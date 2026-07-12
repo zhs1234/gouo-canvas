@@ -1,8 +1,4 @@
-// material-ui
-import logoLight from 'assets/images/logo.svg';
-import logoDark from 'assets/images/logo-white.svg';
 import { useSelector } from 'react-redux';
-import { useTheme } from '@mui/material/styles';
 
 /**
  * if you want to use image instead of <svg> uncomment following.
@@ -16,14 +12,12 @@ import { useTheme } from '@mui/material/styles';
 
 const Logo = ({ isMini = false }) => {
   const siteInfo = useSelector((state) => state.siteInfo);
-  const theme = useTheme();
-  const defaultLogo = theme.palette.mode === 'light' ? logoLight : logoDark;
 
   if (siteInfo.isLoading) {
     return null; // 数据加载未完成时不显示 logo
   }
 
-  const logoToDisplay = siteInfo.logo ? siteInfo.logo : defaultLogo;
+  const logoToDisplay = siteInfo.logo ? siteInfo.logo : '/gouo-logo.svg';
 
   return (
     <img

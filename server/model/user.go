@@ -47,6 +47,10 @@ type User struct {
 	LastLoginIp      string         `json:"last_login_ip" gorm:"type:varchar(128);default:''"`
 	CreatedTime      int64          `json:"created_time" gorm:"bigint"`
 	DeletedAt        gorm.DeletedAt `json:"-" gorm:"index"`
+	BalanceCNY       float64        `json:"balance_cny" gorm:"-"`
+	UsedCNY          float64        `json:"used_cny" gorm:"-"`
+	QuotaCNYRate     float64        `json:"quota_cny_rate" gorm:"-"`
+	ImagePriceCNY    float64        `json:"image_price_cny" gorm:"-"`
 }
 
 type UserUpdates func(*User)

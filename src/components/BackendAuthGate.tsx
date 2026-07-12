@@ -69,8 +69,8 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
   return (
     <main className="min-h-[100dvh] bg-[#05070d] text-white grid lg:grid-cols-[1.1fr_0.9fr]">
       <section className="relative hidden overflow-hidden border-r border-white/10 p-12 lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-cyan-400/20 blur-[120px]" />
-        <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-indigo-500/20 blur-[140px]" />
+        <div className="absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-blue-400/20 blur-[120px]" />
+        <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-blue-700/20 blur-[140px]" />
         <div className="relative flex items-center gap-3">
           <img src={BRAND.logoUrl} alt="" className="h-11 w-11 rounded-xl" />
           <div>
@@ -79,7 +79,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="relative max-w-xl">
-          <p className="mb-5 text-sm font-medium tracking-[0.25em] text-cyan-300">AI VISUAL WORKSPACE</p>
+          <p className="mb-5 text-sm font-medium tracking-[0.25em] text-blue-300">AI VISUAL WORKSPACE</p>
           <h1 className="text-5xl font-semibold leading-tight tracking-tight">{BRAND.slogan}</h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-white/55">统一的图片生成、编辑与多轮创作空间。你的凭据由平台后端托管，每次调用按账户额度安全结算。</p>
         </div>
@@ -97,40 +97,40 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-sm text-white/55">正在检查登录状态…</div>
           ) : (
             <>
-              <p className="text-sm font-medium text-cyan-300">{mode === 'login' ? '欢迎回来' : '创建账户'}</p>
+              <p className="text-sm font-medium text-blue-300">{mode === 'login' ? '欢迎回来' : '创建账户'}</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight">{mode === 'login' ? '登录光构' : '开始你的创作空间'}</h2>
               <p className="mt-3 text-sm leading-6 text-white/45">{mode === 'login' ? '登录后使用你的专属额度与历史记录。' : '用户名最多 12 个字符，密码为 8–20 个字符。'}</p>
 
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                 <label className="block text-sm text-white/70">
                   用户名
-                  <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/25 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10" value={username} onChange={(e) => setUsername(e.target.value)} maxLength={12} autoComplete="username" required />
+                  <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/25 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/10" value={username} onChange={(e) => setUsername(e.target.value)} maxLength={12} autoComplete="username" required />
                 </label>
                 <label className="block text-sm text-white/70">
                   密码
-                  <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/25 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10" value={password} onChange={(e) => setPassword(e.target.value)} type="password" minLength={8} maxLength={20} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
+                  <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/25 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/10" value={password} onChange={(e) => setPassword(e.target.value)} type="password" minLength={8} maxLength={20} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
                 </label>
                 {mode === 'register' && (
                   <div className="grid gap-5 sm:grid-cols-2">
                     <label className="block text-sm text-white/70">
                       邮箱 <span className="text-white/30">（按后端配置）</span>
-                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-cyan-400/60" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
+                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
                     </label>
                     <label className="block text-sm text-white/70">
                       邮箱验证码
-                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-cyan-400/60" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} inputMode="numeric" />
+                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} inputMode="numeric" />
                     </label>
                   </div>
                 )}
 
                 {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-5 text-red-200">{error}</div>}
 
-                <button type="submit" disabled={submitting} className="w-full rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 px-4 py-3 font-semibold text-[#05070d] transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60">
+                <button type="submit" disabled={submitting} className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-blue-700 px-4 py-3 font-semibold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60">
                   {submitting ? '请稍候…' : mode === 'login' ? '登录并进入' : '注册并进入'}
                 </button>
               </form>
 
-              <button type="button" className="mt-6 w-full text-center text-sm text-white/45 hover:text-cyan-300" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
+              <button type="button" className="mt-6 w-full text-center text-sm text-white/45 hover:text-blue-300" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
                 {mode === 'login' ? '还没有账户？立即注册' : '已有账户？返回登录'}
               </button>
             </>

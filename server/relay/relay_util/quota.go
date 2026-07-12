@@ -10,6 +10,7 @@ import (
 	"one-api/common/logger"
 	"one-api/model"
 	"one-api/types"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -31,6 +32,7 @@ type Quota struct {
 	channelId        int
 	tokenId          int
 	unlimitedQuota   bool
+	fixedQuota       int
 	HandelStatus     bool
 
 	startTime         time.Time
@@ -58,13 +60,16 @@ func NewQuota(c *gin.Context, modelName string, promptTokens int) *Quota {
 	quota.groupRatio = c.GetFloat64("group_ratio") // 这里的倍率已经在 common.go 中正确设置了
 	quota.inputRatio = quota.price.GetInput() * quota.groupRatio
 	quota.outputRatio = quota.price.GetOutput() * quota.groupRatio
+	quota.fixedQuota = getFixedImageQuota(c.Request.URL.Path)
 
 	return quota
 
 }
 
 func (q *Quota) PreQuotaConsumption() *types.OpenAIErrorWithStatusCode {
-	if q.price.Type == model.TimesPriceType {
+	if q.fixedQuota > 0 {
+		q.preConsumedQuota = q.fixedQuota
+	} else if q.price.Type == model.TimesPriceType {
 		q.preConsumedQuota = int(1000 * q.inputRatio)
 	} else if q.price.Input != 0 || q.price.Output != 0 {
 		q.preConsumedQuota = int(float64(q.promptTokens)*q.inputRatio) + config.PreConsumedQuota
@@ -245,6 +250,9 @@ func (q *Quota) getRequestTime() int {
 
 // 通过 token 数获取消费配额
 func (q *Quota) GetTotalQuota(promptTokens, completionTokens int, extraBilling map[string]types.ExtraBilling) (quota int) {
+	if q.fixedQuota > 0 {
+		return q.fixedQuota
+	}
 	if q.price.Type == model.TimesPriceType {
 		quota = int(1000 * q.inputRatio)
 	} else {
@@ -278,6 +286,18 @@ func (q *Quota) GetTotalQuota(promptTokens, completionTokens int, extraBilling m
 	}
 
 	return quota
+}
+
+func getFixedImageQuota(path string) int {
+	if !strings.HasPrefix(path, "/v1/images/generations") &&
+		!strings.HasPrefix(path, "/v1/images/edits") &&
+		!strings.HasPrefix(path, "/v1/images/variations") {
+		return 0
+	}
+	if config.GouoImagePriceCNY <= 0 || config.PaymentUSDRate <= 0 || config.QuotaPerUnit <= 0 {
+		return 0
+	}
+	return int(math.Ceil(config.GouoImagePriceCNY / config.PaymentUSDRate * config.QuotaPerUnit))
 }
 
 // 获取计算的 token 数

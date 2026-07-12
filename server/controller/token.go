@@ -122,6 +122,17 @@ func GetPlaygroundToken(c *gin.Context) {
 			return
 		}
 		token = &cleanToken
+	} else {
+		tokenId, tokenUserId, validateErr := common.ValidateToken(token.Key)
+		if validateErr != nil || tokenId != token.Id || tokenUserId != token.UserId {
+			if err := token.RegenerateKey(); err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "刷新光构用户令牌失败：" + err.Error(),
+				})
+				return
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

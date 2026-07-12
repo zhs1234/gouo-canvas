@@ -32,12 +32,15 @@ import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { BRAND } from '../config/brand'
 import { DEFAULT_DROPDOWN_MAX_HEIGHT, getDropdownMaxHeight } from '../lib/dropdown'
+import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import Select from './Select'
 import { Checkbox } from './Checkbox'
 import ViewportTooltip from './ViewportTooltip'
 import { ChevronDownIcon, CloseIcon, CopyIcon, PlusIcon, TrashIcon, GithubIcon, ExportIcon, ImportIcon, DragHandleIcon, LinkIcon } from './icons'
 import GeneralSettingsTab from './settings/GeneralSettingsTab'
 import AgentSettingsTab from './settings/AgentSettingsTab'
+
+const SHOW_API_SETTINGS = !isBackendAuthEnabled()
 
 function newId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -331,7 +334,7 @@ export default function SettingsModal() {
   const [profileImportUrlTooltipVisible, setProfileImportUrlTooltipVisible] = useState(false)
   const [duplicateProfileTooltipVisible, setDuplicateProfileTooltipVisible] = useState(false)
   const [llmPromptTooltipVisible, setLlmPromptTooltipVisible] = useState(false)
-  const [activeTab, setActiveTab] = useState<SettingsTab>('api')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(SHOW_API_SETTINGS ? 'api' : 'general')
   const [exportConfig, setExportConfig] = useState(true)
   const [exportTasks, setExportTasks] = useState(true)
   const [importConfig, setImportConfig] = useState(true)
@@ -461,8 +464,13 @@ export default function SettingsModal() {
   }, [activeProfile.id, activeProfile.timeout])
 
   useEffect(() => {
-    if (showSettings && settingsTabRequest) setActiveTab(settingsTabRequest)
+    if (!showSettings || !settingsTabRequest) return
+    setActiveTab(settingsTabRequest === 'api' && !SHOW_API_SETTINGS ? 'general' : settingsTabRequest)
   }, [settingsTabRequest, showSettings])
+
+  useEffect(() => {
+    if (!SHOW_API_SETTINGS && activeTab === 'api') setActiveTab('general')
+  }, [activeTab])
 
   const updateProfileMenuMaxHeight = useCallback(() => {
     if (!profileMenuTriggerRef.current) return
@@ -1198,15 +1206,17 @@ export default function SettingsModal() {
           {/* Sidebar */}
           <div className="w-full sm:w-48 shrink-0 flex flex-col border-b sm:border-b-0 sm:border-r border-gray-100 dark:border-white/[0.08] bg-gray-50/50 dark:bg-white/[0.02]">
             <nav className="flex-1 overflow-x-auto sm:overflow-y-auto custom-scrollbar p-3 space-x-1 sm:space-x-0 sm:space-y-1 flex sm:flex-col">
-              <button
-                onClick={() => setActiveTab('api')}
-                className={`whitespace-nowrap flex-shrink-0 flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${activeTab === 'api' ? 'bg-white dark:bg-white/[0.08] shadow-sm text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100/80 dark:hover:bg-white/[0.04]'}`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-                API 配置
-              </button>
+              {SHOW_API_SETTINGS && (
+                <button
+                  onClick={() => setActiveTab('api')}
+                  className={`whitespace-nowrap flex-shrink-0 flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${activeTab === 'api' ? 'bg-white dark:bg-white/[0.08] shadow-sm text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100/80 dark:hover:bg-white/[0.04]'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  API 配置
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('general')}
                 className={`whitespace-nowrap flex-shrink-0 flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${activeTab === 'general' ? 'bg-white dark:bg-white/[0.08] shadow-sm text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100/80 dark:hover:bg-white/[0.04]'}`}
@@ -1276,7 +1286,7 @@ export default function SettingsModal() {
               />
             )}
             
-            {activeTab === 'api' && (
+            {SHOW_API_SETTINGS && activeTab === 'api' && (
               <div className="space-y-4">
                 <div>
                   <div className="mb-1.5 flex items-center gap-1.5">
@@ -1896,7 +1906,7 @@ export default function SettingsModal() {
                   > 本站点基于开源项目 [GPT Image Playground](https://github.com/CookSleep/gpt_image_playground) ([MIT](https://github.com/CookSleep/gpt_image_playground/blob/main/LICENSE)) 修改。
                 */}
                 <div className="flex flex-col items-center">
-                  <div className="mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-[1.75rem] border border-indigo-200/70 bg-gradient-to-br from-cyan-50 to-indigo-100 p-3 dark:border-cyan-300/15 dark:from-cyan-400/10 dark:to-indigo-500/15">
+                  <div className="mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-[1.75rem] border border-blue-200/70 bg-gradient-to-br from-blue-50 to-blue-100 p-3 dark:border-blue-300/15 dark:from-blue-400/10 dark:to-blue-600/15">
                     <img src={BRAND.logoUrl} alt={`${BRAND.name} Logo`} className="h-full w-full object-contain" />
                   </div>
                   <h4 className="text-[17px] font-bold text-gray-800 dark:text-gray-100">{BRAND.name} · {BRAND.nameEn}</h4>
@@ -1909,6 +1919,15 @@ export default function SettingsModal() {
                 </p>
 
                 <div className="flex flex-wrap items-center justify-center gap-3">
+                  <a
+                    href={BRAND.repositoryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-blue-600 dark:bg-white dark:text-gray-900 dark:hover:bg-blue-400"
+                  >
+                    <GithubIcon className="h-4 w-4 opacity-80" />
+                    项目 GitHub
+                  </a>
                   <a
                     href={BRAND.source.repositoryUrl}
                     target="_blank"

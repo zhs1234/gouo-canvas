@@ -22,6 +22,7 @@ services:
       REDIS_CONN_STRING: redis://redis:6379
       SESSION_SECRET: ${SESSION_SECRET}
       USER_TOKEN_SECRET: ${USER_TOKEN_SECRET}
+      GOUO_IMAGE_PRICE_CNY: ${GOUO_IMAGE_PRICE_CNY:-0.10}
       TZ: Asia/Shanghai
     volumes:
       - backend-data:/data

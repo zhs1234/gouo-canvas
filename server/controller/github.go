@@ -396,7 +396,7 @@ func GitHubBind(c *gin.Context) {
 
 func GenerateOAuthCode(c *gin.Context) {
 	session := sessions.Default(c)
-	state := utils.GetRandomString(12)
+	state := utils.GetUUID()
 	session.Set("oauth_state", state)
 	err := session.Save()
 	if err != nil {

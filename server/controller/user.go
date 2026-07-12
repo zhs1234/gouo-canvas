@@ -378,6 +378,12 @@ func GetSelf(c *gin.Context) {
 		})
 		return
 	}
+	if config.QuotaPerUnit > 0 {
+		user.QuotaCNYRate = config.PaymentUSDRate / config.QuotaPerUnit
+		user.BalanceCNY = float64(user.Quota) * user.QuotaCNYRate
+		user.UsedCNY = float64(user.UsedQuota) * user.QuotaCNYRate
+	}
+	user.ImagePriceCNY = config.GouoImagePriceCNY
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

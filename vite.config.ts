@@ -46,6 +46,7 @@ export default defineConfig(({ command, mode }) => {
     }
     proxy['/api'] = backendProxy
     proxy['/v1'] = backendProxy
+    proxy['/panel'] = backendProxy
   }
 
   return {

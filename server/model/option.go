@@ -135,6 +135,11 @@ func InitOptionMap() {
 func loadOptionsFromDatabase() {
 	options, _ := AllOption()
 	for _, option := range options {
+		// 仅迁移上游默认品牌，保留管理员后续设置的自定义名称。
+		if option.Key == "SystemName" && strings.TrimSpace(option.Value) == "One Hub" {
+			option.Value = "光构"
+			DB.Save(option)
+		}
 		err := config.GlobalOption.Set(option.Key, option.Value)
 		if err != nil {
 			logger.SysError("failed to update option map: " + err.Error())

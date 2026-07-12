@@ -6,7 +6,7 @@
 
 1. 用户通过 `POST /api/user/login` 或 `POST /api/user/register` 建立服务端会话。
 2. 前端通过 `GET /api/token/playground` 获取当前用户独立的 `sys_playground` 令牌。
-3. 图片请求发往同域的 `/v1/images/generations` 或 `/v1/images/edits`；Agent 请求发往 `/v1/responses`。
+3. 图片请求发往同域的 `/v1/images/generations`、`/v1/images/edits` 或 `/v1/images/variations`。
 4. One Hub 根据令牌找到用户和渠道，转发至平台统一配置的上游 API，并扣减该用户额度、记录调用日志。
 
 浏览器里不会出现平台的上游 API Key。前端仅持有当前用户的中继令牌；即使令牌泄露，影响范围也被限制在该用户账户和额度内。
@@ -35,11 +35,11 @@ VITE_GOUO_IMAGE_MODEL=gpt-image-2
 
 ## 首次后台配置
 
-One Hub 管理后台默认监听本机 `http://127.0.0.1:3000`。第一次启动时按界面创建管理员，随后完成：
+One Hub 管理后台默认监听本机 `http://127.0.0.1:3000`。空数据库第一次启动会创建管理员 `root`，初始密码为 `123456`。该密码只能用于本地初始化；任何联网部署都必须在开放访问前立即修改。随后完成：
 
 1. 在“渠道”中新建 OpenAI 或你的 OpenAI 兼容上游，API Key 只填写在这里。
 2. 给渠道加入 `gpt-image-2` 模型；如果你的上游模型名不同，设置模型映射，或修改 `VITE_GOUO_IMAGE_MODEL`。
-3. 实测 `/v1/images/generations`、`/v1/images/edits` 和 `/v1/responses` 三条路由。
+3. 实测 `/v1/images/generations`、`/v1/images/edits` 和 `/v1/images/variations` 三条路由。
 4. 在“定价”中为 `gpt-image-2` 设置真实价格和倍率。未配置价格前不要开放付费充值，避免按回退倍率错误扣费。
 5. 设置新用户赠送额度、最低充值、支付回调地址和支付渠道。
 6. 将系统名称改为“光构”，并关闭暂未接入前端的登录方式。
@@ -62,5 +62,6 @@ docker compose up -d --build
 ## 当前边界
 
 - One Hub 的 Responses API 已支持 SSE；图片端点当前按非流式响应接入，所以前端自动将 `streamImages` 设为 `false`。
-- 充值、额度和订单能力在后端已经具备；光构当前完成的是登录与 API 扣额主链路，下一阶段应增加用户中心、余额显示、订单创建和支付结果页。
-- `gpt-image-2` 的价格应以你实际上游的账单单位为准，由管理员配置，不在源码中硬编码易过期的价格。
+- 光构已提供原生用户中心、额度显示、兑换码充值和最近使用记录，普通用户无需进入 One Hub 面板。在线支付订单与支付结果页仍需在配置正式支付渠道后接入。
+- `/v1/images/generations`、`/v1/images/edits` 和 `/v1/images/variations` 按成功请求次数固定计费，默认 ¥0.10/次；失败请求退回预扣。生产环境通过 `GOUO_IMAGE_PRICE_CNY` 调整单价。
+- 固定售价不等于上游成本。上线前仍需核对实际 API 账单，确保 ¥0.10 能覆盖不同尺寸、质量和编辑请求的成本。

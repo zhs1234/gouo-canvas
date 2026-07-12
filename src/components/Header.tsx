@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useTooltip } from '../hooks/useTooltip'
 import { BRAND } from '../config/brand'
+import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import ViewportTooltip from './ViewportTooltip'
 import HelpModal from './HelpModal'
 import HistoryModal from './HistoryModal'
+import UserCenterModal from './UserCenterModal'
 import { useFavoriteCollectionTitle } from './FavoriteCollections'
-import { EditIcon, HelpCircleIcon, HistoryIcon, InstallIcon, SettingsIcon } from './icons'
+import { EditIcon, HelpCircleIcon, HistoryIcon, InstallIcon, SettingsIcon, UserIcon } from './icons'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -36,41 +38,10 @@ export default function Header() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isPwaInstalled, setIsPwaInstalled] = useState(isInstalledPwa)
   const [hintVisible, setHintVisible] = useState(false)
-  const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('up')
   const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [showUserCenter, setShowUserCenter] = useState(false)
   const historyButtonRef = useRef<HTMLButtonElement>(null)
   const createConversation = useStore((s) => s.createAgentConversation)
-
-  useEffect(() => {
-    if (appMode === 'agent') {
-      setScrollDirection('up')
-      return
-    }
-
-    let lastScrollY = window.scrollY
-    let ticking = false
-
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const currentScrollY = window.scrollY
-          if (currentScrollY < 20) {
-            setScrollDirection('up')
-          } else if (currentScrollY > lastScrollY + 10) {
-            setScrollDirection('down')
-          } else if (currentScrollY < lastScrollY - 10) {
-            setScrollDirection('up')
-          }
-          lastScrollY = currentScrollY
-          ticking = false
-        })
-        ticking = true
-      }
-    }
-
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [appMode])
 
   useEffect(() => {
     if (appMode === 'agent' && !agentMobileHeaderVisible) {
@@ -85,6 +56,7 @@ export default function Header() {
   const installTooltip = useTooltip()
   const helpTooltip = useTooltip()
   const settingsTooltip = useTooltip()
+  const userCenterTooltip = useTooltip()
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -215,23 +187,24 @@ export default function Header() {
               </div>
             </div>
           )}
-          <div className="hidden sm:flex items-center gap-1 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-100/70 dark:bg-white/[0.04] p-1 mr-4">
-            <button
-              type="button"
-              onClick={() => setAppMode('gallery')}
-              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${appMode === 'gallery' ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
-            >
-              画廊
-            </button>
-            <button
-              type="button"
-              onClick={() => setAppMode('agent')}
-              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${appMode === 'agent' ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
-            >
-              Agent
-            </button>
-          </div>
           <div className="flex items-center gap-1 shrink-0">
+            {isBackendAuthEnabled() && (
+              <div className="relative" {...userCenterTooltip.handlers}>
+                <button
+                  onClick={() => {
+                    dismissAllTooltips()
+                    setShowUserCenter(true)
+                  }}
+                  className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-500/20 transition hover:brightness-110"
+                  aria-label="用户中心"
+                >
+                  <UserIcon className="h-5 w-5" />
+                </button>
+                <ViewportTooltip visible={userCenterTooltip.visible} className="whitespace-nowrap">
+                  用户中心
+                </ViewportTooltip>
+              </div>
+            )}
             {!isPwaInstalled && (
               <div
                 className="relative"
@@ -287,24 +260,6 @@ export default function Header() {
             </div>
           </div>
         </div>
-        <div className={`safe-area-x sm:hidden overflow-hidden transition-all duration-300 ease-in-out ${appMode === 'gallery' && scrollDirection === 'down' ? 'max-h-0 opacity-0 pb-0' : 'max-h-20 opacity-100 pb-2'}`}>
-          <div className="grid grid-cols-2 gap-1 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-gray-100/70 dark:bg-white/[0.04] p-1 mx-2">
-            <button
-              type="button"
-              onClick={() => setAppMode('gallery')}
-              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${appMode === 'gallery' ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
-            >
-              画廊
-            </button>
-            <button
-              type="button"
-              onClick={() => setAppMode('agent')}
-              className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${appMode === 'agent' ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm font-medium' : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}
-            >
-              Agent
-            </button>
-          </div>
-        </div>
       </header>
       
       {/* Hint for sliding down */}
@@ -316,13 +271,9 @@ export default function Header() {
 
       <div className={`safe-area-top invisible pointer-events-none transition-all duration-300 ease-in-out ${appMode === 'agent' && !agentMobileHeaderVisible ? 'max-h-0 sm:max-h-[500px] opacity-0 sm:opacity-100 overflow-hidden sm:overflow-visible' : 'max-h-[500px] opacity-100'}`} aria-hidden="true">
         <div className="safe-header-inner" />
-        <div className={`safe-area-x sm:hidden overflow-hidden transition-all duration-300 ease-in-out ${appMode === 'gallery' && scrollDirection === 'down' ? 'max-h-0 pb-0' : 'max-h-20 pb-2'}`}>
-          <div className="p-1">
-            <div className="py-1.5 text-sm">占位</div>
-          </div>
-        </div>
       </div>
       {showHelp && <HelpModal appMode={appMode} isFavoriteCollectionOverview={appMode === 'gallery' && filterFavorite && !activeFavoriteCollectionId} onClose={() => setShowHelp(false)} />}
+      {showUserCenter && <UserCenterModal onClose={() => setShowUserCenter(false)} />}
     </>
   )
 }

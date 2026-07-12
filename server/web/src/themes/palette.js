@@ -13,7 +13,7 @@ export default function themePalette(theme) {
       white: '#FFFFFF'
     },
     primary: {
-      lighter: theme.colors?.primary200 || '#C8FAD6',
+      lighter: theme.colors?.primary200 || '#DBEAFE',
       light: theme.colors?.primaryLight,
       main: theme.colors?.primaryMain,
       dark: theme.colors?.primaryDark,

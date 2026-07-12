@@ -33,7 +33,7 @@ func OIDCEndpoint(c *gin.Context) {
 	}
 
 	session := sessions.Default(c)
-	state := utils.GetRandomString(12)
+	state := utils.GetUUID()
 	session.Set("oauth_state", state)
 	loginURL := oidcConfig.LoginURL(state)
 	err = session.Save()

@@ -200,6 +200,14 @@ export function SettingsIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function UserIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a3 3 0 11-6 0 3 3 0 016 0zM5 21a7 7 0 0114 0" />
+    </svg>
+  )
+}
+
 export function CollectionManageIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>

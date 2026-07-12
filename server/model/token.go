@@ -307,6 +307,18 @@ func (token *Token) Insert() error {
 	return err
 }
 
+func (token *Token) RegenerateKey() error {
+	key, err := common.GenerateToken(token.Id, token.UserId)
+	if err != nil {
+		return err
+	}
+	if err := DB.Model(token).Update("key", key).Error; err != nil {
+		return err
+	}
+	token.Key = key
+	return nil
+}
+
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (token *Token) Update() error {
 	err := DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota", "group", "backup_group", "setting").Updates(token).Error

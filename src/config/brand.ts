@@ -5,6 +5,7 @@ export const BRAND = {
   slogan: '把灵感构造成图像',
   description: '面向创作者的 AI 图片生成与编辑平台',
   logoUrl: './gouo-logo.png',
+  repositoryUrl: 'https://github.com/zhs1234/gouo-canvas',
   source: {
     name: 'GPT Image Playground',
     author: 'CookSleep',

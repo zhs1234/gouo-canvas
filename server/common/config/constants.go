@@ -10,7 +10,7 @@ var StartTime = time.Now().Unix() // unit: second
 var Version = "v0.0.0"            // this hard coding will be replaced automatically when building, no need to manually change
 var Commit = "unknown"
 var BuildTime = "unknown"
-var SystemName = "One Hub"
+var SystemName = "光构"
 var ServerAddress = "http://localhost:3000"
 var Debug = false
 
@@ -215,11 +215,11 @@ var GeminiAPIEnabled = true
 var ClaudeAPIEnabled = true
 
 const (
-	RoleGuestUser     = 0
-	RoleCommonUser    = 1
-	RoleReliableUser  = 3   // 可信的内部员工
-	RoleAdminUser     = 10
-	RoleRootUser      = 100
+	RoleGuestUser    = 0
+	RoleCommonUser   = 1
+	RoleReliableUser = 3 // 可信的内部员工
+	RoleAdminUser    = 10
+	RoleRootUser     = 100
 )
 
 var RateLimitKeyExpirationDuration = 20 * time.Minute
