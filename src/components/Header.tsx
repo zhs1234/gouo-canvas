@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 import { useTooltip } from '../hooks/useTooltip'
 import { BRAND } from '../config/brand'
 import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
+import type { UserCenterSection } from '../lib/userGuidance'
 import ViewportTooltip from './ViewportTooltip'
 import HelpModal from './HelpModal'
-import HistoryModal from './HistoryModal'
+import InspirationLibraryModal from './InspirationLibraryModal'
 import UserCenterModal from './UserCenterModal'
 import { useFavoriteCollectionTitle } from './FavoriteCollections'
-import { EditIcon, HelpCircleIcon, HistoryIcon, InstallIcon, SettingsIcon, UserIcon } from './icons'
+import { HelpCircleIcon, InstallIcon, SettingsIcon, SparklesIcon, UserIcon } from './icons'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -22,41 +23,33 @@ function isInstalledPwa() {
 }
 
 export default function Header() {
-  const appMode = useStore((s) => s.appMode)
-  const setAppMode = useStore((s) => s.setAppMode)
   const setShowSettings = useStore((s) => s.setShowSettings)
   const setConfirmDialog = useStore((s) => s.setConfirmDialog)
-  const agentMobileHeaderVisible = useStore((s) => s.agentMobileHeaderVisible)
-  const agentConversations = useStore((s) => s.agentConversations)
-  const activeAgentConversationId = useStore((s) => s.activeAgentConversationId)
   const filterFavorite = useStore((s) => s.filterFavorite)
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
-  const activeConversation = agentConversations.find((item) => item.id === activeAgentConversationId)
   const favoriteCollectionTitle = useFavoriteCollectionTitle()
-  const showFavoriteCollectionTitle = appMode === 'gallery' && Boolean(activeFavoriteCollectionId)
+  const showFavoriteCollectionTitle = Boolean(activeFavoriteCollectionId)
   const [showHelp, setShowHelp] = useState(false)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isPwaInstalled, setIsPwaInstalled] = useState(isInstalledPwa)
-  const [hintVisible, setHintVisible] = useState(false)
-  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [showInspiration, setShowInspiration] = useState(false)
   const [showUserCenter, setShowUserCenter] = useState(false)
-  const historyButtonRef = useRef<HTMLButtonElement>(null)
-  const createConversation = useStore((s) => s.createAgentConversation)
-
-  useEffect(() => {
-    if (appMode === 'agent' && !agentMobileHeaderVisible) {
-      setHintVisible(true)
-      const timer = setTimeout(() => {
-        setHintVisible(false)
-      }, 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [appMode, agentMobileHeaderVisible])
+  const [userCenterSection, setUserCenterSection] = useState<UserCenterSection>('overview')
 
   const installTooltip = useTooltip()
   const helpTooltip = useTooltip()
   const settingsTooltip = useTooltip()
+  const inspirationTooltip = useTooltip()
   const userCenterTooltip = useTooltip()
+
+  useEffect(() => {
+    const openUserCenter = (event: Event) => {
+      setUserCenterSection((event as CustomEvent<UserCenterSection>).detail || 'overview')
+      setShowUserCenter(true)
+    }
+    window.addEventListener('gouo:open-user-center', openUserCenter)
+    return () => window.removeEventListener('gouo:open-user-center', openUserCenter)
+  }, [])
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -117,7 +110,7 @@ export default function Header() {
 
   return (
     <>
-      <header data-no-drag-select className={`safe-area-top fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur border-b border-gray-200 dark:border-white/[0.08] transition-transform duration-300 ease-in-out ${appMode === 'agent' && !agentMobileHeaderVisible ? '-translate-y-full sm:translate-y-0' : 'translate-y-0'}`}>
+      <header data-no-drag-select className="safe-area-top fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur border-b border-gray-200 dark:border-white/[0.08]">
         <div className="safe-area-x safe-header-inner max-w-7xl mx-auto flex items-center justify-between relative">
           <div className="flex-1 min-w-0 pr-2 flex items-center gap-2">
             <h1 className="inline-flex min-w-0 items-start relative mr-2">
@@ -137,49 +130,7 @@ export default function Header() {
                 </span>
               )}
             </h1>
-            {appMode === 'agent' && <div className="hidden sm:flex items-center gap-1 relative">
-              <button
-                ref={historyButtonRef}
-                type="button"
-                onClick={() => setShowHistoryModal((visible) => !visible)}
-                className="p-1.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors"
-                title="历史任务"
-              >
-                <HistoryIcon className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAppMode('agent')
-                  createConversation()
-                }}
-                className="p-1.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.04] rounded-lg transition-colors"
-                title="新对话"
-              >
-                <EditIcon className="w-5 h-5" />
-              </button>
-              {showHistoryModal && (
-                <HistoryModal onClose={() => setShowHistoryModal(false)} ignoreOutsideClickRef={historyButtonRef} />
-              )}
-            </div>}
           </div>
-          {appMode === 'agent' && activeConversation && (
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden sm:flex max-w-[30%]">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowHistoryModal(true)
-                  // Use setTimeout to ensure HistoryModal is mounted before setting editing id
-                  setTimeout(() => {
-                    useStore.getState().setAgentEditingConversationId(activeConversation.id)
-                  }, 0)
-                }}
-                className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate hover:bg-gray-100 dark:hover:bg-white/[0.04] px-2 py-1 rounded transition-colors"
-              >
-                {activeConversation.title || 'Agent'}
-              </button>
-            </div>
-          )}
           {showFavoriteCollectionTitle && (
             <div className="absolute left-1/2 top-1/2 hidden max-w-[30%] -translate-x-1/2 -translate-y-1/2 sm:flex">
               <div className="truncate rounded px-2 py-1 text-sm font-semibold text-gray-700 dark:text-gray-300" title={favoriteCollectionTitle}>
@@ -188,11 +139,27 @@ export default function Header() {
             </div>
           )}
           <div className="flex items-center gap-1 shrink-0">
+            <div className="relative" {...inspirationTooltip.handlers}>
+              <button
+                type="button"
+                onClick={() => {
+                  dismissAllTooltips()
+                  setShowInspiration(true)
+                }}
+                className="flex items-center gap-1.5 rounded-lg px-2 py-2 text-gray-600 transition hover:bg-blue-50 hover:text-blue-600 dark:text-gray-400 dark:hover:bg-blue-500/10 dark:hover:text-blue-400 sm:px-2.5"
+                aria-label="打开灵感库"
+              >
+                <SparklesIcon className="h-5 w-5" />
+                <span className="hidden text-sm font-medium lg:inline">灵感</span>
+              </button>
+              <ViewportTooltip visible={inspirationTooltip.visible} className="whitespace-nowrap">灵感库</ViewportTooltip>
+            </div>
             {isBackendAuthEnabled() && (
               <div className="relative" {...userCenterTooltip.handlers}>
                 <button
                   onClick={() => {
                     dismissAllTooltips()
+                    setUserCenterSection('overview')
                     setShowUserCenter(true)
                   }}
                   className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-500/20 transition hover:brightness-110"
@@ -262,18 +229,12 @@ export default function Header() {
         </div>
       </header>
       
-      {/* Hint for sliding down */}
-      <div className={`fixed top-0 left-0 right-0 z-30 flex justify-center pointer-events-none transition-all duration-300 ease-in-out sm:hidden ${appMode === 'agent' && hintVisible && !agentMobileHeaderVisible ? 'translate-y-[env(safe-area-inset-top,0px)] opacity-100' : '-translate-y-full opacity-0'}`}>
-        <div className="bg-black/60 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-b-xl shadow-lg">
-          下拉展示顶栏
-        </div>
-      </div>
-
-      <div className={`safe-area-top invisible pointer-events-none transition-all duration-300 ease-in-out ${appMode === 'agent' && !agentMobileHeaderVisible ? 'max-h-0 sm:max-h-[500px] opacity-0 sm:opacity-100 overflow-hidden sm:overflow-visible' : 'max-h-[500px] opacity-100'}`} aria-hidden="true">
+      <div className="safe-area-top invisible pointer-events-none" aria-hidden="true">
         <div className="safe-header-inner" />
       </div>
-      {showHelp && <HelpModal appMode={appMode} isFavoriteCollectionOverview={appMode === 'gallery' && filterFavorite && !activeFavoriteCollectionId} onClose={() => setShowHelp(false)} />}
-      {showUserCenter && <UserCenterModal onClose={() => setShowUserCenter(false)} />}
+      {showHelp && <HelpModal isFavoriteCollectionOverview={filterFavorite && !activeFavoriteCollectionId} onClose={() => setShowHelp(false)} />}
+      {showInspiration && <InspirationLibraryModal onClose={() => setShowInspiration(false)} />}
+      {showUserCenter && <UserCenterModal initialSection={userCenterSection} onClose={() => setShowUserCenter(false)} />}
     </>
   )
 }

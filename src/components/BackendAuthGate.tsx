@@ -2,15 +2,18 @@ import { type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { BRAND } from '../config/brand'
 import {
   createBackendSettings,
+  getBackendStatus,
   getCurrentUser,
   isBackendAuthEnabled,
   login,
   register,
+  resetPassword,
+  sendPasswordReset,
   type GouoUser,
 } from '../lib/gouoBackend'
 import { useStore } from '../store'
 
-type AuthMode = 'login' | 'register'
+type AuthMode = 'login' | 'register' | 'reset'
 
 async function initializeUser(user: GouoUser): Promise<GouoUser> {
   const settings = await createBackendSettings()
@@ -22,11 +25,16 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
   const enabled = isBackendAuthEnabled()
   const [checking, setChecking] = useState(enabled)
   const [user, setUser] = useState<GouoUser | null>(null)
-  const [mode, setMode] = useState<AuthMode>('login')
+  const resetParams = new URLSearchParams(window.location.search)
+  const [mode, setMode] = useState<AuthMode>(resetParams.get('token') && resetParams.get('email') ? 'reset' : 'login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [email, setEmail] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
+  const [resetToken, setResetToken] = useState(resetParams.get('token') ?? '')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [emailService, setEmailService] = useState(false)
+  const [resetEmailSent, setResetEmailSent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -47,6 +55,11 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
     return () => { cancelled = true }
   }, [enabled])
 
+  useEffect(() => {
+    if (!enabled) return
+    void getBackendStatus().then((status) => setEmailService(Boolean(status.email_service))).catch(() => {})
+  }, [enabled])
+
   if (!enabled || user) return <>{children}</>
 
   const handleSubmit = async (event: FormEvent) => {
@@ -54,6 +67,17 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
     setError('')
     setSubmitting(true)
     try {
+      if (mode === 'reset') {
+        if (password !== confirmPassword) throw new Error('两次输入的新密码不一致')
+        await resetPassword(email.trim(), resetToken.trim(), password)
+        setMode('login')
+        setPassword('')
+        setConfirmPassword('')
+        setResetToken('')
+        window.history.replaceState(null, '', window.location.pathname)
+        setError('密码已重置，请使用新密码登录')
+        return
+      }
       if (mode === 'register') {
         await register({ username, password, email, verificationCode })
       }
@@ -61,6 +85,19 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
       setUser(await initializeUser(currentUser))
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleSendReset = async () => {
+    setError('')
+    setSubmitting(true)
+    try {
+      await sendPasswordReset(email.trim())
+      setResetEmailSent(true)
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : String(sendError))
     } finally {
       setSubmitting(false)
     }
@@ -97,19 +134,38 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-sm text-white/55">正在检查登录状态…</div>
           ) : (
             <>
-              <p className="text-sm font-medium text-blue-300">{mode === 'login' ? '欢迎回来' : '创建账户'}</p>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight">{mode === 'login' ? '登录光构' : '开始你的创作空间'}</h2>
-              <p className="mt-3 text-sm leading-6 text-white/45">{mode === 'login' ? '登录后使用你的专属额度与历史记录。' : '用户名最多 12 个字符，密码为 8–20 个字符。'}</p>
+              <p className="text-sm font-medium text-blue-300">{mode === 'login' ? '欢迎回来' : mode === 'register' ? '创建账户' : '账户恢复'}</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight">{mode === 'login' ? '登录光构' : mode === 'register' ? '开始你的创作空间' : '重置密码'}</h2>
+              <p className="mt-3 text-sm leading-6 text-white/45">{mode === 'login' ? '登录后使用你的专属额度与云端作品。' : mode === 'register' ? '用户名最多 12 个字符，密码为 8–20 个字符。' : '输入邮件中的验证码，并设置新的登录密码。'}</p>
 
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+                {mode !== 'reset' ? (
+                  <label className="block text-sm text-white/70">
+                    用户名
+                    <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/25 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/10" value={username} onChange={(e) => setUsername(e.target.value)} maxLength={12} autoComplete="username" required />
+                  </label>
+                ) : (
+                  <>
+                    <label className="block text-sm text-white/70">
+                      邮箱
+                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required />
+                    </label>
+                    <div className="flex gap-2">
+                      <input className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={resetToken} onChange={(e) => setResetToken(e.target.value)} placeholder="邮件验证码" required />
+                      <button type="button" onClick={() => void handleSendReset()} disabled={submitting || !email.trim()} className="rounded-xl border border-blue-400/30 px-3 text-sm text-blue-200 disabled:opacity-40">{resetEmailSent ? '重新发送' : '发送邮件'}</button>
+                    </div>
+                  </>
+                )}
                 <label className="block text-sm text-white/70">
-                  用户名
-                  <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/25 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/10" value={username} onChange={(e) => setUsername(e.target.value)} maxLength={12} autoComplete="username" required />
-                </label>
-                <label className="block text-sm text-white/70">
-                  密码
+                  {mode === 'reset' ? '新密码' : '密码'}
                   <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition placeholder:text-white/25 focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/10" value={password} onChange={(e) => setPassword(e.target.value)} type="password" minLength={8} maxLength={20} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
                 </label>
+                {mode === 'reset' && (
+                  <label className="block text-sm text-white/70">
+                    确认新密码
+                    <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type="password" minLength={8} maxLength={20} autoComplete="new-password" required />
+                  </label>
+                )}
                 {mode === 'register' && (
                   <div className="grid gap-5 sm:grid-cols-2">
                     <label className="block text-sm text-white/70">
@@ -126,13 +182,16 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
                 {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-5 text-red-200">{error}</div>}
 
                 <button type="submit" disabled={submitting} className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-blue-700 px-4 py-3 font-semibold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60">
-                  {submitting ? '请稍候…' : mode === 'login' ? '登录并进入' : '注册并进入'}
+                  {submitting ? '请稍候…' : mode === 'login' ? '登录并进入' : mode === 'register' ? '注册并进入' : '确认重置密码'}
                 </button>
               </form>
 
-              <button type="button" className="mt-6 w-full text-center text-sm text-white/45 hover:text-blue-300" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
-                {mode === 'login' ? '还没有账户？立即注册' : '已有账户？返回登录'}
-              </button>
+              <div className="mt-6 flex items-center justify-center gap-4 text-sm text-white/45">
+                <button type="button" className="hover:text-blue-300" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
+                  {mode === 'login' ? '还没有账户？立即注册' : '返回登录'}
+                </button>
+                {mode === 'login' && emailService && <button type="button" className="hover:text-blue-300" onClick={() => { setMode('reset'); setError('') }}>忘记密码</button>}
+              </div>
             </>
           )}
         </div>

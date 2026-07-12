@@ -11,6 +11,7 @@ dev-proxy.config.json
 *.db-journal
 *.sqlite
 *.sqlite3
+server/data/
 *.pem
 *.key
 *.p12

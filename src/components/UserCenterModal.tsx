@@ -1,11 +1,14 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { getCurrentUser, getUsageLogs, logout, redeemCode, updateCurrentUser, type GouoUsageLog, type GouoUser } from '../lib/gouoBackend'
+import { bindEmail, createBackendSettings, getBackendStatus, getCurrentUser, getUsageLogs, logout, redeemCode, sendEmailVerification, updateCurrentUser, updatePassword, type GouoUsageLog, type GouoUser } from '../lib/gouoBackend'
+import { useCloudSyncSnapshot } from '../lib/cloudSync'
+import { useStore } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { CloseIcon, RefreshIcon, UserIcon } from './icons'
 
 interface UserCenterModalProps {
+  initialSection?: 'overview' | 'topup' | 'logs' | 'security'
   onClose: () => void
 }
 
@@ -37,20 +40,36 @@ function getLogLabel(type: number) {
   return '账户记录'
 }
 
-export default function UserCenterModal({ onClose }: UserCenterModalProps) {
+export default function UserCenterModal({ initialSection = 'overview', onClose }: UserCenterModalProps) {
   const scrollBoundaryRef = useRef<HTMLDivElement>(null)
   const [user, setUser] = useState<GouoUser | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
-  const [activeSection, setActiveSection] = useState<'overview' | 'topup' | 'logs'>('overview')
+  const [activeSection, setActiveSection] = useState<'overview' | 'topup' | 'logs' | 'security'>(initialSection)
   const [redemptionCode, setRedemptionCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
   const [redeemMessage, setRedeemMessage] = useState('')
   const [logs, setLogs] = useState<GouoUsageLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  const [logsPage, setLogsPage] = useState(1)
+  const [logsTotal, setLogsTotal] = useState(0)
+  const [logModel, setLogModel] = useState('')
+  const [logType, setLogType] = useState(0)
+  const [logStart, setLogStart] = useState('')
+  const [logEnd, setLogEnd] = useState('')
+  const [emailService, setEmailService] = useState(false)
+  const [bindEmailValue, setBindEmailValue] = useState('')
+  const [emailCode, setEmailCode] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [bindingEmail, setBindingEmail] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
   const [error, setError] = useState('')
+  const sync = useCloudSyncSnapshot()
 
   useCloseOnEscape(true, onClose)
   usePreventBackgroundScroll(true, scrollBoundaryRef)
@@ -71,20 +90,27 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
 
   useEffect(() => {
     void loadUser()
+    void getBackendStatus().then((status) => setEmailService(Boolean(status.email_service))).catch(() => {})
   }, [loadUser])
 
   const loadLogs = useCallback(async () => {
     setLogsLoading(true)
     setError('')
     try {
-      const result = await getUsageLogs()
+      const result = await getUsageLogs(logsPage, 20, {
+        model: logModel.trim() || undefined,
+        type: logType || undefined,
+        start: logStart ? Math.floor(new Date(`${logStart}T00:00:00`).getTime() / 1000) : undefined,
+        end: logEnd ? Math.floor(new Date(`${logEnd}T23:59:59`).getTime() / 1000) : undefined,
+      })
       setLogs(result.data)
+      setLogsTotal(result.total_count)
     } catch (logsError) {
       setError(logsError instanceof Error ? logsError.message : String(logsError))
     } finally {
       setLogsLoading(false)
     }
-  }, [])
+  }, [logEnd, logModel, logStart, logType, logsPage])
 
   useEffect(() => {
     if (activeSection === 'logs') void loadLogs()
@@ -134,6 +160,73 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
     }
   }
 
+  const handlePasswordChange = async (event: FormEvent) => {
+    event.preventDefault()
+    if (newPassword !== confirmPassword) {
+      setError('两次输入的新密码不一致')
+      return
+    }
+    setChangingPassword(true)
+    setError('')
+    try {
+      await updatePassword(currentPassword, newPassword)
+      await createBackendSettings(true)
+      useStore.getState().showToast('密码已修改', 'success')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (passwordError) {
+      setError(passwordError instanceof Error ? passwordError.message : String(passwordError))
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
+  const handleSendEmail = async () => {
+    if (!bindEmailValue.trim()) return
+    setSendingEmail(true)
+    setError('')
+    try {
+      await sendEmailVerification(bindEmailValue.trim())
+      useStore.getState().showToast('验证码已发送，请检查邮箱', 'success')
+    } catch (emailError) {
+      setError(emailError instanceof Error ? emailError.message : String(emailError))
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
+  const handleBindEmail = async (event: FormEvent) => {
+    event.preventDefault()
+    setBindingEmail(true)
+    setError('')
+    try {
+      await bindEmail(bindEmailValue.trim(), emailCode.trim())
+      await loadUser()
+      setEmailCode('')
+      useStore.getState().showToast('邮箱已绑定', 'success')
+    } catch (emailError) {
+      setError(emailError instanceof Error ? emailError.message : String(emailError))
+    } finally {
+      setBindingEmail(false)
+    }
+  }
+
+  const exportLogs = () => {
+    const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
+    const rows = [
+      ['时间', '类型', '模型', '金额', '耗时', 'Request ID', '内容'],
+      ...logs.map((log) => [formatTime(log.created_at), getLogLabel(log.type), log.model_name || '', ((log.quota ?? 0) * (user?.quota_cny_rate ?? 0)).toFixed(2), log.request_time || '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']),
+    ]
+    const blob = new Blob([`\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `gouo-usage-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   const avatarText = (user?.display_name || user?.username || '光').trim().slice(0, 1).toUpperCase()
 
   return createPortal(
@@ -177,7 +270,7 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
                 </button>
               </section>
 
-              <section className="grid gap-4 sm:grid-cols-3">
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 p-5 text-white shadow-lg shadow-blue-500/15">
                   <p className="text-sm text-white/70">账户余额</p>
                   <p className="mt-3 text-2xl font-bold tracking-tight">{formatCNY(user.balance_cny)}</p>
@@ -193,9 +286,14 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
                   <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{formatCNY(user.image_price_cny)}</p>
                   <p className="mt-1 text-xs text-gray-400">每次成功生成或编辑</p>
                 </div>
+                <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">云端空间</p>
+                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{sync.storage ? `${(sync.storage.used_bytes / 1024 ** 2).toFixed(0)} MB` : '—'}</p>
+                  <p className="mt-1 text-xs text-gray-400">{sync.storage ? `共 ${(sync.storage.quota_bytes / 1024 ** 3).toFixed(0)} GB` : '正在读取存储状态'}</p>
+                </div>
               </section>
 
-              <section className="grid gap-3 sm:grid-cols-2">
+              <section className="grid gap-3 sm:grid-cols-3">
                 <button type="button" onClick={() => setActiveSection(activeSection === 'topup' ? 'overview' : 'topup')} className={`group rounded-2xl border p-5 text-left transition ${activeSection === 'topup' ? 'border-blue-300 bg-blue-50 dark:border-blue-400/30 dark:bg-blue-500/10' : 'border-blue-100 bg-blue-50/70 hover:border-blue-200 hover:bg-blue-50 dark:border-blue-500/15 dark:bg-blue-500/[0.08]'}`}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -212,6 +310,15 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
                       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看请求明细与额度消耗</p>
                     </div>
                     <span className={`text-xl text-gray-400 transition-transform ${activeSection === 'logs' ? 'rotate-90' : 'group-hover:translate-x-1'}`}>→</span>
+                  </div>
+                </button>
+                <button type="button" onClick={() => setActiveSection(activeSection === 'security' ? 'overview' : 'security')} className={`group rounded-2xl border p-5 text-left transition ${activeSection === 'security' ? 'border-blue-300 bg-blue-50 dark:border-blue-400/30 dark:bg-blue-500/10' : 'border-gray-100 bg-gray-50/70 hover:border-blue-200 hover:bg-blue-50/50 dark:border-white/[0.08] dark:bg-white/[0.03]'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-800 dark:text-gray-200">账户安全</p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">修改密码与绑定邮箱</p>
+                    </div>
+                    <span className={`text-xl text-gray-400 transition-transform ${activeSection === 'security' ? 'rotate-90' : 'group-hover:translate-x-1'}`}>→</span>
                   </div>
                 </button>
               </section>
@@ -232,14 +339,28 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
 
               {activeSection === 'logs' && (
                 <section className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/[0.08]">
-                  <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-white/[0.08]">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-white/[0.08]">
                     <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">最近使用记录</p>
-                      <p className="mt-1 text-xs text-gray-400">展示最近 10 条账户记录</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">使用记录</p>
+                      <p className="mt-1 text-xs text-gray-400">共 {logsTotal.toLocaleString('zh-CN')} 条记录，每页 20 条</p>
                     </div>
-                    <button type="button" onClick={() => void loadLogs()} disabled={logsLoading} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-blue-500 disabled:cursor-wait dark:hover:bg-white/[0.06]" aria-label="刷新使用记录">
-                      <RefreshIcon className={`h-4 w-4 ${logsLoading ? 'animate-spin' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={exportLogs} disabled={!logs.length} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:text-blue-600 disabled:opacity-40 dark:border-white/10">导出 CSV</button>
+                      <button type="button" onClick={() => void loadLogs()} disabled={logsLoading} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-blue-500 disabled:cursor-wait dark:hover:bg-white/[0.06]" aria-label="刷新使用记录">
+                        <RefreshIcon className={`h-4 w-4 ${logsLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 border-b border-gray-100 px-5 py-3 dark:border-white/[0.08] sm:grid-cols-2 lg:grid-cols-4">
+                    <input value={logModel} onChange={(event) => { setLogModel(event.target.value); setLogsPage(1) }} placeholder="按模型筛选" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
+                    <select value={logType} onChange={(event) => { setLogType(Number(event.target.value)); setLogsPage(1) }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900">
+                      <option value={0}>全部类型</option>
+                      <option value={1}>额度充值</option>
+                      <option value={2}>图片生成</option>
+                      <option value={3}>额度调整</option>
+                    </select>
+                    <input type="date" value={logStart} max={logEnd || undefined} onChange={(event) => { setLogStart(event.target.value); setLogsPage(1) }} aria-label="开始日期" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900" />
+                    <input type="date" value={logEnd} min={logStart || undefined} onChange={(event) => { setLogEnd(event.target.value); setLogsPage(1) }} aria-label="结束日期" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900" />
                   </div>
                   {logsLoading ? (
                     <div className="py-10 text-center text-sm text-gray-400">正在读取使用记录…</div>
@@ -253,6 +374,7 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
                               {log.model_name && <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{log.model_name}</span>}
                             </div>
                             <p className="mt-1 truncate text-xs text-gray-400">{formatTime(log.created_at)}{log.content ? ` · ${log.content}` : ''}</p>
+                            {Boolean(log.metadata?.request_id || log.metadata?.requestId) && <p className="mt-1 truncate font-mono text-[11px] text-gray-400">Request ID: {String(log.metadata?.request_id || log.metadata?.requestId)}</p>}
                           </div>
                           <div className="text-left sm:text-right">
                             <p className={`text-sm font-semibold ${log.type === 1 ? 'text-emerald-500' : 'text-gray-700 dark:text-gray-300'}`}>{log.type === 1 ? '+' : '-'}{formatCNY((log.quota ?? 0) * (user.quota_cny_rate ?? 0))}</p>
@@ -264,6 +386,39 @@ export default function UserCenterModal({ onClose }: UserCenterModalProps) {
                   ) : (
                     <div className="py-10 text-center text-sm text-gray-400">暂无使用记录</div>
                   )}
+                  <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-xs dark:border-white/[0.08]">
+                    <button type="button" disabled={logsPage <= 1 || logsLoading} onClick={() => setLogsPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-35 dark:border-white/10">上一页</button>
+                    <span className="text-gray-400">第 {logsPage} / {Math.max(1, Math.ceil(logsTotal / 20))} 页</span>
+                    <button type="button" disabled={logsPage * 20 >= logsTotal || logsLoading} onClick={() => setLogsPage((page) => page + 1)} className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-35 dark:border-white/10">下一页</button>
+                  </div>
+                </section>
+              )}
+
+              {activeSection === 'security' && (
+                <section className="grid gap-4 lg:grid-cols-2">
+                  <form onSubmit={handlePasswordChange} className="rounded-2xl border border-gray-100 p-5 dark:border-white/[0.08]">
+                    <p className="font-semibold text-gray-900 dark:text-white">修改密码</p>
+                    <p className="mt-1 text-xs text-gray-400">修改后会自动刷新当前设备的生图令牌。</p>
+                    <div className="mt-4 space-y-3">
+                      <input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="当前密码" minLength={8} maxLength={20} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
+                      <input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" autoComplete="new-password" placeholder="新密码（8–20 个字符）" minLength={8} maxLength={20} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
+                      <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" placeholder="再次输入新密码" minLength={8} maxLength={20} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
+                      <button type="submit" disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword} className="w-full rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">{changingPassword ? '修改中…' : '修改密码'}</button>
+                    </div>
+                  </form>
+
+                  <form onSubmit={handleBindEmail} className="rounded-2xl border border-gray-100 p-5 dark:border-white/[0.08]">
+                    <p className="font-semibold text-gray-900 dark:text-white">绑定邮箱</p>
+                    <p className="mt-1 text-xs text-gray-400">{user.email ? `当前邮箱：${user.email}` : emailService ? '绑定后可使用邮箱找回密码。' : '管理员尚未配置邮件服务。'}</p>
+                    <div className="mt-4 space-y-3">
+                      <input value={bindEmailValue} onChange={(event) => setBindEmailValue(event.target.value)} type="email" autoComplete="email" placeholder="邮箱地址" disabled={!emailService} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04]" />
+                      <div className="flex gap-2">
+                        <input value={emailCode} onChange={(event) => setEmailCode(event.target.value)} inputMode="numeric" placeholder="邮箱验证码" disabled={!emailService} required className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04]" />
+                        <button type="button" onClick={() => void handleSendEmail()} disabled={!emailService || sendingEmail || !bindEmailValue.trim()} className="rounded-xl border border-blue-200 px-3 text-xs font-medium text-blue-600 disabled:opacity-40 dark:border-blue-500/30 dark:text-blue-300">{sendingEmail ? '发送中…' : '发送验证码'}</button>
+                      </div>
+                      <button type="submit" disabled={!emailService || bindingEmail || !emailCode.trim()} className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{bindingEmail ? '绑定中…' : user.email ? '更换邮箱' : '绑定邮箱'}</button>
+                    </div>
+                  </form>
                 </section>
               )}
 

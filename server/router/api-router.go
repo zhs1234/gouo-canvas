@@ -80,6 +80,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/invoice/detail", controller.GetUserInvoiceDetail)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.PUT("/self", controller.UpdateSelf)
+				selfRoute.PUT("/password", controller.ChangePassword)
 				selfRoute.POST("/unbind", controller.Unbind)
 				// selfRoute.DELETE("/self", controller.DeleteSelf)
 				selfRoute.GET("/token", controller.GenerateAccessToken)
@@ -193,6 +194,36 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/", controller.AddToken)
 			tokenRoute.PUT("/", controller.UpdateToken)
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
+		}
+
+		gouoRoute := apiRouter.Group("/gouo")
+		gouoRoute.Use(middleware.UserAuth())
+		{
+			gouoRoute.GET("/storage", controller.GetGouoStorage)
+			gouoRoute.POST("/assets", controller.UploadGouoAsset)
+			gouoRoute.GET("/assets/:id/content", controller.GetGouoAssetContent)
+			gouoRoute.PUT("/tasks/:clientTaskId", controller.PutGouoTask)
+			gouoRoute.GET("/tasks", controller.ListGouoTasks)
+			gouoRoute.GET("/tasks/:id", controller.GetGouoTask)
+			gouoRoute.POST("/tasks/:id/hide", controller.HideGouoTask)
+			gouoRoute.POST("/tasks/:id/restore", controller.RestoreGouoTask)
+			gouoRoute.GET("/collections", controller.ListGouoCollections)
+			gouoRoute.PUT("/collections/:id", controller.PutGouoCollection)
+			gouoRoute.POST("/collections/:id/hide", controller.HideGouoCollection)
+			gouoRoute.POST("/collections/:id/restore", controller.RestoreGouoCollection)
+			gouoRoute.PUT("/collections/:id/tasks/:taskId", controller.AddGouoFavoriteItem)
+			gouoRoute.DELETE("/collections/:id/tasks/:taskId", controller.RemoveGouoFavoriteItem)
+			gouoRoute.GET("/sync", controller.GetGouoSync)
+		}
+
+		gouoAdminRoute := apiRouter.Group("/gouo/admin")
+		gouoAdminRoute.Use(middleware.AdminAuth())
+		{
+			gouoAdminRoute.GET("/storage", controller.GetGouoAdminStorage)
+			gouoAdminRoute.GET("/storage/users", controller.ListGouoAdminStorageUsers)
+			gouoAdminRoute.GET("/storage/users/:id/tasks", controller.ListGouoAdminUserTasks)
+			gouoAdminRoute.GET("/storage/users/:id/assets/:assetId/content", controller.GetGouoAdminUserAssetContent)
+			gouoAdminRoute.PUT("/storage/users/:id/quota", controller.UpdateGouoAdminStorageQuota)
 		}
 		tokenAdminRoute := apiRouter.Group("/token")
 		tokenAdminRoute.Use(middleware.AdminAuth())

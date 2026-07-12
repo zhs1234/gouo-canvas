@@ -31,6 +31,7 @@ const MultiUserStats = Loadable(lazy(() => import('views/MultiUserStats')));
 const Dashboard = Loadable(lazy(() => import('views/Dashboard')));
 
 const SystemInfo = Loadable(lazy(() => import('views/SystemInfo')));
+const GouoStorage = Loadable(lazy(() => import('views/GouoStorage')));
 
 // ==============================|| MAIN ROUTING ||============================== //
 
@@ -141,6 +142,10 @@ const MainRoutes = {
     {
       path: 'system_info',
       element: <SystemInfo />
+    },
+    {
+      path: 'gouo_storage',
+      element: <GouoStorage />
     }
   ]
 };

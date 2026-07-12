@@ -9,7 +9,6 @@ import { copyImageSourceToClipboard, copyTextToClipboard, getClipboardFailureMes
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import { downloadImageEntriesAsZip, downloadImageIds, getImageZipEntries } from '../lib/downloadImages'
-import { isAgentTaskPromptPending } from '../lib/taskPromptDisplay'
 import { replaceImageMentionsForApi } from '../lib/promptImageMentions'
 import { CloseIcon, CodeIcon, CopyIcon, DownloadIcon, EditIcon, LinkIcon, TrashIcon } from './icons'
 
@@ -229,10 +228,7 @@ export default function DetailModal() {
 
   if (!task) return null
 
-  const isAgentTask = task.sourceMode === 'agent' || Boolean(task.agentConversationId || task.agentRoundId)
-  const showPendingPrompt = isAgentTaskPromptPending(task)
-  const isAgentEditTool = task.status === 'done' && String(task.agentToolAction ?? '').toLowerCase() === 'edit'
-  const showReferenceSection = allInputImageIds.length > 0 || isAgentEditTool
+  const showReferenceSection = allInputImageIds.length > 0
 
   const outputLen = outputSlots.length
   const currentImageRatio = currentOutputImageId ? imageRatios[currentOutputImageId] : ''
@@ -849,7 +845,7 @@ export default function DetailModal() {
               <h3 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                 输入内容
               </h3>
-              {task.prompt && !showPendingPrompt && (
+              {task.prompt && (
                 <button
                   onClick={handleCopyPrompt}
                   className="p-1 rounded text-gray-400 hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-white/[0.06] transition"
@@ -873,16 +869,9 @@ export default function DetailModal() {
                 </span>
               )}
             </div>
-            {showPendingPrompt ? (
-              <div className="mb-4 leading-relaxed">
-                <p className="text-sm text-gray-700 dark:text-gray-300">正在生成……</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">输入内容将在响应完成时接收</p>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4">
-                {task.prompt || '(无提示词)'}
-              </p>
-            )}
+            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4">
+              {task.prompt || '(无提示词)'}
+            </p>
             {showRevisedPrompt && currentRevisedPrompt && (
               <div className="mb-4">
                 <ActualValueBadge
@@ -941,15 +930,10 @@ export default function DetailModal() {
                         )
                       })}
                     </div>
-                    {isAgentEditTool && (
-                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                        由模型自主选择，可能包含其他图片
-                      </div>
-                    )}
                   </>
                 ) : (
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    由模型自主选择
+                    正在加载参考图…
                   </div>
                 )}
               </div>
@@ -1020,15 +1004,13 @@ export default function DetailModal() {
                   <DetailParamValue task={task} paramKey="moderation" className="font-medium" actualParams={currentActualParams} />
                 </div>
               </div>
-              {!isAgentTask && (
-                <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
-                  <span className="text-gray-400 dark:text-gray-500">数量</span>
-                  <br />
-                  <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
-                    <DetailParamValue task={task} paramKey="n" className="font-medium" />
-                  </div>
+              <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
+                <span className="text-gray-400 dark:text-gray-500">数量</span>
+                <br />
+                <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
+                  <DetailParamValue task={task} paramKey="n" className="font-medium" />
                 </div>
-              )}
+              </div>
             </div>
 
             {/* 时间 */}

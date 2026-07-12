@@ -4,7 +4,6 @@ import { useStore, ensureImageThumbnailCached, subscribeImageThumbnail, retryTas
 import { formatImageRatio } from '../lib/size'
 import { getParamDisplay, ActualValueBadge } from '../lib/paramDisplay'
 import { DEFAULT_IMAGES_MODEL, DEFAULT_FAL_MODEL } from '../lib/apiProfiles'
-import { isAgentTaskPromptPending } from '../lib/taskPromptDisplay'
 import { CodeIcon, TransparentBgIcon } from './icons'
 import ViewportTooltip from './ViewportTooltip'
 
@@ -314,9 +313,7 @@ export default function TaskCard({
   const showTransparentOutput = task.transparentOutput || task.params.transparent_output
 
   const nDisplay = getParamDisplay(task, 'n')
-  const isAgentTask = task.sourceMode === 'agent' || Boolean(task.agentConversationId || task.agentRoundId)
-  const showPendingPrompt = isAgentTaskPromptPending(task)
-  const showN = !isAgentTask && (task.params.n > 1 || nDisplay.isMismatch)
+  const showN = task.params.n > 1 || nDisplay.isMismatch
   const outputErrorCount = task.outputErrors?.length ?? 0
   const outputSuccessCount = task.outputImages?.length ?? 0
   const requestedOutputCount = Math.max(task.params.n, outputSuccessCount + outputErrorCount)
@@ -370,32 +367,18 @@ export default function TaskCard({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
-        draggable={task.status === 'done' && task.outputImages?.length > 0}
-        onDragStart={(e) => {
-          if (task.status !== 'done' || !task.outputImages?.length) return;
-          const imageIds = task.outputImages;
-          e.dataTransfer.setData('text/plain', `agent-images:${imageIds.join(',')}`);
-          e.dataTransfer.effectAllowed = 'copy';
-          // Optionally set drag image if we have thumbSrc
-          if (thumbSrc) {
-            const preview = document.createElement('div');
-            preview.style.cssText = 'position:fixed;left:-1000px;top:-1000px;width:100px;height:100px;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.25);';
-            const previewImg = document.createElement('img');
-            previewImg.src = thumbSrc;
-            previewImg.style.cssText = 'width:100px;height:100px;object-fit:cover;display:block;';
-            preview.appendChild(previewImg);
-            document.body.appendChild(preview);
-            e.dataTransfer.setDragImage(preview, 50, 50);
-            setTimeout(() => preview.remove(), 0);
-          }
-        }}
       >
-        {/* 选中时的角标 */}
+      {/* 选中时的角标 */}
       {isSelected && (
         <div className="absolute top-2 right-2 z-10 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-sm">
           <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
           </svg>
+        </div>
+      )}
+      {!isSelected && task.cloudSyncStatus && (
+        <div className={`absolute right-2 top-2 z-10 rounded-full px-2 py-1 text-[10px] font-medium shadow-sm backdrop-blur ${task.cloudHiddenAt ? 'bg-gray-900/75 text-white' : task.cloudSyncStatus === 'synced' ? 'bg-emerald-500/90 text-white' : task.cloudSyncStatus === 'error' ? 'bg-red-500/90 text-white' : 'bg-blue-500/90 text-white'}`}>
+          {task.cloudHiddenAt ? '回收站' : task.cloudSyncStatus === 'synced' ? '已同步' : task.cloudSyncStatus === 'error' ? '同步失败' : '同步中'}
         </div>
       )}
       <div className="flex h-40">
@@ -538,16 +521,9 @@ export default function TaskCard({
         {/* 右侧信息区域 */}
         <div className="flex-1 p-3 flex flex-col min-w-0">
           <div className="flex-1 min-h-0 mb-2 overflow-hidden">
-            {showPendingPrompt ? (
-              <div className="leading-relaxed">
-                <p className="text-sm text-gray-700 dark:text-gray-300">正在生成……</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">输入内容将在响应完成时接收</p>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed line-clamp-3">
-                {task.prompt || '(无提示词)'}
-              </p>
-            )}
+            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed line-clamp-3">
+              {task.prompt || '(无提示词)'}
+            </p>
           </div>
           <div className="mt-auto flex flex-col gap-1.5">
             {/* 参数与信息：横向滚动 */}

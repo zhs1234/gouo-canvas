@@ -46,18 +46,35 @@ One Hub 管理后台默认监听本机 `http://127.0.0.1:3000`。空数据库第
 
 当前光构注册页支持用户名/密码，并预留邮箱和验证码字段。若后台开启 Turnstile，需先在光构注册页接入 Turnstile token，再强制启用；否则注册请求会被拒绝。
 
-## Docker 部署
+## 生产部署
 
-```powershell
-Set-Location deploy
-Copy-Item .env.example .env
-# 修改 .env 中的全部密码和密钥
-docker compose up -d --build
+生产环境支持两条互相独立的部署路线：
+
+- [Docker Compose 部署](./DEPLOYMENT_DOCKER.md)：由仓库中的 Compose 同时管理公开前端、后端、MySQL、Redis 和持久卷。
+- [传统服务器手动部署](./DEPLOYMENT_MANUAL.md)：自行使用 Nginx、systemd、MySQL 和 Redis 管理每个服务。
+
+请先阅读[部署方式选择与共同要求](./DEPLOYMENT.md)，选定一种方式后完整执行对应教程。不要只复制启动命令；密钥固定、HTTPS、管理端隔离、数据库与图片成套备份、升级回滚和上线验收都是生产部署的一部分。
+
+## 云端作品库
+
+登录用户的画廊任务、输出图、参考图、遮罩、缩略图和收藏夹会自动同步到后端。浏览器 IndexedDB 继续作为缓存和断网队列，云端记录决定作品与收藏夹的最终状态。
+
+```dotenv
+GOUO_CLOUD_LIBRARY_ENABLED=true
+GOUO_ASSET_DIR=/data/gouo-assets
+GOUO_ASSET_USER_QUOTA_BYTES=2147483648
+GOUO_ASSET_MAX_FILE_BYTES=26214400
+GOUO_ASSET_MAX_TASK_FILES=32
 ```
 
-公开入口默认为 `http://服务器:8080`。Nginx 在同一个域名下提供光构前端，并将 `/api/*` 与 `/v1/*` 转发给后端，因此登录 Cookie、普通请求和 Responses SSE 流都无需跨域。
+- 默认每个用户 2 GB，单文件最大 25 MB，单任务最多关联 32 个图片资产。
+- 相同用户的相同图片按 SHA-256 去重；不同用户之间不共享鉴权记录。
+- 图片通过 `/api/gouo/assets/:id/content` 鉴权读取，不能把 `GOUO_ASSET_DIR` 配成 Nginx 静态目录。
+- 删除作品只会移入回收站，不会物理清理文件，隐藏作品仍占用空间。
+- Docker 部署已把 `/data` 挂载到 `backend-data` 卷。必须同时备份数据库和该卷，否则无法完整恢复作品库。
+- 本地文件模式仅适合单后端实例。多实例部署必须挂载同一个共享文件系统，或后续切换到 S3 兼容存储。
 
-生产环境还应在容器前增加 HTTPS 入口（Caddy、Nginx Proxy Manager 或云负载均衡均可），只公开 80/443。后端管理端口在 Compose 中绑定到 `127.0.0.1`，远程管理建议使用 SSH 隧道，不要直接暴露公网。
+管理后台的“运营 → 光构存储”页面可查看用户用量并调整单用户配额。配额不能低于当前已使用空间。
 
 ## 当前边界
 

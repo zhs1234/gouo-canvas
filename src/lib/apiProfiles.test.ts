@@ -688,18 +688,6 @@ describe('custom providers', () => {
     expect(customProfile).toMatchObject({ provider: provider.id, apiMode: 'images', streamImages: false })
   })
 
-  it('enables Agent submit auto scroll by default', () => {
-    expect(DEFAULT_SETTINGS.agentScrollToBottomAfterSubmit).toBe(true)
-    expect(normalizeSettings({}).agentScrollToBottomAfterSubmit).toBe(true)
-    expect(normalizeSettings({ agentScrollToBottomAfterSubmit: false }).agentScrollToBottomAfterSubmit).toBe(false)
-  })
-
-  it('enables Agent math formatting prompt by default', () => {
-    expect(DEFAULT_SETTINGS.agentMathFormattingPrompt).toBe(true)
-    expect(normalizeSettings({}).agentMathFormattingPrompt).toBe(true)
-    expect(normalizeSettings({ agentMathFormattingPrompt: false }).agentMathFormattingPrompt).toBe(false)
-  })
-
   it('disables prompt rewrite allowance by default', () => {
     expect(DEFAULT_SETTINGS.allowPromptRewrite).toBe(false)
     expect(normalizeSettings({}).allowPromptRewrite).toBe(false)

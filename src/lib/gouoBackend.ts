@@ -36,6 +36,7 @@ export interface GouoUsageLog {
   model_name?: string
   quota?: number
   request_time?: number
+  metadata?: Record<string, unknown>
 }
 
 interface GouoUsageLogPage {
@@ -45,8 +46,82 @@ interface GouoUsageLogPage {
   total_count: number
 }
 
+export interface GouoBackendStatus {
+  email_service?: boolean
+  email_verification?: boolean
+  gouo_cloud_library?: boolean
+}
+
+export interface GouoCloudStorage {
+  enabled: boolean
+  used_bytes: number
+  quota_bytes: number
+  remaining_bytes: number
+  asset_count: number
+}
+
+export interface GouoCloudAsset {
+  id: string
+  client_image_id?: string
+  sha256: string
+  mime_type: string
+  file_size: number
+  width?: number
+  height?: number
+  original_name?: string
+  content_url: string
+  deduplicated?: boolean
+}
+
+export interface GouoCloudTaskAsset {
+  asset_id: string
+  role: 'input' | 'mask_target' | 'mask' | 'output' | 'thumbnail' | 'partial' | 'transparent_original'
+  position: number
+  client_image_id: string
+  asset: GouoCloudAsset
+}
+
+export interface GouoCloudTask {
+  id: string
+  client_task_id: string
+  schema_version: number
+  status: 'done' | 'error'
+  prompt: string
+  model: string
+  operation: 'generation' | 'edit' | 'variation'
+  params: Record<string, unknown>
+  result_meta: Record<string, unknown>
+  error_message?: string
+  client_created_at: number
+  finished_at?: number
+  created_at: number
+  updated_at: number
+  hidden_at?: number
+  assets: GouoCloudTaskAsset[]
+  favorite_collection_ids?: string[]
+}
+
+export interface GouoCloudCollection {
+  id: string
+  name: string
+  created_at: number
+  updated_at: number
+  hidden_at?: number
+}
+
+export interface GouoCloudSyncResult {
+  tasks: GouoCloudTask[]
+  collections: GouoCloudCollection[]
+  favorite_items: Array<{ collection_id: string; task_id: string; created_at: number; updated_at: number }>
+  next_cursor: string
+  has_more: boolean
+  server_time: number
+}
+
 const configuredBaseUrl = (import.meta.env.VITE_GOUO_BACKEND_URL ?? '').trim().replace(/\/+$/, '')
 const configuredDevTarget = (import.meta.env.VITE_GOUO_BACKEND_DEV_TARGET ?? '').trim().replace(/\/+$/, '')
+let backendToken = ''
+let backendSessionReady = false
 
 export function isBackendAuthEnabled(): boolean {
   return import.meta.env.VITE_GOUO_BACKEND_ENABLED === 'true'
@@ -109,6 +184,10 @@ export function getCurrentUser(): Promise<GouoUser> {
   return backendRequest<GouoUser>('/api/user/self')
 }
 
+export function getBackendStatus(): Promise<GouoBackendStatus> {
+  return backendRequest<GouoBackendStatus>('/api/status')
+}
+
 export function login(username: string, password: string): Promise<GouoUser> {
   return backendRequest<GouoUser>('/api/user/login', {
     method: 'POST',
@@ -117,6 +196,8 @@ export function login(username: string, password: string): Promise<GouoUser> {
 }
 
 export function logout(): Promise<void> {
+  backendToken = ''
+  backendSessionReady = false
   return backendAction('/api/user/logout')
 }
 
@@ -137,8 +218,13 @@ export function redeemCode(key: string): Promise<number> {
   })
 }
 
-export function getUsageLogs(): Promise<GouoUsageLogPage> {
-  return backendRequest<GouoUsageLogPage>('/api/log/self?page=1&size=10&order=-created_at')
+export function getUsageLogs(page = 1, size = 20, filters?: { model?: string; type?: number; start?: number; end?: number }): Promise<GouoUsageLogPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size), order: '-created_at' })
+  if (filters?.model) params.set('model_name', filters.model)
+  if (filters?.type) params.set('log_type', String(filters.type))
+  if (filters?.start) params.set('start_timestamp', String(filters.start))
+  if (filters?.end) params.set('end_timestamp', String(filters.end))
+  return backendRequest<GouoUsageLogPage>(`/api/log/self?${params}`)
 }
 
 export async function register(input: RegisterInput): Promise<void> {
@@ -154,15 +240,98 @@ export function getPlaygroundToken(): Promise<string> {
   return backendRequest<string>('/api/token/playground')
 }
 
-export async function createBackendSettings(): Promise<Partial<AppSettings>> {
-  const token = await getPlaygroundToken()
+export async function createBackendSettings(forceRefresh = false): Promise<Partial<AppSettings>> {
+  if (!backendToken || forceRefresh) backendToken = await getPlaygroundToken()
+  backendSessionReady = true
   const sameOriginBaseUrl = typeof window === 'undefined' ? '/v1' : `${window.location.origin}/v1`
   return {
     baseUrl: configuredBaseUrl ? `${configuredBaseUrl}/v1` : sameOriginBaseUrl,
-    apiKey: token,
+    apiKey: backendToken,
     model: import.meta.env.VITE_GOUO_IMAGE_MODEL?.trim() || 'gpt-image-2',
     apiMode: 'images',
     apiProxy: false,
     streamImages: false,
   }
+}
+
+export function isBackendSessionReady(): boolean {
+  return backendSessionReady
+}
+
+export function isInvalidBackendTokenError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /无效的令牌|invalid.{0,8}token|token.{0,8}(invalid|expired)|HTTP 401/i.test(message)
+}
+
+export function getCloudStorage(): Promise<GouoCloudStorage> {
+  return backendRequest<GouoCloudStorage>('/api/gouo/storage')
+}
+
+export async function uploadCloudAsset(file: Blob, clientImageId: string, sha256: string): Promise<GouoCloudAsset> {
+  const form = new FormData()
+  form.append('file', file, `${clientImageId}.${file.type.split('/')[1] || 'png'}`)
+  form.append('client_image_id', clientImageId)
+  form.append('sha256', sha256)
+  const response = await fetch(apiUrl('/api/gouo/assets'), { method: 'POST', credentials: 'include', body: form })
+  return parseEnvelope<GouoCloudAsset>(response, true)
+}
+
+export function putCloudTask(clientTaskId: string, task: Record<string, unknown>): Promise<GouoCloudTask> {
+  return backendRequest<GouoCloudTask>(`/api/gouo/tasks/${encodeURIComponent(clientTaskId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(task),
+  })
+}
+
+export function getCloudTasks(cursor = '', hidden = false): Promise<{ data: GouoCloudTask[]; next_cursor: string }> {
+  const params = new URLSearchParams({ limit: '100', hidden: String(hidden) })
+  if (cursor) params.set('cursor', cursor)
+  return backendRequest<{ data: GouoCloudTask[]; next_cursor: string }>(`/api/gouo/tasks?${params}`)
+}
+
+export function getCloudSync(cursor = ''): Promise<GouoCloudSyncResult> {
+  const params = new URLSearchParams({ limit: '100' })
+  if (cursor) params.set('cursor', cursor)
+  return backendRequest<GouoCloudSyncResult>(`/api/gouo/sync?${params}`)
+}
+
+export function putCloudCollection(id: string, name: string): Promise<GouoCloudCollection> {
+  return backendRequest<GouoCloudCollection>(`/api/gouo/collections/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  })
+}
+
+export async function fetchCloudAssetContent(asset: GouoCloudAsset): Promise<Blob> {
+  const response = await fetch(apiUrl(asset.content_url), { credentials: 'include' })
+  if (!response.ok) throw new Error(`下载云端图片失败（HTTP ${response.status}）`)
+  return response.blob()
+}
+
+export function setCloudTaskHidden(id: string, hidden: boolean): Promise<void> {
+  return backendAction(`/api/gouo/tasks/${encodeURIComponent(id)}/${hidden ? 'hide' : 'restore'}`, {})
+}
+
+export function setCloudCollectionHidden(id: string, hidden: boolean): Promise<void> {
+  return backendAction(`/api/gouo/collections/${encodeURIComponent(id)}/${hidden ? 'hide' : 'restore'}`, {})
+}
+
+export function updatePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return backendAction('/api/user/password', { current_password: currentPassword, new_password: newPassword }, 'PUT')
+}
+
+export function sendEmailVerification(email: string): Promise<void> {
+  return backendAction(`/api/verification?email=${encodeURIComponent(email)}`)
+}
+
+export function bindEmail(email: string, code: string): Promise<void> {
+  return backendAction(`/api/oauth/email/bind?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`)
+}
+
+export function sendPasswordReset(email: string): Promise<void> {
+  return backendAction(`/api/reset_password?email=${encodeURIComponent(email)}`)
+}
+
+export function resetPassword(email: string, token: string, newPassword: string): Promise<void> {
+  return backendAction('/api/user/reset', { email, token, new_password: newPassword })
 }

@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds, useStore, reuseConfig, editOutputs, removeTask, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
 import TaskCard from './TaskCard'
+import { restoreCloudTask } from '../lib/cloudSync'
+import { EMPTY_GALLERY_PROMPTS } from '../lib/userGuidance'
 
 export default function TaskGrid() {
   const tasks = useStore((s) => s.tasks)
@@ -44,9 +46,19 @@ export default function TaskGrid() {
   }, [tasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
 
   const handleDelete = (task: typeof tasks[0]) => {
+    if (task.cloudHiddenAt) {
+      setConfirmDialog({
+        title: '恢复作品',
+        message: '将这个作品恢复到云端画廊吗？',
+        confirmText: '恢复',
+        action: () => restoreCloudTask(task),
+      })
+      return
+    }
     setConfirmDialog({
-      title: '删除任务',
-      message: '确定要删除这个任务吗？关联的图片资源也会被清理（如果没有其他任务引用）。',
+      title: task.cloudId ? '移入回收站' : '删除任务',
+      message: task.cloudId ? '确定将这个任务移入云端回收站吗？图片文件会继续保留并占用云端空间。' : '确定要删除这个任务吗？关联的图片资源也会被清理（如果没有其他任务引用）。',
+      confirmText: task.cloudId ? '移入回收站' : '删除',
       action: () => removeTask(task),
     })
   }
@@ -253,9 +265,10 @@ export default function TaskGrid() {
   }, [clearSelection, isMac])
 
   if (!filteredTasks.length) {
+    const showExamples = tasks.length === 0 && !searchQuery && !filterFavorite && filterStatus === 'all'
     return (
-      <div className="text-center py-20 text-gray-400 dark:text-gray-500">
-        {searchQuery || filterFavorite ? (
+      <div className="py-12 text-center text-gray-400 dark:text-gray-500 sm:py-16">
+        {!showExamples ? (
           <p className="text-sm">没有找到匹配的任务</p>
         ) : (
           <>
@@ -272,7 +285,24 @@ export default function TaskGrid() {
                 d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
-            <p className="text-sm">输入提示词开始生成图片</p>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">从一个示例开始创作</h2>
+            <p className="mt-1 text-sm">点击示例会自动填入输入框，你可以继续修改任何细节。</p>
+            <div data-no-drag-select className="mx-auto mt-6 grid max-w-3xl gap-2 text-left sm:grid-cols-2 lg:grid-cols-3">
+              {EMPTY_GALLERY_PROMPTS.map((item) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  onClick={() => {
+                    useStore.getState().setPrompt(item.prompt)
+                    window.setTimeout(() => document.querySelector<HTMLElement>('[contenteditable="true"]')?.focus(), 0)
+                  }}
+                  className="group rounded-xl border border-gray-200 bg-white px-4 py-3 transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md hover:shadow-blue-900/5 dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-blue-500/30"
+                >
+                  <span className="text-sm font-semibold text-gray-700 transition group-hover:text-blue-600 dark:text-gray-300 dark:group-hover:text-blue-400">{item.title}</span>
+                  <span className="mt-1 block line-clamp-2 text-xs leading-5 text-gray-400">{item.prompt}</span>
+                </button>
+              ))}
+            </div>
           </>
         )}
       </div>

@@ -1,11 +1,14 @@
-import type { AgentConversation, TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
+import type { TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
 
 const DB_NAME = 'gouo-canvas'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE_TASKS = 'tasks'
 const STORE_IMAGES = 'images'
 const STORE_THUMBNAILS = 'thumbnails'
 const STORE_AGENT_CONVERSATIONS = 'agentConversations'
+const STORE_CLOUD_QUEUE = 'cloudSyncQueue'
+const STORE_CLOUD_META = 'cloudSyncMeta'
+const STORE_CLOUD_ASSET_MAP = 'cloudAssetMap'
 const THUMBNAIL_MAX_SIZE = 720
 const THUMBNAIL_QUALITY = 0.9
 const THUMBNAIL_VERSION = 2
@@ -28,6 +31,15 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_AGENT_CONVERSATIONS)) {
         db.createObjectStore(STORE_AGENT_CONVERSATIONS, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_CLOUD_QUEUE)) {
+        db.createObjectStore(STORE_CLOUD_QUEUE, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_CLOUD_META)) {
+        db.createObjectStore(STORE_CLOUD_META, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(STORE_CLOUD_ASSET_MAP)) {
+        db.createObjectStore(STORE_CLOUD_ASSET_MAP, { keyPath: 'localImageId' })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -70,28 +82,14 @@ export function clearTasks(): Promise<undefined> {
   return dbTransaction(STORE_TASKS, 'readwrite', (s) => s.clear())
 }
 
-// ===== Agent conversations =====
-
-export function getAllAgentConversations(): Promise<AgentConversation[]> {
-  return dbTransaction(STORE_AGENT_CONVERSATIONS, 'readonly', (s) => s.getAll())
-}
-
-export function putAgentConversation(conversation: AgentConversation): Promise<IDBValidKey> {
-  return dbTransaction(STORE_AGENT_CONVERSATIONS, 'readwrite', (s) => s.put(conversation))
-}
-
-export function clearAgentConversations(): Promise<undefined> {
-  return dbTransaction(STORE_AGENT_CONVERSATIONS, 'readwrite', (s) => s.clear())
-}
-
-export function replaceAgentConversations(conversations: AgentConversation[]): Promise<undefined> {
+export function replaceTasks(tasks: TaskRecord[]): Promise<undefined> {
   return openDB().then(
     (db) =>
       new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_AGENT_CONVERSATIONS, 'readwrite')
-        const store = tx.objectStore(STORE_AGENT_CONVERSATIONS)
+        const tx = db.transaction(STORE_TASKS, 'readwrite')
+        const store = tx.objectStore(STORE_TASKS)
         store.clear()
-        for (const conversation of conversations) store.put(conversation)
+        for (const task of tasks) store.put(task)
         tx.oncomplete = () => resolve(undefined)
         tx.onerror = () => reject(tx.error)
         tx.onabort = () => reject(tx.error)
@@ -174,6 +172,56 @@ export function getAllImageIds(): Promise<string[]> {
 
 export function putImage(image: StoredImage): Promise<IDBValidKey> {
   return dbTransaction(STORE_IMAGES, 'readwrite', (s) => s.put(image))
+}
+
+export interface CloudSyncQueueItem {
+  id: string
+  taskId: string
+  attempts: number
+  nextAttemptAt: number
+  createdAt: number
+  error?: string
+}
+
+export interface CloudAssetMapItem {
+  localImageId: string
+  cloudAssetId: string
+  contentUrl: string
+  sha256: string
+  updatedAt: number
+}
+
+interface CloudSyncMetaItem {
+  key: string
+  value: unknown
+}
+
+export function getCloudSyncQueue(): Promise<CloudSyncQueueItem[]> {
+  return dbTransaction(STORE_CLOUD_QUEUE, 'readonly', (s) => s.getAll())
+}
+
+export function putCloudSyncQueueItem(item: CloudSyncQueueItem): Promise<IDBValidKey> {
+  return dbTransaction(STORE_CLOUD_QUEUE, 'readwrite', (s) => s.put(item))
+}
+
+export function deleteCloudSyncQueueItem(id: string): Promise<undefined> {
+  return dbTransaction(STORE_CLOUD_QUEUE, 'readwrite', (s) => s.delete(id))
+}
+
+export function getCloudAssetMapItem(localImageId: string): Promise<CloudAssetMapItem | undefined> {
+  return dbTransaction(STORE_CLOUD_ASSET_MAP, 'readonly', (s) => s.get(localImageId))
+}
+
+export function putCloudAssetMapItem(item: CloudAssetMapItem): Promise<IDBValidKey> {
+  return dbTransaction(STORE_CLOUD_ASSET_MAP, 'readwrite', (s) => s.put(item))
+}
+
+export function getCloudSyncMeta<T>(key: string): Promise<T | undefined> {
+  return dbTransaction<CloudSyncMetaItem | undefined>(STORE_CLOUD_META, 'readonly', (s) => s.get(key)).then((item) => item?.value as T | undefined)
+}
+
+export function putCloudSyncMeta(key: string, value: unknown): Promise<IDBValidKey> {
+  return dbTransaction(STORE_CLOUD_META, 'readwrite', (s) => s.put({ key, value }))
 }
 
 export function deleteImage(id: string): Promise<undefined> {

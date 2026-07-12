@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import type { AppMode } from '../types'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { BRAND } from '../config/brand'
 
 interface HelpModalProps {
-  appMode: AppMode
   isFavoriteCollectionOverview?: boolean
   onClose: () => void
 }
@@ -21,10 +19,9 @@ function useIsMobile() {
   return isMobile
 }
 
-export default function HelpModal({ appMode, isFavoriteCollectionOverview = false, onClose }: HelpModalProps) {
+export default function HelpModal({ isFavoriteCollectionOverview = false, onClose }: HelpModalProps) {
   const isMobile = useIsMobile()
   const modalRef = useRef<HTMLDivElement>(null)
-  const isAgentMode = appMode === 'agent'
   useCloseOnEscape(true, onClose)
   usePreventBackgroundScroll(true, modalRef)
 
@@ -63,21 +60,7 @@ export default function HelpModal({ appMode, isFavoriteCollectionOverview = fals
         </div>
 
         <div className="flex-1 overflow-y-auto overscroll-contain mb-6 text-sm text-gray-600 dark:text-gray-300 space-y-6 custom-scrollbar pr-2">
-          {isAgentMode ? (
-            <>
-              <section>
-                <div className="space-y-4">
-                  <ul className="list-disc pl-4 space-y-2">
-                    <li>需要使用 Responses API 配置。</li>
-                    <li>如需 Agent 搜索互联网或读取 URL 内容，可在设置的 Agent 配置中开启“网络搜索”。</li>
-                    <li>输入 <strong className="text-blue-500 dark:text-blue-400 font-medium">@</strong> 可引用参考图或前面轮次生成的图片；Agent 也会自行参考上下文中的图片。</li>
-                    <li>编辑某轮消息重新发送，或重新生成某轮消息，会产生可切换的分支。</li>
-                    <li>生成的图片会同步到画廊；删除对话默认不会删除画廊中的任务。</li>
-                  </ul>
-                </div>
-              </section>
-            </>
-          ) : isFavoriteCollectionOverview ? (
+          {isFavoriteCollectionOverview ? (
             <>
               <section>
                 <h4 className="mb-4 text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5">

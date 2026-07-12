@@ -1,67 +1,89 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
-// material-ui
-import { Button, Stack, Typography, Alert } from '@mui/material';
-
-// assets
-import { showError, copy } from 'utils/common';
+import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
+import { showError, showSuccess } from 'utils/common';
 import { API } from 'utils/api';
-import { useTranslation } from 'react-i18next';
-
-// ===========================|| FIREBASE - REGISTER ||=========================== //
 
 const ResetPasswordForm = () => {
-  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const [inputs, setInputs] = useState({
-    email: '',
-    token: ''
-  });
-  const [newPassword, setNewPassword] = useState('');
+  const navigate = useNavigate();
+  const [inputs, setInputs] = useState({ email: '', token: '' });
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [completed, setCompleted] = useState(false);
+
+  useEffect(() => {
+    setInputs({
+      email: searchParams.get('email') || '',
+      token: searchParams.get('token') || ''
+    });
+  }, [searchParams]);
 
   const submit = async () => {
-    try {
-      const res = await API.post(`/api/user/reset`, inputs);
-      const { success, message } = res.data;
-      if (success) {
-        let password = res.data.data;
-        setNewPassword(password);
-        copy(password, t('auth.newPassword'));
-      } else {
-        showError(message);
-      }
-    } catch (error) {
+    if (password.length < 8 || password.length > 20) {
+      showError('新密码必须为 8 到 20 个字符');
       return;
+    }
+    if (password !== confirmPassword) {
+      showError('两次输入的新密码不一致');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await API.post('/api/user/reset', {
+        ...inputs,
+        new_password: password
+      });
+      if (!response.data.success) throw new Error(response.data.message);
+      setCompleted(true);
+      showSuccess('密码已重置');
+      setTimeout(() => navigate('/login'), 1200);
+    } catch (error) {
+      showError(error.message || '重置密码失败');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  useEffect(() => {
-    let email = searchParams.get('email');
-    let token = searchParams.get('token');
-    setInputs({
-      token,
-      email
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  if (!inputs.email || !inputs.token) {
+    return (
+      <Typography variant="h3" sx={{ textDecoration: 'none' }}>
+        重置链接无效或已过期
+      </Typography>
+    );
+  }
+
+  if (completed) return <Alert severity="success">密码已重置，正在返回登录页…</Alert>;
 
   return (
-    <Stack spacing={3} padding={'24px'} justifyContent={'center'} alignItems={'center'}>
-      {!inputs.email || !inputs.token ? (
-        <Typography variant="h3" sx={{ textDecoration: 'none' }}>
-          {t('auth.invalidLink')}
-        </Typography>
-      ) : newPassword ? (
-        <Alert severity="error">
-          {t('auth.newPasswordInfo')} <b>{newPassword}</b> <br />
-          {t('auth.newPasswordEdit')}
-        </Alert>
-      ) : (
-        <Button fullWidth onClick={submit} size="large" type="submit" variant="contained" color="primary">
-          {t('auth.restPasswordClick')}
-        </Button>
-      )}
+    <Stack spacing={2} padding="24px">
+      <TextField
+        label="新密码"
+        type="password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        inputProps={{ minLength: 8, maxLength: 20 }}
+        fullWidth
+      />
+      <TextField
+        label="确认新密码"
+        type="password"
+        value={confirmPassword}
+        onChange={(event) => setConfirmPassword(event.target.value)}
+        inputProps={{ minLength: 8, maxLength: 20 }}
+        fullWidth
+      />
+      <Button
+        fullWidth
+        onClick={() => void submit()}
+        disabled={submitting || !password || !confirmPassword}
+        size="large"
+        variant="contained"
+      >
+        {submitting ? '重置中…' : '设置新密码'}
+      </Button>
     </Stack>
   );
 };

@@ -76,7 +76,7 @@ describe('gouoBackend', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/log/self?page=1&size=10&order=-created_at',
+      '/api/log/self?page=1&size=20&order=-created_at',
       expect.objectContaining({ credentials: 'include' }),
     )
   })
@@ -104,5 +104,29 @@ describe('gouoBackend', () => {
     const { getPlaygroundToken } = await import('./gouoBackend')
 
     await expect(getPlaygroundToken()).rejects.toThrow('额度不足')
+  })
+
+  it('recognizes backend token failures without treating unrelated errors as authentication failures', async () => {
+    const { isInvalidBackendTokenError } = await import('./gouoBackend')
+
+    expect(isInvalidBackendTokenError(new Error('无效的令牌'))).toBe(true)
+    expect(isInvalidBackendTokenError(new Error('HTTP 401'))).toBe(true)
+    expect(isInvalidBackendTokenError(new Error('Provider API error: token expired'))).toBe(true)
+    expect(isInvalidBackendTokenError(new Error('额度不足'))).toBe(false)
+  })
+
+  it('uploads cloud assets with the authenticated session and client image id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      success: true,
+      data: { id: 'asset-1', sha256: 'abc', mime_type: 'image/png', file_size: 3, content_url: '/api/gouo/assets/asset-1/content' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { uploadCloudAsset } = await import('./gouoBackend')
+
+    await expect(uploadCloudAsset(new Blob(['abc'], { type: 'image/png' }), 'image-1', 'abc')).resolves.toMatchObject({ id: 'asset-1' })
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/gouo/assets')
+    expect(init).toMatchObject({ method: 'POST', credentials: 'include' })
+    expect((init.body as FormData).get('client_image_id')).toBe('image-1')
   })
 })

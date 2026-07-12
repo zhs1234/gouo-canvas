@@ -194,6 +194,11 @@ func InitDB() (err error) {
 			return err
 		}
 
+		err = DB.AutoMigrate(&GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{})
+		if err != nil {
+			return err
+		}
+
 		if config.UserInvoiceMonth {
 			err = db.AutoMigrate(&StatisticsMonthGeneratedHistory{})
 			if err != nil {

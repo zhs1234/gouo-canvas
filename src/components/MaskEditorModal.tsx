@@ -6,6 +6,7 @@ import { canvasToBlob, loadImage } from '../lib/canvasImage'
 import { blobToDataUrl } from '../lib/dataUrl'
 import { storeImage } from '../lib/db'
 import { prepareMaskTargetDataUrl, replaceMaskTargetImage } from '../lib/maskPreprocess'
+import { GUIDE_FLAGS, hasGuideFlag, setGuideFlag } from '../lib/userGuidance'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import {
@@ -139,6 +140,7 @@ export default function MaskEditorModal() {
   const [isPanning, setIsPanning] = useState(false)
   const [sliderAnchor, setSliderAnchor] = useState<SliderAnchor | null>(null)
   const [showMaskInfo, setShowMaskInfo] = useState(false)
+  const [showFirstUseGuide, setShowFirstUseGuide] = useState(false)
 
   const close = () => {
     if (isSaving) return
@@ -146,6 +148,11 @@ export default function MaskEditorModal() {
   }
   useCloseOnEscape(Boolean(imageId), close)
   usePreventBackgroundScroll(Boolean(imageId))
+
+  useEffect(() => {
+    if (!imageId || hasGuideFlag(GUIDE_FLAGS.maskEditor)) return
+    setShowFirstUseGuide(true)
+  }, [imageId])
 
   useEffect(() => () => {
     if (maskInfoTimerRef.current != null) {
@@ -835,6 +842,25 @@ export default function MaskEditorModal() {
   return (
     <>
       <div data-no-drag-select className="fixed inset-0 z-[80] flex flex-col bg-gray-50 dark:bg-gray-900 animate-modal-in">
+      {showFirstUseGuide && (
+        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-5 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white p-6 text-center shadow-2xl dark:bg-gray-950 sm:p-7">
+            <div className="relative mx-auto h-36 w-56 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-100 dark:from-blue-950 dark:to-indigo-950 dark:ring-blue-500/20">
+              <div className="absolute inset-5 rounded-xl bg-[linear-gradient(135deg,#cbd5e1_25%,#f8fafc_25%,#f8fafc_50%,#cbd5e1_50%,#cbd5e1_75%,#f8fafc_75%)] bg-[length:18px_18px] opacity-60" />
+              <div className="absolute left-16 top-9 h-16 w-24 rounded-[45%] border-4 border-dashed border-blue-500 bg-blue-400/25" />
+              <div className="absolute left-28 top-6 h-8 w-8 animate-bounce rounded-full border-4 border-white bg-blue-600 shadow-lg" />
+            </div>
+            <h3 className="mt-5 text-xl font-bold text-gray-950 dark:text-white">涂抹需要修改的区域</h3>
+            <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">蓝色画笔经过的区域会成为遮罩。保存后，请在提示词里同时说明要改成什么，例如“只把遮罩区域改成红色外套”。</p>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+              <span className="rounded-lg bg-gray-50 px-2 py-2 text-gray-500 dark:bg-white/[0.04]">滚轮缩放</span>
+              <span className="rounded-lg bg-gray-50 px-2 py-2 text-gray-500 dark:bg-white/[0.04]">Alt 拖动画布</span>
+              <span className="rounded-lg bg-gray-50 px-2 py-2 text-gray-500 dark:bg-white/[0.04]">橡皮擦修正</span>
+            </div>
+            <button type="button" onClick={() => { setGuideFlag(GUIDE_FLAGS.maskEditor); setShowFirstUseGuide(false) }} className="mt-5 w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700">开始涂抹</button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex-none flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 z-20">
         <div className="flex items-center gap-3">

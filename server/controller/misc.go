@@ -26,6 +26,8 @@ func GetStatus(c *gin.Context) {
 			"version":             config.Version,
 			"start_time":          config.StartTime,
 			"email_verification":  config.EmailVerificationEnabled,
+			"email_service":       config.SMTPServer != "" && config.SMTPAccount != "" && config.SMTPToken != "",
+			"gouo_cloud_library":  config.GouoCloudLibraryEnabled,
 			"github_oauth":        config.GitHubOAuthEnabled,
 			"github_client_id":    config.GitHubClientId,
 			"oidc_auth":           config.OIDCAuthEnabled,
@@ -180,8 +182,9 @@ func SendPasswordResetEmail(c *gin.Context) {
 }
 
 type PasswordResetRequest struct {
-	Email string `json:"email"`
-	Token string `json:"token"`
+	Email       string `json:"email"`
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
 }
 
 func ResetPassword(c *gin.Context) {
@@ -195,7 +198,7 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 
-	if req.Email == "" || req.Token == "" {
+	if req.Email == "" || req.Token == "" || len(req.NewPassword) < 8 || len(req.NewPassword) > 20 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "无效的参数",
@@ -209,8 +212,12 @@ func ResetPassword(c *gin.Context) {
 		})
 		return
 	}
-	password := common.GenerateVerificationCode(12)
-	err = model.ResetUserPasswordByEmail(req.Email, password)
+	user := &model.User{Email: req.Email}
+	if err := user.FillUserByEmail(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "重置链接非法或已过期"})
+		return
+	}
+	err = model.ResetUserPasswordByEmail(req.Email, req.NewPassword)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -219,9 +226,9 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 	common.DeleteKey(req.Email, common.PasswordResetPurpose)
+	_ = model.RegeneratePlaygroundToken(user.Id)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    password,
 	})
 }

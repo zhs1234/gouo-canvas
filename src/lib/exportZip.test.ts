@@ -48,7 +48,6 @@ describe('exportZip', () => {
       thumbnailsByImageId: new Map([[thumbnail.id, thumbnail]]),
       favoriteCollections: [],
       defaultFavoriteCollectionId: null,
-      agentConversations: [],
     })
     const parsed = readExportZip(bytes)
 

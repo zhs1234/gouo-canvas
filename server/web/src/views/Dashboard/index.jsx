@@ -11,7 +11,6 @@ import ModelUsagePieChart from './component/ModelUsagePieChart';
 import { useTranslation } from 'react-i18next';
 import InviteCard from './component/InviteCard';
 import QuotaLogWeek from './component/QuotaLogWeek';
-import QuickStartCard from './component/QuickStartCard';
 import RPM from './component/RPM';
 import StatusPanel from './component/StatusPanel';
 import { useSelector } from 'react-redux';
@@ -131,9 +130,6 @@ const Dashboard = () => {
           <Grid item lg={4} xs={12}>
             {/* 用户信息 */}
             <ModelUsagePieChart isLoading={isLoading} data={modelUsageData} />
-            <Box mt={2}>
-              <QuickStartCard />
-            </Box>
             {/* 邀请 */}
             <Box mt={2}>
               <InviteCard />

@@ -113,159 +113,12 @@ input[type="number"] {
   50% { border-color: #93c5fd; }
 }
 
-@keyframes agent-web-search-text-sweep {
-  0% { background-position: 200% center; }
-  100% { background-position: -100% center; }
-}
-
-.agent-web-search-running-text {
-  --agent-web-search-text: #6b7280;
-  --agent-web-search-highlight: #ffffff;
-  display: inline-block;
-  color: transparent;
-  background-color: var(--agent-web-search-text);
-  background-image: linear-gradient(
-    110deg,
-    var(--agent-web-search-text) 0%,
-    var(--agent-web-search-text) 40%,
-    var(--agent-web-search-highlight) 50%,
-    var(--agent-web-search-text) 60%,
-    var(--agent-web-search-text) 100%
-  );
-  background-size: 200% 100%;
-  background-repeat: no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: agent-web-search-text-sweep 2.5s linear infinite;
-}
-
-@media (prefers-color-scheme: dark) {
-  .agent-web-search-running-text {
-    --agent-web-search-text: #9ca3af;
-    --agent-web-search-highlight: #ffffff;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .agent-web-search-running-text {
-    color: var(--agent-web-search-text);
-    background-image: none;
-    animation: none;
-  }
-}
-
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
-}
-
-.markdown-renderer {
-  color: inherit;
-  line-height: inherit;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.markdown-renderer :where(p, ul, ol, blockquote, table, pre, [data-streamdown="code-block"]) {
-  margin-bottom: 0.65rem;
-  margin-top: 0.65rem;
-}
-
-.markdown-renderer :where(p:first-child, ul:first-child, ol:first-child, blockquote:first-child, table:first-child, pre:first-child, [data-streamdown="code-block"]:first-child) {
-  margin-top: 0;
-}
-
-.markdown-renderer :where(p:last-child, ul:last-child, ol:last-child, blockquote:last-child, table:last-child, pre:last-child, [data-streamdown="code-block"]:last-child) {
-  margin-bottom: 0;
-}
-
-.markdown-renderer :where(h1, h2, h3, h4, h5, h6) {
-  color: inherit;
-  font-weight: 700;
-  line-height: 1.35;
-  margin: 1rem 0 0.45rem;
-}
-
-.markdown-renderer :where(h1) { font-size: 1.35em; }
-.markdown-renderer :where(h2) { font-size: 1.2em; }
-.markdown-renderer :where(h3) { font-size: 1.08em; }
-
-.markdown-renderer :where(ul, ol) {
-  padding-left: 1.35rem;
-}
-
-.markdown-renderer :where(ul) { list-style: disc; }
-.markdown-renderer :where(ol) { list-style: decimal; }
-
-.markdown-renderer :where(li) {
-  margin: 0.2rem 0;
-}
-
-.markdown-renderer :where(blockquote) {
-  border-left: 3px solid rgba(59, 130, 246, 0.45);
-  color: #52525b;
-  padding-left: 0.85rem;
-}
-
-.markdown-renderer :where(a) {
-  color: #2563eb;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.markdown-renderer :where(:not(pre) > code) {
-  border-radius: 0.35rem;
-  background: rgba(113, 113, 122, 0.12);
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  padding: 0.1rem 0.32rem;
-}
-
-.markdown-renderer :where(table) {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
-}
-
-.markdown-renderer :where(th, td) {
-  border: 1px solid #e4e4e7;
-  padding: 0.4rem 0.6rem;
-}
-
-.markdown-renderer :where(th) {
-  background: rgba(113, 113, 122, 0.1);
-  font-weight: 600;
-}
-
-.markdown-renderer :where(img) {
-  max-width: 100%;
-  border-radius: 0.75rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .markdown-renderer :where(blockquote) {
-    color: #a1a1aa;
-  }
-
-  .markdown-renderer :where(a) {
-    color: #60a5fa;
-  }
-
-  .markdown-renderer :where(:not(pre) > code) {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .markdown-renderer :where(th, td) {
-    border-color: rgba(255, 255, 255, 0.12);
-  }
-
-  .markdown-renderer :where(th) {
-    background: rgba(255, 255, 255, 0.06);
-  }
 }
 
 .mask-edge-r {
@@ -384,11 +237,6 @@ input[type="number"] {
 }
 
 @media (max-width: 640px) {
-  html.agent-no-pull-refresh,
-  html.agent-no-pull-refresh body {
-    overscroll-behavior-y: contain;
-  }
-
   .safe-area-top {
     padding-top: max(0.5rem, var(--safe-area-top));
   }

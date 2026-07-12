@@ -18,6 +18,11 @@ func InitConf() {
 	SessionSecret = utils.GetOrDefault("session_secret", SessionSecret)
 	UserInvoiceMonth = viper.GetBool("user_invoice_month")
 	GouoImagePriceCNY = viper.GetFloat64("gouo_image_price_cny")
+	GouoCloudLibraryEnabled = viper.GetBool("gouo_cloud_library_enabled")
+	GouoAssetDir = viper.GetString("gouo_asset_dir")
+	GouoAssetUserQuotaBytes = viper.GetInt64("gouo_asset_user_quota_bytes")
+	GouoAssetMaxFileBytes = viper.GetInt64("gouo_asset_max_file_bytes")
+	GouoAssetMaxTaskFiles = viper.GetInt("gouo_asset_max_task_files")
 	GitHubProxy = viper.GetString("github_proxy")
 	MCP_ENABLE = viper.GetBool("mcp.enable") != false
 	UPTIMEKUMA_ENABLE = viper.GetBool("uptime_kuma.enable") != false
@@ -49,6 +54,11 @@ func defaultConfig() {
 	viper.SetDefault("favicon", "")
 	viper.SetDefault("user_invoice_month", false)
 	viper.SetDefault("gouo_image_price_cny", 0.1)
+	viper.SetDefault("gouo_cloud_library_enabled", true)
+	viper.SetDefault("gouo_asset_dir", "./data/gouo-assets")
+	viper.SetDefault("gouo_asset_user_quota_bytes", int64(2*1024*1024*1024))
+	viper.SetDefault("gouo_asset_max_file_bytes", int64(25*1024*1024))
+	viper.SetDefault("gouo_asset_max_task_files", 32)
 	viper.SetDefault("mcp.enable", false)
 	viper.SetDefault("uptime_kuma.enable", false)
 	viper.SetDefault("uptime_kuma.domain", "")

@@ -3,7 +3,7 @@ import type { InputImage } from '../types'
 const MENTION_START = '\u2063'
 const MENTION_END = '\u2064'
 const SELECTED_IMAGE_MENTION_RE = /\u2063@图(\d+)\u2064/g
-const SELECTED_MENTION_RE = /\u2063(@图(\d+)|@(?:第)?\d+轮图\d+)\u2064/g
+const SELECTED_MENTION_RE = /\u2063(@图(\d+))\u2064/g
 
 export interface AtImageQuery {
   start: number
@@ -78,13 +78,10 @@ export function insertImageMention(prompt: string, start: number, cursor: number
 }
 
 export function insertImageMentionAtVisibleRange(prompt: string, start: number, cursor: number, imageIndex: number) {
-  return insertTextMentionAtVisibleRange(prompt, start, cursor, getImageMentionLabel(imageIndex))
-}
-
-export function insertTextMentionAtVisibleRange(prompt: string, start: number, cursor: number, text: string) {
   const promptStart = getPromptIndexFromVisibleIndex(prompt, start)
   const promptCursor = getPromptIndexFromVisibleIndex(prompt, cursor)
-  const mention = getSelectedTextMentionLabel(text)
+  const text = getImageMentionLabel(imageIndex)
+  const mention = getSelectedImageMentionLabel(imageIndex)
   return {
     prompt: `${prompt.slice(0, promptStart)}${mention}${prompt.slice(promptCursor)}`,
     cursor: start + text.length,
@@ -109,8 +106,7 @@ export function remapImageMentionsForOrder(
 
 export type PromptMentionPart =
   | { type: 'text'; text: string }
-  | { type: 'mention'; text: string; imageIndex: number; mentionText?: string }
-  | { type: 'mention'; text: string; mentionText: string; imageIndex?: never }
+  | { type: 'mention'; text: string; imageIndex: number }
 
 export function getPromptMentionParts(prompt: string, inputImages: InputImage[]): PromptMentionPart[] {
   const parts: PromptMentionPart[] = []
@@ -118,16 +114,14 @@ export function getPromptMentionParts(prompt: string, inputImages: InputImage[])
 
   for (const match of prompt.matchAll(SELECTED_MENTION_RE)) {
     const text = match[1]
-    const index = match[2] ? Number(match[2]) - 1 : null
+    const index = Number(match[2]) - 1
     if (match.index == null) continue
-    if (index != null && !inputImages[index]) continue
+    if (!inputImages[index]) continue
 
     if (match.index > lastIndex) {
       parts.push({ type: 'text', text: stripImageMentionMarkers(prompt.slice(lastIndex, match.index)) })
     }
-    parts.push(index == null
-      ? { type: 'mention', text, mentionText: getSelectedTextMentionLabel(text) }
-      : { type: 'mention', text, imageIndex: index })
+    parts.push({ type: 'mention', text, imageIndex: index })
     lastIndex = match.index + match[0].length
   }
 

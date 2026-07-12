@@ -153,7 +153,7 @@ export default function SearchBar() {
         )}
         {!inCollectionOverview && (
           <>
-            <div className="relative w-[88px]">
+            <div className="relative w-[112px]">
               <Select
                 value={filterStatus}
                 onChange={handleStatusChange}
@@ -162,6 +162,9 @@ export default function SearchBar() {
                   { label: '已完成', value: 'done' },
                   { label: '生成中', value: 'running' },
                   { label: '失败', value: 'error' },
+                  { label: '待同步', value: 'pending' },
+                  { label: '同步失败', value: 'sync_error' },
+                  { label: '回收站', value: 'hidden' },
                 ]}
                 className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-white/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition"
               />

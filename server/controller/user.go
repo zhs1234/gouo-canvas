@@ -464,9 +464,7 @@ func UpdateSelf(c *gin.Context) {
 		})
 		return
 	}
-	if user.Password == "" {
-		user.Password = "$I_LOVE_U" // make Validator happy :)
-	}
+	user.Password = "$I_LOVE_U" // 密码只能通过专用接口修改
 	if err := common.Validate.Struct(&user); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -481,12 +479,8 @@ func UpdateSelf(c *gin.Context) {
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
 	}
-	if user.Password == "$I_LOVE_U" {
-		user.Password = "" // rollback to what it should be
-		cleanUser.Password = ""
-	}
-	updatePassword := user.Password != ""
-	if err := cleanUser.Update(updatePassword); err != nil {
+	cleanUser.Password = ""
+	if err := cleanUser.Update(false); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -498,6 +492,38 @@ func UpdateSelf(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+func ChangePassword(c *gin.Context) {
+	var req ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.NewPassword) < 8 || len(req.NewPassword) > 20 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "新密码必须为 8 到 20 个字符"})
+		return
+	}
+	user, err := model.GetUserById(c.GetInt("id"), true)
+	if err != nil || !common.ValidatePasswordAndHash(req.CurrentPassword, user.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "当前密码不正确"})
+		return
+	}
+	if common.ValidatePasswordAndHash(req.NewPassword, user.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "新密码不能与当前密码相同"})
+		return
+	}
+	user.Password = req.NewPassword
+	if err := user.Update(true); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "修改密码失败"})
+		return
+	}
+	if err := model.RegeneratePlaygroundToken(user.Id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "密码已修改，但刷新用户令牌失败，请重新登录"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
 
 func DeleteUser(c *gin.Context) {
@@ -722,6 +748,10 @@ func EmailBind(c *gin.Context) {
 		return
 	}
 	id := c.GetInt("id")
+	if model.RecordExists(&model.User{}, "email", email, id) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "该邮箱已被其他账号绑定"})
+		return
+	}
 	user := model.User{
 		Id: id,
 	}

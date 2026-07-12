@@ -200,6 +200,16 @@ export function SettingsIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function SparklesIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" {...props}>
+      <path d="m12 3-1.15 3.1a3 3 0 0 1-1.75 1.75L6 9l3.1 1.15a3 3 0 0 1 1.75 1.75L12 15l1.15-3.1a3 3 0 0 1 1.75-1.75L18 9l-3.1-1.15a3 3 0 0 1-1.75-1.75L12 3Z" />
+      <path d="m19 15-.65 1.75a2 2 0 0 1-1.1 1.1L15.5 18l1.75.65a2 2 0 0 1 1.1 1.1L19 21.5l.65-1.75a2 2 0 0 1 1.1-1.1L22.5 18l-1.75-.65a2 2 0 0 1-1.1-1.1L19 15Z" />
+      <path d="m5 3-.45 1.2a1.5 1.5 0 0 1-.85.85L2.5 5.5l1.2.45a1.5 1.5 0 0 1 .85.85L5 8l.45-1.2a1.5 1.5 0 0 1 .85-.85l1.2-.45-1.2-.45a1.5 1.5 0 0 1-.85-.85L5 3Z" />
+    </svg>
+  )
+}
+
 export function UserIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}>

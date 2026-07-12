@@ -20,6 +20,7 @@
 - 登录、注册、会话保持和光构原生用户中心
 - 平台统一管理上游 API，浏览器不接触平台 API Key
 - 用户独立中继令牌、额度展示、兑换码充值和使用记录
+- 账号云端作品库、跨设备画廊、收藏夹同步和可恢复回收站
 - 图片接口按成功请求次数固定计费，默认 ¥0.10/次
 - One Hub 管理后台，用于渠道、用户、额度和系统配置
 
@@ -79,16 +80,12 @@ go test ./relay/relay_util -run '^TestGetFixedImageQuota$'
 
 ## 部署
 
-仓库提供 `deploy/docker-compose.yml`，可同时启动前端、后端、MySQL 和 Redis：
+生产部署分为两条独立路线，请选择一种，不要混用两套目录和升级命令：
 
-```powershell
-Set-Location deploy
-Copy-Item .env.example .env
-# 修改 .env 中的全部密码和密钥
-docker compose up -d --build
-```
+- [Docker Compose 部署](./docs/DEPLOYMENT_DOCKER.md)：推荐路线，一次启动前端、后端、MySQL 和 Redis，适合首次部署和单机生产环境。
+- [传统服务器手动部署](./docs/DEPLOYMENT_MANUAL.md)：直接使用 Nginx、systemd、MySQL 和 Redis，适合有 Linux 运维经验并需要精细控制目录与进程的用户。
 
-默认公开入口为 `http://服务器:8080`，后端管理端口只绑定本机。正式开放前请完整执行[生产上线检查清单](./docs/PRODUCTION_CHECKLIST.md)，并阅读[后端接入与部署说明](./docs/BACKEND_INTEGRATION.md)。
+先阅读[部署方式选择与共同要求](./docs/DEPLOYMENT.md)。两份教程分别包含环境准备、密钥、数据库、构建启动、HTTPS、管理端访问、云端图片持久化、备份、升级、回滚、排障和验收步骤。正式开放前还必须完整执行[生产上线检查清单](./docs/PRODUCTION_CHECKLIST.md)。
 
 ## 配置项
 
@@ -101,6 +98,9 @@ docker compose up -d --build
 | `SESSION_SECRET` | 后端 | 会话签名密钥，生产环境必须固定且保密 |
 | `USER_TOKEN_SECRET` | 后端 | 用户中继令牌密钥，设置后不要随意更换 |
 | `GOUO_IMAGE_PRICE_CNY` | 后端 | 每次成功图片请求的人民币价格 |
+| `GOUO_CLOUD_LIBRARY_ENABLED` | 后端 | 是否启用账号云端作品库 |
+| `GOUO_ASSET_DIR` | 后端 | 私有图片文件目录，Docker 默认 `/data/gouo-assets` |
+| `GOUO_ASSET_USER_QUOTA_BYTES` | 后端 | 默认单用户云端空间，默认 2 GB |
 | `SQL_DSN` | 后端 | MySQL/PostgreSQL 连接；未设置时使用 SQLite |
 | `REDIS_CONN_STRING` | 后端 | Redis 连接，多实例部署时应配置 |
 
@@ -109,6 +109,9 @@ docker compose up -d --build
 ## 文档
 
 - [用户使用指南](./docs/USER_GUIDE.md)
+- [部署方式选择](./docs/DEPLOYMENT.md)
+- [Docker Compose 部署](./docs/DEPLOYMENT_DOCKER.md)
+- [传统服务器手动部署](./docs/DEPLOYMENT_MANUAL.md)
 - [后端接入与部署](./docs/BACKEND_INTEGRATION.md)
 - [生产上线检查清单](./docs/PRODUCTION_CHECKLIST.md)
 - [SaaS 架构与后续计划](./docs/SAAS_ARCHITECTURE.md)
@@ -116,7 +119,7 @@ docker compose up -d --build
 
 ## 当前边界
 
-- 图片和任务历史主要保存在当前浏览器的 IndexedDB 中，更换浏览器或清理站点数据前应先导出备份。
+- 登录用户的作品、图片资产和收藏夹会同步到云端，浏览器 IndexedDB 作为本地缓存和待同步队列；未登录数据和同步失败的数据仍只存在当前浏览器中。
 - 在线支付需要先在管理后台配置正式支付渠道、回调地址和密钥；未完成前可使用兑换码充值。
 - 固定售价不等于上游实际成本，上线前应按模型、质量和尺寸核对账单。
 - 本仓库仍保留 One Hub 的部分通用能力和上游文档，光构前台只开放当前已接入的产品流程。

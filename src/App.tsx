@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { initStore } from './store'
 import { useStore } from './store'
 import { activateFirstImportedProfile, buildSettingsFromUrlParams, clearUrlSettingParams, hasUrlSettingParams } from './lib/urlSettings'
@@ -19,21 +19,21 @@ import MaskEditorModal from './components/MaskEditorModal'
 import ImageContextMenu from './components/ImageContextMenu'
 import { FavoriteCollectionPickerModal, FavoriteCollectionsView, ManageCollectionsModal } from './components/FavoriteCollections'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
+import { startCloudSync } from './lib/cloudSync'
+import CloudSyncBanner from './components/CloudSyncBanner'
+import FirstGenerationGuide from './components/FirstGenerationGuide'
+import OnboardingModal from './components/OnboardingModal'
+import { GUIDE_FLAGS, hasGuideFlag } from './lib/userGuidance'
 
 let customProviderConfigUrlImportStarted = false
 
 export default function App() {
+  const [showOnboarding, setShowOnboarding] = useState(() => !hasGuideFlag(GUIDE_FLAGS.onboarding))
   const setSettings = useStore((s) => s.setSettings)
-  const appMode = useStore((s) => s.appMode)
-  const setAppMode = useStore((s) => s.setAppMode)
   const filterFavorite = useStore((s) => s.filterFavorite)
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   useDockerApiUrlMigrationNotice()
   useGlobalClickSuppression()
-
-  useEffect(() => {
-    if (appMode === 'agent') setAppMode('gallery')
-  }, [appMode, setAppMode])
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
@@ -73,7 +73,7 @@ export default function App() {
           clearAppliedUrlSettings()
         })
 
-      initStore()
+      void initStore().then(() => startCloudSync())
       return
     }
 
@@ -96,7 +96,7 @@ export default function App() {
         })
     }
 
-    initStore()
+    void initStore().then(() => startCloudSync())
   }, [setSettings])
 
   useEffect(() => {
@@ -113,6 +113,7 @@ export default function App() {
   return (
     <>
       <Header />
+      <CloudSyncBanner />
       <main data-home-main data-drag-select-surface className="pb-48">
         <div className="safe-area-x max-w-7xl mx-auto">
           <SearchBar />
@@ -129,6 +130,8 @@ export default function App() {
       <Toast />
       <MaskEditorModal />
       <ImageContextMenu />
+      <FirstGenerationGuide />
+      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
     </>
   )
 }

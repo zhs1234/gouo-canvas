@@ -308,6 +308,7 @@ func (token *Token) Insert() error {
 }
 
 func (token *Token) RegenerateKey() error {
+	oldKey := token.Key
 	key, err := common.GenerateToken(token.Id, token.UserId)
 	if err != nil {
 		return err
@@ -316,7 +317,21 @@ func (token *Token) RegenerateKey() error {
 		return err
 	}
 	token.Key = key
+	if config.RedisEnabled && oldKey != "" {
+		redis.RedisDel(fmt.Sprintf(UserTokensKey, oldKey))
+	}
 	return nil
+}
+
+func RegeneratePlaygroundToken(userID int) error {
+	token, err := GetTokenByName("sys_playground", userID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return token.RegenerateKey()
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
