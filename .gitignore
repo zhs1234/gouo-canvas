@@ -1,4 +1,6 @@
 node_modules/
 dist/
+output/
 dev-proxy.config.json
+.env.local
 .wrangler/

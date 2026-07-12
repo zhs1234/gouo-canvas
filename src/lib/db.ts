@@ -1,6 +1,6 @@
 import type { AgentConversation, TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
 
-const DB_NAME = 'gpt-image-playground'
+const DB_NAME = 'gouo-canvas'
 const DB_VERSION = 3
 const STORE_TASKS = 'tasks'
 const STORE_IMAGES = 'images'

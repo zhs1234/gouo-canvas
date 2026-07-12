@@ -1,7 +1,6 @@
+.git
+.env
 node_modules
 dist
-.git
-.gitignore
-*.md
-Dockerfile
-.dockerignore
+output
+server

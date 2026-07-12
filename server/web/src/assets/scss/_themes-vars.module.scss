@@ -1,0 +1,186 @@
+// paper & background
+$paper: #ffffff;
+
+// primary - Aligned with one-hub-plus palette
+$primaryLight: #5BE49B;
+$primaryMain: #00A76F;
+$primaryDark: #007867;
+$primary200: #C8FAD6;
+$primary800: #004B50;
+
+// secondary
+$secondaryLight: #C684FF;
+$secondaryMain: #8E33FF;
+$secondaryDark: #5119B7;
+$secondary200: #EFD6FF;
+$secondary800: #27097A;
+
+// success Colors
+$successLight: #77ED8B;
+$success200: #D3FCD2;
+$successMain: #22C55E;
+$successDark: #118D57;
+
+// error
+$errorLight: #FFAC82;
+$errorMain: #FF5630;
+$errorDark: #B71D18;
+
+// orange
+$orangeLight: #FFE9D5;
+$orangeMain: #FF5630;
+$orangeDark: #B71D18;
+
+// warning
+$warningLight: #FFD666;
+$warningMain: #FFAB00;
+$warningDark: #B76E00;
+
+// info
+$infoLight: #61F3F3;
+$infoMain: #00B8D9;
+$infoDark: #006C9C;
+
+// grey - Aligned with one-hub-plus grey scale
+$grey50: #FCFDFD;
+$grey100: #F9FAFB;
+$grey200: #F4F6F8;
+$grey300: #DFE3E8;
+$grey400: #C4CDD5;
+$grey500: #919EAB;
+$grey600: #637381;
+$grey700: #454F5B;
+$grey800: #1C252E;
+$grey900: #141A21;
+
+$tableBackground: #F4F6F8;
+$tableBorderBottom: #DFE3E8;
+
+// ==============================|| DARK THEME VARIANTS ||============================== //
+
+// paper & background
+$darkBackground: #141A21; // grey.900
+$darkPaper: #1C252E; // grey.800
+$darkDivider: rgba(145, 158, 171, 0.2);
+$darkSelectedBack: rgba(0, 167, 111, 0.12);
+
+// dark 800 & 900
+$darkLevel1: #141A21; // grey.900
+$darkLevel2: #1C252E; // grey.800
+
+$darkTableHeader: #28323D;
+
+// primary dark
+$darkPrimaryLight: #5BE49B;
+$darkPrimaryMain: #00A76F;
+$darkPrimaryDark: #007867;
+$darkPrimary200: #C8FAD6;
+$darkPrimary800: #004B50;
+
+// secondary dark
+$darkSecondaryLight: #C684FF;
+$darkSecondaryMain: #8E33FF;
+$darkSecondaryDark: #5119B7;
+$darkSecondary200: #EFD6FF;
+$darkSecondary800: #27097A;
+
+// text variants
+$darkTextTitle: #FFFFFF;
+$darkTextPrimary: #FFFFFF;
+$darkTextSecondary: #919EAB;
+$darkTextDark: #FFFFFF;
+
+// ==============================|| JAVASCRIPT ||============================== //
+
+:export {
+  // paper & background
+  paper: $paper;
+
+  // primary
+  primaryLight: $primaryLight;
+  primary200: $primary200;
+  primaryMain: $primaryMain;
+  primaryDark: $primaryDark;
+  primary800: $primary800;
+
+  // secondary
+  secondaryLight: $secondaryLight;
+  secondary200: $secondary200;
+  secondaryMain: $secondaryMain;
+  secondaryDark: $secondaryDark;
+  secondary800: $secondary800;
+
+  // success
+  successLight: $successLight;
+  success200: $success200;
+  successMain: $successMain;
+  successDark: $successDark;
+
+  // error
+  errorLight: $errorLight;
+  errorMain: $errorMain;
+  errorDark: $errorDark;
+
+  // orange
+  orangeLight: $orangeLight;
+  orangeMain: $orangeMain;
+  orangeDark: $orangeDark;
+
+  // warning
+  warningLight: $warningLight;
+  warningMain: $warningMain;
+  warningDark: $warningDark;
+
+  // info
+  infoLight: $infoLight;
+  infoMain: $infoMain;
+  infoDark: $infoDark;
+
+  // grey
+  grey50: $grey50;
+  grey100: $grey100;
+  grey200: $grey200;
+  grey300: $grey300;
+  grey400: $grey400;
+  grey500: $grey500;
+  grey600: $grey600;
+  grey700: $grey700;
+  grey800: $grey800;
+  grey900: $grey900;
+
+  // ==============================|| DARK THEME VARIANTS ||============================== //
+
+  // paper & background
+  darkPaper: $darkPaper;
+  darkBackground: $darkBackground;
+
+  // dark 800 & 900
+  darkLevel1: $darkLevel1;
+  darkLevel2: $darkLevel2;
+
+  // text variants
+  darkTextTitle: $darkTextTitle;
+  darkTextPrimary: $darkTextPrimary;
+  darkTextSecondary: $darkTextSecondary;
+  darkTextDark: $darkTextDark;
+  darkTableHeader: $darkTableHeader;
+
+  // primary dark
+  darkPrimaryLight: $darkPrimaryLight;
+  darkPrimaryMain: $darkPrimaryMain;
+  darkPrimaryDark: $darkPrimaryDark;
+  darkPrimary200: $darkPrimary200;
+  darkPrimary800: $darkPrimary800;
+
+  // secondary dark
+  darkSecondaryLight: $darkSecondaryLight;
+  darkSecondaryMain: $darkSecondaryMain;
+  darkSecondaryDark: $darkSecondaryDark;
+  darkSecondary200: $darkSecondary200;
+  darkSecondary800: $darkSecondary800;
+
+  darkDivider: $darkDivider;
+  darkSelectedBack: $darkSelectedBack;
+  tableBackground: $tableBackground;
+  tableBorderBottom: $tableBorderBottom;
+}

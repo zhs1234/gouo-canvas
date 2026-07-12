@@ -1,0 +1,73 @@
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VITE_GOUO_IMAGE_MODEL: ${GOUO_IMAGE_MODEL:-gpt-image-2}
+    restart: unless-stopped
+    ports:
+      - "${PUBLIC_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SQL_DSN: gouo:${MYSQL_PASSWORD}@tcp(db:3306)/gouo
+      REDIS_CONN_STRING: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      USER_TOKEN_SECRET: ${USER_TOKEN_SECRET}
+      TZ: Asia/Shanghai
+    volumes:
+      - backend-data:/data
+    ports:
+      - "127.0.0.1:${BACKEND_ADMIN_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -q '\"success\":true'"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: gouo
+      MYSQL_USER: gouo
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  backend-data:
+  mysql-data:
+  redis-data:

@@ -1,7 +1,7 @@
 {
-  "name": "gpt-image-playground",
+  "name": "gouo-canvas",
   "private": true,
-  "version": "0.6.12",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

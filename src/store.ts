@@ -1620,7 +1620,7 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'gpt-image-playground',
+      name: 'gouo-canvas',
       version: 2,
       migrate: (persistedState) => migratePersistedState(persistedState),
       partialize: getPersistedState,
@@ -5447,7 +5447,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `gpt-image-playground-backup_${formatExportFileTime(new Date(exportedAt))}.zip`
+    a.download = `gouo-canvas-backup_${formatExportFileTime(new Date(exportedAt))}.zip`
     a.click()
     URL.revokeObjectURL(url)
     useStore.getState().showToast('数据已导出', 'success')

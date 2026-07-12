@@ -12,7 +12,7 @@
   --muted-foreground: 240 4% 46%;
   --border: 240 6% 90%;
   --input: 240 6% 90%;
-  --primary: 221 83% 53%;
+  --primary: 239 84% 67%;
   --primary-foreground: 0 0% 100%;
   --sidebar: 240 5% 96%;
   --sidebar-foreground: 240 10% 10%;
@@ -77,7 +77,7 @@ body.drag-selecting * {
     --muted-foreground: 240 5% 65%;
     --border: 240 4% 22%;
     --input: 240 4% 22%;
-    --primary: 217 91% 60%;
+    --primary: 188 94% 53%;
     --primary-foreground: 0 0% 100%;
     --sidebar: 240 5% 12%;
     --sidebar-foreground: 0 0% 98%;

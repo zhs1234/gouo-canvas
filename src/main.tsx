@@ -2,6 +2,7 @@ import 'core-js/actual/array/at'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import BackendAuthGate from './components/BackendAuthGate'
 import 'streamdown/styles.css'
 import 'katex/dist/katex.min.css'
 import './index.css'
@@ -25,6 +26,8 @@ if ('serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BackendAuthGate>
+      <App />
+    </BackendAuthGate>
   </StrictMode>,
 )

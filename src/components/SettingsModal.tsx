@@ -30,6 +30,7 @@ import { requestBrowserNotificationPermission, type BrowserNotificationPermissio
 import { DEFAULT_AGENT_MAX_TOOL_ROUNDS, DEFAULT_STREAM_PARTIAL_IMAGES, type AgentApiConfigMode, type ApiProfile, type AppSettings, type CustomProviderDefinition, type ZipDownloadRoute } from '../types'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
+import { BRAND } from '../config/brand'
 import { DEFAULT_DROPDOWN_MAX_HEIGHT, getDropdownMaxHeight } from '../lib/dropdown'
 import Select from './Select'
 import { Checkbox } from './Checkbox'
@@ -43,7 +44,7 @@ function newId(prefix: string) {
 }
 
 const ADD_CUSTOM_PROVIDER_VALUE = '__add_custom_provider__'
-const COPY_IMPORT_URL_OPTIONS_STORAGE_KEY = 'gpt-image-playground.copy-import-url-options'
+const COPY_IMPORT_URL_OPTIONS_STORAGE_KEY = 'gouo-canvas.copy-import-url-options'
 
 const DEFAULT_COPY_IMPORT_URL_OPTIONS = {
   includeApiKey: false,
@@ -1894,49 +1895,33 @@ export default function SettingsModal() {
 
                   > 本站点基于开源项目 [GPT Image Playground](https://github.com/CookSleep/gpt_image_playground) ([MIT](https://github.com/CookSleep/gpt_image_playground/blob/main/LICENSE)) 修改。
                 */}
-                <a
-                  href="https://github.com/CookSleep/gpt_image_playground"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex flex-col items-center outline-none"
-                >
-                  <div className="mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-full border border-gray-200/80 bg-gray-50/50 text-gray-800 transition-colors group-hover:bg-gray-100 dark:border-white/[0.08] dark:bg-white/[0.02] dark:text-gray-100 dark:group-hover:bg-white/[0.06]">
-                    <GithubIcon className="h-11 w-11" />
+                <div className="flex flex-col items-center">
+                  <div className="mb-5 flex h-[88px] w-[88px] items-center justify-center rounded-[1.75rem] border border-indigo-200/70 bg-gradient-to-br from-cyan-50 to-indigo-100 p-3 dark:border-cyan-300/15 dark:from-cyan-400/10 dark:to-indigo-500/15">
+                    <img src={BRAND.logoUrl} alt={`${BRAND.name} Logo`} className="h-full w-full object-contain" />
                   </div>
-                  <h4 className="text-[17px] font-bold text-gray-800 dark:text-gray-100">GPT Image Playground</h4>
-                  <p className="mt-1.5 text-[13px] text-gray-500 transition-colors group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300">
-                    @CookSleep
-                  </p>
-                </a>
+                  <h4 className="text-[17px] font-bold text-gray-800 dark:text-gray-100">{BRAND.name} · {BRAND.nameEn}</h4>
+                  <p className="mt-1.5 text-[13px] text-gray-500 dark:text-gray-400">{BRAND.slogan}</p>
+                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">by {BRAND.team}</p>
+                </div>
                 
                 <p className="mt-8 mb-6 max-w-[360px] text-center text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-                  本项目的成长离不开每一位用户的使用、反馈、贡献与支持，感谢一路有你。
+                  {BRAND.description}。本产品由 {BRAND.team} 负责设计与运营。
                 </p>
 
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <a
-                    href="https://github.com/CookSleep/gpt_image_playground/issues"
+                    href={BRAND.source.repositoryUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gray-100/80 px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-200 hover:text-gray-900 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1] dark:hover:text-white"
                   >
-                    <svg className="h-4 w-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                    </svg>
-                    反馈问题
-                  </a>
-                  <a
-                    href="https://www.ifdian.net/a/cooksleep"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gray-100/80 px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-200 hover:text-gray-900 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1] dark:hover:text-white"
-                  >
-                    <svg className="h-4 w-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                    </svg>
-                    赞助作者
+                    <GithubIcon className="h-4 w-4 opacity-70" />
+                    开源致谢
                   </a>
                 </div>
+                <p className="mt-4 max-w-[420px] text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
+                  本站基于开源项目 {BRAND.source.name}（MIT）修改，原作者 @{BRAND.source.author}。
+                </p>
               </div>
             )}
           </div>

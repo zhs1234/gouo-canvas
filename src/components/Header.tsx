@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { useVersionCheck } from '../hooks/useVersionCheck'
 import { useTooltip } from '../hooks/useTooltip'
+import { BRAND } from '../config/brand'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import ViewportTooltip from './ViewportTooltip'
 import HelpModal from './HelpModal'
@@ -32,7 +32,6 @@ export default function Header() {
   const activeConversation = agentConversations.find((item) => item.id === activeAgentConversationId)
   const favoriteCollectionTitle = useFavoriteCollectionTitle()
   const showFavoriteCollectionTitle = appMode === 'gallery' && Boolean(activeFavoriteCollectionId)
-  const { hasUpdate, latestRelease, dismiss } = useVersionCheck()
   const [showHelp, setShowHelp] = useState(false)
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isPwaInstalled, setIsPwaInstalled] = useState(isInstalledPwa)
@@ -153,36 +152,17 @@ export default function Header() {
               {showFavoriteCollectionTitle ? (
                 <>
                   <span className="min-w-0 truncate text-[17px] font-bold tracking-tight text-gray-800 dark:text-gray-100 sm:hidden" title={favoriteCollectionTitle}>{favoriteCollectionTitle}</span>
-                  <a
-                    href="https://github.com/CookSleep/gpt_image_playground"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hidden text-lg font-bold tracking-tight text-gray-800 transition-colors hover:text-gray-600 dark:text-gray-100 dark:hover:text-gray-300 sm:inline"
-                  >
-                    GPT Image Playground
-                  </a>
+                  <span className="hidden items-center gap-2 text-lg font-bold tracking-tight text-gray-800 dark:text-gray-100 sm:inline-flex">
+                    <img src={BRAND.logoUrl} alt="" className="h-7 w-7 object-contain" />
+                    {BRAND.name}
+                  </span>
                 </>
               ) : (
-                <a
-                  href="https://github.com/CookSleep/gpt_image_playground"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[17px] sm:text-lg font-bold tracking-tight text-gray-800 dark:text-gray-100 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                >
-                  GPT Image Playground
-                </a>
-              )}
-              {hasUpdate && latestRelease && (
-                <a
-                  href={latestRelease.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={dismiss}
-                  className="absolute -right-1 -top-1 translate-x-full -translate-y-1/4 px-1 py-0.5 rounded-[4px] border border-red-500/30 text-[9px] font-black bg-red-500 text-white hover:bg-red-600 transition-all animate-fade-in leading-none shadow-sm"
-                  title={`新版本 ${latestRelease.tag}`}
-                >
-                  NEW
-                </a>
+                <span className="inline-flex items-center gap-2 text-[17px] font-bold tracking-tight text-gray-800 dark:text-gray-100 sm:text-lg">
+                  <img src={BRAND.logoUrl} alt="" className="h-7 w-7 object-contain" />
+                  {BRAND.name}
+                  <span className="hidden text-xs font-medium tracking-normal text-gray-400 md:inline">{BRAND.nameEn}</span>
+                </span>
               )}
             </h1>
             {appMode === 'agent' && <div className="hidden sm:flex items-center gap-1 relative">

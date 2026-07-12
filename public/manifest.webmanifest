@@ -1,18 +1,18 @@
 {
-  "name": "GPT Image Playground",
-  "short_name": "GPT Image",
-  "description": "GPT Image Playground 图像生成工作台",
+  "name": "光构 · Gouo Canvas",
+  "short_name": "光构",
+  "description": "把灵感构造成图像",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#030712",
-  "theme_color": "#111827",
+  "background_color": "#070b16",
+  "theme_color": "#0b1020",
   "icons": [
     {
-      "src": "./pwa-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "./gouo-logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

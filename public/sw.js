@@ -1,5 +1,5 @@
-const CACHE_NAME = 'gpt-image-playground-v0.1.5'
-const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './pwa-icon.svg']
+const CACHE_NAME = 'gouo-canvas-v0.1.0'
+const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './gouo-logo.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
