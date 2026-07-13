@@ -1,4 +1,6 @@
-# 光构部署指南
+# 光构部署总览
+
+[English](../../en/deployment/index.md) · [文档中心](../../README.md)
 
 本文档是生产部署入口。光构支持两种部署方式，两种方式的目录结构、进程管理和升级命令不同，请先选择一种，然后只执行对应文档中的步骤，不要把两套命令混用。
 
@@ -6,8 +8,8 @@
 
 | 方式 | 适合谁 | 优点 | 需要自行负责 |
 | --- | --- | --- | --- |
-| [Docker Compose 部署](./DEPLOYMENT_DOCKER.md) | 首次部署、单机生产环境、希望快速上线的用户 | 环境一致，MySQL、Redis、前后端一次启动，升级和迁移更直观 | Docker、域名、HTTPS、备份和服务器安全 |
-| [传统服务器手动部署](./DEPLOYMENT_MANUAL.md) | 熟悉 Linux、systemd 和 Nginx，需要精细控制进程与目录的用户 | 服务目录、日志、数据库和反向代理都可独立管理 | Node.js、Go、MySQL、Redis、Nginx、systemd 和版本升级 |
+| [Docker Compose 部署](./docker.md) | 首次部署、单机生产环境、希望快速上线的用户 | 环境一致，MySQL、Redis、前后端一次启动，升级和迁移更直观 | Docker、域名、HTTPS、备份和服务器安全 |
+| [传统服务器手动部署](./manual.md) | 熟悉 Linux、systemd 和 Nginx，需要精细控制进程与目录的用户 | 服务目录、日志、数据库和反向代理都可独立管理 | Node.js、Go、MySQL、Redis、Nginx、systemd 和版本升级 |
 
 如果没有明确的运维偏好，建议使用 Docker Compose。手动部署不是“更简单的 Docker”，它要求你自行维护每个系统组件。
 
@@ -43,7 +45,7 @@ openssl rand -hex 32
 6. 在“运营 → 光构存储”确认云端图片可写、用户配额正确、管理员可以查看输出作品。
 7. 配置 HTTPS、备份、监控和防火墙。
 8. 使用普通用户完成注册、登录、生成、同步、回收站和跨浏览器恢复测试。
-9. 完成[生产上线检查清单](./PRODUCTION_CHECKLIST.md)后再开放注册。
+9. 完成[生产上线检查清单](./checklist.md)后再开放注册。
 
 ## 重要目录和数据
 
@@ -60,7 +62,7 @@ openssl rand -hex 32
 
 ## 继续阅读
 
-- 使用 Docker：从 [Docker Compose 部署](./DEPLOYMENT_DOCKER.md)第一步开始。
-- 不使用 Docker：从 [传统服务器手动部署](./DEPLOYMENT_MANUAL.md)第一步开始。
-- 上游渠道和计费链路：[后端接入说明](./BACKEND_INTEGRATION.md)。
-- 正式开放前：[生产上线检查清单](./PRODUCTION_CHECKLIST.md)。
+- 使用 Docker：从 [Docker Compose 部署](./docker.md)第一步开始。
+- 不使用 Docker：从 [传统服务器手动部署](./manual.md)第一步开始。
+- 上游渠道和计费链路：[后端接入说明](../backend.md)。
+- 正式开放前：[生产上线检查清单](./checklist.md)。

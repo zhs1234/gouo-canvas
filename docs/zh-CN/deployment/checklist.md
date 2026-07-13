@@ -1,8 +1,10 @@
 # 光构生产上线检查清单
 
+[English](../../en/deployment/checklist.md) · [部署总览](./index.md) · [文档中心](../../README.md)
+
 本清单用于把本地可用版本部署为公开产品。每一项都应由实际运营者确认，不要直接把本地测试配置用于公网。
 
-部署步骤请按选定路线执行：[Docker Compose 部署](./DEPLOYMENT_DOCKER.md)或[传统服务器手动部署](./DEPLOYMENT_MANUAL.md)。本清单用于最终验收，不能替代部署教程。
+部署步骤请按选定路线执行：[Docker Compose 部署](./docker.md)或[传统服务器手动部署](./manual.md)。本清单用于最终验收，不能替代部署教程。
 
 ## 1. 账号与访问
 
