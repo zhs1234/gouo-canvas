@@ -38,6 +38,18 @@ describe('gouoBackend', () => {
     await expect(register({ username: 'creator', password: 'password123' })).resolves.toBeUndefined()
   })
 
+  it('requests a registration verification code for the encoded email address', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true, message: '' }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { sendEmailVerification } = await import('./gouoBackend')
+
+    await expect(sendEmailVerification('creator+test@example.com')).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/verification?email=creator%2Btest%40example.com',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    )
+  })
+
   it('updates the display name and logs out through the session API', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ success: true, message: '' })))
     vi.stubGlobal('fetch', fetchMock)

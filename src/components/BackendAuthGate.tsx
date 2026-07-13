@@ -8,6 +8,7 @@ import {
   login,
   register,
   resetPassword,
+  sendEmailVerification,
   sendPasswordReset,
   type GouoUser,
 } from '../lib/gouoBackend'
@@ -39,6 +40,10 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
   const [resetToken, setResetToken] = useState(resetParams.get('token') ?? '')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [emailService, setEmailService] = useState(false)
+  const [emailVerification, setEmailVerification] = useState(false)
+  const [backendStatusLoaded, setBackendStatusLoaded] = useState(!enabled)
+  const [sendingVerification, setSendingVerification] = useState(false)
+  const [verificationSent, setVerificationSent] = useState(false)
   const [resetEmailSent, setResetEmailSent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -73,7 +78,13 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!enabled) return
-    void getBackendStatus().then((status) => setEmailService(Boolean(status.email_service))).catch(() => {})
+    void getBackendStatus()
+      .then((status) => {
+        setEmailService(Boolean(status.email_service))
+        setEmailVerification(Boolean(status.email_verification))
+      })
+      .catch(() => {})
+      .finally(() => setBackendStatusLoaded(true))
   }, [enabled])
 
   if (!enabled || user) return <>{children}</>
@@ -120,6 +131,20 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
     }
   }
 
+  const handleSendVerification = async () => {
+    if (!email.trim()) return
+    setError('')
+    setSendingVerification(true)
+    try {
+      await sendEmailVerification(email.trim())
+      setVerificationSent(true)
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : String(sendError))
+    } finally {
+      setSendingVerification(false)
+    }
+  }
+
   return (
     <main className="min-h-[100dvh] bg-[#05070d] text-white grid lg:grid-cols-[1.1fr_0.9fr]">
       <section className="relative hidden overflow-hidden border-r border-white/10 p-12 lg:flex lg:flex-col lg:justify-between">
@@ -147,13 +172,13 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
             <div className="font-semibold">{BRAND.name} · {BRAND.nameEn}</div>
           </div>
 
-          {checking ? (
+          {checking || !backendStatusLoaded ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center text-sm text-white/55">正在检查登录状态…</div>
           ) : (
             <>
               <p className="text-sm font-medium text-blue-300">{mode === 'login' ? '欢迎回来' : mode === 'register' ? '创建账户' : '账户恢复'}</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight">{mode === 'login' ? '登录光构' : mode === 'register' ? '开始你的创作空间' : '重置密码'}</h2>
-              <p className="mt-3 text-sm leading-6 text-white/45">{mode === 'login' ? '登录后使用你的专属额度与云端作品。' : mode === 'register' ? '用户名最多 12 个字符，密码为 8–20 个字符。' : '输入邮件中的验证码，并设置新的登录密码。'}</p>
+              <p className="mt-3 text-sm leading-6 text-white/45">{mode === 'login' ? '登录后使用你的专属额度与云端作品。' : mode === 'register' ? `用户名最多 12 个字符，密码为 8–20 个字符${emailVerification ? '，并完成邮箱验证。' : '。'}` : '输入邮件中的验证码，并设置新的登录密码。'}</p>
 
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                 {mode !== 'reset' ? (
@@ -183,22 +208,29 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
                     <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type="password" minLength={8} maxLength={20} autoComplete="new-password" required />
                   </label>
                 )}
-                {mode === 'register' && (
-                  <div className="grid gap-5 sm:grid-cols-2">
+                {mode === 'register' && emailVerification && (
+                  <div className="space-y-5">
                     <label className="block text-sm text-white/70">
-                      邮箱 <span className="text-white/30">（按后端配置）</span>
-                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
+                      邮箱
+                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={email} onChange={(e) => { setEmail(e.target.value); setVerificationCode(''); setVerificationSent(false) }} type="email" autoComplete="email" required />
                     </label>
-                    <label className="block text-sm text-white/70">
-                      邮箱验证码
-                      <input className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} inputMode="numeric" />
-                    </label>
+                    <div className="text-sm text-white/70">
+                      <label htmlFor="registration-verification-code">邮箱验证码</label>
+                      <div className="mt-2 flex gap-2">
+                        <input id="registration-verification-code" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-white outline-none transition focus:border-blue-400/60" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required />
+                        <button type="button" onClick={() => void handleSendVerification()} disabled={!emailService || sendingVerification || submitting || !email.trim()} className="shrink-0 rounded-xl border border-blue-400/30 px-3 text-sm text-blue-200 transition hover:bg-blue-400/10 disabled:cursor-not-allowed disabled:opacity-40">
+                          {sendingVerification ? '发送中…' : verificationSent ? '重新发送' : '发送验证码'}
+                        </button>
+                      </div>
+                      {!emailService && <span className="mt-2 block text-xs text-amber-300">邮件服务暂不可用，请联系管理员检查 SMTP 配置。</span>}
+                      {emailService && verificationSent && <span className="mt-2 block text-xs text-emerald-300">验证码已发送，请检查邮箱。</span>}
+                    </div>
                   </div>
                 )}
 
                 {error && <div role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-5 text-red-200">{error}</div>}
 
-                <button type="submit" disabled={submitting} className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-blue-700 px-4 py-3 font-semibold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60">
+                <button type="submit" disabled={submitting || sendingVerification} className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-blue-700 px-4 py-3 font-semibold text-white transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60">
                   {submitting ? '请稍候…' : mode === 'login' ? '登录并进入' : mode === 'register' ? '注册并进入' : '确认重置密码'}
                 </button>
               </form>
