@@ -22,6 +22,7 @@ import { blobToDataUrl } from './dataUrl'
 import { dataUrlToBlob } from './canvasImage'
 import {
   fetchCloudAssetContent,
+  getCurrentUser,
   getCloudStorage,
   getCloudSync,
   isBackendAuthEnabled,
@@ -35,6 +36,7 @@ import {
   type GouoCloudTask,
   type GouoCloudTaskAsset,
 } from './gouoBackend'
+import { activateUserStorage, isLoadedStorageForUser } from './storageScope'
 
 export interface CloudSyncSnapshot {
   status: 'idle' | 'syncing' | 'synced' | 'error' | 'disabled'
@@ -426,6 +428,12 @@ async function runCloudSync() {
   }
   setSnapshot({ status: 'syncing', phase: '正在检查云端空间', error: '', completed: 0, total: 0 })
   try {
+    const user = await getCurrentUser()
+    if (!isLoadedStorageForUser(user.id)) {
+      activateUserStorage(user.id)
+      window.location.reload()
+      return
+    }
     const storage = await getCloudStorage()
     setSnapshot({ storage })
     if (!storage.enabled) {

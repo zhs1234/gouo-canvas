@@ -1,3 +1,5 @@
+import { isEmbeddedPage } from './browserFrame'
+
 export async function copyTextToClipboard(text: string) {
   let asyncClipboardError: unknown = null
 
@@ -112,14 +114,6 @@ async function imageBlobToPngBlob(blob: Blob): Promise<Blob> {
     })
   } finally {
     image.close()
-  }
-}
-
-function isEmbeddedPage() {
-  try {
-    return window.self !== window.top
-  } catch {
-    return true
   }
 }
 

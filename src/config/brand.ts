@@ -4,7 +4,7 @@ export const BRAND = {
   team: 'xgouo',
   slogan: '把灵感构造成图像',
   description: '面向创作者的 AI 图片生成与编辑平台',
-  logoUrl: './gouo-logo.png',
+  logoUrl: './gouo-logo-192.png',
   repositoryUrl: 'https://github.com/zhs1234/gouo-canvas',
   source: {
     name: 'GPT Image Playground',

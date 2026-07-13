@@ -1,6 +1,6 @@
-import { useRef, useEffect, useCallback, useState, useMemo, useLayoutEffect } from 'react'
+import { lazy, Suspense, useRef, useEffect, useCallback, useState, useMemo, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
+import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks } from '../store'
 import { DEFAULT_PARAMS, type TaskRecord } from '../types'
 import { getActiveApiProfile, normalizeSettings } from '../lib/apiProfiles'
 import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
@@ -10,14 +10,18 @@ import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getCurrentUser, isBackendAuthEnabled } from '../lib/gouoBackend'
 import { getActionableErrorMessage, GUIDE_FLAGS, hasGuideFlag, setGuideFlag } from '../lib/userGuidance'
+import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
 import { useHintTooltip } from '../hooks/useHintTooltip'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getTaskOutputImageZipEntries } from '../lib/downloadImages'
-import SizePickerModal from './SizePickerModal'
 import { CloseIcon } from './icons'
 import ButtonTooltip from './input/buttonTooltip'
+import AtImageOptionThumb, { type AtImageOption } from './input/atImageOptionThumb'
 import DragUploadOverlay from './input/dragUploadOverlay'
 import InputBatchBars from './input/inputBatchBars'
 import InputParamsPanel from './input/inputParamsPanel'
+
+const SizePickerModal = lazy(() => import('./SizePickerModal'))
 
 
 function getMentionTagTextLength(el: Element) {
@@ -336,26 +340,6 @@ function getFavoriteCollectionTasksForBatch(collectionId: string, tasks: TaskRec
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 640)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  return isMobile
-}
-
-type AtImageOption = { type: 'input'; key: string; label: string; imageId: string; dataUrl: string; imageIndex: number }
-
-function AtImageOptionThumb({ option }: { option: AtImageOption }) {
-  return (
-    <span className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-gray-200/70 bg-gray-100 dark:border-white/[0.08] dark:bg-white/[0.04]">
-      <img src={option.dataUrl} className="h-full w-full object-cover" alt="" />
-    </span>
-  )
 }
 
 export default function InputBar() {
@@ -1835,12 +1819,14 @@ export default function InputBar() {
       <DragUploadOverlay visible={isDragging} atImageLimit={atImageLimit} maxImages={API_MAX_IMAGES} />
 
       {showSizePicker && (
-        <SizePickerModal
-          currentSize={isFalTextToImage && params.size === 'auto' ? DEFAULT_FAL_IMAGE_SIZE : params.size}
-          onSelect={(size) => setParams({ size })}
-          onClose={() => setShowSizePicker(false)}
-          allowAuto={!isFalTextToImage}
-        />
+        <Suspense fallback={null}>
+          <SizePickerModal
+            currentSize={isFalTextToImage && params.size === 'auto' ? DEFAULT_FAL_IMAGE_SIZE : params.size}
+            onSelect={(size) => setParams({ size })}
+            onClose={() => setShowSizePicker(false)}
+            allowAuto={!isFalTextToImage}
+          />
+        </Suspense>
       )}
 
       <div data-input-bar className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-4xl px-3 sm:px-4 transition-all duration-300">

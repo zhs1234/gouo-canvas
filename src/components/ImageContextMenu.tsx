@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useStore, addImageFromUrl, ensureImageCached } from '../store'
+import { isEmbeddedPage } from '../lib/browserFrame'
 import { canCopyImageToClipboard, copyImageSourceToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getImageZipEntries } from '../lib/downloadImages'
 import { suppressGlobalClicks } from '../lib/clickSuppression'
@@ -245,12 +246,4 @@ export default function ImageContextMenu() {
       </button>
     </div>
   )
-}
-
-function isEmbeddedPage() {
-  try {
-    return window.self !== window.top
-  } catch {
-    return true
-  }
 }

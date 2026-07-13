@@ -1,22 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { BRAND } from '../config/brand'
 
 interface HelpModalProps {
   isFavoriteCollectionOverview?: boolean
   onClose: () => void
-}
-
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 640)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  return isMobile
 }
 
 export default function HelpModal({ isFavoriteCollectionOverview = false, onClose }: HelpModalProps) {

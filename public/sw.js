@@ -1,5 +1,5 @@
-const CACHE_NAME = 'gouo-canvas-v0.1.0'
-const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './gouo-logo.png']
+const CACHE_NAME = 'gouo-canvas-v0.1.0-assets-1'
+const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './gouo-logo-192.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

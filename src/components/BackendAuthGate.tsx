@@ -11,11 +11,16 @@ import {
   sendPasswordReset,
   type GouoUser,
 } from '../lib/gouoBackend'
+import { activateUserStorage, shouldReloadForStorageScopeChange } from '../lib/storageScope'
 import { useStore } from '../store'
 
 type AuthMode = 'login' | 'register' | 'reset'
 
-async function initializeUser(user: GouoUser): Promise<GouoUser> {
+async function initializeUser(user: GouoUser): Promise<GouoUser | null> {
+  if (activateUserStorage(user.id)) {
+    window.location.reload()
+    return null
+  }
   const settings = await createBackendSettings()
   useStore.getState().setSettings(settings)
   return user
@@ -44,15 +49,26 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
     getCurrentUser()
       .then(initializeUser)
       .then((currentUser) => {
-        if (!cancelled) setUser(currentUser)
+        if (!cancelled && currentUser) setUser(currentUser)
       })
-      .catch(() => {
-        if (!cancelled) setUser(null)
+      .catch((checkError) => {
+        if (cancelled) return
+        setUser(null)
+        if (checkError instanceof Error && checkError.message.includes('本地存储')) setError(checkError.message)
       })
       .finally(() => {
         if (!cancelled) setChecking(false)
       })
     return () => { cancelled = true }
+  }, [enabled])
+
+  useEffect(() => {
+    if (!enabled) return
+    const handleStorage = (event: StorageEvent) => {
+      if (shouldReloadForStorageScopeChange(event)) window.location.reload()
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
   }, [enabled])
 
   useEffect(() => {
@@ -82,7 +98,8 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
         await register({ username, password, email, verificationCode })
       }
       const currentUser = await login(username.trim(), password)
-      setUser(await initializeUser(currentUser))
+      const initializedUser = await initializeUser(currentUser)
+      if (initializedUser) setUser(initializedUser)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
     } finally {

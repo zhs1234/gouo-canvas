@@ -119,7 +119,6 @@ export interface GouoCloudSyncResult {
 }
 
 const configuredBaseUrl = (import.meta.env.VITE_GOUO_BACKEND_URL ?? '').trim().replace(/\/+$/, '')
-const configuredDevTarget = (import.meta.env.VITE_GOUO_BACKEND_DEV_TARGET ?? '').trim().replace(/\/+$/, '')
 let backendToken = ''
 let backendSessionReady = false
 
@@ -205,12 +204,6 @@ export async function updateCurrentUser(displayName: string): Promise<void> {
   await backendAction('/api/user/self', { display_name: displayName.trim() }, 'PUT')
 }
 
-export function getBackendPanelUrl(path: string): string {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  const baseUrl = import.meta.env.DEV ? configuredDevTarget || configuredBaseUrl : configuredBaseUrl
-  return `${baseUrl}${normalizedPath}`
-}
-
 export function redeemCode(key: string): Promise<number> {
   return backendRequest<number>('/api/user/topup', {
     method: 'POST',
@@ -283,12 +276,6 @@ export function putCloudTask(clientTaskId: string, task: Record<string, unknown>
   })
 }
 
-export function getCloudTasks(cursor = '', hidden = false): Promise<{ data: GouoCloudTask[]; next_cursor: string }> {
-  const params = new URLSearchParams({ limit: '100', hidden: String(hidden) })
-  if (cursor) params.set('cursor', cursor)
-  return backendRequest<{ data: GouoCloudTask[]; next_cursor: string }>(`/api/gouo/tasks?${params}`)
-}
-
 export function getCloudSync(cursor = ''): Promise<GouoCloudSyncResult> {
   const params = new URLSearchParams({ limit: '100' })
   if (cursor) params.set('cursor', cursor)
@@ -310,10 +297,6 @@ export async function fetchCloudAssetContent(asset: GouoCloudAsset): Promise<Blo
 
 export function setCloudTaskHidden(id: string, hidden: boolean): Promise<void> {
   return backendAction(`/api/gouo/tasks/${encodeURIComponent(id)}/${hidden ? 'hide' : 'restore'}`, {})
-}
-
-export function setCloudCollectionHidden(id: string, hidden: boolean): Promise<void> {
-  return backendAction(`/api/gouo/collections/${encodeURIComponent(id)}/${hidden ? 'hide' : 'restore'}`, {})
 }
 
 export function updatePassword(currentPassword: string, newPassword: string): Promise<void> {

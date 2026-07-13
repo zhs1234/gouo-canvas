@@ -1,4 +1,3 @@
-export type BrowserNotificationPermission = NotificationPermission | 'unsupported'
 export type BrowserNotificationPermissionResult =
   | { ok: true }
   | { ok: false; reason: 'unsupported' | 'insecure' | 'denied' | 'default' | 'error'; error?: unknown }

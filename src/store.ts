@@ -35,7 +35,8 @@ import {
 import { callImageApi } from './lib/api'
 import { showBrowserNotification } from './lib/browserNotification'
 import { IMAGE_FETCH_CORS_HINT } from './lib/imageApiShared'
-import { getFalErrorMessage, getFalQueuedImageResult } from './lib/falAiImageApi'
+import type { FalQueuedImageResult } from './lib/falAiImageApi'
+import { getFalErrorMessage } from './lib/falError'
 import { getCustomQueuedImageResult } from './lib/openaiCompatibleImageApi'
 import { validateMaskMatchesImage } from './lib/canvasImage'
 import { orderInputImagesForMask } from './lib/mask'
@@ -46,6 +47,11 @@ import { isBackendAuthEnabled } from './lib/gouoBackend'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, notifyFirstGeneration, requestUserCenter } from './lib/userGuidance'
+import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus } from './lib/taskFilters'
+import { isRecord, normalizeInputImages, normalizeMaskDraft } from './lib/storeInputNormalization'
+import { getLoadedStorageName } from './lib/storageScope'
+
+export { taskHasOutputErrors, taskMatchesFilterStatus, taskMatchesSearchQuery, type TaskFilterStatus } from './lib/taskFilters'
 
 export const ALL_FAVORITES_COLLECTION_ID = '__all_favorites__'
 export const DEFAULT_FAVORITE_COLLECTION_ID = '__default_favorites__'
@@ -574,7 +580,7 @@ interface AppState {
   // 搜索和筛选
   searchQuery: string
   setSearchQuery: (q: string) => void
-  filterStatus: 'all' | 'running' | 'done' | 'error' | 'pending' | 'sync_error' | 'hidden'
+  filterStatus: TaskFilterStatus
   setFilterStatus: (status: AppState['filterStatus']) => void
   filterFavorite: boolean
   setFilterFavorite: (f: boolean) => void
@@ -662,33 +668,9 @@ export async function deleteImageIfUnreferenced(imageId: string) {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function normalizeInputImages(value: unknown): InputImage[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((img): InputImage | null => {
-      if (!isRecord(img) || typeof img.id !== 'string') return null
-      return { id: img.id, dataUrl: typeof img.dataUrl === 'string' ? img.dataUrl : '' }
-    })
-    .filter((img): img is InputImage => img != null)
-}
-
-function normalizeMaskDraft(value: unknown): MaskDraft | null {
-  if (!isRecord(value)) return null
-  if (typeof value.targetImageId !== 'string' || typeof value.maskDataUrl !== 'string') return null
-  return {
-    targetImageId: value.targetImageId,
-    maskDataUrl: value.maskDataUrl,
-    updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : Date.now(),
-  }
-}
-
 export const useStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Settings
       settings: { ...DEFAULT_SETTINGS },
       setSettings: (s) => set((st) => {
@@ -989,7 +971,7 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'gouo-canvas',
+      name: getLoadedStorageName(),
       version: 2,
       migrate: (persistedState) => migratePersistedState(persistedState),
       partialize: getPersistedState,
@@ -1005,12 +987,8 @@ function genId(): string {
   return Date.now().toString(36) + (++uid).toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-function getPersistableTask(task: TaskRecord): TaskRecord {
-  return task
-}
-
 function putTask(task: TaskRecord): Promise<IDBValidKey> {
-  return dbPutTask(getPersistableTask(task))
+  return dbPutTask(task)
 }
 
 export function getCodexCliPromptKey(settings: AppSettings): string {
@@ -1093,29 +1071,6 @@ function usesConcurrentOpenAIImageRequests(profile: ApiProfile, params: TaskPara
   if (profile.provider !== 'openai' || n <= 1) return false
   if (profile.apiMode === 'responses') return true
   return profile.apiMode === 'images' && (profile.codexCli || profile.streamImages)
-}
-
-export function taskHasOutputErrors(task: Pick<TaskRecord, 'outputErrors'>) {
-  return Boolean(task.outputErrors?.length)
-}
-
-export function taskMatchesFilterStatus(task: TaskRecord, filterStatus: AppState['filterStatus']) {
-  if (filterStatus === 'hidden') return Boolean(task.cloudHiddenAt)
-  if (task.cloudHiddenAt) return false
-  if (filterStatus === 'all') return true
-  if (filterStatus === 'pending') return task.cloudSyncStatus === 'pending' || task.cloudSyncStatus === 'syncing'
-  if (filterStatus === 'sync_error') return task.cloudSyncStatus === 'error'
-  if (filterStatus === 'error') return task.status === 'error' || taskHasOutputErrors(task)
-  return task.status === filterStatus
-}
-
-export function taskMatchesSearchQuery(task: TaskRecord, query: string) {
-  const q = query.trim().toLowerCase()
-  if (!q) return true
-  const prompt = (task.prompt || '').toLowerCase()
-  const paramStr = JSON.stringify(task.params).toLowerCase()
-  const errorStr = [task.error, ...(task.outputErrors ?? []).map((item) => item.error)].filter(Boolean).join('\n').toLowerCase()
-  return prompt.includes(q) || paramStr.includes(q) || errorStr.includes(q)
 }
 
 export function showCodexCliPrompt(force = false, reason = '接口返回的提示词已被改写') {
@@ -1367,7 +1322,7 @@ async function resolveImageSizeParamsList(
   })
 }
 
-async function completeRecoveredFalTask(task: TaskRecord, result: Awaited<ReturnType<typeof getFalQueuedImageResult>>) {
+async function completeRecoveredFalTask(task: TaskRecord, result: FalQueuedImageResult) {
   const latest = useStore.getState().tasks.find((item) => item.id === task.id)
   if (!latest || latest.status === 'done') return
   if (latest.status !== 'running' && !latest.falRecoverable) return
@@ -1409,6 +1364,7 @@ async function recoverFalTask(taskId: string) {
   }
 
   try {
+    const { getFalQueuedImageResult } = await import('./lib/falAiImageApi')
     const result = await getFalQueuedImageResult(profile, task.falEndpoint, task.falRequestId, task.params)
     clearFalRecoveryTimer(taskId)
     await completeRecoveredFalTask(task, result)
@@ -1440,7 +1396,7 @@ export async function initStore() {
   const { tasks: markedTasks, interruptedTasks } = markInterruptedOpenAIRunningTasks(visibleStoredTasks)
   const interruptedTaskIds = new Set(interruptedTasks.map((task) => task.id))
   const favoriteState = useStore.getState()
-  const normalizedFavorites = normalizeLoadedFavoriteState(markedTasks.map(getPersistableTask), favoriteState.favoriteCollections, favoriteState.defaultFavoriteCollectionId)
+  const normalizedFavorites = normalizeLoadedFavoriteState(markedTasks, favoriteState.favoriteCollections, favoriteState.defaultFavoriteCollectionId)
   const tasks = normalizedFavorites.tasks
 
   if (normalizedFavorites.collections !== favoriteState.favoriteCollections) {

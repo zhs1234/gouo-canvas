@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useStore } from '../store'
 import { useTooltip } from '../hooks/useTooltip'
 import { BRAND } from '../config/brand'
@@ -6,11 +6,12 @@ import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import type { UserCenterSection } from '../lib/userGuidance'
 import ViewportTooltip from './ViewportTooltip'
-import HelpModal from './HelpModal'
-import InspirationLibraryModal from './InspirationLibraryModal'
-import UserCenterModal from './UserCenterModal'
-import { useFavoriteCollectionTitle } from './FavoriteCollections'
+import { useFavoriteCollectionTitle } from './favorites/useFavoriteCollectionTitle'
 import { HelpCircleIcon, InstallIcon, SettingsIcon, SparklesIcon, UserIcon } from './icons'
+
+const HelpModal = lazy(() => import('./HelpModal'))
+const InspirationLibraryModal = lazy(() => import('./InspirationLibraryModal'))
+const UserCenterModal = lazy(() => import('./UserCenterModal'))
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -232,9 +233,11 @@ export default function Header() {
       <div className="safe-area-top invisible pointer-events-none" aria-hidden="true">
         <div className="safe-header-inner" />
       </div>
-      {showHelp && <HelpModal isFavoriteCollectionOverview={filterFavorite && !activeFavoriteCollectionId} onClose={() => setShowHelp(false)} />}
-      {showInspiration && <InspirationLibraryModal onClose={() => setShowInspiration(false)} />}
-      {showUserCenter && <UserCenterModal initialSection={userCenterSection} onClose={() => setShowUserCenter(false)} />}
+      <Suspense fallback={null}>
+        {showHelp && <HelpModal isFavoriteCollectionOverview={filterFavorite && !activeFavoriteCollectionId} onClose={() => setShowHelp(false)} />}
+        {showInspiration && <InspirationLibraryModal onClose={() => setShowInspiration(false)} />}
+        {showUserCenter && <UserCenterModal initialSection={userCenterSection} onClose={() => setShowUserCenter(false)} />}
+      </Suspense>
     </>
   )
 }

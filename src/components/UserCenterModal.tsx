@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { bindEmail, createBackendSettings, getBackendStatus, getCurrentUser, getUsageLogs, logout, redeemCode, sendEmailVerification, updateCurrentUser, updatePassword, type GouoUsageLog, type GouoUser } from '../lib/gouoBackend'
 import { useCloudSyncSnapshot } from '../lib/cloudSync'
+import { deactivateUserStorage } from '../lib/storageScope'
 import { useStore } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
@@ -10,10 +11,6 @@ import { CloseIcon, RefreshIcon, UserIcon } from './icons'
 interface UserCenterModalProps {
   initialSection?: 'overview' | 'topup' | 'logs' | 'security'
   onClose: () => void
-}
-
-function formatQuota(value?: number) {
-  return Math.max(0, value ?? 0).toLocaleString('zh-CN')
 }
 
 function formatCNY(value?: number) {
@@ -135,6 +132,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
     setError('')
     try {
       await logout()
+      deactivateUserStorage()
       window.location.reload()
     } catch (logoutError) {
       setError(logoutError instanceof Error ? logoutError.message : String(logoutError))

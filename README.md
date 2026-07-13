@@ -11,7 +11,7 @@
 
 项目仓库：[zhs1234/gouo-canvas](https://github.com/zhs1234/gouo-canvas)
 
-![光构 Logo](./public/gouo-logo.png)
+![光构 Logo](./docs/images/gouo-logo-source.png)
 
 ## 功能
 

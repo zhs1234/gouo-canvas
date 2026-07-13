@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds, useStore, reuseConfig, editOutputs, removeTask, taskMatchesFilterStatus, taskMatchesSearchQuery } from '../store'
+import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds, useStore, reuseConfig, editOutputs, removeTask } from '../store'
+import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
 import TaskCard from './TaskCard'
 import { restoreCloudTask } from '../lib/cloudSync'
 import { EMPTY_GALLERY_PROMPTS } from '../lib/userGuidance'

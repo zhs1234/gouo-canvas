@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { initStore } from './store'
 import { useStore } from './store'
 import { activateFirstImportedProfile, buildSettingsFromUrlParams, clearUrlSettingParams, hasUrlSettingParams } from './lib/urlSettings'
@@ -10,20 +10,17 @@ import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import TaskGrid from './components/TaskGrid'
 import InputBar from './components/InputBar'
-import DetailModal from './components/DetailModal'
-import Lightbox from './components/Lightbox'
-import SettingsModal from './components/SettingsModal'
-import ConfirmDialog from './components/ConfirmDialog'
 import Toast from './components/Toast'
-import MaskEditorModal from './components/MaskEditorModal'
 import ImageContextMenu from './components/ImageContextMenu'
-import { FavoriteCollectionPickerModal, FavoriteCollectionsView, ManageCollectionsModal } from './components/FavoriteCollections'
+import { FavoriteCollectionsView } from './components/favorites/FavoriteCollectionsView'
+import OverlayLayer from './components/OverlayLayer'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 import { startCloudSync } from './lib/cloudSync'
 import CloudSyncBanner from './components/CloudSyncBanner'
 import FirstGenerationGuide from './components/FirstGenerationGuide'
-import OnboardingModal from './components/OnboardingModal'
 import { GUIDE_FLAGS, hasGuideFlag } from './lib/userGuidance'
+
+const OnboardingModal = lazy(() => import('./components/OnboardingModal'))
 
 let customProviderConfigUrlImportStarted = false
 
@@ -121,17 +118,15 @@ export default function App() {
         </div>
       </main>
       <InputBar />
-      <DetailModal />
-      <Lightbox />
-      <SettingsModal />
-      <ConfirmDialog />
-      <FavoriteCollectionPickerModal />
-      <ManageCollectionsModal />
+      <OverlayLayer />
       <Toast />
-      <MaskEditorModal />
       <ImageContextMenu />
       <FirstGenerationGuide />
-      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
+      {showOnboarding && (
+        <Suspense fallback={null}>
+          <OnboardingModal onClose={() => setShowOnboarding(false)} />
+        </Suspense>
+      )}
     </>
   )
 }
