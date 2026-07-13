@@ -134,6 +134,7 @@ function apiUrl(path: string): string {
 function requestInit(init?: RequestInit): RequestInit {
   return {
     ...init,
+    cache: 'no-store',
     credentials: 'include',
     headers: {
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
@@ -290,7 +291,7 @@ export function putCloudCollection(id: string, name: string): Promise<GouoCloudC
 }
 
 export async function fetchCloudAssetContent(asset: GouoCloudAsset): Promise<Blob> {
-  const response = await fetch(apiUrl(asset.content_url), { credentials: 'include' })
+  const response = await fetch(apiUrl(asset.content_url), { cache: 'no-store', credentials: 'include' })
   if (!response.ok) throw new Error(`下载云端图片失败（HTTP ${response.status}）`)
   return response.blob()
 }

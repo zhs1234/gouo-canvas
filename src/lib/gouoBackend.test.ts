@@ -26,7 +26,7 @@ describe('gouoBackend', () => {
     await expect(login('creator', 'password123')).resolves.toMatchObject({ id: 7 })
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.gouo.example/api/user/login',
-      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+      expect.objectContaining({ method: 'POST', cache: 'no-store', credentials: 'include' }),
     )
   })
 
@@ -65,7 +65,7 @@ describe('gouoBackend', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/user/logout',
-      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+      expect.objectContaining({ method: 'GET', cache: 'no-store', credentials: 'include' }),
     )
   })
 

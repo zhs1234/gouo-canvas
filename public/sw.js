@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gouo-canvas-v0.1.0-assets-1'
+const CACHE_NAME = 'gouo-canvas-v0.1.0-assets-2'
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './gouo-logo-192.png']
 
 self.addEventListener('install', (event) => {
@@ -25,6 +25,15 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
 
+  if (
+    url.pathname === '/api' ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname === '/v1' ||
+    url.pathname.startsWith('/v1/') ||
+    url.pathname === '/panel' ||
+    url.pathname.startsWith('/panel/')
+  ) return
+
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -37,6 +46,8 @@ self.addEventListener('fetch', (event) => {
     )
     return
   }
+
+  if (!['font', 'image', 'manifest', 'script', 'style'].includes(request.destination)) return
 
   event.respondWith(
     caches.match(request).then((cached) => {
