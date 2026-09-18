@@ -37,7 +37,8 @@ jobs:
           if-no-files-found: ignore
   initial-lock:
     # One-time bootstrap, removed after the generated lock is captured.
-    if: github.event_name == 'push' && github.repository == 'zhs1234/gouo-canvas' && github.ref == 'refs/heads/v2' && github.event.head_commit.message == 'build(v2): capture verified initial dependency lock'
+    if: >-
+      github.event_name == 'push' && github.repository == 'zhs1234/gouo-canvas' && github.ref == 'refs/heads/v2' && github.event.head_commit.message == 'build(v2): capture verified initial dependency lock'
     needs: studio
     runs-on: ubuntu-latest
     timeout-minutes: 3
