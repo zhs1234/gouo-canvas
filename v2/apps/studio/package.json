@@ -1,0 +1,5 @@
+{
+  "name":"@gouo/studio","version":"0.1.0","private":true,"type":"module",
+  "scripts":{"dev":"vite --host 127.0.0.1","build":"tsc --noEmit && vite build","preview":"vite preview --host 127.0.0.1"},
+  "dependencies":{"@gouo/contracts":"0.1.0","@gouo/ui":"0.1.0","@tanstack/react-query":"^5.0.0","fabric":"7.4.0","react":"19.3.0","react-dom":"19.3.0","react-router-dom":"^7.0.0"}
+}

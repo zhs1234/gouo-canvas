@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Non-production examples. All routes remain disabled until per-channel live validation.",
+  "models": [
+    {"modelKey":"openai-image25-sunburst","label":"GPT Image 2.5 Sunburst","upstreamModelId":"gpt-image-2.5-sunburst","protocol":"openai-images","adapterId":"openai-images","enabled":false,"verification":"pending","channelId":"","secretRef":"","capabilityRevision":1,"capabilities":{"operations":["generate"],"maxInputs":0,"maxOutputs":1,"qualities":[],"formats":["png"],"transparency":false,"sizes":[]}},
+    {"modelKey":"openai-image25-flare","label":"GPT Image 2.5 Flare","upstreamModelId":"gpt-image-2.5-flare","protocol":"openai-images","adapterId":"openai-images","enabled":false,"verification":"pending","channelId":"","secretRef":"","capabilityRevision":1,"capabilities":{"operations":["generate"],"maxInputs":0,"maxOutputs":1,"qualities":[],"formats":["png"],"transparency":false,"sizes":[]}},
+    {"modelKey":"custom-channel-template","label":"填写渠道型号","upstreamModelId":"","protocol":"provider-native","adapterId":"","enabled":false,"verification":"pending","channelId":"","secretRef":"","capabilityRevision":1,"capabilities":{"operations":[],"maxInputs":0,"maxOutputs":1,"qualities":[],"formats":[],"transparency":false,"sizes":[]}}
+  ]
+}

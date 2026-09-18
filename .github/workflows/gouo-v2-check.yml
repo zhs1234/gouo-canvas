@@ -1,0 +1,37 @@
+name: Gouo V2 checks
+on:
+  push:
+    branches: [v2, 'v2/**', 'codex/**']
+    paths: ['v2/**', 'docs/v2/**', 'START_HERE_V2.md', '.github/workflows/gouo-v2-check.yml']
+  pull_request:
+    paths: ['v2/**', '.github/workflows/gouo-v2-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  studio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install workspace (generate lock only when absent)
+        run: node scripts/setup.mjs
+      - name: Typecheck, contract tests and build
+        run: npm run check
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke (no provider keys)
+        run: npm run test:e2e
+      - name: Upload generated lockfile for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gouo-v2-lockfile
+          path: v2/package-lock.json
+          if-no-files-found: ignore
