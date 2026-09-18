@@ -24,7 +24,7 @@ Asynq：B3 使用 Go/Redis 队列时引入 `hibiken/asynq`，并检查匹配 Red
 
 查看所锁版本的 LICENSE/NOTICE、传递依赖、模型权重、字体和模板的独立条款。保留原著作权与要求的声明。MIT/Apache 等标签不是对全部部署素材的统一商用授权。AGPL/GPL/商业 SDK 在集成/修改/分发方式明确前不作为闭源核心默认依赖；独立服务不是自动免责。
 
-本交付不复制 node_modules，不携带字体文件。不伪造 lockfile；第一次联网 npm install 的真实解析结果通过检查后提交，后续 npm ci。版本变更与 npm audit 告警由 P0 记录，不用 `--force` 无差别升级。
+本交付不复制 node_modules，不携带字体文件。已提交来自成功 GitHub Actions 的真实 package-lock.json，使用 npm ci。版本变更与 npm audit 告警由 P0 记录，不用 `--force` 无差别升级。
 
 ## 原始参考（2026-09-18 查阅；实现前复核变更）
 

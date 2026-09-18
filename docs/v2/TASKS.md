@@ -4,7 +4,7 @@
 
 ## P0 — 安装、基线与现状确认（第一个任务）
 
-读取全部适用 AGENTS。运行 `node v2/scripts/setup.mjs`、`cd v2 && npm run check`，安装浏览器后运行 `npm run test:e2e`。首次联网生成真实 package-lock.json 并提交；已有锁时使用 npm ci，不伪造版本或 integrity。记录运行的 Node/npm/Go 版本。
+读取全部适用 AGENTS。运行 `node v2/scripts/setup.mjs`、`cd v2 && npm run check`，安装浏览器后运行 `npm run test:e2e`。已提交 CI 生成的真实 package-lock.json；使用 npm ci，不无故重新解析版本或手工编造 integrity。记录运行的 Node/npm/Go 版本。
 
 核实旧 UI、Go 测试基线；不要通过修改无关旧业务修复已有失败。缺少网路/工具/凭据时明确记录，允许继续不依赖它的任务。确认没有改 main、生产配置和数据。核对源代码中 Image 2.5 的实际限制，见 MODELS.md。
 

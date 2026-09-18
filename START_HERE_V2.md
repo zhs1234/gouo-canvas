@@ -35,4 +35,4 @@ npm run dev
 
 当前是**可继续开发的工程起点**，不是完整商品图 SaaS。现有 starter 已提供 UI 包、共享类型与校验、账号接口桥接、本地编辑/导出、模型排查工具、测试与 CI。Job/Worker、云项目、生产多模型适配、月度订阅等有明确任务，但未被伪装为已实现。
 
-依赖通过 npm 安装，不把 node_modules、完整第三方仓库或字体文件塞进仓库。首次联网初始化生成 V2 lockfile 后应提交；已有 lockfile 时 setup 使用 npm ci。
+依赖通过 npm 安装，不把 node_modules、完整第三方仓库或字体文件塞进仓库。V2 已附带通过 GitHub 检查时生成的 package-lock.json；setup 默认使用 npm ci，按锁定版本安装。

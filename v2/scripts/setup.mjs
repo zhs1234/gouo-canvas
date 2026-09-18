@@ -11,4 +11,4 @@ const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', [comm
 if (result.error) { console.error(result.error.message); process.exit(1) }
 if (result.status !== 0) process.exit(result.status ?? 1)
 console.log('Ready: cd v2 && npm run check && npm run dev')
-console.log('首次生成的 v2/package-lock.json 应与测试结果一起提交；之后使用 npm ci。')
+console.log(command === 'ci' ? '已按 V2 锁文件安装依赖。' : '首次生成的 v2/package-lock.json 应与测试结果一起提交；之后使用 npm ci。')

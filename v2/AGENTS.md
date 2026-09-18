@@ -12,4 +12,4 @@ Fabric.js is the selected editor engine, not a complete editor product. Existing
 
 Use capability-driven forms. Keep unsupported/unverified models disabled. Additional quality values such as xhigh/max must remain strings from channel capability data, not old global enums.
 
-Dependencies: add only used packages, update package-lock.json and docs/v2/DEPENDENCIES.md. First initialization may need network; after lockfile exists use npm ci. Do not fabricate lockfile integrity hashes.
+Dependencies: add only used packages, update package-lock.json and docs/v2/DEPENDENCIES.md. The initial lockfile is committed from a successful GitHub Actions run. Use npm ci. Network is still required for uncached packages. Do not regenerate the dependency graph without an intentional upgrade or fabricate integrity hashes.
