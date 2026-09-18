@@ -35,3 +35,33 @@ jobs:
           name: gouo-v2-lockfile
           path: v2/package-lock.json
           if-no-files-found: ignore
+  initial-lock:
+    # One-time bootstrap, removed after the generated lock is captured.
+    if: github.event_name == 'push' && github.repository == 'zhs1234/gouo-canvas' && github.ref == 'refs/heads/v2' && github.event.head_commit.message == 'build(v2): capture verified initial dependency lock'
+    needs: studio
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: gouo-v2-lockfile
+          path: ${{ runner.temp }}/gouo-initial-lock
+      - name: Commit only the checked dependency lock to v2
+        env:
+          LOCK_SOURCE: ${{ runner.temp }}/gouo-initial-lock/package-lock.json
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/v2
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test ! -e v2/package-lock.json
+          node -e 'const fs=require("node:fs"); const p=JSON.parse(fs.readFileSync(process.env.LOCK_SOURCE,"utf8")); if(p.name!=="gouo-v2" || p.lockfileVersion!==3 || !p.packages["apps/studio"]) process.exit(1)'
+          cp "$LOCK_SOURCE" v2/package-lock.json
+          git add -- v2/package-lock.json
+          test "$(git diff --cached --name-only)" = v2/package-lock.json
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'build(v2): lock dependencies after successful starter checks'
+          git push origin HEAD:refs/heads/v2
