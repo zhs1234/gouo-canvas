@@ -1,24 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Excalidraw, CaptureUpdateAction, convertToExcalidrawElements, loadFromBlob, serializeAsJSON } from '@excalidraw/excalidraw'
+import { Excalidraw, CaptureUpdateAction, convertToExcalidrawElements, exportToBlob, serializeAsJSON } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { FileId } from '@excalidraw/excalidraw/element/types'
 import type { RestoredDataState } from '@excalidraw/excalidraw/data/restore'
-import { createStore, get, set } from 'idb-keyval'
+import { createStore, get, set, setMany } from 'idb-keyval'
 import '@excalidraw/excalidraw/index.css'
 import './canvas-lab.css'
+import { useAuth } from '../loomic/lib/auth-context'
+import { decodeDocument, readLegacyDrafts, type LegacyDraft } from './documents'
 
 // 独立数据库，不读取或改写正式画布与会话草稿。
 const store = createStore('gouo-canvas-lab-v1', 'documents')
-const fixture = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII='
+const fixture = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAABkCAYAAAABtjuPAAAACXBIWXMAAAPoAAAD6AG1e1JrAAACFUlEQVR4nO2UQQ3AQACDTiq2Jm1qbjLWBB4YKKSH573RBvy0wSm+4uPHDQqwAG8BFsG1btADDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQEwBDkhATAEOSEBMAQ5IQMwHQEwQ0aAfKqcAAAAASUVORK5CYII='
 const empty = { type: 'excalidraw', version: 2, elements: [], appState: {}, files: {} }
 
-async function decode(raw: string) {
-  const data = JSON.parse(raw)
-  if (data?.type !== 'excalidraw' || !Array.isArray(data.elements) || typeof data.version !== 'number') {
-    throw new Error('请选择 Excalidraw 文档；不支持直接导入 Fabric 或其他画布格式')
-  }
-  return loadFromBlob(new Blob([raw], { type: 'application/json' }), null, null)
-}
 function download(raw: string, name: string) {
   const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }))
   const a = document.createElement('a')
@@ -29,6 +24,14 @@ function download(raw: string, name: string) {
 }
 
 export default function CanvasLab() {
+  const { user, loading } = useAuth()
+  const owner = `local:${user?.id ?? 'guest'}`
+  if (loading) return <p>正在确认当前本地草稿范围</p>
+  return <CanvasLabEditor key={owner} owner={owner} />
+}
+function CanvasLabEditor({ owner }: { owner: string }) {
+  const storageKey = (name: string) => `${owner}:${name}`
+  const [legacyDrafts, setLegacyDrafts] = useState<Array<{ key: string; draft: LegacyDraft }>>([])
   const [initial, setInitial] = useState<RestoredDataState>()
   const [revision, setRevision] = useState(0)
   const [ready, setReady] = useState(false)
@@ -44,7 +47,7 @@ export default function CanvasLab() {
 
   const save = (raw = pending.current) => {
     if (!raw) return queue.current.then(() => true, () => false)
-    queue.current = queue.current.catch(() => {}).then(() => set('active', raw, store))
+    queue.current = queue.current.catch(() => {}).then(() => set(storageKey('active'), raw, store))
     return queue.current.then(() => {
       if (pending.current === raw) pending.current = undefined
       if (alive.current) setStatus('已保存到本机对照草稿')
@@ -53,32 +56,38 @@ export default function CanvasLab() {
   }
   useEffect(() => {
     alive.current = true
-    get<string>('active', store).then(raw => decode(raw ?? JSON.stringify(empty))).then(scene => {
+    get<string>(storageKey('active'), store).then(async raw => raw ?? (owner === 'local:guest' ? await get<string>('active', store) : undefined)).then(raw => decodeDocument(raw ?? JSON.stringify(empty))).then(({ scene }) => {
       if (alive.current) { setInitial(scene); setStatus('独立对照草稿已打开') }
     }).catch(() => { if (alive.current) { setStatus('草稿读取失败，未覆盖原数据'); setFailure(true) } })
     return () => { alive.current = false; clearTimeout(timer.current); void save() }
   }, [])
 
-  const importCopy = async (file?: File) => {
+  const importCopy = async (file?: File, sourceDraft?: LegacyDraft) => {
     if (!file || importing.current) return
     importing.current = true
     try {
       if (file.size > 32 * 1024 * 1024) throw new Error('文档超过 32 MB，请保留原件并使用较小副本')
       const raw = await file.text()
-      const scene = await decode(raw)
+      const { scene, legacy } = await decodeDocument(raw)
       // 导入前保存当前编辑；原始字节另存，SDK 恢复不覆盖原始快照。
       clearTimeout(timer.current)
       if (!await save()) throw new Error('当前草稿保存失败，停止导入以免丢失内容')
-      await set(`import:${crypto.randomUUID()}`, { name: file.name, raw, importedAt: new Date().toISOString() }, store)
-      await set('last-import', raw, store)
-      await set('active', raw, store)
+      const current = await get<string>(storageKey('active'), store)
+      const snapshot = { name: file.name, raw, sourceDraft, importedAt: new Date().toISOString() }
+      const writes: [string, unknown][] = [
+        [storageKey(`import:${crypto.randomUUID()}`), snapshot],
+        [storageKey('last-import'), raw],
+        [storageKey('active'), raw],
+      ]
+      if (current) writes.push([storageKey(`before-import:${crypto.randomUUID()}`), current])
+      await setMany(writes, store)
       pending.current = undefined
       api.current = null
       hydrated.current = false
       setReady(false)
       setInitial(scene)
       setRevision(value => value + 1)
-      setStatus('已导入副本，原始文档快照已保留')
+      setStatus(legacy ? '已导入 Loomic 画布副本，完整原始草稿快照已保留；会话不迁入对照页' : '已导入副本，原始文档快照已保留')
     } catch (error) { setStatus(error instanceof Error ? error.message : '导入失败，原草稿未替换') }
     finally { importing.current = false }
   }
@@ -90,7 +99,10 @@ export default function CanvasLab() {
       setStatus('同一素材已在画布中，未重复插入')
       return
     }
-    const [element] = convertToExcalidrawElements([{ type: 'image', x: 120, y: 120, width: 120, height: 120, fileId: 'lab-fixture-1' as FileId, customData: { artifactId: 'lab-fixture-1' } }])
+    const view = current.getAppState()
+    const x = view.width / (2 * view.zoom.value) - view.scrollX - 80
+    const y = view.height / (2 * view.zoom.value) - view.scrollY - 50
+    const [element] = convertToExcalidrawElements([{ type: 'image', x, y, width: 160, height: 100, fileId: 'lab-fixture-1' as FileId, customData: { artifactId: 'lab-fixture-1' } }])
     current.addFiles([{ id: 'lab-fixture-1', dataURL: fixture, mimeType: 'image/png', created: Date.now() }] as Parameters<ExcalidrawImperativeAPI['addFiles']>[0])
     current.updateScene({ elements: [...elements, element], captureUpdate: CaptureUpdateAction.IMMEDIATELY })
     setStatus('已插入测试素材（未调用模型）')
@@ -105,10 +117,21 @@ export default function CanvasLab() {
       <button disabled={!ready} onClick={() => {
         if (api.current) download(serializeAsJSON(api.current.getSceneElements(), api.current.getAppState(), api.current.getFiles(), 'local'), 'gouo-lab.excalidraw')
       }}>导出文档副本</button>
-      <button onClick={() => void get<string>('last-import', store).then(raw => raw ? download(raw, 'original-import.excalidraw') : setStatus('尚未导入文档'))}>下载原始导入文件</button>
+      <button onClick={() => void get<string>(storageKey('last-import'), store).then(raw => raw ? download(raw, 'original-import.excalidraw') : setStatus('尚未导入文档'))}>下载原始导入文件</button>
+      <button disabled={!ready} onClick={() => void (async () => {
+        try {
+          if (!api.current) return
+          const blob = await exportToBlob({ elements: api.current.getSceneElements(), appState: api.current.getAppState(), files: api.current.getFiles(), mimeType: 'image/png' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a'); a.href = url; a.download = 'gouo-lab.png'; a.click()
+          setTimeout(() => URL.revokeObjectURL(url), 1000)
+        } catch { setStatus('PNG 导出失败，请先导出文档备份') }
+      })()}>导出 PNG 副本</button>
+      <button disabled={!ready} onClick={() => void readLegacyDrafts(owner).then(rows => { setLegacyDrafts(rows); setStatus(rows.length ? '仅列出当前账号或访客范围的旧草稿，点击导入副本' : '当前范围没有旧 Loomic 草稿') }).catch(error => setStatus(error.message))}>查看旧草稿（只读）</button>
       <button disabled={!ready} onClick={insertFixture}>插入测试素材</button>
       <output role="status">{status}</output>
     </header>
+    {legacyDrafts.length > 0 && <aside aria-label="旧 Loomic 草稿副本">{legacyDrafts.map(({ key, draft }) => <button key={key} disabled={!ready} onClick={() => void importCopy(new File([JSON.stringify(draft)], `${draft.canvas.name}.json`, { type: 'application/json' }), draft)}>导入副本：{draft.canvas.name}</button>)}<p>仅导入画布；聊天与缩略图保留在独立数据库的原始快照，原项目不变。</p></aside>}
     {failure && <p>请保留浏览器数据。此页面不会自动清空损坏的草稿。</p>}
     {initial && <section className="gouo-canvas-lab-editor" aria-label="官方画布">
       <Excalidraw key={revision} initialData={initial} langCode="zh-CN" excalidrawAPI={value => { api.current = value }} onChange={(elements, state, files) => {
