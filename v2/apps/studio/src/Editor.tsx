@@ -51,7 +51,7 @@ export default function Editor() {
   function addText() {
     const target = canvas.current
     if (!target || !text.trim()) return
-    const item = new Textbox(text.trim(), { left: 60, top: 50, width: 520, fontSize: 36, fill: '#182630', fontFamily: 'sans-serif' })
+    const item = new Textbox(text.trim(), { left: 60, top: 50, originX: 'left', originY: 'top', width: 520, fontSize: 36, fill: '#182630', fontFamily: 'sans-serif' })
     target.add(item); target.setActiveObject(item); target.requestRenderAll()
   }
   function removeSelection() {
