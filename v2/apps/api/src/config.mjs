@@ -20,13 +20,20 @@ export function loadConfig(env = process.env) {
   if (new Set(models.map(m => m.id)).size !== models.length) throw new Error('模型目录有重复 ID')
   const gateway = new URL(env.GOUO_GATEWAY_BASE_URL || 'http://127.0.0.1:3000/v1')
   if (!['http:', 'https:'].includes(gateway.protocol) || gateway.username || gateway.password || gateway.search || gateway.hash) throw new Error('网关地址格式无效')
+  if (env.GOUO_RELAY_API_KEY && env.GOUO_RELAY_API_KEY_FILE) throw new Error('统一 relay 只能选择环境变量或密钥文件其中一种')
+  let relayKey = env.GOUO_RELAY_API_KEY || ''
+  if (env.GOUO_RELAY_API_KEY_FILE) {
+    try { relayKey = readFileSync(env.GOUO_RELAY_API_KEY_FILE, 'utf8').trim() }
+    catch { throw new Error('无法读取统一 relay 密钥文件，请检查挂载和权限') }
+    if (!relayKey || /[\r\n]/.test(relayKey)) throw new Error('统一 relay 密钥文件内容无效')
+  }
   const relayOwnerId = env.GOUO_RELAY_OWNER_ID ? Number(env.GOUO_RELAY_OWNER_ID) : undefined
   if (relayOwnerId !== undefined && (!Number.isSafeInteger(relayOwnerId) || relayOwnerId <= 0)) throw new Error('网关令牌所属账号 ID 无效')
-  if (env.GOUO_ENABLE_GENERATION === 'true' && env.GOUO_RELAY_API_KEY && relayOwnerId === undefined) throw new Error('启用个人 relay 生成前必须配置 GOUO_RELAY_OWNER_ID 为令牌所属账号 ID')
+  if (env.GOUO_ENABLE_GENERATION === 'true' && relayKey && relayOwnerId === undefined) throw new Error('启用个人 relay 生成前必须配置 GOUO_RELAY_OWNER_ID 为令牌所属账号 ID')
   return {
     models, gateway: gateway.toString().replace(/\/$/, ''),
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
-    relayKey: env.GOUO_RELAY_API_KEY || '',
+    relayKey,
     relayOwnerId,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),

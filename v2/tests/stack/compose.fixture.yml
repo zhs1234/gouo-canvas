@@ -1,0 +1,16 @@
+# 明确的内存契约替身，不是实际 New API，不含真实账号或供应商配置。
+services:
+  new-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: fixture
+  studio-api:
+    environment:
+      GOUO_ENABLE_GENERATION: 'true'
+      GOUO_RELAY_OWNER_ID: '7'
+      GOUO_RELAY_API_KEY: fixture-relay
+      GOUO_RELAY_API_KEY_FILE: ''
+      GOUO_STUDIO_MODELS_FILE: /run/fixture-models.json
+    volumes:
+      - ../tests/stack/models.json:/run/fixture-models.json:ro

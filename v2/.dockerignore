@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+.local
+.reports
+playwright-report
+test-results
+deploy/runtime
+**/.env
+**/.env.*
+!**/.env.example
+**/*.sqlite*
+**/*.db*
+**/*.log

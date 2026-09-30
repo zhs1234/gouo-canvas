@@ -17,7 +17,7 @@ Browser: React + Router + TanStack Query + Loomic/Excalidraw
                                 Chat Completions / Images JSON / multipart
 ```
 
-浏览器账号 token 只在内存中，刷新用 HttpOnly Cookie；真实 relay key 只由业务服务读取，浏览器不能直接请求 `/v1`。默认没有模型密钥与可用模型，不调用付费渠道。当前是同步 HTTP 事件批次，关闭页面不能保证保留运行结果；任务队列和权益尚未实现。
+浏览器账号 token 只在内存中，刷新用 HttpOnly Cookie；真实 relay key 只由业务服务读取，浏览器不能直接请求 `/v1`。默认没有模型密钥与可用模型，不调用付费渠道。当前通过 SSE 逐 token/工具事件传输，兼容批次端点保留；关闭页面不保证供应商取消或恢复完整运行；任务队列和权益尚未实现。
 
 本地草稿按访客/账号 scope 显示，但同一浏览器的 IndexedDB 不提供共享设备安全隔离；重要结果须导出备份。服务端 SQLite 仅对请求去重，未知结果阻止重交，不具备 Worker/usage reservation 语义。详见 [LOOMIC.md](LOOMIC.md)。
 
@@ -56,3 +56,7 @@ B1 暂缓：以后启用云库时明确存储、owner scoped 查询、revision�
 ## 运行
 
 开发：`cd v2 && npm run dev` 同时运行 API 3001、前端 5174；New API 3000 单独运行。生产目标同源 `/studio/` 静态资源及账号/业务 API 的分别反向代理，产物在 `v2/apps/studio/dist`。生产 HTTPS、Cookie/CSRF、备份、队列和收费策略待单独实施。
+
+## 可重复一体化运行
+
+新增 `v2/deploy/compose.yml`、独立镜像和同源 Nginx 入口，详见 [RUNNING.md](RUNNING.md)。保持前端、Studio、New API 三服务，以及浏览器草稿 / Studio 去重 / New API 账号费用三个数据职责。没有合库或复制第二套认证；旧根部署文件不参与 V2。`/studio/chat-lab` 和 `/studio/canvas-lab` 是隔离、可回退的体验对照，尚未替换默认画布和会话存储。

@@ -11,15 +11,12 @@
 选择 `zhs1234/gouo-canvas` 的 **v2** 分支，或从其派生的任务分支。工作树应包含本文件。
 
 ```sh
-node v2/scripts/setup.mjs
-cd v2
-npm run check
-npm run dev
+docker compose --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --build --wait
 ```
 
-访问 `http://127.0.0.1:5174/studio/`，直接进入 Loomic 画布。菜单“项目库”打开本地草稿列表。`npm run dev` 同时启动 Studio API 3001 和 Vite 5174；New API 3000 单独启动。右上角连接账号，本地编辑不依赖登录。配置见 `v2/.env.example`：模型默认禁用，relay 密钥只由 `v2/apps/api` 读取，**不要放入 VITE_* 环境变量**。
+访问 `http://localhost:8080/studio/`，同一入口提供画布、Studio API 与 New API 原生 `/setup` / `/console`，服务和数据库职责仍然独立。初始无需密码或 key，生成关闭；用户在原生页面安全初始化，脚本不代建账号、token 或渠道。必要配置、健康检查、数据保留和验证边界见 [RUNNING.md](docs/v2/RUNNING.md)。不再依赖仓库外临时 helper。
 
-New API 的部署说明以固定版本的上游文档为准，使用独立开发数据库。当前 Codex 云环境已安装并校验官方发布二进制，可运行 `python3 /workspace/new-api-environment/start.py`，随后运行 `python3 /workspace/new-api-environment/smoke.py` 初始化并检查本地账号。本地随机凭据在权限 0600 的 state/local-credentials.json 中，不打印、不提交。V2 setup 安装独立 workspace 的依赖，不启动 New API 或发起真实付费请求。旧后端文档仅供参考。
+前端/API 热更新仍可运行 `node v2/scripts/setup.mjs` 后 `cd v2 && npm run dev`，但它要求另行连接明确的 New API 实例；从干净环境启动整套服务使用上面的 Compose。旧根 `deploy/` 和 `server/` 不属于此 V2 编排。
 
 账号协议为 Bearer access token + HttpOnly refresh Cookie：`POST /api/user/login`、`POST /api/user/auth/refresh`、`POST /api/user/auth/logout`、`GET /api/user/self`。访问令牌仅留内存，不存 localStorage/sessionStorage；退出由服务端撤销。当前仅验证本地 HTTP 开发，生产必须另行配置 HTTPS、安全 Cookie 与 Origin/CSRF 策略。额外验证/MFA 流程尚未在 V2 实现。
 
@@ -39,6 +36,6 @@ New API 的部署说明以固定版本的上游文档为准，使用独立开发
 
 当前实例的对话渠道 2 与图片渠道 1 按模型分别路由；用户另行授权复验后，`gpt-5.6-sol → gpt-image-2 → 对话总结` 的真实链路通过，三次调用合计 ¥0.5033058，同请求重放未再次扣费。此前首个对话请求因上游 503 失败、未生图且无该请求的消费记录；没有自动重试。实例启用这两个已验证模型，其他别名/视觉/编辑参数继续等待具体渠道验证。画布账号窗口显示人民币余额、实际消耗和原生单价；用户选定保留现有单价、default 1 倍计费。详见 STATUS.md 和 LOOMIC.md。
 
-当前是**可继续开发的工程起点**，不是完整商品图 SaaS。现有集成提供 Loomic 原生画布/聊天、本地项目/对话恢复、New API 认证桥接，以及 LangGraph + Images 协议适配。Agent 选择器恢复原版，只选择对话模型；图片模型在原生独立偏好设置中选择，供智能体生图工具使用。只有图片渠道时可使用独立“AI 生成图片”面板，聊天入口会提示先配置对话模型，不会自动改成直接生图。当前云环境在用户授权后已实测其 `gpt-image-2` 默认参数生成；仅对应仓库外环境配置启用该能力，仓库示例继续禁用，其他模型/编辑能力待验证。HTTP 事件批次不等于流式/可恢复 Worker。本地 SQLite 只防重复提交；Job/Worker、云项目、月度订阅仍待实现。
+当前是**可继续开发的工程起点**，不是完整商品图 SaaS。现有集成提供 Loomic 原生画布/聊天、本地项目/对话恢复、New API 认证桥接，以及 LangGraph + Images 协议适配。Agent 选择器恢复原版，只选择对话模型；图片模型在原生独立偏好设置中选择，供智能体生图工具使用。只有图片渠道时可使用独立“AI 生成图片”面板，聊天入口会提示先配置对话模型，不会自动改成直接生图。当前云环境在用户授权后已实测其 `gpt-image-2` 默认参数生成；仅对应仓库外环境配置启用该能力，仓库示例继续禁用，其他模型/编辑能力待验证。当前已支持真实 SSE 文本/工具事件，仍不是持久可恢复 Worker。本地 SQLite 只防重复提交；Job/Worker、云项目、月度订阅仍待实现。
 
 依赖通过 npm 安装，不把 node_modules、完整第三方仓库或字体文件塞进仓库。V2 已附带通过 GitHub 检查时生成的 package-lock.json；setup 默认使用 npm ci，按锁定版本安装。

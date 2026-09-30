@@ -1,0 +1,68 @@
+name: gouo-v2
+services:
+  new-api:
+    build:
+      context: ..
+      dockerfile: deploy/NewAPI.Dockerfile
+    environment:
+      PORT: '3000'
+      SQLITE_PATH: /data/new-api.db
+      SESSION_COOKIE_SECURE: ${GOUO_SECURE_COOKIES:-false}
+      SESSION_COOKIE_TRUSTED_URL: ${GOUO_TRUSTED_ORIGIN:-}
+      TRUSTED_PROXIES: 'none'
+    volumes:
+      - new-api-data:/data
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/status').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  studio-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: api
+    environment:
+      GOUO_STUDIO_HOST: 0.0.0.0
+      GOUO_STUDIO_PORT: '3001'
+      GOUO_BACKEND_DEV_TARGET: http://new-api:3000
+      GOUO_GATEWAY_BASE_URL: http://new-api:3000/v1
+      GOUO_STUDIO_LEDGER_PATH: /data/studio-requests.sqlite
+      GOUO_STUDIO_MODELS_FILE: ${GOUO_STUDIO_MODELS_FILE:-/app/config/loomic.models.example.json}
+      GOUO_RELAY_API_KEY_FILE: ${GOUO_RELAY_API_KEY_FILE:-}
+      GOUO_RELAY_OWNER_ID: ${GOUO_RELAY_OWNER_ID:-}
+      GOUO_ENABLE_GENERATION: ${GOUO_ENABLE_GENERATION:-false}
+    volumes:
+      - studio-data:/data
+      - ${GOUO_RUNTIME_DIR:-./runtime}:/run/gouo:ro
+    # SQLite 的并发守卫目前要求单副本，不扩展 replicas。
+    depends_on:
+      new-api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/studio/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: web
+    environment:
+      GOUO_PUBLIC_ORIGIN: ${GOUO_PUBLIC_ORIGIN:-http://localhost:8080}
+    ports:
+      - '127.0.0.1:${GOUO_HTTP_PORT:-8080}:8080'
+    depends_on:
+      new-api:
+        condition: service_healthy
+      studio-api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/healthz]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  new-api-data:
+  studio-data:

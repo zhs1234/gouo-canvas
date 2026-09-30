@@ -18,7 +18,11 @@
     "test": "tsc -p packages/contracts/tsconfig.json && node --test tests/contracts-cases.mjs tests/probe-cases.mjs",
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm test && npm run test:api && npm run build",
-    "test:api": "npm test --workspace @gouo/studio-api"
+    "test:api": "npm test --workspace @gouo/studio-api",
+    "stack:up": "docker compose --env-file deploy/.env.example -f deploy/compose.yml up --build --wait",
+    "stack:down": "docker compose --env-file deploy/.env.example -f deploy/compose.yml down",
+    "stack:status": "node scripts/stack-status.mjs",
+    "test:stack": "node scripts/test-stack.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",
