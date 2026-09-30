@@ -33,7 +33,7 @@ GOUO_NORMAL_ROUTING_EVIDENCE_FILE=/run/gouo/normal-routing.evidence.json
 
 ## 验收边界
 
-CI 的三阶段整栈：真实固定版未初始化边界；原 personal 模式的内存替身；全新普通用户注册默认0额度→明确 fixture-only 加额→真实 Nginx/Studio/SDK/SQLite→替身聊天/图片→本人三笔账单→画布重开；第二普通用户独立生成与隔离，另测无余额/无组模型/禁用/注销。测试 fixture 的额度/价格/令牌不是实际资金或真实凭据，`/api/fixture/account` 只存在于 fixture 容器。
+CI 的三阶段整栈：真实固定版未初始化边界；原 personal 模式的管理员 owner 内存替身（固定渠道后缀只允许管理员）；全新普通用户注册默认0额度→明确 fixture-only 加额→真实 Nginx/Studio/SDK/SQLite→替身聊天/图片→本人三笔账单→画布重开；第二普通用户独立生成与隔离，另测无余额/无组模型/禁用/注销。测试 fixture 的额度/价格/令牌不是实际资金或真实凭据，`/api/fixture/account` 只存在于 fixture 容器。
 
 真实原生注册条件/邮件验证/MFA/账号初始化、真实渠道组权限与供应商结算仍待批准后的验收，不能以 fixture 替代这些证据。默认入口仍 Loomic，不部署；最终 CI 与商业/真实验收阻塞见 STATUS/TASKS。
 

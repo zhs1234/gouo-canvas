@@ -7,7 +7,7 @@ import sharp from 'sharp'
 const sessions = new Map()
 const accounts = new Map([7, 8].map(id => [id, {
   id, username: id === 7 ? 'studio-user' : 'other-user', display_name: id === 7 ? '协议测试用户' : '另一个测试用户',
-  role: 1, status: 1, group: 'default', quota: 100000, used_quota: 0, request_count: 0,
+  role: id === 7 ? 10 : 1, status: 1, group: 'default', quota: 100000, used_quota: 0, request_count: 0,
 }]))
 const tokens = new Map()
 const logs = []
@@ -89,6 +89,8 @@ const server = createServer(async (req, res) => {
       if (url.pathname === '/api/pricing') return json(res, 200, { success: true, group_ratio: { default: 1 }, data: ['fixture-chat', 'fixture-image'].map(model_name => ({ model_name, quota_type: 1, model_price: 0.1 })) })
       if (url.pathname === '/api/log/self') return ok(res, { items: logs.filter(row => row.user_id === session.owner && (!url.searchParams.has('request_id') || row.request_id === url.searchParams.get('request_id'))).toReversed().slice(0, 10) })
     }
+    // Legacy pinned fixture belongs to the admin fixture, just like the fixed upstream contract.
+    if (/^Bearer fixture-relay-\d+$/.test(req.headers.authorization ?? '') && accounts.get(7).role < 10) return json(res, 403, { success: false, message: '普通用户不支持指定渠道' })
     const relayToken = [...tokens.values()].find(t => req.headers.authorization === `Bearer ${t.key}`)
     const relayAllowed = model => relayToken && relayToken.status === 1 && relayToken.remain_quota > 0 && relayToken.model_limits.split(',').includes(model) && accounts.get(relayToken.user_id)?.status === 1 && accounts.get(relayToken.user_id)?.quota > 0
     if (url.pathname === '/v1/images/generations' && req.method === 'POST') {

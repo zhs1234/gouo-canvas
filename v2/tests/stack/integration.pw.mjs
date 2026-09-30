@@ -25,6 +25,7 @@ test('same-origin stack authenticates, streams image tools, attributes usage and
   await expect(page.getByText('协议替身已完成图片，未调用真实供应商。', { exact: true })).toBeVisible()
   const headers = { authorization: run.headers().authorization, 'idempotency-key': run.headers()['idempotency-key'], origin: root }
   expect(headers.authorization).not.toContain('fixture-relay')
+  expect((await (await request.get('/api/user/self', { headers })).json()).data.role).toBe(10)
   const before = (await (await request.get('/api/studio/billing', { headers })).json()).data
   expect(before.requestCount).toBe(3)
   expect(before.spent).toBeCloseTo(0.3)
