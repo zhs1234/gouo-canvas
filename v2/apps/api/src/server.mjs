@@ -1,13 +1,14 @@
 import Fastify from 'fastify'
 import { z } from 'zod'
 import { catalog, isAvailable, generationEnabled } from './config.mjs'
+import { History } from './history.mjs'
 import { Ledger } from './ledger.mjs'
 import { generateImage, StudioError } from './images.mjs'
 import { runAgent, runImage } from './agent.mjs'
 import { billingSummary, settledUsage } from './billing.mjs'
 
 const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
-const runBody = z.object({ runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
+const runBody = z.object({ threadId: z.string().uuid().optional(), runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
   sessionId: z.string().max(100), conversationId: z.string().max(100), canvasId: z.string().max(100).optional(),
   attachments: z.array(z.object({ url: z.string().max(12 * 1024 * 1024), mimeType: z.string(), assetId: z.string(), source: z.enum(['upload', 'canvas', 'canvas-ref']), name: z.string().optional() })).max(4).optional(),
   imageGenerationPreference: z.object({ mode: z.enum(['auto', 'manual']), models: z.array(z.string()).max(1) }).optional(),
@@ -19,6 +20,7 @@ export function createServer(config, overrides = {}) {
   const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, requestTimeout: 150_000 })
   const fetcher = overrides.fetch ?? fetch
   const ledger = new Ledger(config.ledgerPath)
+  const history = new History(ledger.db)
   const busy = new Set()
   app.addHook('onClose', async () => ledger.close())
   app.setErrorHandler((error, _request, reply) => reply.code(error.status ?? error.statusCode ?? 500).send({ success: false, message: error instanceof StudioError ? error.message : error.validation ? '请求格式无效' : '创作服务请求失败' }))
@@ -33,7 +35,7 @@ export function createServer(config, overrides = {}) {
     try { response = await fetcher(new URL('/api/user/self', config.authOrigin), { headers: { Authorization: token }, redirect: 'error', signal: AbortSignal.timeout(10_000) }) } catch { throw new StudioError('账号服务暂不可用', 502) }
     const body = await response.json().catch(() => null)
     if (!response.ok || body?.success !== true || !Number.isSafeInteger(body.data?.id) || body.data.id <= 0) throw new StudioError('登录会话已失效', 401)
-    if (request.routeOptions.url !== '/api/studio/billing') {
+    if (request.method === 'POST' && ['/api/studio/images', '/api/studio/runs', '/api/studio/runs/stream'].includes(request.routeOptions.url)) {
       if (config.allowGeneration && config.relayKey && !generationEnabled(config)) throw new StudioError('生成服务缺少有效的 GOUO_RELAY_OWNER_ID，请联系管理员配置令牌所属账号', 503)
       if (config.relayOwnerId !== undefined && body.data.id !== config.relayOwnerId) throw new StudioError('当前账号尚未连接自己的生成令牌', 403)
     }
@@ -41,6 +43,23 @@ export function createServer(config, overrides = {}) {
     request.studioAccount = body.data
   })
   app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(config, request.headers.authorization, request.studioAccount, fetcher) }))
+  function pageOffset(request) {
+    const parsed = z.coerce.number().int().min(0).max(1000000).safeParse(request.query.offset ?? 0)
+    if (!parsed.success) throw new StudioError('分页参数无效', 400)
+    return parsed.data
+  }
+  app.get('/api/studio/threads', async request => {
+    const offset = pageOffset(request)
+    const rows = history.list(request.studioUser, offset)
+    return { success: true, data: { items: rows.slice(0, 50), nextOffset: rows.length > 50 ? offset + 50 : null } }
+  })
+  app.post('/api/studio/threads', async request => {
+    const parsed = z.object({ title: z.string().trim().min(1).max(100).default('新对话') }).strict().safeParse(request.body ?? {})
+    if (!parsed.success) throw new StudioError('会话标题无效', 400)
+    return { success: true, data: history.create(request.studioUser, parsed.data.title) }
+  })
+  app.get('/api/studio/threads/:id', async request => ({ success: true, data: history.detail(request.studioUser, request.params.id, pageOffset(request)) }))
+  app.get('/api/studio/runs/:id', async request => ({ success: true, data: history.getRun(request.studioUser, request.params.id) }))
   async function execute(request, kind, payload, action, transport) {
     const key = request.headers['idempotency-key']
     if (typeof key !== 'string' || !/^[\w-]{8,100}$/.test(key)) throw new StudioError('缺少有效请求标识', 400)
@@ -56,16 +75,27 @@ export function createServer(config, overrides = {}) {
     if (begun.busy) throw new StudioError('已有生成请求正在处理，本次请求尚未执行，请稍后重试', 409)
     busy.add(owner)
     try {
+      if (payload.threadId) history.begin(owner, payload)
       transport?.start()
       const requests = []
-      const result = await action({ ...config, ...(transport ? { onEvent: transport.event } : {}), onGatewayResponse: info => requests.push(info) })
+      const result = await action({ ...config, ...((transport || payload.threadId) ? { onEvent: event => {
+        if (payload.threadId) history.event(owner, key, event)
+        transport?.event(event)
+      } } : {}), onGatewayResponse: info => requests.push(info) })
       const usage = await settledUsage(config, request.headers.authorization, requests, fetcher)
       if (usage) result.usage = usage
-      ledger.complete(owner, kind, key, result)
+      // 会话终态与幂等结果同时提交，避免恢复时看到不一致的完成状态。
+      ledger.db.exec('BEGIN')
+      try {
+        ledger.complete(owner, kind, key, result)
+        if (payload.threadId) history.finish(owner, key, result)
+        ledger.db.exec('COMMIT')
+      } catch (error) { ledger.db.exec('ROLLBACK'); throw error }
       transport?.finish(result)
       return { success: true, data: result }
     } catch (error) {
       ledger.unknown(owner, kind, key)
+      if (payload.threadId) history.unknown(owner, key)
       if (transport) { transport.fail(); return }
       throw error
     }
@@ -85,6 +115,7 @@ export function createServer(config, overrides = {}) {
   async function handleRun(request, reply, streaming = false) {
     const parsed = runBody.safeParse(request.body)
     if (!parsed.success) throw new StudioError('智能体请求格式无效', 400)
+    if (parsed.data.threadId) history.require(request.studioUser, parsed.data.threadId)
     if (parsed.data.runId !== request.headers['idempotency-key']) throw new StudioError('任务标识与请求标识不一致', 400)
     if (parsed.data.videoGenerationPreference) throw new StudioError('视频生成将在后续接入')
     if (parsed.data.mentions?.some(m => m?.mentionType !== 'image-model')) throw new StudioError('品牌库和自定义技能尚未接入')
@@ -128,9 +159,12 @@ export function createServer(config, overrides = {}) {
         },
       }
     }
-    return execute(request, 'agent', parsed.data, context => imageOnly
-      ? (overrides.runImage ?? runImage)(context, model, parsed.data)
-      : (overrides.runAgent ?? runAgent)(context, model, parsed.data), transport)
+    return execute(request, 'agent', parsed.data, context => {
+      const agentPayload = parsed.data.threadId ? { ...parsed.data, history: history.context(request.studioUser, parsed.data.threadId) } : parsed.data
+      return imageOnly
+      ? (overrides.runImage ?? runImage)(context, model, agentPayload)
+      : (overrides.runAgent ?? runAgent)(context, model, agentPayload)
+    }, transport)
   }
   app.post('/api/studio/runs', (request, reply) => handleRun(request, reply))
   app.post('/api/studio/runs/stream', (request, reply) => handleRun(request, reply, true))

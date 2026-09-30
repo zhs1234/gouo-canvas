@@ -16,7 +16,8 @@ function CanvasWorkspace() {
 export default function App() {
   return <ThemeProvider attribute="class" defaultTheme="light" enableSystem><AuthProvider><ToastProvider><Routes>
     <Route path="/" element={<CanvasWorkspace />} />
-    <Route path="/chat-lab" element={<Suspense fallback={<p>正在打开聊天对照…</p>}><ChatLab /></Suspense>} />
+    <Route path="/chat" element={<Suspense fallback={<p>正在打开聊天…</p>}><ChatLab /></Suspense>} />
+    <Route path="/chat-lab" element={<Navigate to="/chat" replace />} />
     <Route path="/canvas-lab" element={<Suspense fallback={<p>正在打开画布对照…</p>}><CanvasLab /></Suspense>} />
     <Route path="/projects" element={<ProjectsPage />} />
     <Route path="/editor" element={<Navigate to="/" replace />} />

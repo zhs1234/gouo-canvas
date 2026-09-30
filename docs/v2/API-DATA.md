@@ -4,7 +4,21 @@
 
 2026-09-30 范围：云 Project/Asset 路由和表暂缓，下列数据设计是历史规划。实际业务服务已选定 v2/apps/api，经 New API /api/user/self 验证身份；公开模型目录和认证 /images、/runs 使用 `{success,message,data}` envelope，具体运行契约见 LOOMIC.md。下列 /jobs、订阅与数据库设计尚未实现，不直接套用旧 Session 或执行旧迁移。
 
-## 路由
+## 已实现的持久聊天接口（C1）
+
+均由 New API `/api/user/self` 验证 Bearer 身份；不接受客户端 owner。
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| GET /api/studio/threads | 当前账号会话分页列表 |
+| POST /api/studio/threads | 创建会话，标题最多 100 字符 |
+| GET /api/studio/threads/:id | 当前账号会话与已保存运行/消息/费用状态 |
+| GET /api/studio/runs/:id | 只读运行状态与事件，不触发模型调用 |
+| POST /api/studio/runs/stream | 可选 threadId；归属校验后执行，服务端读取该会话上下文 |
+
+未知/他人资源返回 404，列表及详情分页最多 50 项。持久化运行状态为 running/completed/failed/unknown；进程重启不恢复执行，未完成变 unknown。停止接收不是供应商取消。带 threadId 的请求不使用客户端历史，同 ID 重放沿用原请求指纹，不随新历史变化；busy 前拒绝不创建假消息。未带 threadId 的既有画布协议保留兼容。
+
+## 后续规划路由（未全部实现）
 
 | 方法与路径 | 输入 / 结果 | 约束 |
 | --- | --- | --- |
