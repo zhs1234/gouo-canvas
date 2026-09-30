@@ -1,6 +1,22 @@
 # 实际交付与验证状态
 
-## 依赖高危后续修复（2026-09-30，最新）
+## LangGraph 升级与未知费用回归（2026-09-30，最新）
+
+用户批准扩大 SDK 升级测试，保持同一草稿 PR：LangGraph 1.2.0 → 1.4.18、SDK 1.6.5 → 1.12.0，新增 protocol 0.0.19；实际依赖树不再包含 LangGraph 链的 UUID 10/13，未加入强制 UUID 覆盖。此前 relay 所属账号、busy 前拒绝及 Sharp/NanoID 安全更新均保留。
+
+新增 8 项真实 SDK + 本地 HTTP 网关回归。过程中复现总结或图片请求断线时漏计未知调用的问题：此前会把已知部分费用标记为整次 settled；现在记录未知调用，显示 pending，不自动重试、不丢失已生成图片、不解除幂等保护。两项费用状态回归修复前失败、修复后通过。
+
+| 本地检查（Node 24.19.0 / Linux x64） | 结果 |
+| --- | --- |
+| `npm ci` / `npm ls --all` | 成功，无 invalid 依赖；LangGraph/core/Zod peer 范围兼容 |
+| `npm run check` | 类型检查、14 个领域/探测测试、33 个 API 测试、生产构建通过 |
+| `npm run test:e2e -- --workers=2 --reporter=line` | 13/13；含画布、账号/草稿隔离、取消后晚到结果及 Mermaid 兼容 |
+| `npm audit` / `npm audit --omit=dev` | 均为 0 项告警 |
+| SDK 新增回归 | 工具→图片→总结的三次费用归属与重放、纯文本历史、无工具、HTTP/参数错误、重复工具、图片/总结断线，以及真实客户端 abort 后幂等/busy 保护 |
+
+客户端 abort 不代表服务端或供应商任务已经取消；服务端可能继续完成并保存结果，测试确认相同 ID 不重复执行，未执行的 busy ID 可稍后重试。所有请求指向本地 fixture，无真实模型、费用或生产账号修改。仍需真实渠道联调、特殊平台验证及生产部署安全审查；零审计告警不等于完成这些门禁。远程 Node 22 验证见 PR 最新 SHA 的 CI。
+
+## 依赖高危后续修复（2026-09-30，此前）
 
 在同一独立 QA 修复分支，保持业务实现、Excalidraw 0.18.1 和 LangGraph 1.2.0 不变：Sharp 0.34.5 → 0.35.5；只为 mermaid-to-excalidraw 2.2.2 覆盖 Nano ID 4.0.2 → 5.1.16。具体运行时路径、兼容边界和剩余决策见 DEPENDENCIES.md。
 

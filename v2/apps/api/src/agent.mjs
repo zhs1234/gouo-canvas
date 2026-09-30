@@ -49,7 +49,14 @@ export async function runAgent(config, chatModel, payload) {
       chatFailure = new StudioError('对话调用已达到本次上限，未继续扣费')
       throw chatFailure
     }
-    const response = await fetch(url, init)
+    let response
+    try {
+      response = await fetch(url, init)
+    } catch (error) {
+      // 未收到响应也可能已扣费；缺少网关 ID 的调用必须保留为待确认。
+      config.onGatewayResponse?.({ requestId: null, status: 0 })
+      throw error
+    }
     recordGatewayResponse(config, response)
     if (!response.ok) {
       chatFailure = new StudioError(`对话网关返回 HTTP ${response.status}，未自动重试`, 502)

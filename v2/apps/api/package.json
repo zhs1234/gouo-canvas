@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@langchain/core": "1.2.0",
-    "@langchain/langgraph": "1.2.0",
+    "@langchain/langgraph": "1.4.18",
     "@langchain/openai": "1.2.0",
     "fastify": "5.12.5",
     "sharp": "0.35.5",

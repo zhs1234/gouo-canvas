@@ -18,7 +18,7 @@
 | idb-keyval 6.2.2 | 本地画布/项目/对话 | Apache-2.0 |
 | Zod 3.25.76 | 上游契约和业务请求验证 | MIT |
 | Fastify 5.12.5 | 新业务服务 | MIT |
-| LangChain core/openai/LangGraph 1.2.0 | 服务端智能体与成熟工具循环 | MIT |
+| LangChain core/openai 1.2.0、LangGraph 1.4.18 | 服务端智能体与成熟工具循环 | MIT |
 | Sharp 0.35.5 | 图片解码、格式/尺寸边界 | Apache-2.0；本机库独立许可 |
 | TypeScript 5.9.3 / Vite 7.3.6 | 类型/构建 | Apache-2.0 / MIT |
 | Playwright 1.63.0 / node:test | 浏览器及协议回归 | Apache-2.0 / Node 原许可 |
@@ -58,6 +58,18 @@ Sharp 0.35 要求 Node >=20.9，当前项目 >=22.16 满足；它不再自动回
 
 上游变更：[Sharp 0.35.0](https://sharp.pixelplumbing.com/changelog/v0.35.0/)、[Sharp 0.35.5](https://sharp.pixelplumbing.com/changelog/v0.35.5/)、[libheif 公告](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c)、[Nano ID 5 变更](https://github.com/ai/nanoid/blob/5.0.0/CHANGELOG.md)。
 
-剩余 2 项 moderate，均为运行时路径 `@gouo/studio-api → @langchain/langgraph@1.2.0 → uuid@10.0.0`：UUID 本体一项、LangGraph 传播一项。GHSA-w5hq-g745-h8pq 修复版本为 11.1.1。当前 LangGraph 直接使用 v4() 与 validate()，未用受 UUID 11 行为变更影响的 v1/v7 options，但不能只凭调用点声称完整依赖兼容。探索性的父包和版本限定覆盖在当前 npm workspace 安装中未实际替换 UUID 10，因此已移除，未提交无效覆盖或手工伪造已修复锁文件。
+该轮之后曾剩余 2 项 moderate，均为运行时路径 `@gouo/studio-api → @langchain/langgraph@1.2.0 → uuid@10.0.0`：UUID 本体一项、LangGraph 传播一项。GHSA-w5hq-g745-h8pq 修复版本为 11.1.1。当前 LangGraph 直接使用 v4() 与 validate()，未用受 UUID 11 行为变更影响的 v1/v7 options，但不能只凭调用点声称完整依赖兼容。探索性的父包和版本限定覆盖在当前 npm workspace 安装中未实际替换 UUID 10，因此已移除，未提交无效覆盖或手工伪造已修复锁文件。
 
-建议下一步单独评审 LangGraph 1.4.18 的兼容升级（审计推荐版本）：会将 SDK 从 ~1.6.5 推至 ~1.12.0，并引入 protocol ^0.0.19；需覆盖工具循环、消息/检查点、取消、错误与重复执行边界，再决定是否接受。另一选择是等待父包回补 UUID；等待期间保留这两项告警，不开放为已通过生产安全门禁。当前没有复现 UUID 漏洞利用，也没有证据证明其不可利用。[UUID 11.1.1 修复记录](https://github.com/uuidjs/uuid/blob/v11.1.1/CHANGELOG.md)。
+当时建议单独评审 LangGraph 1.4.18 的兼容升级（审计推荐版本）：会将 SDK 从 ~1.6.5 推至 ~1.12.0，并引入 protocol ^0.0.19；需覆盖工具循环、消息/检查点、取消、错误与重复执行边界，再决定是否接受。另一选择是等待父包回补 UUID；等待期间保留这两项告警，不开放为已通过生产安全门禁。当前没有复现 UUID 漏洞利用，也没有证据证明其不可利用。[UUID 11.1.1 修复记录](https://github.com/uuidjs/uuid/blob/v11.1.1/CHANGELOG.md)。
+
+## 2026-09-30 授权扩大 SDK 升级验证（当前）
+
+用户随后批准升级智能体 SDK 并扩大回归。实际安装 LangGraph 1.4.18，其声明的 SDK ~1.12.0 解析为 1.12.0，protocol ^0.0.19 解析为 0.0.19；checkpoint 保持 1.1.5。LangChain core/openai 均保持 1.2.0，满足 LangGraph core ^1.1.48 的 peer 要求，Zod 3.25.76 同样满足声明。未增加 UUID override。
+
+锁文件差异只有 LangGraph/SDK 更新、protocol 新增，以及它们原有 UUID 10.0.0/13.0.2 副本移除；Mermaid 自身 UUID 14.0.2 保持原样。`npm ci` 与 `npm ls --all` 验证真实解析，完整/`--omit=dev` 审计均为 0 项告警。因此上节剩余两项 UUID 告警已解决，无须继续等待父包回补。上游 [1.4.18 发布记录](https://github.com/langchain-ai/langgraphjs/releases/tag/@langchain%2Flanggraph@1.4.18) 确认 SDK 1.12.0 更新。
+
+保留当前 createReactAgent / ToolNode、有限调用次数、零自动重试、个人 relay 所属账号及 SQLite 幂等边界，不因 SDK 升级迁移 Agent 架构。新增 8 项通过真实 SDK 和回环 HTTP 网关的测试，覆盖工具→图片→总结/请求费用归属、纯文本历史与禁用工具、工具 HTTP 错误、参数错误、重复工具、总结/图片连接丢失以及客户端断开与 busy 重试；既有权限/账单/跨重启 unknown 回归继续运行。无真实供应商调用。
+
+客户端取消仅中止浏览器传输，不承诺撤销已发出的供应商任务或费用；服务端仍可能完成并保存结果，相同 ID 不重执行。零审计告警只表示当前依赖公告检查通过，不替代真实渠道联调、部署平台验证或生产安全审查。
+
+扩大测试还复现了连接丢失时的费用归属缺口：未收到响应的总结或图片请求未被计入汇总，之前成功调用的账单可能被误报为整次已结算。现对两类 fetch 异常各补记一个无 request ID 的未知调用；汇总保持 pending 且不显示确定总费用。回归在修复前分别失败、修复后通过；不改变零重试、结果保存或账本去重规则。

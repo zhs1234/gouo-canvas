@@ -30,9 +30,16 @@ export async function generateImage(config, model, payload, fetcher = fetch) {
     }
   } else { headers['Content-Type'] = 'application/json'; body = JSON.stringify(common) }
   // No retry or fallback: a timeout may already have consumed model quota.
-  const response = await fetcher(`${config.gateway}/images/${operation === 'edit' ? 'edits' : 'generations'}`, {
-    method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(120_000),
-  })
+  let response
+  try {
+    response = await fetcher(`${config.gateway}/images/${operation === 'edit' ? 'edits' : 'generations'}`, {
+      method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(120_000),
+    })
+  } catch (error) {
+    // 连接丢失不能证明未扣费，智能体总费用需保留这次未知调用。
+    config.onGatewayResponse?.({ requestId: null, status: 0 })
+    throw error
+  }
   recordGatewayResponse(config, response)
   if (!response.ok) throw new StudioError(`图片网关返回 HTTP ${response.status}，未自动重试`, 502)
   const raw = await response.json()
