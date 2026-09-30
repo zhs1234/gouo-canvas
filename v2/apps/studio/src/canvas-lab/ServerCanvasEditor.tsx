@@ -29,27 +29,40 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const alive = useRef(true)
   const stopped = useRef(false)
+  const priorRecovery = useRef<string | undefined>(undefined)
+  const openingContent = useRef<string | undefined>(undefined)
+  const edited = useRef(false)
   const controller = useRef(new AbortController())
   const backupKey = `${owner}:server:${projectId}:backup`
   const recoveryKey = `${backupKey}:recovery`
+  const retainRecovery = async (raw: string) => {
+    // Merely reopening an unsaved server version must not erase the failed edits.
+    if (!priorRecovery.current || edited.current) await set(recoveryKey, raw, store)
+  }
   const serialize = () => api.current ? JSON.stringify({ ...JSON.parse(serializeAsJSON(api.current.getSceneElementsIncludingDeleted(), api.current.getAppState(), api.current.getFiles(), 'local')), processedSourceIds: processed.current }) : pending.current
   const save = (raw = pending.current) => {
     if (!raw) return queue.current
     queue.current = queue.current.catch(() => {}).then(async () => {
       await set(backupKey, raw, store)
-      if (!alive.current || stopped.current || raw === lastSaved.current) return
+      if (!alive.current) return
+      if (stopped.current) {
+        await retainRecovery(raw)
+        return
+      }
+      if (raw === lastSaved.current) return
       try {
+        setStatus('正在保存到 Studio 项目；请等待保存确认')
         const { elements, appState, files, processedSourceIds } = JSON.parse(raw) as StudioDocument
         const next = await saveProject(projectId, revision.current, { document: { elements, appState, files, processedSourceIds } }, controller.current.signal)
         if (!alive.current) return
         revision.current = next.revision
         lastSaved.current = raw
         if (pending.current === raw) pending.current = undefined
-        setProject(next); setStatus('已保存到 Studio 项目')
+        setProject(next); setStatus(pending.current ? '有新修改尚未保存到 Studio 项目' : '已保存到 Studio 项目')
       } catch (error) {
         if (!alive.current) return
-        await set(recoveryKey, raw, store)
         stopped.current = true; setBlocked(true)
+        await retainRecovery(pending.current ?? raw)
         const conflict = typeof error === 'object' && error !== null && 'status' in error && error.status === 409
         setStatus(conflict ? '项目版本冲突：自动保存已暂停，请导出本机备份后重新加载' : `保存失败：${error instanceof Error ? error.message : '请求失败'}；自动保存已暂停，本机备份已保留`)
       }
@@ -61,9 +74,18 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
     const requestController = new AbortController()
     controller.current = requestController
     let cancelled = false
+    const warnUnsaved = (event: BeforeUnloadEvent) => {
+      if (pending.current && pending.current !== lastSaved.current) {
+        event.preventDefault()
+        event.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', warnUnsaved)
     void (async () => {
       try {
         const current = await getProject(projectId, requestController.signal)
+        // A failed local read must not prevent opening or exporting the server scene.
+        priorRecovery.current = await get<string>(recoveryKey, store).catch(() => undefined)
         const source = assetId ?? current.sourceAssetId
         processed.current = [...(current.document.processedSourceIds ?? [])]
         const document = { type: 'excalidraw', version: 2, ...current.document }
@@ -87,14 +109,21 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
     })()
     return () => {
       cancelled = true; alive.current = false; requestController.abort(); clearTimeout(timer.current)
-      if (pending.current) void set(recoveryKey, pending.current, store).catch(() => {})
+      window.removeEventListener('beforeunload', warnUnsaved)
+      if (pending.current) void retainRecovery(pending.current).catch(() => {})
     }
   }, [])
   return <main className="gouo-canvas-lab">
     <header><a href="/studio/projects">项目库</a><a href="/studio/">返回创作画布</a><strong>{project?.title ?? 'Studio 项目'}</strong><span>官方 Excalidraw · 账号私有项目</span>
       <button disabled={!ready || blocked} onClick={() => void save(serialize())}>保存 Studio 项目</button>
       <button disabled={!ready} onClick={() => { const raw = serialize(); if (raw) download(raw, `${project?.title ?? 'studio'}.excalidraw`) }}>导出文档备份</button>
-      <button onClick={() => void get<string>(recoveryKey, store).then(async raw => raw ?? await get<string>(backupKey, store)).then(raw => raw ? download(raw, 'studio-recovery.excalidraw') : setStatus('本机没有此项目备份'))}>下载本机备份</button>
+      <button onClick={() => void (async () => {
+        // Flush edits made after a failed save before selecting the recovery copy.
+        await save()
+        const raw = await get<string>(recoveryKey, store) ?? await get<string>(backupKey, store)
+        if (raw) download(raw, 'studio-recovery.excalidraw')
+        else setStatus('本机没有此项目备份')
+      })().catch(() => setStatus('本机备份读取失败，请使用导出文档备份保存当前画布'))}>下载本机备份</button>
       {blocked && <button onClick={() => window.location.reload()}>重新加载服务器版本</button>}
       <output role={blocked ? 'alert' : 'status'}>{status}</output>
     </header>
@@ -103,8 +132,11 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
       if (!hydrated.current) {
         if (elements.filter(element => !element.isDeleted).length < initial.elements.filter(element => !element.isDeleted).length) return
         hydrated.current = true; setReady(true)
+        openingContent.current = JSON.stringify({ elements, files })
       }
+      if (JSON.stringify({ elements, files }) !== openingContent.current) edited.current = true
       pending.current = JSON.stringify({ ...JSON.parse(serializeAsJSON(elements, state, files, 'local')), processedSourceIds: processed.current })
+      if (!stopped.current && pending.current !== lastSaved.current) setStatus('有修改尚未保存到 Studio 项目')
       clearTimeout(timer.current); timer.current = setTimeout(() => void save(), 500)
     }} /></section>}
   </main>

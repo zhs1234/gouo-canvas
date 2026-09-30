@@ -39,6 +39,15 @@ async function exported(page, name = '导出文档备份') {
   return JSON.parse(await readFile(await (await waiting).path(), 'utf8'))
 }
 const live = doc => doc.elements.filter(e => !e.isDeleted)
+async function drawRectangle(page) {
+  const box = await page.locator('.excalidraw .interactive').boundingBox()
+  await page.mouse.click(box.x + 650, box.y + 350)
+  await page.keyboard.press('r')
+  await page.mouse.move(box.x + 650, box.y + 350)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 760, box.y + 430, { steps: 5 })
+  await page.mouse.up()
+}
 test('server asset insertion persists bytes and processed marker; delete plus reload never resurrects', async ({ page }) => {
   const state = await fixture(page)
   await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
@@ -138,4 +147,69 @@ test('failed remote save pauses without replay and offers independent local reco
   expect(live(recovered)).toHaveLength(1)
   expect(recovered.files[assetId].dataURL).toBe(dataURL)
   expect(state.writes).toHaveLength(1)
+})
+
+test('edits after failed save are in latest recovery copy without another remote write', async ({ page }) => {
+  const state = await fixture(page); state.failSave = true
+  await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
+  await expect(page.getByRole('alert')).toContainText('保存服务暂不可用')
+  await drawRectangle(page)
+  // Download immediately, before the debounce has persisted the new edit.
+  const recovered = await exported(page, '下载本机备份')
+  expect(live(recovered).map(e => e.type).sort()).toEqual(['image', 'rectangle'])
+  expect(recovered.files[assetId].dataURL).toBe(dataURL)
+  expect(state.writes).toHaveLength(1)
+  await page.reload()
+  await expect(page.getByRole('button', { name: '保存 Studio 项目', exact: true })).toBeEnabled()
+  expect(live(await exported(page, '下载本机备份')).map(e => e.type).sort()).toEqual(['image', 'rectangle'])
+  expect(state.project.document.elements).toHaveLength(0)
+})
+
+test('local quota failure pauses remote saves while current document remains exportable', async ({ page }) => {
+  const state = await fixture(page)
+  await page.addInitScript(() => {
+    IDBObjectStore.prototype.put = function () { throw new DOMException('fixture quota full', 'QuotaExceededError') }
+  })
+  await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
+  await expect(page.getByRole('alert')).toContainText('本机备份失败')
+  expect(state.writes).toHaveLength(0)
+  const document = await exported(page)
+  expect(live(document)).toHaveLength(1)
+  expect(document.files[assetId].dataURL).toBe(dataURL)
+  await drawRectangle(page)
+  expect(live(await exported(page))).toHaveLength(2)
+  expect(state.writes).toHaveLength(0)
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    return event.defaultPrevented
+  })).toBe(true)
+})
+
+test('edits during an in-flight save survive a subsequent save failure', async ({ page }) => {
+  const state = await fixture(page)
+  let release, received
+  const arrived = new Promise(resolve => { received = resolve })
+  const gate = new Promise(resolve => { release = resolve })
+  let captured = false
+  await page.route(`**/api/studio/projects/${projectId}`, async route => {
+    if (route.request().method() !== 'PATCH' || captured) return route.fallback()
+    captured = true
+    const body = route.request().postDataJSON()
+    received()
+    await gate
+    state.writes.push(body)
+    state.project = { ...state.project, ...body, revision: state.project.revision + 1 }
+    return route.fulfill({ json: { success: true, data: state.project } })
+  })
+  await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
+  await arrived
+  await drawRectangle(page)
+  await expect(page.getByRole('status')).toContainText('尚未保存')
+  state.failSave = true
+  release()
+  await expect(page.getByRole('alert')).toContainText('保存服务暂不可用')
+  expect(live(state.project.document)).toHaveLength(1)
+  expect(live(await exported(page, '下载本机备份'))).toHaveLength(2)
+  expect(state.writes).toHaveLength(2)
 })
