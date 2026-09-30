@@ -58,6 +58,8 @@ GOUO_STACK_URL=http://localhost:8080 npm run stack:status
 
 此 Compose 是单机开发/预发布运行基础，不是上线授权。公网部署必须由运维提供已经配置好的 HTTPS 终止入口，再设置 `GOUO_PUBLIC_ORIGIN=https://...`、`GOUO_SECURE_COOKIES=true`、`GOUO_TRUSTED_ORIGIN=https://...`；验证 New API 的安全会话密钥、可信代理、备份、日志保留和管理员访问策略。不能把默认本地 HTTP 入口直接暴露到公网。此项目不会自动申请证书、接受新服务条款或修改生产安全设置。
 
+CI 用 `GOUO_STACK_DOCKER_HUB=true` 从 Docker Official Images 原始仓库拉取相同 digest，以避免公开 ECR 数据限流；本地默认镜像内容相同，不自动换成浮动版本。
+
 构建若已有组织代理/受信任 CA，Dockerfile 支持可选 BuildKit secret `build_ca`；仅由操作人员指向已经授权的 CA 文件并传标准 HTTP_PROXY/HTTPS_PROXY 构建参数。默认不改变信任；不得关闭 TLS 校验或加入未知根证书。依赖安装失败应明确处理网络条件，不能从陌生镜像下载替代程序。
 
 ## 可重复验收与证据边界

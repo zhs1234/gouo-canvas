@@ -16,6 +16,12 @@ const emptyEnv = join(directory, 'empty.env')
 await writeFile(emptyEnv, '')
 const args = ['compose', '--env-file', emptyEnv, '-p', project, '-f', 'deploy/compose.yml', '-f', 'tests/stack/compose.ephemeral.yml']
 if (process.env.GOUO_STACK_BUILD_OVERRIDE) args.push('-f', resolve(process.env.GOUO_STACK_BUILD_OVERRIDE))
+const buildArgs = ['--build-arg', 'HTTP_PROXY', '--build-arg', 'HTTPS_PROXY']
+// CI 与受限开发环境可选官方原始仓库；digest 不变，不改为浮动标签。
+if (process.env.GOUO_STACK_DOCKER_HUB === 'true') buildArgs.push(
+  '--build-arg', 'NODE_IMAGE=docker.io/library/node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c',
+  '--build-arg', 'NGINX_IMAGE=docker.io/library/nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94',
+)
 let fixture = false
 function run(command, argv) {
   return new Promise((resolvePromise, reject) => {
@@ -30,7 +36,7 @@ async function request(path, init) {
 }
 try {
   console.log('Phase 1: real pinned New API, uninitialized, no accounts/tokens/channels/providers')
-  await compose('build', '--build-arg', 'HTTP_PROXY', '--build-arg', 'HTTPS_PROXY')
+  await compose('build', ...buildArgs)
   await compose('up', '-d', '--wait', '--wait-timeout', '180')
   assert.equal((await request('/')).status, 302)
   assert.equal((await request('/studio/')).status, 200)
@@ -48,7 +54,7 @@ try {
   await compose('down', '-v', '--remove-orphans')
   fixture = true
   console.log('Phase 2: explicit in-memory New API contract double, not real account/provider verification')
-  await compose('build', '--build-arg', 'HTTP_PROXY', '--build-arg', 'HTTPS_PROXY')
+  await compose('build', ...buildArgs)
   await compose('up', '-d', '--wait', '--wait-timeout', '180')
   await run('npx', ['playwright', 'test', '--config', 'tests/stack/playwright.config.mjs'])
   console.log('Stack checks passed; no persistent credentials or paid calls were created')

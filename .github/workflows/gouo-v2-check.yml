@@ -31,4 +31,6 @@ jobs:
       - name: Browser smoke (no provider keys)
         run: npm run test:e2e
       - name: Integrated services (real uninitialized New API, then explicit contract fixture)
+        env:
+          GOUO_STACK_DOCKER_HUB: 'true'
         run: npm run test:stack
