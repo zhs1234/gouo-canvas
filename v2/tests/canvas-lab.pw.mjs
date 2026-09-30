@@ -211,7 +211,9 @@ test('native image crop preserves original file data through export and reopen',
   await page.getByText('更多操作', { exact: true }).click()
   const center = await point(page, image.x + image.width / 2, image.y + image.height / 2)
   await page.mouse.click(center.x, center.y)
-  await page.keyboard.press('Enter')
+  // 等待 SDK 选中图片后点击原生裁剪控件，避免按键先于选择状态生效。
+  await page.getByRole('button', { name: 'Crop image', exact: true }).click()
+  await expect(page.locator('.excalidraw .HintViewer')).toContainText('finish cropping')
   await drag(page, await point(page, image.x + image.width + 4, image.y + image.height + 4), await point(page, image.x + image.width - 40, image.y + image.height - 20))
   await page.keyboard.press('Enter')
   const cropped = JSON.parse(await exported(page))

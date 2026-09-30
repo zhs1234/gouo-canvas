@@ -1,6 +1,6 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
-> 最新用户要求：先看直接复用的官方完整 UI 效果，确认后才继续全面整合/合并。新云端已完成 assistant-ui default starter 视觉阶段，来源、路由和替身边界见 [UI-STARTER.md](UI-STARTER.md)，本阶段证据见 STATUS.md 最上方。此要求优先于下文旧阶段下一步排序。默认 Loomic 保留，真实供应商调用仍为 0。
+> 最新用户要求：用户已于 16:53 UTC 看过官方完整 UI 桌面截图并确认“可以”；沿该方案收尾整合与最终 CI，父线程负责合并，不上线。新云端已完成 assistant-ui default starter 视觉阶段，来源、路由和替身边界见 [UI-STARTER.md](UI-STARTER.md)，本阶段证据见 STATUS.md 最上方。此要求优先于下文旧阶段下一步排序。默认 Loomic 保留，真实供应商调用仍为 0。
 
 本轮到第三阶段结束，不自动开启第四阶段。代码在授权分支 `codex/qa-relay-owner-idempotency`，draft PR [#3](https://github.com/zhs1234/gouo-canvas/pull/3)，目标 `codex/new-api-v2`；不合并、不部署。最终精确提交与 CI 见本轮交付回复和 STATUS.md；新环境应先 fetch 并核对两分支及 PR head，不从临时目录恢复代码。
 

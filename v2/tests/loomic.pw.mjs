@@ -105,6 +105,8 @@ test('failed agent requests show the actual error and local conversation survive
   await page.getByLabel('输入消息', { exact: true }).fill('测试请求，不调用付费模型')
   await page.getByLabel('输入消息', { exact: true }).press('Enter')
   await expect(page.getByText('请先登录 New API 账号', { exact: false })).toBeVisible()
+  // 错误已显示不代表异步持久化完成；停止控件在 finally 等待写入后移除。
+  await expect(page.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0)
   await page.reload()
   await expect(page.getByText('测试请求，不调用付费模型', { exact: true })).toBeVisible()
   await expect(page.getByText('请先登录 New API 账号', { exact: false })).toBeVisible()

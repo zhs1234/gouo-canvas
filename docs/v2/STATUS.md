@@ -1,6 +1,19 @@
 # 实际交付与验证状态
 
-## 官方完整 UI 样板：等待视觉确认（2026-09-30）
+## UI 视觉通过后的 CI 收尾（2026-09-30）
+
+用户已于 16:53 UTC 查看桌面聊天/官方画布截图并确认“可以”。沿该视觉方案继续，合并由父线程在最终核验后执行；不切默认入口、不部署、不调用真实供应商。
+
+`eb6740e56d108e58ea0bf2d13309c0245cd18150` 的 push run 36746968065 与 PR run 36746975472 首次 CI 均在 Browser smoke 失败：新增截图测试将路径写死为 `/workspace/scratch/...`，GitHub runner 创建 `/workspace` 报 EACCES。两路类型/领域/API/构建通过，整栈因浏览器步骤失败而被跳过；PR 另有裁剪和旧会话恢复测试时序失败，不把这些失败冒称为整栈成功。
+
+- 截图输出改用 Playwright `testInfo.outputPath('ui-review')`，与运行机器路径无关。此前用户已批准的 Library 截图保持原版本。
+- 裁剪测试等待 SDK 图片选中后的原生 Crop image 控件，并确认裁剪提示出现再拖拽，避免键盘事件早于选择状态生效。
+- 旧会话错误恢复测试等待“停止接收”控件移除后再刷新；组件 finally 在完成 IndexedDB 保存后才移除控件，错误文本先出现不能证明写入完成。
+- 改动仅测试及文档，产品代码/视觉/持久化逻辑不变。三项受影响测试各重复三次 **9/9** 通过；不重复已通过的本地域/API/构建。新精确 SHA 的完整 push/PR CI 另行核验并在交付回复/PR 状态记录。
+
+---
+
+## 官方完整 UI 样板：首阶段交付（2026-09-30）
 
 新云端环境终端、文件与 Chromium 可用；从授权分支远端 `124117340134af5ca3463863ba454ccc2e1878d2` 接手，PR #3 核验仍 draft、目标 `codex/new-api-v2`，未在默认 work/main 修改。
 
@@ -12,7 +25,7 @@
 - 隔离整栈 **2/2**：真实固定 New API 未初始化安全边界 + 实际 Nginx/Studio/SDK/SQLite→内存 New API 替身联调通过。本环境首次 Docker 内 npm 报 Exit handler never called；使用已有系统受信任 CA 的只读 BuildKit secret 后成功，override 仅在 /tmp，不改信任/TLS、不入仓库。随机测试容器/卷/镜像已自动回收。
 - `npm ls --all` 有效，完整/omitdev 审计均 0，`git diff --check` 通过。真实供应商调用 **0**，未创建真实凭据、合并或部署。
 
-此阶段只交官方成品视觉样板及后端薄适配。用户视觉确认之前暂停全面整合/默认切换/合并；不要把本地 localhost 当共享预览。Library 文件 ID 及最终分支 SHA 在本任务交付回复；截图本机目录为 `/workspace/scratch/gouo-ui-review/`，父线程应使用 Library 读取而非假设共享目录。
+此阶段交官方成品视觉样板及后端薄适配。用户已确认视觉；默认入口保持 Loomic，合并待最终检查并由父线程执行；不要把本地 localhost 当共享预览。Library 文件 ID 及最终分支 SHA 在本任务交付回复；截图本机目录为 `/workspace/scratch/gouo-ui-review/`，父线程应使用 Library 读取而非假设共享目录。
 
 ---
 

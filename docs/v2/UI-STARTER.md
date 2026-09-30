@@ -1,6 +1,6 @@
 # 官方完整聊天样板：视觉确认阶段
 
-2026-09-30 用户拒绝旧自拼聊天页面后，改用仍维护的 assistant-ui 主仓库 default starter 完整页面。只替换展示与薄适配，不复制其 AI SDK 服务端、云服务、认证或计费。此阶段供用户确认视觉，未批准默认画布切换、合并或部署。
+2026-09-30 用户拒绝旧自拼聊天页面后，改用仍维护的 assistant-ui 主仓库 default starter 完整页面。只替换展示与薄适配，不复制其 AI SDK 服务端、云服务、认证或计费。用户已于 16:53 UTC 查看桌面截图并确认“可以”，授权最终检查后由父线程合并到 codex/new-api-v2；未批准默认画布切换或部署。
 
 ## 固定来源与许可
 
@@ -32,4 +32,4 @@
 
 截图是实际浏览器渲染，不是 ImageGen 效果图。账号、模型目录、会话、项目 API 用 Playwright 明确替身；文本为固定验收内容，商品素材是测试内 SVG 经 Sharp 转 PNG，未调用供应商。模型名、图片与画布内有替身标记。视觉 fixture 禁止发送生成请求。截图不能证明真实供应商、New API 初始化/渠道或真实计费通过；整栈测试另外经过实际 Studio/Nginx 与内存网关替身。
 
-复现：`cd v2 && npm ci && npx playwright install chromium && npm run test:e2e -- --workers=1 --reporter=line tests/ui-starter-visual.pw.mjs`。当前环境浏览器在 `/tmp/gouo-playwright`，运行时加 `PLAYWRIGHT_BROWSERS_PATH=/tmp/gouo-playwright`。本机 localhost 不是用户共享预览地址。
+复现：`cd v2 && npm ci && npx playwright install chromium && npm run test:e2e -- --workers=1 --reporter=line tests/ui-starter-visual.pw.mjs`。复现截图默认在 Playwright 本测试 outputPath 的 `ui-review/` 子目录，不依赖 `/workspace`；上面的 scratch 路径为首次 Library 交付时的保存位置。当前环境浏览器在 `/tmp/gouo-playwright`，运行时加 `PLAYWRIGHT_BROWSERS_PATH=/tmp/gouo-playwright`。本机 localhost 不是用户共享预览地址。

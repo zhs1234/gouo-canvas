@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test'
 import { mkdir } from 'node:fs/promises'
 import sharp from 'sharp'
 import { mockAccount } from './account-fixture.mjs'
-const output = '/workspace/scratch/gouo-ui-review'
 const threadId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const projectId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#e5ece6"/><stop offset="1" stop-color="#f5f2e9"/></linearGradient><linearGradient id="b" x2="1"><stop stop-color="#314b3d"/><stop offset=".5" stop-color="#5a7964"/><stop offset="1" stop-color="#304438"/></linearGradient></defs><rect width="800" height="600" fill="url(#bg)"/><ellipse cx="404" cy="516" rx="144" ry="22" fill="#829382" opacity=".2"/><rect x="310" y="169" width="180" height="334" rx="28" fill="url(#b)"/><rect x="343" y="103" width="114" height="84" rx="12" fill="#d9cdb5"/><path d="M354 113v55m10-55v55m10-55v55m10-55v55m10-55v55m10-55v55m10-55v55m10-55v55m10-55v55" stroke="#beaf92" stroke-width="3"/><rect x="329" y="279" width="142" height="146" rx="3" fill="#f0eee4"/><text x="400" y="318" text-anchor="middle" font-family="serif" font-size="27" fill="#34493b">BOTANICA</text><path d="M400 373v-39m0 22q-28-23-28-4q0 15 28 12m0-6q28-23 28-4q0 15-28 12" stroke="#69866f" fill="none" stroke-width="2"/><text x="400" y="402" text-anchor="middle" font-family="sans-serif" font-size="10" letter-spacing="2" fill="#69715f">DAILY CARE · 300 ML</text><text x="40" y="555" font-family="sans-serif" font-size="15" fill="#5a6c5e">UI REVIEW FIXTURE · NO MODEL CALL</text></svg>`
@@ -21,7 +20,8 @@ async function fixture(page) {
   const project = {id:projectId,title:'植萃洗护 · 主图画布（替身）',revision:1,document:doc}
   await page.route(`**/api/studio/projects/${projectId}`, route => route.fulfill({ json: { success:true,data: route.request().method()==='PATCH' ? {...project,revision:2} : project } }))
 }
-test('official starter desktop dark and mobile plus official canvas screenshots', async ({page}) => {
+test('official starter desktop dark and mobile plus official canvas screenshots', async ({page}, testInfo) => {
+  const output = testInfo.outputPath('ui-review')
   await mkdir(output,{recursive:true});await fixture(page)
   const errors=[];page.on('pageerror',e=>errors.push(e.message))
   await page.setViewportSize({width:1440,height:1000})
