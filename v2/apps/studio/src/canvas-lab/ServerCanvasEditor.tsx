@@ -118,9 +118,13 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
       <button disabled={!ready || blocked} onClick={() => void save(serialize())}>保存 Studio 项目</button>
       <button disabled={!ready} onClick={() => { const raw = serialize(); if (raw) download(raw, `${project?.title ?? 'studio'}.excalidraw`) }}>导出文档备份</button>
       <button onClick={() => void (async () => {
-        // Flush edits made after a failed save before selecting the recovery copy.
-        await save()
-        const raw = await get<string>(recoveryKey, store) ?? await get<string>(backupKey, store)
+        // Local export must not wait for an in-flight or unresponsive remote save.
+        const current = pending.current
+        if (current) {
+          await set(backupKey, current, store)
+          await retainRecovery(current)
+        }
+        const raw = priorRecovery.current && !edited.current ? priorRecovery.current : current ?? await get<string>(recoveryKey, store) ?? await get<string>(backupKey, store)
         if (raw) download(raw, 'studio-recovery.excalidraw')
         else setStatus('本机没有此项目备份')
       })().catch(() => setStatus('本机备份读取失败，请使用导出文档备份保存当前画布'))}>下载本机备份</button>

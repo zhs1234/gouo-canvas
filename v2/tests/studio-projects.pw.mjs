@@ -206,6 +206,9 @@ test('edits during an in-flight save survive a subsequent save failure', async (
   await arrived
   await drawRectangle(page)
   await expect(page.getByRole('status')).toContainText('尚未保存')
+  // The first PATCH is still held by the gate: backup download must be local.
+  expect(live(await exported(page, '下载本机备份'))).toHaveLength(2)
+  expect(state.writes).toHaveLength(0)
   state.failSave = true
   release()
   await expect(page.getByRole('alert')).toContainText('保存服务暂不可用')
