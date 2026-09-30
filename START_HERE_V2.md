@@ -6,6 +6,10 @@
 
 2026-09-30 选择：[Loomic](https://github.com/fancyboi999/Loomic) 原生无限画布与智能体前端，固定提交 `bdb47a5adf900b48615af0bd914336e3770021b5`，替换 Fabric starter；账号/网关使用 [New API](https://github.com/QuantumNous/new-api) `v1.0.0-rc.40`。这是新的开发阶段，没有数据迁移；云项目/素材库暂不接入。本地项目、画布和聊天先保存在浏览器。具体复用范围与边界见 `docs/v2/LOOMIC.md`。
 
+## 最新增量（2026-09-30）
+
+用户批准以 assistant-ui 接现有 Studio/LangGraph，会话历史按 New API 账号归属保存到 Studio SQLite；正式聊天入口为 `/studio/chat`。画布仍保留现有默认入口，官方 Excalidraw 对照与旧草稿只读副本导入独立验证，不覆盖原始数据。持久会话不等于持久 Worker、供应商取消或独立计费账本。以下早期本地会话描述保留为历史背景，以 STATUS.md 最新验证为准。
+
 ## 启动
 
 选择 `zhs1234/gouo-canvas` 的 **v2** 分支，或从其派生的任务分支。工作树应包含本文件。

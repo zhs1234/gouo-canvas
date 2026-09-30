@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import assert from 'node:assert/strict'
 
 // 只管理本次创建的随机 Compose 项目，绝不接管已有实例或读取用户 .env。
+// 每阶段回收该项目自动命名的构建镜像；不清理全局缓存、用户镜像或历史卷。
 const directory = await mkdtemp(join(tmpdir(), 'gouo-stack-test-'))
 const project = 'gouo-test-' + process.pid + '-' + Date.now().toString(36)
 const port = process.env.GOUO_TEST_PORT || '18080'
@@ -51,7 +52,7 @@ try {
   assert.equal((await request('/api/user/login', { method: 'POST', headers: { Origin: 'https://untrusted.invalid' } })).status, 403)
   assert.equal((await request('/v1/models')).status, 404)
   await run('node', ['scripts/stack-status.mjs'])
-  await compose('down', '-v', '--remove-orphans')
+  await compose('down', '-v', '--remove-orphans', '--rmi', 'local')
   fixture = true
   console.log('Phase 2: explicit in-memory New API contract double, not real account/provider verification')
   await compose('build', ...buildArgs)
@@ -63,6 +64,6 @@ try {
   await compose('logs', '--no-color', '--tail', '60').catch(() => {})
   throw error
 } finally {
-  await compose('down', '-v', '--remove-orphans').catch(() => {})
+  await compose('down', '-v', '--remove-orphans', '--rmi', 'local').catch(() => {})
   await rm(directory, { recursive: true, force: true })
 }

@@ -76,6 +76,6 @@ Sharp 0.35 要求 Node >=20.9，当前项目 >=22.16 满足；它不再自动回
 
 ## 一体化与聊天实验依赖
 
-assistant-ui `@assistant-ui/react@0.15.22`（MIT）用于独立 ChatLab，不替换 LangGraph 或 New API。安装新增 326 个 lock 路径，新增包许可字段均 MIT；API 与许可证按已安装固定版本检查，未复制整个上游仓库。完整归属在 `docs/v2/licenses/assistant-ui-MIT.txt`，同份文件随前端发布到 `/studio/assistant-ui-LICENSE.txt`。未配置 assistant-cloud 服务。详见 CHAT-LAB.md；不引入 tldraw 或新的商业许可证。
+assistant-ui `@assistant-ui/react@0.15.22`（MIT）用于 Studio 持久聊天入口，不替换 LangGraph 或 New API。安装新增 326 个 lock 路径，新增包许可字段均 MIT；API 与许可证按已安装固定版本检查，未复制整个上游仓库。完整归属在 `docs/v2/licenses/assistant-ui-MIT.txt`，同份文件随前端发布到 `/studio/assistant-ui-LICENSE.txt`。未配置 assistant-cloud 服务。详见 CHAT-LAB.md；不引入 tldraw 或新的商业许可证。
 
 V2 镜像只使用官方 New API `v1.0.0-rc.40` 发布二进制，amd64/arm64 SHA-256 固定于 `v2/deploy/NewAPI.Dockerfile`，并包含固定源码提交的 LICENSE/NOTICE/THIRD-PARTY-LICENSES。Node 与 Nginx 基础镜像以 manifest digest 固定。Docker Hub 匿名限流时使用公开 Docker Official Images 镜像源，未用陌生转发替换 New API 发布资产。此构建未修改 New API；既有 AGPL 义务仍适用。
