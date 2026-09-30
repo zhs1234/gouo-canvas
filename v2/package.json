@@ -33,6 +33,9 @@
   "overrides": {
     "@radix-ui/react-tabs": "1.1.21",
     "nanoid@3.3.3": "3.3.19",
-    "lodash-es": "4.18.1"
+    "lodash-es": "4.18.1",
+    "@excalidraw/mermaid-to-excalidraw": {
+      "nanoid": "5.1.16"
+    }
   }
 }

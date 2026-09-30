@@ -19,7 +19,7 @@
 | Zod 3.25.76 | 上游契约和业务请求验证 | MIT |
 | Fastify 5.12.5 | 新业务服务 | MIT |
 | LangChain core/openai/LangGraph 1.2.0 | 服务端智能体与成熟工具循环 | MIT |
-| Sharp 0.34.5 | 图片解码、格式/尺寸边界 | Apache-2.0；本机库独立许可 |
+| Sharp 0.35.5 | 图片解码、格式/尺寸边界 | Apache-2.0；本机库独立许可 |
 | TypeScript 5.9.3 / Vite 7.3.6 | 类型/构建 | Apache-2.0 / MIT |
 | Playwright 1.63.0 / node:test | 浏览器及协议回归 | Apache-2.0 / Node 原许可 |
 | Geist variable 5.2.8 | 同源 UI 字体 | SIL OFL-1.1 |
@@ -44,15 +44,20 @@ B3 需要成熟持久化队列，具体按新服务技术栈选型；不默认�
 
 - Fastify 5.6.2 → 5.12.5，保持 5.x 公共 API；随其声明更新 fast-json-stringify 并去重，不单独强制升级内部序列化器。上游 [5.12.5 安全发布](https://github.com/fastify/fastify/releases/tag/v5.12.5)。
 - 精确覆盖 lodash-es 为 4.18.1，解除 Chevrotain 的旧版精确锁定，保持 4.x。
-- 仅覆盖 `nanoid@3.3.3` → 3.3.19，修复 Excalidraw 直接依赖；不把 Mermaid 的 Nano ID 4 强制降到 3 或跨主版本升到 5。
+- 仅覆盖 `nanoid@3.3.3` → 3.3.19，修复 Excalidraw 直接依赖；Mermaid 的 Nano ID 4 在下述独立验证后单独处理。
 - 锁文件由 npm 实际安装生成；`npm ls` 无 invalid 依赖。未改旧根 workspace。
 
-本次 `npm audit` 从 13 项（4 high / 9 moderate）降为 6 项（2 high / 4 moderate），仍不是零风险：
+首轮审计从 13 项（4 high / 9 moderate）降为 6 项。随后针对剩余高危检查实际调用点和上游变更，并增加兼容回归：
 
-| 剩余依赖 | 告警 / 决策 |
+| 原有运行时路径 | 修复 / 验证 |
 | --- | --- |
-| sharp 0.34.5 | high；修复版本 0.35.5 跨越 0.x 次版本兼容边界，涉及本机图片库。需独立验证支持平台、格式及解码行为后升级。格式检查发生在解析之后，不把 MIME/像素上限视为完整缓解。[上游公告](https://github.com/advisories/GHSA-f88m-g3jw-g9cj) |
-| nanoid 4.0.2 | high；由 mermaid-to-excalidraw 2.2.2 精确引入。升级到已修补的 5.x 或更新父包需独立验证图表导入/布局；当前未作跨主版本覆盖。Excalidraw 0.18.1 与 mermaid-to-excalidraw 2.2.2 各有一项传播的 moderate 告警 |
-| uuid 10.0.0 / LangGraph 1.2.0 | 两项 moderate；直接强制 UUID 11+ 跨主版本，更新 LangGraph 至审计建议的 1.4.18 则涉及智能体循环兼容检查，本次保持现有架构版本 |
+| `@gouo/studio-api → sharp@0.34.5` | 升至 0.35.5；GHSA-f88m-g3jw-g9cj 修复下限 0.35.0，GHSA-rgj7-g3m4-5g8c 修复下限 0.35.4。当前应用仅用带像素上限的 metadata，不涉及删除的编码参数；新增 PNG/JPEG/WebP 字节/尺寸/编辑上传、伪装格式、损坏图片、大小上限 5 项回归。 |
+| `@excalidraw/excalidraw@0.18.1 → @excalidraw/mermaid-to-excalidraw@2.2.2 → nanoid@4.0.2` | 仅在转换器父包下覆盖 5.1.16；4.x 无修复版。保留 Excalidraw 0.18.1 和转换器 2.2.2，不采用审计建议的 Excalidraw 0.17.6 降级。调用点仅同步无参数 nanoid()，不涉及 5.x 删除的异步接口；浏览器对比流程图、时序图、类图和 ER 图，验证绑定和 SVG 素材 ID。 |
 
-未复现这些剩余漏洞的实际利用，不能据此声称不可利用。生产开放前应单独解决，不能把它们归为开发依赖告警。
+Sharp 0.35 要求 Node >=20.9，当前项目 >=22.16 满足；它不再自动回退到源码编译，特殊平台部署需显式处理本机构建。本次只验证 Linux x64 与项目 CI，不能推广为所有平台已验证。Nano ID 5 改用 Web Crypto，当前受支持浏览器通过真实转换回归。此前暂缓是缺少这些兼容证据，并非已证实不能升级。
+
+上游变更：[Sharp 0.35.0](https://sharp.pixelplumbing.com/changelog/v0.35.0/)、[Sharp 0.35.5](https://sharp.pixelplumbing.com/changelog/v0.35.5/)、[libheif 公告](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c)、[Nano ID 5 变更](https://github.com/ai/nanoid/blob/5.0.0/CHANGELOG.md)。
+
+剩余 2 项 moderate，均为运行时路径 `@gouo/studio-api → @langchain/langgraph@1.2.0 → uuid@10.0.0`：UUID 本体一项、LangGraph 传播一项。GHSA-w5hq-g745-h8pq 修复版本为 11.1.1。当前 LangGraph 直接使用 v4() 与 validate()，未用受 UUID 11 行为变更影响的 v1/v7 options，但不能只凭调用点声称完整依赖兼容。探索性的父包和版本限定覆盖在当前 npm workspace 安装中未实际替换 UUID 10，因此已移除，未提交无效覆盖或手工伪造已修复锁文件。
+
+建议下一步单独评审 LangGraph 1.4.18 的兼容升级（审计推荐版本）：会将 SDK 从 ~1.6.5 推至 ~1.12.0，并引入 protocol ^0.0.19；需覆盖工具循环、消息/检查点、取消、错误与重复执行边界，再决定是否接受。另一选择是等待父包回补 UUID；等待期间保留这两项告警，不开放为已通过生产安全门禁。当前没有复现 UUID 漏洞利用，也没有证据证明其不可利用。[UUID 11.1.1 修复记录](https://github.com/uuidjs/uuid/blob/v11.1.1/CHANGELOG.md)。

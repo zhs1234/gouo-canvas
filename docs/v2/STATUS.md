@@ -1,6 +1,20 @@
 # 实际交付与验证状态
 
-## 独立 QA 问题修复（2026-09-30，最新）
+## 依赖高危后续修复（2026-09-30，最新）
+
+在同一独立 QA 修复分支，保持业务实现、Excalidraw 0.18.1 和 LangGraph 1.2.0 不变：Sharp 0.34.5 → 0.35.5；只为 mermaid-to-excalidraw 2.2.2 覆盖 Nano ID 4.0.2 → 5.1.16。具体运行时路径、兼容边界和剩余决策见 DEPENDENCIES.md。
+
+| 本地检查（Node 24.19.0 / Linux x64） | 结果 |
+| --- | --- |
+| `npm ci` / `npm ls --all` | 干净安装成功，无 invalid 依赖 |
+| `npm run check` | 类型检查、14 个领域/探测测试、25 个 API 测试、生产构建通过 |
+| `npm run test:e2e -- --workers=2 --reporter=line` | 13/13；新增四类 Mermaid 图表、连接绑定和 SVG 素材 ID 兼容回归 |
+| 新增图片解析回归 | 5/5；PNG/JPEG/WebP 编辑上传及生成输出，格式伪装、损坏、大小和像素边界 |
+| `npm audit` / `npm audit --omit=dev` | 均 2 moderate / 0 high，剩余 LangGraph → UUID 10.0.0 路径；未使用 force |
+
+所有测试使用本地 fixture/mock，无真实 API 或费用。本轮未重跑下方历史的额外 10 项独立浏览器 helper，不将其计入本轮 13 项。特殊本机平台未验证；构建大分包告警仍存在。远程 Node 22 CI 结果以草稿 PR 最新 SHA 为准。建议下一项单独评审 LangGraph 1.4.18 的 SDK/protocol 升级；两项中危尚未解决，不作为生产安全门禁通过。
+
+## 独立 QA 问题修复（2026-09-30，此前）
 
 基于 `c8fcce0` 的独立测试复现两项问题，本次在独立修复分支处理，没有修改实际账号、渠道、凭据或部署：
 

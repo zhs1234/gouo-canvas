@@ -12,7 +12,7 @@
     "@langchain/langgraph": "1.2.0",
     "@langchain/openai": "1.2.0",
     "fastify": "5.12.5",
-    "sharp": "0.34.5",
+    "sharp": "0.35.5",
     "zod": "3.25.76"
   }
 }
