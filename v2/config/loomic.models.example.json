@@ -1,0 +1,7 @@
+{
+  "models": [
+    { "id": "studio-agent", "displayName": "智能体模型（待配置）", "kind": "chat", "upstreamModelId": "configure-your-chat-model", "enabled": false, "verification": "pending", "vision": false },
+    { "id": "studio-image", "displayName": "图片模型（待配置）", "kind": "image", "upstreamModelId": "configure-your-image-model", "enabled": false, "verification": "pending", "qualities": [], "sizes": {}, "operations": ["generate"] },
+    { "id": "studio-video", "displayName": "视频生成（后续接入）", "kind": "video", "upstreamModelId": "configure-your-video-model", "enabled": false, "verification": "pending" }
+  ]
+}

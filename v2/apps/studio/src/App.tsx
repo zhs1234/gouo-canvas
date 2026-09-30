@@ -1,21 +1,21 @@
-import { lazy, Suspense } from 'react'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { Notice, Panel } from '@gouo/ui'
-import Account from './Account'
-import Models from './Models'
-const Editor = lazy(() => import('./Editor'))
+import { Route, Routes, Navigate, useSearchParams } from 'react-router-dom'
+import { ThemeProvider } from 'next-themes'
+import { AuthProvider, useAuth } from './loomic/lib/auth-context'
+import { ToastProvider } from './loomic/components/toast'
+import CanvasPage from './loomic/CanvasPage'
+import ProjectsPage from './loomic/ProjectsPage'
+function CanvasWorkspace() {
+  const { user } = useAuth()
+  const [params] = useSearchParams()
+  // Dispose pending transports as well as the editor when the workspace changes.
+  return <CanvasPage key={`${user?.id ?? 'guest'}:${params.get('id') || 'draft'}`} />
+}
 export default function App() {
-  return <div className="layout">
-    <aside><a className="brand" href="/studio/">GOUO <span>STUDIO / V2</span></a>
-      <nav aria-label="工作台导航"><NavLink to="/" end>工作台</NavLink><NavLink to="/editor">本地编辑器</NavLink><NavLink to="/models">模型接入清单</NavLink></nav>
-      <p className="aside-note">电商图片工作流<br />新业务，复用成熟基础设施</p>
-    </aside>
-    <main><header><p className="eyebrow">DEVELOPMENT FOUNDATION</p><h1>商品创作工作台</h1></header>
-      <Notice>开发起点：已接入本地编辑器与 New API 账号；AI 工作流尚待开发，云库暂不接入。</Notice>
-      <Suspense fallback={<p role="status">正在加载编辑器…</p>}><Routes>
-        <Route path="/" element={<div className="grid"><Panel title="本次开发目标"><p>上传商品 → 选择场景 → AI 生成 → 编辑 → 保存 → 导出。</p><p>先完成服务端任务与模型验证，再开放真实生成。任务顺序见 docs/v2/TASKS.md。</p><NavLink className="button" to="/editor">打开本地编辑器</NavLink></Panel><Account /></div>} />
-        <Route path="/editor" element={<Editor />} /><Route path="/models" element={<Models />} /><Route path="*" element={<Navigate to="/" replace />} />
-      </Routes></Suspense>
-    </main>
-  </div>
+  return <ThemeProvider attribute="class" defaultTheme="light" enableSystem><AuthProvider><ToastProvider><Routes>
+    <Route path="/" element={<CanvasWorkspace />} />
+    <Route path="/projects" element={<ProjectsPage />} />
+    <Route path="/editor" element={<Navigate to="/" replace />} />
+    <Route path="/board" element={<Navigate to="/" replace />} />
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes></ToastProvider></AuthProvider></ThemeProvider>
 }

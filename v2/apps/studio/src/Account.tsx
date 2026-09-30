@@ -14,7 +14,10 @@ export default function Account() {
     setBusy(true); setError('')
     try {
       const user = await login(String(data.get('username') || '').trim(), String(data.get('password') || ''))
-      client.clear()
+      await client.cancelQueries()
+      // Preserve the live session observer used by the Loomic workspace.
+      // Clearing it would leave the canvas scoped to the guest until reload.
+      client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
       client.setQueryData(['session'], user)
       form.reset()
     } catch (e) { setError(e instanceof Error ? e.message : '登录失败') } finally { setBusy(false) }

@@ -1,47 +1,41 @@
-# 依赖与上游资料
+# 实际依赖与上游资料
 
-## 当前实际导入的包
+## 当前复用
 
-| 项目 | 用途 | 接入位置 |
+版本以 `v2/package-lock.json` 为准。本次有意引入 Loomic 需要的 UI 依赖与服务器 SDK，移除 Fabric 和未采用的 Filerobot/Konva 包。只安装到独立 V2 workspace，旧 root package/lockfile 不变。
+
+| 项目 / 锁定版本 | 用途 | 许可 |
 | --- | --- | --- |
-| React / React DOM | 应用渲染 | v2/apps/studio |
-| React Router | 页面路由 | main.tsx/App.tsx |
-| TanStack Query | 账号及后续服务端状态 | main.tsx/Account.tsx |
-| Fabric.js | 本地设计画布引擎 | Editor.tsx |
-| TypeScript / Vite / React plugin | 类型与构建 | v2 workspace |
-| Playwright | 浏览器回归 | v2/tests/studio.pw.mjs |
-| node:test | 无框架依赖的领域/探测测试 | v2/tests/*-cases.mjs |
+| Loomic `bdb47a5` | 原生画布、聊天、项目组件与样式 | MIT，源码保留 LICENSE/UPSTREAM.json |
+| React / React DOM 19.3.0 | 上游组件渲染 | MIT |
+| Excalidraw 0.18.1 | 无限画布及编辑/导出 | MIT；字体单独许可 |
+| React Router DOM 7.18.4 / TanStack Query 5.103.1 | 路由薄适配、账号缓存 | MIT |
+| Base UI 1.3.0 / class-variance-authority 0.7.1 | 原生菜单/对话框/按钮 | MIT / Apache-2.0 |
+| Tailwind / Vite plugin 4.2.2、clsx 2.1.1、tailwind-merge 3.5.0、tw-animate-css 1.4.0 | 上游样式 | MIT |
+| Framer Motion 12.38.0 / next-themes 0.4.6 | 原生交互与主题 | MIT |
+| lucide-react 1.0.1 / react-colorful 5.6.1 | 图标、颜色选择 | ISC / MIT |
+| react-markdown 10.1.0 / remark-gfm 4.0.1 | 智能体消息展示 | MIT |
+| idb-keyval 6.2.2 | 本地画布/项目/对话 | Apache-2.0 |
+| Zod 3.25.76 | 上游契约和业务请求验证 | MIT |
+| Fastify 5.6.2 | 新业务服务 | MIT |
+| LangChain core/openai/LangGraph 1.2.0 | 服务端智能体与成熟工具循环 | MIT |
+| Sharp 0.34.5 | 图片解码、格式/尺寸边界 | Apache-2.0；本机库独立许可 |
+| TypeScript 5.9.3 / Vite 7.3.6 | 类型/构建 | Apache-2.0 / MIT |
+| Playwright 1.63.0 / node:test | 浏览器及协议回归 | Apache-2.0 / Node 原许可 |
+| Geist variable 5.2.8 | 同源 UI 字体 | SIL OFL-1.1 |
 
-`@gouo/ui` 和 `@gouo/contracts` 是本仓库内部包，不是声称成熟外部产品的自研替代品；前者只含少量展示组件，后者定义业务契约。不要手写 Canvas 引擎、复杂上传调度或分布式队列。
+Excalidraw 的 `@radix-ui/react-tabs` 固定覆盖为 1.1.21，兼容 React 19。字体由所锁 npm 包同源提供，声明在 `apps/studio/public/third-party-notices.txt`；排除已废弃的 Liberation 字体资源。传递依赖和本机库仍需分别保留其 NOTICE/LICENSE，不能以此表替代全供应链审查。
 
-## 按任务引入，不提前堆依赖
+New API：独立账号/模型网关 https://github.com/QuantumNous/new-api，开发固定 `v1.0.0-rc.40`，源码 `0aec08fee811ec6136828fda790551b49e410301`。官方发布资产已核对校验清单；AGPL-3.0，对外服务/修改时按实际使用履行义务，MIT 前端不覆盖它。
 
-New API：已选择 https://github.com/QuantumNous/new-api 作为独立账号/模型网关服务，开发固定 `v1.0.0-rc.40`，源码提交 `0aec08fee811ec6136828fda790551b49e410301`。使用官方 Linux amd64 发布资产，核对官方校验清单并固定 SHA-256；未修改上游源码，不增加 npm 依赖。上游为 AGPL-3.0，保留署名和许可证，修改/对外服务时按实际集成方式履行义务。当前 RC 开发验证不等于生产验证。
+## 安装与验证
 
-Asynq：B3 使用 Go/Redis 队列时引入 `hibiken/asynq`，并检查匹配 Redis 版本和部署拓扑。Uppy：W1 确实需要批量/恢复上传时引入。rembg：需要服务端抠图时作为隔离 worker，并分别核查 Python 包和权重许可证。ComfyUI：后期复杂图像流程可评估，不是首发必需。
+`node v2/scripts/setup.mjs` 默认按锁文件 npm ci。它不会启动生产服务、初始化生产库、下载模型权重或发起付费生成。运行 `cd v2 && npm run check` 和 `npm run test:e2e`，实际结果见 STATUS.md。当前新增依赖全部有实际调用；不用 --force 无差别升级。
 
-现有微信/支付宝/Stripe SDK、GORM、Redis、OSS/S3 驱动优先复用，但要验证业务安全，不再重复引入 GoPay 或第二套认证平台。Fabric 与 Filerobot/tldraw/Konva 不同时引入；更换编辑器需要新 ADR 和真实收益证据。
+不复制完整第三方仓库、node_modules 或字体二进制进 Git。上游源码的改动集中于 Vite/路由、认证、能力目录、本地草稿和新 API 边界，来源与功能限制见 LOOMIC.md。
 
-## 许可证与供应链
+## 后续按需求引入
 
-查看所锁版本的 LICENSE/NOTICE、传递依赖、模型权重、字体和模板的独立条款。保留原著作权与要求的声明。MIT/Apache 等标签不是对全部部署素材的统一商用授权。AGPL/GPL/商业 SDK 在集成/修改/分发方式明确前不作为闭源核心默认依赖；独立服务不是自动免责。
+B3 需要成熟持久化队列，具体按新服务技术栈选型；不默认添加 Go/Asynq。批量上传确有恢复需求时评估 Uppy。抠图需要隔离 worker 和模型权重独立授权，ComfyUI 不阻塞首发。Loomic 上游 Supabase/PGMQ/积分/支付依赖均未引入。
 
-本交付不复制 node_modules，不携带字体文件。已提交来自成功 GitHub Actions 的真实 package-lock.json，使用 npm ci。版本变更与 npm audit 告警由 P0 记录，不用 `--force` 无差别升级。
-
-## 原始参考（2026-09-18 查阅；实现前复核变更）
-
-- Fabric 仓库：https://github.com/fabricjs/fabric.js；安装：https://www.fabricjs.com/docs/getting-started/installing/
-- React：https://github.com/facebook/react
-- Router：https://github.com/remix-run/react-router
-- Query：https://github.com/TanStack/query
-- Vite：https://github.com/vitejs/vite
-- Playwright：https://github.com/microsoft/playwright
-- Asynq：https://github.com/hibiken/asynq
-- Uppy：https://github.com/transloadit/uppy
-- rembg：https://github.com/danielgatis/rembg
-- One Hub：https://github.com/MartialBE/one-hub
-- New API：https://github.com/QuantumNous/new-api（2026-09-30 选定，替换 One Hub）
-- Codex AGENTS：https://developers.openai.com/codex/guides/agents-md/
-- Codex 环境：https://developers.openai.com/codex/cloud/environments/
-
-Codex 云环境可将 `node v2/scripts/setup.mjs` 用作初始化命令；这不是已经替用户设置了云环境。依赖下载需要相应网络访问。脚本不会下载模型权重、初始化生产库或发起付费生成。
+原 One Hub/Fabric 资料仅作历史参考。E1 不叠加第二套画布引擎；视频接入需要独立协议/任务恢复测试，保留界面并不代表能力已实现。

@@ -1,18 +1,36 @@
 {
-  "name": "gouo-v2", "version": "0.1.0", "private": true, "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
-  "engines": {"node": ">=22.16.0", "npm": ">=10"},
+  "name": "gouo-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.16.0",
+    "npm": ">=10"
+  },
   "scripts": {
-    "dev": "npm run dev --workspace @gouo/studio",
+    "dev": "node scripts/dev.mjs",
     "build": "npm run build --workspace @gouo/studio",
     "typecheck": "tsc --noEmit -p apps/studio/tsconfig.json",
     "test": "tsc -p packages/contracts/tsconfig.json && node --test tests/contracts-cases.mjs tests/probe-cases.mjs",
     "test:e2e": "playwright test",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run test:api && npm run build",
+    "test:api": "npm test --workspace @gouo/studio-api"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.0", "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^5.0.0", "typescript": "^5.9.3", "vite": "^7.0.0"
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.0",
+    "@excalidraw/excalidraw": "0.18.1"
+  },
+  "overrides": {
+    "@radix-ui/react-tabs": "1.1.21"
   }
 }

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .cache/
+.local/
 .reports/
 playwright-report/
 test-results/

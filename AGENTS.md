@@ -2,9 +2,9 @@
 
 ## Active assignment
 
-The user approved V2: a multi-model ecommerce image SaaS, monthly subscriptions, no video. Prefer mature reusable projects and migrate proven capabilities; do not preserve the old Playground interaction at the expense of the product goal.
+The user approved V2: an image-first ecommerce creation workspace with an infinite canvas and an agent UI, with video generation planned later. Video clipping is excluded. Reuse Loomic's mature frontend rather than another custom starter shell; monthly subscriptions remain a future business task.
 
-Current backend decision (2026-09-30): use New API instead of One Hub for accounts and the model gateway. This is new development with no data migration; cloud projects/assets are deferred. Prior One Hub and B1-first plans are historical references. Prioritize B2 model compatibility and local editor work. Keep provider credentials server-side; New API account access tokens may exist only in browser memory, with HttpOnly refresh cookies.
+Current decision (2026-09-30): use New API for accounts and the model gateway, Loomic's MIT frontend pinned at `bdb47a5adf900b48615af0bd914336e3770021b5` for the creative workspace, and `v2/apps/api` for the authenticated business adapter. This is new development with no data migration; cloud projects/assets are deferred. Prior One Hub, Fabric and B1-first plans are historical references. Keep provider credentials server-side; New API account access tokens may exist only in browser memory, with HttpOnly refresh cookies. See `docs/v2/LOOMIC.md` for source attribution, actual capabilities and remaining gates.
 
 Start with `START_HERE_V2.md`, then `docs/v2/TASKS.md`. This repository must explain the assignment without access to the original chat.
 
@@ -26,7 +26,7 @@ Start with `START_HERE_V2.md`, then `docs/v2/TASKS.md`. This repository must exp
 
 ## Implementation style
 
-TypeScript + React, readable small domain modules, existing Go conventions. UI Chinese by default. Use TanStack Query for server data, isolated editor state for Fabric, and no replacement mega-store. Prefer established package capabilities over home-grown engines. Add a dependency only when a concrete task uses it; record its license and integration reason.
+TypeScript + React, readable small domain modules, existing Go conventions when editing legacy Go code. UI Chinese by default. Use TanStack Query for account/server data and Loomic/Excalidraw for canvas state; no replacement mega-store. Prefer established package capabilities over home-grown engines. Add a dependency only when a concrete task uses it; record its license and integration reason.
 
 Do not invent successful API responses, simulated payment success, fake AI outputs, empty handlers or TODO stubs and call them completed features. Explicit development fixtures are allowed only in tests or clearly labeled local demos. Missing provider credentials should not block unrelated implementation/testing.
 

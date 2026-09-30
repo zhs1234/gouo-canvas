@@ -1,6 +1,6 @@
 # Codex 任务清单
 
-当前决策（2026-09-30）：使用 New API 作为账号与模型网关，没有旧数据迁移，云库暂缓。工作顺序为复验 P0 → B2 → B3，本地 E1 可先做；B1 及依赖云保存的部分等待后续需求。以下原有项目/素材设计保留作参考，不应自动执行。B2/B3 开始时先明确新业务服务的位置与 New API 身份验证方式，不默认写入旧 One Hub 的 server/。真实收费必须等额度/幂等底座。每项单独形成可审查提交，更新 STATUS.md。
+当前决策（2026-09-30）：使用 New API 作为账号与模型网关，没有旧数据迁移，云库暂缓。当前已接入固定版本 Loomic 原生画布/聊天，业务服务为 v2/apps/api；本地草稿/项目/对话已接通，见 LOOMIC.md。工作顺序为 B2 实际渠道验证 → B3，本地 E1 可继续；B1 及依赖云保存的部分等待后续需求。以下原有项目/素材设计保留作参考，不应自动执行。业务请求通过 New API /api/user/self 校验 Bearer 身份，不写入旧 One Hub 的 server/。视频生成后续接入，视频剪裁不在范围。真实收费必须等额度/幂等底座。每项单独形成可审查提交，更新 STATUS.md。
 
 ## P0 — 安装、基线与现状确认（第一个任务）
 
@@ -8,7 +8,7 @@
 
 验证固定版本 New API 的真实登录、刷新、退出和图片路由鉴权；旧 UI/Go 基线仅在改动旧代码时复验。缺少网络/工具/凭据时明确记录，允许继续不依赖它的任务。确认没有改 main、生产配置和数据。核对 New API 当前版本的模型协议行为，不沿用旧网关限制，见 MODELS.md。
 
-验收：V2 类型检查、14 个 Node 测试和 Playwright smoke 成功；依赖锁已提交；真实模型调用未自动发生。
+验收：V2 类型检查、领域/探测/API 协议测试和 Playwright 流程通过（实际数量见 STATUS.md）；依赖锁已提交；真实模型调用未自动发生。
 
 ## B1 — Project / Asset 服务端闭环（暂缓，历史设计）
 
@@ -22,17 +22,17 @@
 
 ## B2 — 多模型目录与协议兼容（Image 2.5 优先）
 
-配置参考 v2/config/models.example.json；新业务服务位置待本任务确定。复用固定版本 New API 的网关适配先通过测试；确实不支持时评估服务器端 direct adapter，不能逼用户换模型或把供应商密钥发给浏览器。当前不依赖 B1 云库。
+业务入口已在 v2/apps/api；Loomic 实际配置参考 v2/config/loomic.models.example.json，原 models.example.json 供 operator probe 参考。已完成 Images JSON/multipart、Chat Completions + LangGraph 工具循环的本地协议测试，仍待真实渠道验证。复用固定版本 New API 的网关适配；确实不支持时评估服务器端 direct adapter，不能逼用户换模型或把供应商密钥发给浏览器。当前不依赖 B1 云库。
 
 实现公开能力目录与仅管理员可编辑的渠道配置；modelKey、upstreamModelId、protocol、adapter、capabilityRevision 分离。先做 OpenAI Images JSON 与 multipart 编辑，再 Responses。后续独立适配 Gemini Content/Interactions、fal Queue、其他 native 协议。每个协议单独提交，不把不同接口假装成一套 Images JSON。
 
-Image 2.5 优先核查官方两个 ID 与实际渠道别名，JSON 字段、模型映射 multipart 字段、quality xhigh/max、usage、超时、路由权限和计费。加入脱敏 golden request/response fixtures。没有凭据时 status 保持 contract-tested，不能 enabled 给用户。
+Image 2.5 优先核查官方两个 ID 与实际渠道别名，JSON 字段、模型映射 multipart 字段、quality xhigh/max、usage、超时、路由权限和计费。加入脱敏 golden request/response fixtures。没有凭据时保持禁用：示例占位模型为 pending，本地 adapter 测试仅证明协议行为；实际渠道必须 live-verified 后才可启用。URL-only 输出当前明确拒绝，后续需要私有下载适配后单独验证。
 
 验收：新模型无需改前端源码便可注册；不支持的参数明确拒绝；multipart 改名不丢字段；JSON、b64、URL、错误/拒绝、超时都有测试；配置未验证时 fail closed。真实付费探测需另行授权。
 
 ## B3 — Durable Job / Worker / Usage Reservation
 
-新业务服务位置在 B2 确定，划分 jobs/usage/outbox 与独立 worker 入口；按实际使用引入 Asynq。云库暂缓时不得宣称已有云端结果保存，输出保留/下载与删除策略需在本任务明确。
+在已选的 v2/apps/api 边界划分 jobs/usage/outbox 与独立 worker 入口；按实际技术栈选择成熟队列。当前 SQLite request guard 不是 durable job 或 usage reservation；原 Asynq/Go 建议是可选方案，不能为了它默认搬回旧 server/。云库暂缓时不得宣称已有云端结果保存，输出保留/下载与删除策略需在本任务明确。
 
 POST job 返回 202 + jobId。数据库事务写 job/reservation/outbox，server 校验套餐权益与素材归属。后台 worker 执行、保存私有结果、持久化状态；浏览器只查询，不持有上游长连接或 service token。刷新/关页不丢任务。
 
@@ -42,7 +42,7 @@ POST job 返回 202 + jobId。数据库事务写 job/reservation/outbox，server
 
 ## E1 — 编辑器 / 模板
 
-在已有 Fabric 包之上实现撤销重做、图层、对齐、裁剪、模板导入、品牌素材、字号与文字编辑、项目保存/恢复；保存带版本的 document JSON + assetId。只序列化认可的对象类型，不接受任意外部 URL/SVG/脚本。恢复时等待字体/图片加载完成。
+使用 Loomic + Excalidraw 的原生编辑功能，维护已接入的图层、文字/图片、项目保存/恢复和导出；无需重写画布引擎。继续添加电商模板字段、对齐/导出预设、品牌素材、图片处理和文档版本。现在文档内嵌图片，云 assetId 仅在 B1 重启后采用。视频生成是独立后续协议任务，视频剪裁不实现。只序列化认可的对象类型，不接受任意外部 URL/SVG/脚本。恢复时等待字体/图片加载完成。
 
 商品、背景、价格、卖点和 Logo 独立图层；价格与宣传文案可修改，不要求重新生图。商用字体/模板必须有单独授权记录；不从系统拷贝字体入仓库。尺寸先作为用户可配置预设，不假称“平台官方最新规则”。
 

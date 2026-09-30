@@ -2,7 +2,7 @@
 
 公共 TypeScript 入口 `v2/packages/contracts/src/index.ts`。服务端 HTTP 边界必须做自己的运行时校验与鉴权，不能把前端校验当安全机制。计划中的业务 API 成功 `{ success: true, data }`；失败 `{ success: false, error: { code, message, requestId } }`，禁止把上游密钥、完整错误响应或内部 URL 返给用户。已接入的 New API 账号接口使用上游 `{ success, message, data }` envelope，由 v2/apps/studio/src/api.ts 处理。
 
-2026-09-30 范围：云 Project/Asset 路由和表暂缓，下列数据设计是历史规划。B2/B3 需先确定不依赖云库的任务输入/输出契约与业务服务身份验证，不直接套用旧 Session 或执行旧迁移。
+2026-09-30 范围：云 Project/Asset 路由和表暂缓，下列数据设计是历史规划。实际业务服务已选定 v2/apps/api，经 New API /api/user/self 验证身份；公开模型目录和认证 /images、/runs 使用 `{success,message,data}` envelope，具体运行契约见 LOOMIC.md。下列 /jobs、订阅与数据库设计尚未实现，不直接套用旧 Session 或执行旧迁移。
 
 ## 路由
 
@@ -63,4 +63,4 @@
 {"schemaVersion":1,"projectId":"server-issued-id","revision":1,"pages":[{"id":"page-1","width":1280,"height":1280,"background":"#ffffff","objects":[]}],"assetReferences":[]}
 ```
 
-正式对象模型在 E1 定义，允许的 type/属性需要白名单和版本迁移。将 Fabric 内部 JSON 直接不加限制反序列化到生产不属于验收通过。
+正式对象模型在 E1 定义，允许的 type/属性需要白名单和版本迁移。当前使用 Loomic/Excalidraw 本地文档；将任意画布 SDK 的内部 JSON 不加限制反序列化到生产不属于验收通过。

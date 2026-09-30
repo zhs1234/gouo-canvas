@@ -43,7 +43,7 @@ server-only：modelKey、upstreamModelId、protocol、adapterId、channelId、se
 
 public：模型标签、业务 modelKey、已验证操作、参考图上限、输出张数、质量/尺寸/格式、透明底等能力；不能包含 keys、内部 URL 或管理员配置。
 
-`v2/config/models.example.json` 只是非生产配置示例。默认全 disabled/pending；不能通过导入示例直接开放付费模型。共享校验在 `v2/packages/contracts/src/index.ts`，服务端还需验证数据库、配额和资产归属。
+`v2/config/models.example.json` 供 operator probe 参考；Loomic 业务服务实际目录为 `v2/config/loomic.models.example.json`，见 LOOMIC.md。默认全 disabled/pending；不能通过导入示例直接开放付费模型。共享校验在 `v2/packages/contracts/src/index.ts`，当前服务端协议实现不代替数据库权益/配额或云资产归属校验。
 
 ## 5. 网关不支持时
 

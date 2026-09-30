@@ -1,0 +1,34 @@
+import { DatabaseSync } from 'node:sqlite'
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { createHash } from 'node:crypto'
+export class Ledger {
+  constructor(path) {
+    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+    this.db = new DatabaseSync(path)
+    this.db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS requests (
+      owner INTEGER NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, hash TEXT NOT NULL,
+      status TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL, PRIMARY KEY(owner,kind,key))`)
+    // This synchronous integration has no durable worker. A crash cannot safely
+    // establish whether a paid call finished; keep it blocked, never resubmit it.
+    this.db.exec("UPDATE requests SET status='unknown' WHERE status='running'")
+  }
+  begin(owner, kind, key, payload) {
+    const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+    const row = this.db.prepare('SELECT * FROM requests WHERE owner=? AND kind=? AND key=?').get(owner, kind, key)
+    if (row) {
+      if (row.hash !== hash) return { conflict: true }
+      if (row.status === 'completed') return { result: JSON.parse(row.result) }
+      return { blocked: true }
+    }
+    this.db.prepare('INSERT INTO requests VALUES(?,?,?,?,?,?,?)').run(owner, kind, key, hash, 'running', null, new Date().toISOString())
+    return { started: true }
+  }
+  complete(owner, kind, key, result) {
+    this.db.prepare("UPDATE requests SET status='completed', result=? WHERE owner=? AND kind=? AND key=?").run(JSON.stringify(result), owner, kind, key)
+  }
+  unknown(owner, kind, key) {
+    this.db.prepare("UPDATE requests SET status='unknown' WHERE owner=? AND kind=? AND key=?").run(owner, kind, key)
+  }
+  close() { this.db.close() }
+}
