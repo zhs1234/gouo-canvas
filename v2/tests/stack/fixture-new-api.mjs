@@ -83,7 +83,8 @@ const server = createServer(async (req, res) => {
       else for (const text of content.match(/.{1,5}/gu)) {
         if (res.destroyed) return
         emit({ content: text })
-        await new Promise(resolve => setTimeout(resolve, 25))
+        // Give the explicit disconnect test time to abort after a real first delta.
+        await new Promise(resolve => setTimeout(resolve, /断线恢复/.test(JSON.stringify(body.messages.at(-1))) ? 1000 : 25))
       }
       emit({}, wantsImage ? 'tool_calls' : 'stop')
       res.write(`data: ${JSON.stringify({ id, object: 'chat.completion.chunk', created: 1, model: body.model, choices: [], usage })}\n\ndata: [DONE]\n\n`)

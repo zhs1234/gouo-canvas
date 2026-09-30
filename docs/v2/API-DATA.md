@@ -78,3 +78,15 @@
 ```
 
 正式对象模型在 E1 定义，允许的 type/属性需要白名单和版本迁移。当前使用 Loomic/Excalidraw 本地文档；将任意画布 SDK 的内部 JSON 不加限制反序列化到生产不属于验收通过。
+
+## 第三阶段 Studio 项目与原始素材
+
+Studio API 复用 New API `/api/user/self` 验证 owner，无新账号或余额系统。与会话/请求去重共享单副本 SQLite；备份应使用 SQLite 一致性备份或停止服务后包含 WAL 的完整卷，不能运行中仅复制主文件。
+
+- `GET/POST /api/studio/projects`：50 条分页 / 创建空项目。
+- `GET/PATCH /api/studio/projects/:id`：详情 / `{expectedRevision,title?,document?}` CAS；冲突409，其他 owner404。
+- `POST /api/studio/assets/from-run`：`{runId,toolCallId,artifactIndex}`，从 owner 已保存 `tool.completed` 事件取原图，稳定去重。已知图片可来自后续失败/unknown 的运行；不改变运行费用未知状态。
+- `GET /api/studio/assets/:id`：owner 私有 metadata/dataURL，private no-store。
+- `POST /api/studio/projects/from-asset`：`{assetId,title?}`，同一 owner/素材幂等生成一个空项目；浏览器用稳定 assetId 插入一次。
+
+文档包含 elements/appState/files 及独立 processedSourceIds；新 SDK序列化时保留删除标记。素材只支持可完整解码的单页 PNG/JPEG/WebP，原 bytes+SHA-256 不变；禁止 URL 输入和跨账号引用。限制：HTTP body20MiB，文档最多5000元素/100图片，原图30MiB/2400万像素（HTTP 文档上限会更早限制内嵌文件）。当前无删除、存储配额或保留策略。

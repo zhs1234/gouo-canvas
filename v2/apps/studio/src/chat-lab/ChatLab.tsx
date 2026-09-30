@@ -9,9 +9,10 @@ import Account from '../Account'
 import { BillingPanel } from '../loomic/components/billing-panel'
 import { fetchBilling } from '../loomic/lib/billing'
 import { restoreMessages, studioAdapter, type SavedThread } from './adapter'
+import { GeneratedImage } from './GeneratedImage'
 import './chat-lab.css'
 function Message() {
-  return <MessagePrimitive.Root className="lab-message"><MessagePrimitive.Parts components={{ Image: ({ image }) => <img src={image} alt="生成图片" />, tools: { Fallback: ({ toolName, result }) => <details open><summary>{toolName === 'generate_image' ? '图片生成工具' : toolName}</summary>{result ? String(result) : '结果待确认'}</details> } }} /><MessagePrimitive.Error><p role="alert">请求失败或中断；请检查任务结果与账号费用，不会自动重试。</p></MessagePrimitive.Error></MessagePrimitive.Root>
+  return <MessagePrimitive.Root className="lab-message"><MessagePrimitive.Parts components={{ Image: GeneratedImage, tools: { Fallback: ({ toolName, result }) => <details open><summary>{toolName === 'generate_image' ? '图片生成工具' : toolName}</summary>{result ? String(result) : '结果待确认'}</details> } }} /><MessagePrimitive.Error><p role="alert">请求失败或中断；请检查任务结果与账号费用，不会自动重试。</p></MessagePrimitive.Error></MessagePrimitive.Root>
 }
 function LabRuntime({ model, imageModel, thread, reload }: { model: string; imageModel?: string; thread: SavedThread; reload: () => void }) {
   const lifetime = useRef(new AbortController())

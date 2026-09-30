@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
+import { validateNormalRouting } from './relay.mjs'
 
 const model = z.object({
   id: z.string().min(1).max(100), displayName: z.string().min(1).max(100),
@@ -20,6 +21,14 @@ export function loadConfig(env = process.env) {
   if (new Set(models.map(m => m.id)).size !== models.length) throw new Error('模型目录有重复 ID')
   const gateway = new URL(env.GOUO_GATEWAY_BASE_URL || 'http://127.0.0.1:3000/v1')
   if (!['http:', 'https:'].includes(gateway.protocol) || gateway.username || gateway.password || gateway.search || gateway.hash) throw new Error('网关地址格式无效')
+  const relayRoutingMode = z.enum(['pinned', 'model']).parse(env.GOUO_RELAY_ROUTING_MODE || 'pinned')
+  let normalRoutingEvidence
+  if (relayRoutingMode === 'model') {
+    if (!env.GOUO_NORMAL_ROUTING_EVIDENCE_FILE) throw new Error('普通模型路由缺少 GOUO_NORMAL_ROUTING_EVIDENCE_FILE 人工核验记录')
+    try { normalRoutingEvidence = JSON.parse(readFileSync(env.GOUO_NORMAL_ROUTING_EVIDENCE_FILE, 'utf8')) }
+    catch { throw new Error('无法读取普通模型路由人工核验记录') }
+    validateNormalRouting(normalRoutingEvidence, gateway.toString(), models)
+  }
   if (env.GOUO_RELAY_API_KEY && env.GOUO_RELAY_API_KEY_FILE) throw new Error('统一 relay 只能选择环境变量或密钥文件其中一种')
   let relayKey = env.GOUO_RELAY_API_KEY || ''
   if (env.GOUO_RELAY_API_KEY_FILE) {
@@ -27,6 +36,7 @@ export function loadConfig(env = process.env) {
     catch { throw new Error('无法读取统一 relay 密钥文件，请检查挂载和权限') }
     if (!relayKey || /[\r\n]/.test(relayKey)) throw new Error('统一 relay 密钥文件内容无效')
   }
+  if (relayRoutingMode === 'model' && /-\d+$/.test(relayKey)) throw new Error('普通模型路由需要无渠道后缀的基础令牌')
   const relayOwnerId = env.GOUO_RELAY_OWNER_ID ? Number(env.GOUO_RELAY_OWNER_ID) : undefined
   if (relayOwnerId !== undefined && (!Number.isSafeInteger(relayOwnerId) || relayOwnerId <= 0)) throw new Error('网关令牌所属账号 ID 无效')
   if (env.GOUO_ENABLE_GENERATION === 'true' && relayKey && relayOwnerId === undefined) throw new Error('启用个人 relay 生成前必须配置 GOUO_RELAY_OWNER_ID 为令牌所属账号 ID')
@@ -34,6 +44,7 @@ export function loadConfig(env = process.env) {
     models, gateway: gateway.toString().replace(/\/$/, ''),
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
     relayKey,
+    relayRoutingMode, normalRoutingEvidence,
     relayOwnerId,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),

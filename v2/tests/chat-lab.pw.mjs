@@ -133,3 +133,61 @@ test('history pagination exposes earlier records without resubmission', async ({
   await page.getByRole('button',{name:'返回最新记录'}).click()
   await expect(page.getByText('最新回答',{exact:true})).toBeVisible()
 })
+
+const savedImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII='
+const savedRunId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+async function imageHistory(page) {
+  const fixture = await setup(page)
+  const tool = { type: 'tool.completed', toolCallId: 'saved-tool', artifacts: [{ type: 'image', url: savedImage }] }
+  fixture.threads[0].runs = [{ runId: savedRunId, prompt: '保存的图片', status: 'completed', events: [tool, tool] }]
+  let generated = 0
+  await page.route('**/api/studio/runs/stream', route => { generated++; return route.abort() })
+  await page.goto('./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+  await expect(page.getByAltText('生成图片')).toHaveCount(1)
+  return { fixture, generated: () => generated }
+}
+test('restored duplicate tool output has one image and resolves only its saved source, never regenerates', async ({ page }) => {
+  let assetWrites = 0, projectWrites = 0
+  const assetId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  const projectId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  await page.route('**/api/studio/assets/from-run', route => {
+    assetWrites++
+    expect(route.request().postDataJSON()).toEqual({ runId: savedRunId, toolCallId: 'saved-tool', artifactIndex: 0 })
+    return route.fulfill({ json: { success: true, data: { id: assetId } } })
+  })
+  await page.route('**/api/studio/projects/from-asset', route => {
+    projectWrites++
+    expect(route.request().postDataJSON()).toEqual({ assetId })
+    return route.fulfill({ json: { success: true, data: { id: projectId } } })
+  })
+  await page.route(`**/api/studio/projects/${projectId}`, route => route.fulfill({ status: 404, json: { success: false, message: '测试终点' } }))
+  const state = await imageHistory(page)
+  await page.reload()
+  await expect(page.getByRole('button', { name: '打开画布', exact: true })).toHaveCount(1)
+  await page.getByRole('button', { name: '打开画布', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`canvas-lab\\?project=${projectId}&asset=${assetId}`))
+  expect(assetWrites).toBe(1); expect(projectWrites).toBe(1); expect(state.generated()).toBe(0)
+})
+test('asset persistence failure preserves original and avoids automatic generation or write retries', async ({ page }) => {
+  let writes = 0
+  await page.route('**/api/studio/assets/from-run', route => { writes++; return route.fulfill({ status: 503, json: { success: false, message: '素材存储暂不可用' } }) })
+  const state = await imageHistory(page)
+  await page.getByRole('button', { name: '打开画布', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('素材存储暂不可用')
+  await expect(page.getByRole('link', { name: '下载原图', exact: true })).toHaveAttribute('href', savedImage)
+  await expect(page.getByAltText('生成图片')).toBeVisible()
+  expect(writes).toBe(1); expect(state.generated()).toBe(0)
+})
+test('existing project selection inserts saved asset without creating a project', async ({ page }) => {
+  const projectId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', assetId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  await page.route('**/api/studio/projects?offset=0', route => route.fulfill({ json: { success: true, data: { items: [{ id: projectId, title: '已有私有项目' }], nextOffset: null } } }))
+  await page.route('**/api/studio/assets/from-run', route => route.fulfill({ json: { success: true, data: { id: assetId } } }))
+  let creates = 0
+  await page.route('**/api/studio/projects/from-asset', route => { creates++; return route.abort() })
+  await page.route(`**/api/studio/projects/${projectId}`, route => route.fulfill({ status: 404, json: { success: false, message: '测试终点' } }))
+  const state = await imageHistory(page)
+  await page.getByRole('button', { name: '插入已有画布', exact: true }).click()
+  await page.getByRole('button', { name: '已有私有项目', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`canvas-lab\\?project=${projectId}&asset=${assetId}`))
+  expect(creates).toBe(0); expect(state.generated()).toBe(0)
+})

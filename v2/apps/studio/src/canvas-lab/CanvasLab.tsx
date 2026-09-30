@@ -7,6 +7,8 @@ import { createStore, get, set, setMany } from 'idb-keyval'
 import '@excalidraw/excalidraw/index.css'
 import './canvas-lab.css'
 import { useAuth } from '../loomic/lib/auth-context'
+import { useSearchParams } from 'react-router-dom'
+import { ServerCanvasEditor } from './ServerCanvasEditor'
 import { decodeDocument, readLegacyDrafts, type LegacyDraft } from './documents'
 
 // 独立数据库，不读取或改写正式画布与会话草稿。
@@ -25,8 +27,12 @@ function download(raw: string, name: string) {
 
 export default function CanvasLab() {
   const { user, loading } = useAuth()
+  const [params] = useSearchParams()
+  const projectId = params.get('project')
+  const assetId = params.get('asset')
   const owner = `local:${user?.id ?? 'guest'}`
   if (loading) return <p>正在确认当前本地草稿范围</p>
+  if (projectId) return user ? <ServerCanvasEditor key={`${owner}:${projectId}:${assetId ?? ''}`} owner={owner} projectId={projectId} assetId={assetId} /> : <main><a href="/studio/">返回创作画布</a><p role="alert">请先登录 New API 账号后打开 Studio 项目</p></main>
   return <CanvasLabEditor key={owner} owner={owner} />
 }
 function CanvasLabEditor({ owner }: { owner: string }) {

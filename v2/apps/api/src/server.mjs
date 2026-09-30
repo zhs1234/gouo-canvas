@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import { z } from 'zod'
 import { catalog, isAvailable, generationEnabled } from './config.mjs'
+import { Projects, documentSchema } from './projects.mjs'
 import { History } from './history.mjs'
 import { Ledger } from './ledger.mjs'
 import { generateImage, StudioError } from './images.mjs'
@@ -21,6 +22,7 @@ export function createServer(config, overrides = {}) {
   const fetcher = overrides.fetch ?? fetch
   const ledger = new Ledger(config.ledgerPath)
   const history = new History(ledger.db)
+  const projects = new Projects(ledger.db, history)
   const busy = new Set()
   app.addHook('onClose', async () => ledger.close())
   app.setErrorHandler((error, _request, reply) => reply.code(error.status ?? error.statusCode ?? 500).send({ success: false, message: error instanceof StudioError ? error.message : error.validation ? '请求格式无效' : '创作服务请求失败' }))
@@ -48,6 +50,31 @@ export function createServer(config, overrides = {}) {
     if (!parsed.success) throw new StudioError('分页参数无效', 400)
     return parsed.data
   }
+  const titleSchema = z.string().trim().min(1).max(100)
+  function parseProject(schema, body) {
+    const parsed = schema.safeParse(body ?? {})
+    if (!parsed.success) throw new StudioError('项目或素材请求格式无效', 400)
+    return parsed.data
+  }
+  app.get('/api/studio/projects', async request => ({ success: true, data: projects.list(request.studioUser, pageOffset(request)) }))
+  app.post('/api/studio/projects', async request => ({ success: true, data: projects.create(request.studioUser, parseProject(z.object({ title: titleSchema.default('新项目') }).strict(), request.body).title) }))
+  app.post('/api/studio/projects/from-asset', async request => {
+    const body = parseProject(z.object({ assetId: z.string().uuid(), title: titleSchema.default('生成图片项目') }).strict(), request.body)
+    return { success: true, data: projects.create(request.studioUser, body.title, body.assetId) }
+  })
+  app.get('/api/studio/projects/:id', async request => ({ success: true, data: projects.get(request.studioUser, request.params.id) }))
+  app.patch('/api/studio/projects/:id', async request => {
+    const body = parseProject(z.object({ expectedRevision: z.number().int().min(1), title: titleSchema.optional(), document: documentSchema.optional() }).strict().refine(value => value.title !== undefined || value.document !== undefined), request.body)
+    return { success: true, data: await projects.patch(request.studioUser, request.params.id, body) }
+  })
+  app.post('/api/studio/assets/from-run', async request => {
+    const body = parseProject(z.object({ runId: z.string().uuid(), toolCallId: z.string().min(1).max(200), artifactIndex: z.number().int().min(0).max(99) }).strict(), request.body)
+    return { success: true, data: await projects.fromRun(request.studioUser, body) }
+  })
+  app.get('/api/studio/assets/:id', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store')
+    return { success: true, data: projects.asset(request.studioUser, request.params.id, true) }
+  })
   app.get('/api/studio/threads', async request => {
     const offset = pageOffset(request)
     const rows = history.list(request.studioUser, offset)

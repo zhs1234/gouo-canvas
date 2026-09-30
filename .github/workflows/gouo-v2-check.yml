@@ -29,7 +29,7 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Browser smoke (no provider keys)
-        run: npm run test:e2e
+        run: npm run test:e2e -- --workers=1
       - name: Integrated services (real uninitialized New API, then explicit contract fixture)
         env:
           GOUO_STACK_DOCKER_HUB: 'true'

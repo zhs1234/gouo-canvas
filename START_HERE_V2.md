@@ -8,6 +8,8 @@
 
 ## 最新增量（2026-09-30）
 
+用户批准第三阶段持久项目与原始素材：assistant-ui 图片可打开/插入官方 Excalidraw 私有项目，项目库与 revision 保存/冲突恢复已接入；原默认画布与旧草稿保留。普通模型路由及用户安全配置见 MODEL_SETUP.md；新显式 gpt-6.1-sol 对话首先读 [HANDOFF.md](docs/v2/HANDOFF.md)。此前“云项目暂缓”是历史边界，本轮持久项目授权优先。
+
 用户批准以 assistant-ui 接现有 Studio/LangGraph，会话历史按 New API 账号归属保存到 Studio SQLite；正式聊天入口为 `/studio/chat`。画布仍保留现有默认入口，官方 Excalidraw 对照与旧草稿只读副本导入独立验证，不覆盖原始数据。持久会话不等于持久 Worker、供应商取消或独立计费账本。以下早期本地会话描述保留为历史背景，以 STATUS.md 最新验证为准。
 
 ## 启动
