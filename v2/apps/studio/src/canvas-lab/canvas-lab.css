@@ -1,0 +1,14 @@
+.gouo-canvas-lab { height: 100dvh; display: flex; flex-direction: column; background: white; color: #202124; }
+.gouo-canvas-lab > header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px; font-size: 13px; border-bottom: 1px solid #ddd; }
+.gouo-canvas-lab header button, .gouo-canvas-lab header label { padding: 6px; border: 1px solid #bbb; border-radius: 5px; }
+.gouo-canvas-lab header input { max-width: 180px; }
+.gouo-canvas-lab header output { flex-basis: 100%; }
+.gouo-canvas-lab-editor { flex: 1; min-height: 0; position: relative; }
+/* 只在对照页恢复被 Loomic 全局样式隐藏的官方控件。 */
+.gouo-canvas-lab .excalidraw .App-menu_top__left,
+.gouo-canvas-lab .excalidraw .layer-ui__wrapper__top-right,
+.gouo-canvas-lab .excalidraw .FixedSideContainer.FixedSideContainer_side_top.App-top-bar,
+.gouo-canvas-lab .excalidraw .layer-ui__wrapper__footer.App-menu.App-menu_bottom,
+.gouo-canvas-lab .excalidraw .App-bottom-bar,
+.gouo-canvas-lab .excalidraw .shapes-section { display: flex !important; }
+.gouo-canvas-lab .excalidraw .ToolIcon__keybinding { display: block !important; }
