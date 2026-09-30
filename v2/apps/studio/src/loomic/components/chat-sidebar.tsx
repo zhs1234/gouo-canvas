@@ -135,6 +135,9 @@ export function ChatSidebar({
   const initialPromptSent = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef(false);
+  const activeRunId = useRef<string | null>(null)
+  const disposeRun = useRef<(() => void) | null>(null)
+  useEffect(() => () => disposeRun.current?.(), [])
   const messageMentionsRef = useRef(messageMentions);
   messageMentionsRef.current = messageMentions;
   const selectedCanvasElementsRef = useRef(selectedCanvasElements);
@@ -429,6 +432,18 @@ export function ChatSidebar({
       setStreaming(true);
       abortRef.current = false;
 
+      const runOwner = accessTokenRef.current
+      let finished = false
+      let saveTimer: ReturnType<typeof setTimeout> | undefined
+      let saving = Promise.resolve()
+      const persist = () => {
+        clearTimeout(saveTimer)
+        saveTimer = undefined
+        const snapshot = snapshotMessages(currentSessionId).map(message => !finished && message.id === assistantId
+          ? { ...message, contentBlocks: [...message.contentBlocks, { type: 'text' as const, text: '接收尚未完成，结果和费用待确认；请检查 New API 记录，不要重复提交。' }] }
+          : message)
+        saving = saving.then(() => replaceMessages(runOwner, currentSessionId, snapshot)).catch(error => showToast(error instanceof Error ? error.message : '本地对话保存失败', 'error'))
+      }
       try {
         const perf = {
           t0Send: performance.now(),
@@ -462,6 +477,9 @@ export function ChatSidebar({
 
           // Apply event to messages (single source of truth — shared with reconnect)
           applyStreamEvent(event, assistantId, currentSessionId);
+          finished = ['run.completed', 'run.failed', 'run.canceled'].includes(event.type)
+          if (finished) persist()
+          else if (!saveTimer) saveTimer = setTimeout(persist, 100)
 
           // Forward event to parent for fallback job polling (timed-out generation recovery)
           onStreamEvent?.(event);
@@ -511,7 +529,13 @@ export function ChatSidebar({
           }
         });
 
-        // Start run via WebSocket
+        disposeRun.current = () => {
+          persist()
+          if (activeRunId.current) ws.cancelRun(activeRunId.current)
+          cleanup()
+          resolveStream()
+        }
+        // 通过认证 SSE 传输启动，不自动重试写入。
         const runId = await new Promise<string>((resolve, reject) => {
           const timeout = setTimeout(() => {
             cleanup();
@@ -553,6 +577,7 @@ export function ChatSidebar({
               );
               const id = ack.payload.runId as string;
               runIdRef.current = id;
+              activeRunId.current = id
               resolve(id);
             },
           );
@@ -562,6 +587,7 @@ export function ChatSidebar({
 
         await streamDone;
         cleanup();
+        if (activeRunId.current === runId) activeRunId.current = null
       } catch {
         updateSessionMessages(currentSessionId, (prev) =>
           prev.map((m) => {
@@ -578,7 +604,9 @@ export function ChatSidebar({
           }),
         );
       } finally {
-        await replaceMessages(accessTokenRef.current, currentSessionId, snapshotMessages(currentSessionId)).catch((error) => showToast(error instanceof Error ? error.message : "本地对话保存失败", "error"));
+        persist()
+        await saving
+        disposeRun.current = null
         setStreaming(false);
       }
     },
@@ -775,6 +803,14 @@ export function ChatSidebar({
         </div>
       </ErrorBoundary>
 
+      {streaming && (
+        <div className="px-4 pb-2">
+          <button type="button" className="rounded border border-border px-3 py-1 text-xs" onClick={() => {
+            if (activeRunId.current) ws.cancelRun(activeRunId.current)
+          }}>停止接收</button>
+          <p className="mt-1 text-[11px] text-muted-foreground">停止接收不会保证取消后台生成，费用仍可能产生。</p>
+        </div>
+      )}
       {/* Input */}
       <div className="relative">
         {atQuery !== null && mentionPickerItems.length > 0 && (

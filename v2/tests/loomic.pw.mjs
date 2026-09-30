@@ -142,7 +142,7 @@ test('fixture agent results enter the canvas and persist; requests contain only 
     { id: 'disabled-chat', displayName: '未验证对话模型', kind: 'chat', accessible: false, provider: 'Fixture' },
   ] } } }))
   let calls = 0
-  await page.route('**/api/studio/runs', route => {
+  await page.route('**/api/studio/runs/stream', route => {
     calls++
     account.billing.balance = 99.75; account.billing.spent = 0.25; account.billing.requestCount = 3
     const payload = route.request().postDataJSON()
@@ -152,12 +152,12 @@ test('fixture agent results enter the canvas and persist; requests contain only 
     expect(route.request().headers().authorization).toBe(`Bearer ${account.token}`)
     expect(route.request().headers()['idempotency-key']).toBe(payload.runId)
     const base = { runId: payload.runId, timestamp: new Date().toISOString() }
-    return route.fulfill({ json: { success: true, data: { usage: { state: 'settled', currency: 'CNY', cost: 0.25, requestCount: 3 }, events: [
+    return route.fulfill({ contentType: 'text/event-stream', body: [
       { ...base, type: 'tool.started', toolCallId: 'fixture-call', toolName: 'generate_image' },
       { ...base, type: 'tool.completed', toolCallId: 'fixture-call', toolName: 'generate_image', artifacts: [{ type: 'image', url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32 }] },
       { ...base, type: 'message.delta', messageId: 'fixture-message', delta: '本地测试结果，未调用 AI。' },
-      { ...base, type: 'run.completed' },
-    ] } } })
+      { ...base, type: 'run.completed', usage: { state: 'settled', currency: 'CNY', cost: 0.25, requestCount: 3 } },
+    ].map(event => `data: ${JSON.stringify(event)}\n\n`).join('') })
   })
   await page.goto('./')
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
@@ -265,15 +265,15 @@ test('switching projects aborts the previous transport so late results cannot en
   await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { generationEnabled: true, models: [{ id: 'fixture-chat', displayName: '仅限本地协议测试', kind: 'chat', accessible: true, provider: 'Fixture' }] } } }))
   let release; const gate = new Promise(resolve => { release = resolve })
   let received = false
-  await page.route('**/api/studio/runs', async route => {
+  await page.route('**/api/studio/runs/stream', async route => {
     received = true
     const payload = route.request().postDataJSON()
     await gate
     const base = { runId: payload.runId, timestamp: new Date().toISOString() }
-    await route.fulfill({ json: { success: true, data: { events: [
+    await route.fulfill({ contentType: 'text/event-stream', body: [
       { ...base, type: 'tool.completed', toolCallId: 'fixture-late', toolName: 'generate_image', artifacts: [{ type: 'image', url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32 }] },
       { ...base, type: 'run.completed' },
-    ] } } }).catch(() => {}) // The browser aborts this explicit delayed fixture.
+    ].map(event => `data: ${JSON.stringify(event)}\n\n`).join('') }).catch(() => {}) // The browser aborts this explicit delayed fixture.
   })
   try {
     await page.goto('./')
@@ -287,7 +287,7 @@ test('switching projects aborts the previous transport so late results cannot en
     await page.getByLabel('输入消息', { exact: true }).fill('本地隔离测试，不调用模型')
     await page.getByLabel('输入消息', { exact: true }).press('Enter')
     await expect.poll(() => received).toBe(true)
-    const aborted = page.waitForEvent('requestfailed', { predicate: request => request.url().endsWith('/api/studio/runs') })
+    const aborted = page.waitForEvent('requestfailed', { predicate: request => request.url().endsWith('/api/studio/runs/stream') })
     const previousId = new URL(page.url()).searchParams.get('id') || 'draft'
     await page.getByRole('button', { name: '菜单', exact: true }).click()
     await page.getByRole('menuitem', { name: '新建项目', exact: true }).click()

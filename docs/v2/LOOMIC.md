@@ -15,7 +15,7 @@
 
 项目、图片文件、会话和消息存入 IndexedDB。访客与登录账号按 `local:guest` / `local:<New API user id>` 显示各自的草稿；登录切换不迁移访客草稿。这只是浏览器内的分类，不是共享设备上的安全隔离或云同步。清理站点数据会删除草稿，请导出备份。快速关闭页面时浏览器不保证异步保存完成，重要修改使用“本地保存”，等待成功提示后再刷新或关闭。
 
-原生组件里部分 `accessToken` 属性沿用上游名称，现在传入的是本地草稿 scope，真实账号令牌由现有 `api.ts` 在内存中管理。`use-websocket.ts` 保留事件消费契约，但运输层改为同源认证 HTTP：一次请求结束后交付事件数组。没有 WebSocket 服务、逐 token 流式返回、离线恢复或持久化 Worker。取消按钮中止浏览器等待，不能保证取消已经提交到模型的操作或费用。
+原生组件里部分 `accessToken` 属性沿用上游名称，现在传入的是本地草稿 scope，真实账号令牌由现有 `api.ts` 在内存中管理。`use-websocket.ts` 保留事件消费契约，但运输层改为同源认证 HTTP：现通过 `/api/studio/runs/stream` SSE 逐 token/工具事件交付，原 `/runs` 批次兼容保留。没有 WebSocket 服务、服务器恢复接口或持久化 Worker。部分文字节流保存到原会话，停止接收不代表取消供应商费用。取消按钮中止浏览器等待，不能保证取消已经提交到模型的操作或费用。
 
 按用户要求，侧边栏恢复原版 `Agent Model` 选择器，仅列出可用的对话模型和 `Auto (workspace default)`。图片模型仍在原生独立 `Image model` 偏好设置中选择，供智能体工具使用；工具栏“AI 生成图片”继续提供独立生图面板。目录成功加载后，只清除已失效的 Agent 模型偏好（含之前选过的图片模型），保留有效对话选择及独立图片设置。聊天提交显式选择对话模型；无可用对话模型时停止并提示，不自动调用图片渠道。
 
@@ -40,6 +40,7 @@ New API 固定开发版本 `v1.0.0-rc.40`，源码提交 `0aec08fee811ec6136828f
 | `GET /api/studio/models` | 脱敏能力目录，不包含上游 ID、内部地址或密钥 |
 | `GET /api/studio/billing` | 当前账号的人民币余额、原生用量、模型单价和最近消费记录 |
 | `POST /api/studio/images` | 认证后执行已验证的 Images JSON / multipart 编辑协议 |
+| `POST /api/studio/runs/stream` | 真实 SSE 文本/工具事件，终态保存后携带费用状态 |
 | `POST /api/studio/runs` | 认证后执行 LangGraph 智能体或图片模式，返回 Loomic 事件数组 |
 
 智能体采用 LangGraph 的 `createReactAgent` 和 ToolNode，不手写推理引擎。服务端提供唯一生图工具，最多生成一张图片/请求，不配置视频工具。侧边栏仅提交对话模型，由智能体使用独立图片偏好调用生图工具；独立生图面板通过 `/api/studio/images` 发送图片需求。`/api/studio/runs` 的历史直接图片协议兼容仍保留，前端不再从 Agent 选择器进入该模式。模型与参数来自服务端目录，不能由浏览器提供任意供应商地址。智能体附件需要视觉聊天模型；图片编辑需要该图片模型验证过的 edit 能力。当前图片结果只接受内嵌 b64_json，URL-only 返回会明确报错，没有任意 URL 图片代理。

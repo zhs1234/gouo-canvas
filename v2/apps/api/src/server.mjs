@@ -41,24 +41,34 @@ export function createServer(config, overrides = {}) {
     request.studioAccount = body.data
   })
   app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(config, request.headers.authorization, request.studioAccount, fetcher) }))
-  async function execute(request, kind, payload, action) {
+  async function execute(request, kind, payload, action, transport) {
     const key = request.headers['idempotency-key']
     if (typeof key !== 'string' || !/^[\w-]{8,100}$/.test(key)) throw new StudioError('缺少有效请求标识', 400)
     const owner = request.studioUser
     const begun = ledger.begin(owner, kind, key, payload, busy.has(owner))
     if (begun.conflict) throw new StudioError('同一请求标识不能修改参数', 409)
     if (begun.blocked) throw new StudioError('该请求正在处理或结果待确认，不能重复提交；请检查网关记录', 409)
-    if (begun.result) return { success: true, data: begun.result }
+    if (begun.result) {
+      transport?.start()
+      transport?.finish(begun.result)
+      return { success: true, data: begun.result }
+    }
     if (begun.busy) throw new StudioError('已有生成请求正在处理，本次请求尚未执行，请稍后重试', 409)
     busy.add(owner)
     try {
+      transport?.start()
       const requests = []
-      const result = await action({ ...config, onGatewayResponse: info => requests.push(info) })
+      const result = await action({ ...config, ...(transport ? { onEvent: transport.event } : {}), onGatewayResponse: info => requests.push(info) })
       const usage = await settledUsage(config, request.headers.authorization, requests, fetcher)
       if (usage) result.usage = usage
       ledger.complete(owner, kind, key, result)
+      transport?.finish(result)
       return { success: true, data: result }
-    } catch (error) { ledger.unknown(owner, kind, key); throw error }
+    } catch (error) {
+      ledger.unknown(owner, kind, key)
+      if (transport) { transport.fail(); return }
+      throw error
+    }
     finally { busy.delete(owner) }
   }
   function selectModel(id, kind) {
@@ -72,7 +82,7 @@ export function createServer(config, overrides = {}) {
     const model = selectModel(parsed.data.model, 'image')
     return execute(request, 'image', parsed.data, context => (overrides.generateImage ?? generateImage)(context, model, parsed.data))
   })
-  app.post('/api/studio/runs', async request => {
+  async function handleRun(request, reply, streaming = false) {
     const parsed = runBody.safeParse(request.body)
     if (!parsed.success) throw new StudioError('智能体请求格式无效', 400)
     if (parsed.data.runId !== request.headers['idempotency-key']) throw new StudioError('任务标识与请求标识不一致', 400)
@@ -84,10 +94,45 @@ export function createServer(config, overrides = {}) {
     if (selected?.kind === 'image' && parsed.data.imageGenerationPreference?.models?.some(id => id !== selected.id)) throw new StudioError('两处图片模型选择不一致，请选择同一个模型')
     const imageOnly = selected?.kind === 'image' || (!selected && !config.models.some(m => m.kind === 'chat' && isAvailable(config, m)))
     const model = selectModel(imageOnly ? selected?.id ?? parsed.data.imageGenerationPreference?.models?.[0] : parsed.data.model, imageOnly ? 'image' : 'chat')
-    // The endpoint keeps one idempotency scope even when the selected mode changes.
+    // 两种传输共用去重范围；终态必须在保存完整结果后才发送。
+    let transport
+    if (streaming) {
+      let heartbeat
+      let sent = 0
+      const write = event => {
+        if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+      }
+      const end = () => { clearInterval(heartbeat); if (!reply.raw.destroyed) reply.raw.end() }
+      transport = {
+        start() {
+          reply.hijack()
+          reply.raw.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' })
+          reply.raw.flushHeaders()
+          heartbeat = setInterval(() => { if (!reply.raw.destroyed) reply.raw.write(': keepalive\n\n') }, 15000)
+          heartbeat.unref()
+          // 断开传输不等于供应商取消；继续有限执行并保存结果供同 ID 重放。
+          reply.raw.once('close', () => clearInterval(heartbeat))
+        },
+        event(event) {
+          if (event.type === 'run.completed' || event.type === 'run.failed') return
+          sent++
+          write(event)
+        },
+        finish(result) {
+          for (const event of result.events.slice(sent)) write({ ...event, ...(['run.completed', 'run.failed'].includes(event.type) && result.usage ? { usage: result.usage } : {}) })
+          end()
+        },
+        fail() {
+          write({ type: 'run.failed', runId: parsed.data.runId, timestamp: new Date().toISOString(), error: { code: 'result_unknown', message: '请求结果待确认；未自动重试，请检查网关记录。' } })
+          end()
+        },
+      }
+    }
     return execute(request, 'agent', parsed.data, context => imageOnly
       ? (overrides.runImage ?? runImage)(context, model, parsed.data)
-      : (overrides.runAgent ?? runAgent)(context, model, parsed.data))
-  })
+      : (overrides.runAgent ?? runAgent)(context, model, parsed.data), transport)
+  }
+  app.post('/api/studio/runs', (request, reply) => handleRun(request, reply))
+  app.post('/api/studio/runs/stream', (request, reply) => handleRun(request, reply, true))
   return app
 }

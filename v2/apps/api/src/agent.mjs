@@ -10,24 +10,32 @@ import { relayKey, recordGatewayResponse } from './relay.mjs'
 // Image-only channels do not require an extra chat model or an LLM tool loop.
 // The UI labels this mode as image generation; the prompt is sent verbatim.
 export async function runImage(config, imageModel, payload) {
-  const base = { runId: payload.runId, timestamp: new Date().toISOString() }
+  const events = []
+  const emit = (type, data = {}) => {
+    const event = { type, runId: payload.runId, timestamp: new Date().toISOString(), ...data }
+    events.push(event)
+    config.onEvent?.(event)
+  }
   const toolCallId = crypto.randomUUID()
+  emit('run.started', { sessionId: payload.sessionId, conversationId: payload.conversationId })
+  emit('tool.started', { toolCallId, toolName: 'generate_image', input: { prompt: payload.prompt, model: imageModel.id } })
   const result = await generateImage(config, imageModel, {
     prompt: payload.prompt, inputImages: (payload.attachments ?? []).map(a => a.url),
   })
-  return { events: [
-    { ...base, type: 'run.started', sessionId: payload.sessionId, conversationId: payload.conversationId },
-    { ...base, type: 'tool.started', toolCallId, toolName: 'generate_image', input: { prompt: payload.prompt, model: imageModel.id } },
-    { ...base, type: 'tool.completed', toolCallId, toolName: 'generate_image', outputSummary: '图片已生成', artifacts: [{ type: 'image', ...result }] },
-    { ...base, type: 'run.completed' },
-  ] }
+  emit('tool.completed', { toolCallId, toolName: 'generate_image', outputSummary: '图片已生成', artifacts: [{ type: 'image', ...result }] })
+  emit('run.completed')
+  return { events }
 }
 
 export async function runAgent(config, chatModel, payload) {
   const events = []
-  const emit = (type, data = {}) => events.push({ type, runId: payload.runId, timestamp: new Date().toISOString(),
-    ...(type === 'run.started' ? { sessionId: payload.sessionId, conversationId: payload.conversationId } : {}),
-    ...(type === 'message.delta' ? { messageId: payload.runId } : {}), ...data })
+  const emit = (type, data = {}) => {
+    const event = { type, runId: payload.runId, timestamp: new Date().toISOString(),
+      ...(type === 'run.started' ? { sessionId: payload.sessionId, conversationId: payload.conversationId } : {}),
+      ...(type === 'message.delta' ? { messageId: payload.runId } : {}), ...data }
+    events.push(event)
+    config.onEvent?.(event)
+  }
   let generated = false
   const imageModelId = payload.imageGenerationPreference?.models?.[0]
   const imageModel = config.models.find(m => m.kind === 'image' && (imageModelId ? m.id === imageModelId : isAvailable(config, m)))
@@ -65,7 +73,7 @@ export async function runAgent(config, chatModel, payload) {
     return response
   }
   const llm = new ChatOpenAI({ model: chatModel.upstreamModelId, apiKey: relayKey(config, chatModel),
-    configuration: { baseURL: config.gateway, fetch: gatewayFetch }, maxRetries: 0, timeout: 120_000, maxTokens: chatModel.maxTokens ?? 2000 })
+    configuration: { baseURL: config.gateway, fetch: gatewayFetch }, streaming: Boolean(config.onEvent), maxRetries: 0, timeout: 120_000, maxTokens: chatModel.maxTokens ?? 2000 })
   const attachments = payload.attachments ?? []
   if (attachments.length && !chatModel.vision) throw new StudioError('当前智能体模型尚未验证图片理解能力，请取消参考图或配置视觉模型')
   for (const attachment of attachments) await decodeImage(attachment.url)
@@ -78,9 +86,10 @@ export async function runAgent(config, chatModel, payload) {
   const agent = createReactAgent({ llm, tools: new ToolNode(chatModel.toolCalling && imageModel && isAvailable(config, imageModel) ? [imageTool] : [], { handleToolErrors: false }) })
   emit('run.started')
   try {
-    const stream = await agent.stream({ messages }, { streamMode: 'updates', recursionLimit: 6 })
+    // SSE 使用 SDK 的真实消息块；批次接口保留原先的节点完成事件。
+    const stream = await agent.stream({ messages }, { streamMode: config.onEvent ? 'messages' : 'updates', recursionLimit: 6 })
     for await (const update of stream) {
-      for (const message of update.agent?.messages ?? []) {
+      for (const message of config.onEvent ? (update[1]?.langgraph_node === 'agent' ? [update[0]] : []) : update.agent?.messages ?? []) {
         const text = typeof message.content === 'string' ? message.content : message.content.filter(b => b.type === 'text').map(b => b.text).join('')
         if (text) emit('message.delta', { delta: text })
       }
