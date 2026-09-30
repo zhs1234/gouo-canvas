@@ -1,0 +1,7 @@
+{
+  "sourceCommit": "0aec08fee811ec6136828fda790551b49e410301",
+  "gatewayOrigin": "http://new-api:3000",
+  "retryTimes": 0,
+  "operatorVerified": false,
+  "verifiedAt": ""
+}

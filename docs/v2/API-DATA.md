@@ -4,7 +4,21 @@
 
 2026-09-30 范围：云 Project/Asset 路由和表暂缓，下列数据设计是历史规划。实际业务服务已选定 v2/apps/api，经 New API /api/user/self 验证身份；公开模型目录和认证 /images、/runs 使用 `{success,message,data}` envelope，具体运行契约见 LOOMIC.md。下列 /jobs、订阅与数据库设计尚未实现，不直接套用旧 Session 或执行旧迁移。
 
-## 路由
+## 已实现的持久聊天接口（C1）
+
+均由 New API `/api/user/self` 验证 Bearer 身份；不接受客户端 owner。
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| GET /api/studio/threads | 当前账号会话分页列表 |
+| POST /api/studio/threads | 创建会话，标题最多 100 字符 |
+| GET /api/studio/threads/:id | 当前账号会话与已保存运行/消息/费用状态 |
+| GET /api/studio/runs/:id | 只读运行状态与事件，不触发模型调用 |
+| POST /api/studio/runs/stream | 可选 threadId；归属校验后执行，服务端读取该会话上下文 |
+
+未知/他人资源返回 404，列表及详情分页最多 50 项。持久化运行状态为 running/completed/failed/unknown；进程重启不恢复执行，未完成变 unknown。停止接收不是供应商取消。带 threadId 的请求不使用客户端历史，同 ID 重放沿用原请求指纹，不随新历史变化；busy 前拒绝不创建假消息。未带 threadId 的既有画布协议保留兼容。
+
+## 后续规划路由（未全部实现）
 
 | 方法与路径 | 输入 / 结果 | 约束 |
 | --- | --- | --- |
@@ -64,3 +78,15 @@
 ```
 
 正式对象模型在 E1 定义，允许的 type/属性需要白名单和版本迁移。当前使用 Loomic/Excalidraw 本地文档；将任意画布 SDK 的内部 JSON 不加限制反序列化到生产不属于验收通过。
+
+## 第三阶段 Studio 项目与原始素材
+
+Studio API 复用 New API `/api/user/self` 验证 owner，无新账号或余额系统。与会话/请求去重共享单副本 SQLite；备份应使用 SQLite 一致性备份或停止服务后包含 WAL 的完整卷，不能运行中仅复制主文件。
+
+- `GET/POST /api/studio/projects`：50 条分页 / 创建空项目。
+- `GET/PATCH /api/studio/projects/:id`：详情 / `{expectedRevision,title?,document?}` CAS；冲突409，其他 owner404。
+- `POST /api/studio/assets/from-run`：`{runId,toolCallId,artifactIndex}`，从 owner 已保存 `tool.completed` 事件取原图，稳定去重。已知图片可来自后续失败/unknown 的运行；不改变运行费用未知状态。
+- `GET /api/studio/assets/:id`：owner 私有 metadata/dataURL，private no-store。
+- `POST /api/studio/projects/from-asset`：`{assetId,title?}`，同一 owner/素材幂等生成一个空项目；浏览器用稳定 assetId 插入一次。
+
+文档包含 elements/appState/files 及独立 processedSourceIds；新 SDK序列化时保留删除标记。素材只支持可完整解码的单页 PNG/JPEG/WebP，原 bytes+SHA-256 不变；禁止 URL 输入和跨账号引用。限制：HTTP body20MiB，文档最多5000元素/100图片，原图30MiB/2400万像素（HTTP 文档上限会更早限制内嵌文件）。当前无删除、存储配额或保留策略。

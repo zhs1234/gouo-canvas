@@ -33,7 +33,7 @@ test('billing uses real account authorization, scopes another account correctly 
     const own = await app.inject({ url: '/api/studio/billing?user_id=8', headers })
     assert.equal(own.statusCode, 200)
     assert.equal(own.json().data.balance, 7 * 7.3); assert.equal(own.json().data.groupRatio, 1)
-    assert.equal(own.json().data.recentCalls.length, 1)
+    assert.equal(own.json().data.recentCalls.length, 2)
     assert.doesNotMatch(own.body, /secret|private-prompt|fixture-hidden|user_id/)
     const other = await app.inject({ url: '/api/studio/billing?user_id=7', headers: { authorization: 'Bearer fixture-user-8', 'new-api-user': '7' } })
     assert.equal(other.statusCode, 200); assert.equal(other.json().data.balance, 8 * 7.3)

@@ -1,0 +1,15 @@
+# Explicit isolated contract double: quota is test data, never real money.
+services:
+  studio-api:
+    environment:
+      GOUO_RELAY_API_KEY: ''
+      GOUO_RELAY_OWNER_ID: ''
+      GOUO_RELAY_CREDENTIAL_MODE: user-token
+      GOUO_RELAY_ROUTING_MODE: model
+      GOUO_USER_TOKEN_QUOTA_CAP: '1000'
+      GOUO_USER_TOKEN_LIFETIME_SECONDS: '3600'
+      GOUO_NORMAL_ROUTING_EVIDENCE_FILE: /run/fixture-routing.json
+      GOUO_STUDIO_MODELS_FILE: /run/fixture-user-models.json
+    volumes:
+      - ../tests/stack/user-models.json:/run/fixture-user-models.json:ro
+      - ../tests/stack/user-routing.json:/run/fixture-routing.json:ro

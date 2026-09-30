@@ -10,16 +10,17 @@ Browser: React + Router + TanStack Query + Loomic/Excalidraw
   /api/user/*           -> New API account authentication :3000
   /api/studio/models    -> public sanitized capability catalog
   /api/studio/images    -> authenticated Fastify adapter :3001
-  /api/studio/runs       -> authenticated LangGraph agent :3001
+  /api/studio/threads   -> owner-scoped persistent chat history :3001
+  /api/studio/runs       -> authenticated LangGraph agent / read-only status :3001
                               identity via New API /api/user/self
-                              local SQLite idempotency guard
+                              local SQLite idempotency guard + conversation events
                               server-only relay -> New API /v1
                                 Chat Completions / Images JSON / multipart
 ```
 
-浏览器账号 token 只在内存中，刷新用 HttpOnly Cookie；真实 relay key 只由业务服务读取，浏览器不能直接请求 `/v1`。默认没有模型密钥与可用模型，不调用付费渠道。当前是同步 HTTP 事件批次，关闭页面不能保证保留运行结果；任务队列和权益尚未实现。
+浏览器账号 token 只在内存中，刷新用 HttpOnly Cookie；真实 relay key 只由业务服务读取，浏览器不能直接请求 `/v1`。默认没有模型密钥与可用模型，不调用付费渠道。当前通过 SSE 逐 token/工具事件传输，兼容批次端点保留；关闭页面不保证供应商取消或恢复完整运行；任务队列和权益尚未实现。
 
-本地草稿按访客/账号 scope 显示，但同一浏览器的 IndexedDB 不提供共享设备安全隔离；重要结果须导出备份。服务端 SQLite 仅对请求去重，未知结果阻止重交，不具备 Worker/usage reservation 语义。详见 [LOOMIC.md](LOOMIC.md)。
+本地草稿按访客/账号 scope 显示，但同一浏览器的 IndexedDB 不提供共享设备安全隔离；重要结果须导出备份。服务端 SQLite 保存请求去重与按账号隔离的聊天历史；未知结果阻止重交，不具备 Worker/usage reservation 语义。详见 [LOOMIC.md](LOOMIC.md)。
 
 ## 目录
 
@@ -56,3 +57,21 @@ B1 暂缓：以后启用云库时明确存储、owner scoped 查询、revision�
 ## 运行
 
 开发：`cd v2 && npm run dev` 同时运行 API 3001、前端 5174；New API 3000 单独运行。生产目标同源 `/studio/` 静态资源及账号/业务 API 的分别反向代理，产物在 `v2/apps/studio/dist`。生产 HTTPS、Cookie/CSRF、备份、队列和收费策略待单独实施。
+
+## 可重复一体化运行
+
+新增 `v2/deploy/compose.yml`、独立镜像和同源 Nginx 入口，详见 [RUNNING.md](RUNNING.md)。保持前端、Studio、New API 三服务，以及浏览器草稿 / Studio 去重 / New API 账号费用三个数据职责。没有合库或复制第二套认证；旧根部署文件不参与 V2。`/studio/chat-lab` 和 `/studio/canvas-lab` 是隔离、可回退的体验对照，尚未替换默认画布和会话存储。
+
+## 持久聊天与画布对照（C1）
+
+`/studio/chat` 使用 assistant-ui 组件、自定义 Studio transport 和 New API 会话；没有第二套账号、模型网关或账单。Studio 同一 SQLite 文件新增会话、运行与流事件表，每次读写以已验证的 New API user ID 为 owner。历史图像仍以内嵌结果保存，不等于云项目/对象存储。旧 `/studio/chat-lab` 重定向到正式聊天入口，默认画布菜单提供入口与回退。
+
+流中进度逐事件落盘，终态与幂等结果同事务保存；断网/切线程/停止接收只断开客户端接收，运行可在当前进程继续完成。刷新可按线程或 run ID 读取已保存结果，不会重新提交生成。进程重启使尚在 running 的记录变为 unknown；没有后台 Worker 自动续跑，也不保证供应商取消或收费停止。
+
+模型上下文取服务端最近六次完成运行的用户/助手文本，每段最多 8000 字符；完整历史另行保留，不能把上下文窗口称为无限记忆。New API 仍是实际费用权威，历史记录中的 usage 是查询结果/待确认状态，不是新增财务账本。单实例 SQLite 数据与备份应由部署者按隐私及保留策略管理；当前不自动删历史。
+
+官方画布与现有包装共用 Excalidraw，独立存储副本并以只读方式查看当前账号的旧本机草稿。默认编辑器切换必须通过图片文件完整性与交互回归；本阶段不静默替换旧草稿或转换不支持的 Fabric payload。
+
+## 普通用户与原生账户/计费收尾
+
+原 personal relay 的单 owner 安全边界保留；新增默认不启用的 user-token 模式，按本人 JWT/组模型权限获取 New API 原生有限令牌，key 仅本次服务端请求内存。New API 是唯一钱包，Studio SQLite 只记录 run/调用序号/request_id 与状态供本人只读核对，未新增用户库、余额、支付或自动退款。原生账户页面通过同源 HTTP 集成复用，AGPLv3/NOTICE 归属保留；固定 SHA 和许可/流程见 ACCOUNT-CONTRACT.md、USER-BILLING.md。试用赠額/售价/支付和真实安全策略仍待决定/批准。

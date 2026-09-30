@@ -13,7 +13,7 @@ import { loadConfig } from '../src/config.mjs'
 // Explicit local fixtures only. This suite never calls a real provider.
 const chat = { id: 'chat', displayName: 'Fixture chat', kind: 'chat', upstreamModelId: 'fixture-chat', enabled: true, verification: 'live-verified', vision: false, toolCalling: true }
 const image = { id: 'image', displayName: 'Fixture image', kind: 'image', upstreamModelId: 'fixture-image', enabled: true, verification: 'live-verified', qualities: ['xhigh'], sizes: { '1:1': '1024x1024' }, operations: ['generate', 'edit'], responseFormat: 'b64_json' }
-const config = () => ({ models: [chat, image], relayKey: 'fixture-relay-secret', allowGeneration: true, gateway: 'http://fixture.invalid/v1', authOrigin: 'http://fixture.invalid', ledgerPath: ':memory:' })
+const config = () => ({ models: [chat, image], relayKey: 'fixture-relay-secret', relayOwnerId: 7, allowGeneration: true, gateway: 'http://fixture.invalid/v1', authOrigin: 'http://fixture.invalid', ledgerPath: ':memory:' })
 const headers = { authorization: 'Bearer fixture-user-7', 'idempotency-key': 'fixture-key-1234' }
 const authFetch = async (_url, init) => new Response(JSON.stringify({ success: true, data: { id: init.headers.Authorization.endsWith('-8') ? 8 : 7 } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 const pixels = () => sharp({ create: { width: 32, height: 24, channels: 3, background: '#90aa70' } }).png().toBuffer()
@@ -117,15 +117,22 @@ test('switching between image and agent modes cannot spend the same conversation
 })
 
 test('idempotent image replay is owner scoped and changed parameters conflict', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'gouo-owner-ledger-'))
+  const c = { ...config(), ledgerPath: join(directory, 'requests.sqlite') }
   let calls = 0
-  const app = createServer(config(), { fetch: authFetch, generateImage: async () => { calls++; return { url: 'fixture-only', width: 32, height: 24 } } })
-  const make = (h = headers, prompt = 'test') => app.inject({ method: 'POST', url: '/api/studio/images', headers: h, payload: { prompt, model: 'image' } })
+  const overrides = { fetch: authFetch, generateImage: async () => { calls++; return { url: 'fixture-owner-result-' + calls, width: 32, height: 24 } } }
+  const app = createServer(c, overrides)
+  const other = createServer({ ...c, relayOwnerId: 8 }, overrides)
+  const make = (server = app, h = headers, prompt = 'test') => server.inject({ method: 'POST', url: '/api/studio/images', headers: h, payload: { prompt, model: 'image' } })
   try {
     const first = await make(); assert.equal(first.statusCode, 200)
     assert.deepEqual((await make()).json(), first.json()); assert.equal(calls, 1)
-    assert.equal((await make(headers, 'changed')).statusCode, 409); assert.equal(calls, 1)
-    assert.equal((await make({ ...headers, authorization: 'Bearer fixture-user-8' })).statusCode, 200); assert.equal(calls, 2)
-  } finally { await app.close() }
+    assert.equal((await make(app, headers, 'changed')).statusCode, 409); assert.equal(calls, 1)
+    const second = await make(other, { ...headers, authorization: 'Bearer fixture-user-8' })
+    assert.equal(second.statusCode, 200); assert.equal(calls, 2)
+    assert.notEqual(second.json().data.url, first.json().data.url)
+    assert.deepEqual((await make()).json(), first.json()); assert.equal(calls, 2)
+  } finally { await app.close(); await other.close(); rmSync(directory, { recursive: true, force: true }) }
 })
 
 test('ambiguous gateway failure stays blocked across a service restart', async () => {

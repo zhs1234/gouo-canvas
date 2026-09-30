@@ -2,6 +2,8 @@
 
 import {
   Copy,
+  MessageSquare,
+  PencilRuler,
   FolderOpen,
   Home,
   ImagePlus,
@@ -209,6 +211,14 @@ export function CanvasLogoMenu({
             <DropdownMenuItem onClick={() => router.push("/projects")}>
               <FolderOpen className="size-4" />
               项目库
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/chat")}>
+              <MessageSquare className="size-4" />
+              聊天与会话历史
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/canvas-lab")}>
+              <PencilRuler className="size-4" />
+              官方画布对照（保留旧草稿）
             </DropdownMenuItem>
           </DropdownMenuGroup>
 

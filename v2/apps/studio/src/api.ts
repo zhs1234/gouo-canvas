@@ -109,7 +109,29 @@ export async function logout(): Promise<void> {
     headers.set('Authorization', `Bearer ${session.access_token}`)
     headers.set('X-Auth-Session', session.session.sid)
   }
-  await send('/api/user/auth/logout', { method: 'POST', headers })
+  const result = await send<{ revoked_sid?: string; cookie_cleared?: boolean } | undefined>('/api/user/auth/logout', { method: 'POST', headers })
+  // The pinned server may revoke a Bearer session without clearing a different
+  // browser cookie. Do not claim a complete sign-out in that case.
+  if (result?.cookie_cleared === false) throw new Error('浏览器会话已切换，请刷新页面后再退出登录')
   sessionVersion += 1
   session = null
+}
+
+// 流式写操作只发送一次，不能自动重放可能已经计费的请求。
+export async function requestStream(path: string, init: RequestInit): Promise<Response> {
+  if (!path.startsWith('/api/') || path.includes('://')) throw new Error('仅允许同源业务 API')
+  if (!session || session.access_expires_at <= Date.now() / 1000 + 30) await refreshSession()
+  init.signal?.throwIfAborted()
+  if (!session) throw new ApiError('请先登录 New API 账号', 401)
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${session.access_token}`)
+  headers.set('Content-Type', 'application/json')
+  headers.set('Accept', 'text/event-stream')
+  const response = await fetch(path, { ...init, headers, credentials: 'include', cache: 'no-store', redirect: 'error' })
+  if (!response.ok) {
+    if (response.status === 401) session = null
+    const payload = await response.json().catch(() => null)
+    throw new ApiError(payload?.message || `生成请求失败（HTTP ${response.status}）`, response.status)
+  }
+  return response
 }

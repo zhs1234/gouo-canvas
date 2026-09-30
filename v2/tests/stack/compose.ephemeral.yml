@@ -1,0 +1,10 @@
+# 仅隔离验收使用：不保留真实 New API 初始数据库，不创建任何账号。
+services:
+  new-api:
+    volumes: !reset []
+    tmpfs:
+      - /data
+  studio-api:
+    volumes: !reset []
+    tmpfs:
+      - /data:uid=1000,gid=1000,mode=0700

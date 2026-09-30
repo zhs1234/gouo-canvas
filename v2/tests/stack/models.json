@@ -1,0 +1,6 @@
+{
+  "models": [
+    { "id": "fixture-chat", "displayName": "协议替身对话", "kind": "chat", "upstreamModelId": "fixture-chat", "enabled": true, "verification": "live-verified", "channelId": 2, "toolCalling": true, "maxChatCalls": 3, "maxTokens": 256 },
+    { "id": "fixture-image", "displayName": "协议替身图片", "kind": "image", "upstreamModelId": "fixture-image", "enabled": true, "verification": "live-verified", "channelId": 1, "operations": ["generate"], "responseFormat": "b64_json" }
+  ]
+}
