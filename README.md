@@ -8,6 +8,18 @@ Gouo Canvas is an AI image creation workspace for text-to-image generation, refe
 
 ![Gouo Canvas logo](./docs/images/gouo-logo-source.png)
 
+## Live demo
+
+[Open Gouo Canvas](https://canvas.wcnmb.top/)
+
+The hosted site requires an account. Sign in to access the image workspace and your cloud library; image generation uses your account balance.
+
+## Interface preview
+
+Public sign-in page captured from the live site on 2026-09-30. No signed-in account data or private images are shown.
+
+![Gouo Canvas public sign-in page with workspace introduction and login form](./docs/images/demo-login.png)
+
 ## Highlights
 
 - Text-to-image generation, reference-image editing, variations, and masked edits
