@@ -24,6 +24,7 @@ if (process.env.GOUO_STACK_DOCKER_HUB === 'true') buildArgs.push(
   '--build-arg', 'NGINX_IMAGE=docker.io/library/nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94',
 )
 let fixture = false
+let userMode = false
 function run(command, argv) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, argv, { env: environment, stdio: 'inherit' })
@@ -31,7 +32,7 @@ function run(command, argv) {
     child.on('exit', code => code === 0 ? resolvePromise() : reject(new Error(command + ' exited ' + code)))
   })
 }
-const compose = (...command) => run('docker', [...args, ...(fixture ? ['-f', 'tests/stack/compose.fixture.yml'] : []), ...command])
+const compose = (...command) => run('docker', [...args, ...(fixture ? ['-f', 'tests/stack/compose.fixture.yml'] : []), ...(userMode ? ['-f', 'tests/stack/compose.users.yml'] : []), ...command])
 async function request(path, init) {
   return fetch(base + path, { ...init, signal: AbortSignal.timeout(10000), redirect: 'manual' })
 }
@@ -56,6 +57,12 @@ try {
   fixture = true
   console.log('Phase 2: explicit in-memory New API contract double, not real account/provider verification')
   await compose('build', ...buildArgs)
+  await compose('up', '-d', '--wait', '--wait-timeout', '180')
+  await run('npx', ['playwright', 'test', '--config', 'tests/stack/playwright.config.mjs'])
+  await compose('down', '-v', '--remove-orphans')
+  userMode = true
+  environment.GOUO_STACK_PHASE = 'users'
+  console.log('Phase 3: fresh ordinary users, explicit zero balance and fixture-only funding, native per-user token contract')
   await compose('up', '-d', '--wait', '--wait-timeout', '180')
   await run('npx', ['playwright', 'test', '--config', 'tests/stack/playwright.config.mjs'])
   console.log('Stack checks passed; no persistent credentials or paid calls were created')

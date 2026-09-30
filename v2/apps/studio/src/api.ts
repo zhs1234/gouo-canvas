@@ -109,7 +109,10 @@ export async function logout(): Promise<void> {
     headers.set('Authorization', `Bearer ${session.access_token}`)
     headers.set('X-Auth-Session', session.session.sid)
   }
-  await send('/api/user/auth/logout', { method: 'POST', headers })
+  const result = await send<{ revoked_sid?: string; cookie_cleared?: boolean } | undefined>('/api/user/auth/logout', { method: 'POST', headers })
+  // The pinned server may revoke a Bearer session without clearing a different
+  // browser cookie. Do not claim a complete sign-out in that case.
+  if (result?.cookie_cleared === false) throw new Error('浏览器会话已切换，请刷新页面后再退出登录')
   sessionVersion += 1
   session = null
 }

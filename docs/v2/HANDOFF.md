@@ -1,8 +1,10 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
-> 最新用户要求：用户已于 16:53 UTC 看过官方完整 UI 桌面截图并确认“可以”；沿该方案收尾整合与最终 CI，父线程负责合并，不上线。新云端已完成 assistant-ui default starter 视觉阶段，来源、路由和替身边界见 [UI-STARTER.md](UI-STARTER.md)，本阶段证据见 STATUS.md 最上方。此要求优先于下文旧阶段下一步排序。默认 Loomic 保留，真实供应商调用仍为 0。
+> 最新用户要求：用户继续授权账号管理、计费、新普通用户注册后可用性收尾，优先级 CI→fresh 普通用户闭环→原生账号→计费异常对账→移动恢复→最终 CI。简明计划见 TASKS.md，固定契约见 ACCOUNT-CONTRACT.md，每用户模式与真实执行阻塞见 USER-BILLING.md。真实配置默认关闭，未设赠额/售价/支付，父负责最终合并。
 
-本轮到第三阶段结束，不自动开启第四阶段。代码在授权分支 `codex/qa-relay-owner-idempotency`，draft PR [#3](https://github.com/zhs1234/gouo-canvas/pull/3)，目标 `codex/new-api-v2`；不合并、不部署。最终精确提交与 CI 见本轮交付回复和 STATUS.md；新环境应先 fetch 并核对两分支及 PR head，不从临时目录恢复代码。
+> 上一阶段视觉：用户已于 16:53 UTC 看过官方完整 UI 桌面截图并确认“可以”；沿该方案收尾整合与最终 CI，父线程负责合并，不上线。新云端已完成 assistant-ui default starter 视觉阶段，来源、路由和替身边界见 [UI-STARTER.md](UI-STARTER.md)，本阶段证据见 STATUS.md 最上方。此要求优先于下文旧阶段下一步排序。默认 Loomic 保留，真实供应商调用仍为 0。
+
+用户已追加授权上述账号与计费最小增量，不扩大到新 IAM、队列或支付系统。代码在授权分支 `codex/qa-relay-owner-idempotency`，draft PR [#3](https://github.com/zhs1234/gouo-canvas/pull/3)，目标 `codex/new-api-v2`；不合并、不部署。最终精确提交与 CI 见本轮交付回复和 STATUS.md；新环境应先 fetch 并核对两分支及 PR head，不从临时目录恢复代码。
 
 ## 产品及代码状态
 
@@ -27,7 +29,7 @@ git switch codex/qa-relay-owner-idempotency
 docker compose --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --build --wait
 ```
 
-访问 `http://localhost:8080/studio/`。默认回环绑定、生成关闭；可检查 `/setup`、`/console`，不自动初始化。需要 Docker/Compose v2.24+ 及公开构建依赖网络。停止使用同样参数的 `down`，不要 `-v` 删除用户数据。Studio 单副本，数据在独立命名卷；原图/项目/运行备份需 SQLite 一致性快照或停服完整卷。
+访问 `http://localhost:8080/studio/`。默认回环绑定、生成关闭；可检查 `/setup`、`/sign-in`、`/security`、`/wallet`，不自动初始化。需要 Docker/Compose v2.24+ 及公开构建依赖网络。停止使用同样参数的 `down`，不要 `-v` 删除用户数据。Studio 单副本，数据在独立命名卷；原图/项目/运行备份需 SQLite 一致性快照或停服完整卷。
 
 独立检查：
 

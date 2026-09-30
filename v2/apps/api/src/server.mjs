@@ -6,6 +6,7 @@ import { History } from './history.mjs'
 import { Ledger } from './ledger.mjs'
 import { generateImage, StudioError } from './images.mjs'
 import { runAgent, runImage } from './agent.mjs'
+import { userModels, userRelay } from './user-relay.mjs'
 import { billingSummary, settledUsage } from './billing.mjs'
 
 const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
@@ -27,24 +28,39 @@ export function createServer(config, overrides = {}) {
   app.addHook('onClose', async () => ledger.close())
   app.setErrorHandler((error, _request, reply) => reply.code(error.status ?? error.statusCode ?? 500).send({ success: false, message: error instanceof StudioError ? error.message : error.validation ? '请求格式无效' : '创作服务请求失败' }))
   app.get('/api/studio/health', async () => ({ success: true, data: { service: 'gouo-studio-api', localDrafts: true } }))
-  app.get('/api/studio/models', async () => ({ success: true, data: catalog(config) }))
+  app.get('/api/studio/models', async request => ({ success: true, data: catalog(request.studioConfig ?? config) }))
   app.addHook('preHandler', async (request) => {
-    if (['/api/studio/models', '/api/studio/health'].includes(request.routeOptions.url)) return
+    if (request.routeOptions.url === '/api/studio/health' || (request.routeOptions.url === '/api/studio/models' && config.relayCredentialMode !== 'user-token')) return
     const token = request.headers.authorization
     if (typeof token !== 'string' || !/^Bearer \S{1,4096}$/.test(token)) throw new StudioError('请先登录 New API 账号', 401)
     // Never trust browser-supplied user IDs or relay tokens.
     let response
     try { response = await fetcher(new URL('/api/user/self', config.authOrigin), { headers: { Authorization: token }, redirect: 'error', signal: AbortSignal.timeout(10_000) }) } catch { throw new StudioError('账号服务暂不可用', 502) }
     const body = await response.json().catch(() => null)
+    if (response.status >= 500) throw new StudioError('账号服务暂不可用', 502)
+    if (response.status === 403) throw new StudioError('账号已禁用或无权访问，请在原生账户页面核对', 403)
     if (!response.ok || body?.success !== true || !Number.isSafeInteger(body.data?.id) || body.data.id <= 0) throw new StudioError('登录会话已失效', 401)
     if (request.method === 'POST' && ['/api/studio/images', '/api/studio/runs', '/api/studio/runs/stream'].includes(request.routeOptions.url)) {
       if (config.allowGeneration && config.relayKey && !generationEnabled(config)) throw new StudioError('生成服务缺少有效的 GOUO_RELAY_OWNER_ID，请联系管理员配置令牌所属账号', 503)
       if (config.relayOwnerId !== undefined && body.data.id !== config.relayOwnerId) throw new StudioError('当前账号尚未连接自己的生成令牌', 403)
     }
+    if (config.relayCredentialMode === 'user-token') {
+      if (body.data.status !== 1) throw new StudioError('账号已禁用，请联系管理员', 403)
+      if (['/api/studio/models', '/api/studio/billing'].includes(request.routeOptions.url)) {
+        request.studioConfig = await userModels(config, token, body.data, fetcher)
+      }
+    }
     request.studioUser = body.data.id
     request.studioAccount = body.data
   })
-  app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(config, request.headers.authorization, request.studioAccount, fetcher) }))
+  app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(request.studioConfig ?? config, request.headers.authorization, request.studioAccount, fetcher) }))
+  app.get('/api/studio/requests/:kind/:id', async request => {
+    if (!['image', 'agent'].includes(request.params.kind) || !/^[\w-]{8,100}$/.test(request.params.id)) throw new StudioError('请求标识无效', 400)
+    const record = ledger.detail(request.studioUser, request.params.kind, request.params.id)
+    if (!record) throw new StudioError('请求不存在', 404)
+    const usage = await settledUsage(config, request.headers.authorization, record.attempts, fetcher)
+    return { success: true, data: { ...record, usage: usage ?? { state: 'pending', requestCount: 0, requestIds: [], currency: 'CNY' } } }
+  })
   function pageOffset(request) {
     const parsed = z.coerce.number().int().min(0).max(1000000).safeParse(request.query.offset ?? 0)
     if (!parsed.success) throw new StudioError('分页参数无效', 400)
@@ -87,7 +103,7 @@ export function createServer(config, overrides = {}) {
   })
   app.get('/api/studio/threads/:id', async request => ({ success: true, data: history.detail(request.studioUser, request.params.id, pageOffset(request)) }))
   app.get('/api/studio/runs/:id', async request => ({ success: true, data: history.getRun(request.studioUser, request.params.id) }))
-  async function execute(request, kind, payload, action, transport) {
+  async function execute(request, kind, payload, action, transport, validate = () => {}) {
     const key = request.headers['idempotency-key']
     if (typeof key !== 'string' || !/^[\w-]{8,100}$/.test(key)) throw new StudioError('缺少有效请求标识', 400)
     const owner = request.studioUser
@@ -101,14 +117,24 @@ export function createServer(config, overrides = {}) {
     }
     if (begun.busy) throw new StudioError('已有生成请求正在处理，本次请求尚未执行，请稍后重试', 409)
     busy.add(owner)
+    let transportStarted = false, externalStarted = false
     try {
+      let context = config
+      if (config.relayCredentialMode === 'user-token') {
+        if (!Number.isSafeInteger(request.studioAccount.quota) || request.studioAccount.quota <= 0) throw new StudioError('账号余额不足，请在原生钱包查看额度或联系管理员', 402)
+        context = await userModels(config, request.headers.authorization, request.studioAccount, fetcher)
+      }
+      validate(context)
+      externalStarted = true
+      if (config.relayCredentialMode === 'user-token') context = await userRelay(context, request.headers.authorization, request.studioAccount, fetcher)
       if (payload.threadId) history.begin(owner, payload)
       transport?.start()
+      transportStarted = Boolean(transport)
       const requests = []
-      const result = await action({ ...config, ...((transport || payload.threadId) ? { onEvent: event => {
+      const result = await action({ ...context, ...((transport || payload.threadId) ? { onEvent: event => {
         if (payload.threadId) history.event(owner, key, event)
         transport?.event(event)
-      } } : {}), onGatewayResponse: info => requests.push(info) })
+      } } : {}), onGatewayResponse: info => { ledger.gateway(owner, kind, key, info); requests.push(info) } })
       const usage = await settledUsage(config, request.headers.authorization, requests, fetcher)
       if (usage) result.usage = usage
       // 会话终态与幂等结果同时提交，避免恢复时看到不一致的完成状态。
@@ -121,23 +147,24 @@ export function createServer(config, overrides = {}) {
       transport?.finish(result)
       return { success: true, data: result }
     } catch (error) {
-      ledger.unknown(owner, kind, key)
+      if (externalStarted) ledger.unknown(owner, kind, key)
+      else ledger.releaseUnstarted(owner, kind, key)
       if (payload.threadId) history.unknown(owner, key)
-      if (transport) { transport.fail(); return }
+      if (transportStarted) { transport.fail(); return }
       throw error
     }
     finally { busy.delete(owner) }
   }
-  function selectModel(id, kind) {
-    const model = config.models.find(m => m.kind === kind && (id ? m.id === id : isAvailable(config, m)))
-    if (!model || !isAvailable(config, model)) throw new StudioError('尚未配置并验证可用模型，请先完成 New API 渠道接入', 503)
+  function selectModel(id, kind, context) {
+    const model = context.models.find(m => m.kind === kind && (id ? m.id === id : isAvailable(context, m)))
+    if (!model || !isAvailable(context, model)) throw new StudioError(model?.availabilityReason ?? '尚未配置并验证可用模型，请先完成 New API 渠道接入', model?.availabilityReason ? 403 : 503)
     return model
   }
   app.post('/api/studio/images', async request => {
     const parsed = imageBody.safeParse(request.body)
     if (!parsed.success) throw new StudioError('图片请求格式无效', 400)
-    const model = selectModel(parsed.data.model, 'image')
-    return execute(request, 'image', parsed.data, context => (overrides.generateImage ?? generateImage)(context, model, parsed.data))
+    let model
+    return execute(request, 'image', parsed.data, context => (overrides.generateImage ?? generateImage)(context, model, parsed.data), undefined, context => { model = selectModel(parsed.data.model, 'image', context) })
   })
   async function handleRun(request, reply, streaming = false) {
     const parsed = runBody.safeParse(request.body)
@@ -146,12 +173,15 @@ export function createServer(config, overrides = {}) {
     if (parsed.data.runId !== request.headers['idempotency-key']) throw new StudioError('任务标识与请求标识不一致', 400)
     if (parsed.data.videoGenerationPreference) throw new StudioError('视频生成将在后续接入')
     if (parsed.data.mentions?.some(m => m?.mentionType !== 'image-model')) throw new StudioError('品牌库和自定义技能尚未接入')
-    for (const id of parsed.data.imageGenerationPreference?.models ?? []) selectModel(id, 'image')
-    const selected = parsed.data.model ? config.models.find(m => m.id === parsed.data.model) : undefined
-    if (parsed.data.model && !selected) throw new StudioError('所选模型尚未接入', 503)
-    if (selected?.kind === 'image' && parsed.data.imageGenerationPreference?.models?.some(id => id !== selected.id)) throw new StudioError('两处图片模型选择不一致，请选择同一个模型')
-    const imageOnly = selected?.kind === 'image' || (!selected && !config.models.some(m => m.kind === 'chat' && isAvailable(config, m)))
-    const model = selectModel(imageOnly ? selected?.id ?? parsed.data.imageGenerationPreference?.models?.[0] : parsed.data.model, imageOnly ? 'image' : 'chat')
+    let imageOnly = false, model
+    const validate = context => {
+      for (const id of parsed.data.imageGenerationPreference?.models ?? []) selectModel(id, 'image', context)
+      const selected = parsed.data.model ? context.models.find(m => m.id === parsed.data.model) : undefined
+      if (parsed.data.model && !selected) throw new StudioError('所选模型尚未接入', 503)
+      if (selected?.kind === 'image' && parsed.data.imageGenerationPreference?.models?.some(id => id !== selected.id)) throw new StudioError('两处图片模型选择不一致，请选择同一个模型')
+      imageOnly = selected?.kind === 'image' || (!selected && !context.models.some(m => m.kind === 'chat' && isAvailable(context, m)))
+      model = selectModel(imageOnly ? selected?.id ?? parsed.data.imageGenerationPreference?.models?.[0] : parsed.data.model, imageOnly ? 'image' : 'chat', context)
+    }
     // 两种传输共用去重范围；终态必须在保存完整结果后才发送。
     let transport
     if (streaming) {
@@ -191,7 +221,7 @@ export function createServer(config, overrides = {}) {
       return imageOnly
       ? (overrides.runImage ?? runImage)(context, model, agentPayload)
       : (overrides.runAgent ?? runAgent)(context, model, agentPayload)
-    }, transport)
+    }, transport, validate)
   }
   app.post('/api/studio/runs', (request, reply) => handleRun(request, reply))
   app.post('/api/studio/runs/stream', (request, reply) => handleRun(request, reply, true))

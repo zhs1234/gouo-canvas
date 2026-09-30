@@ -15,7 +15,7 @@ docker compose --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --b
 访问 **http://localhost:8080/studio/**。所有发布端口默认仅绑定回环地址；New API 与 Studio API 不直接发布宿主端口。初始模型禁用，不需要任何账号密码或 API key，不会调用模型。
 
 - `/studio/`：现有画布、账号和流式聊天。
-- `/setup`、`/console`：New API 原生初始化/控制台，沿用其权限校验。
+- `/setup`、`/sign-in`、`/security`、`/wallet`：New API 原生初始化/控制台，沿用其权限校验。
 - `/studio/chat`：assistant-ui 正式聊天入口，按 New API 账号持久化会话，复用原生账号与费用面板；`/studio/chat-lab` 兼容跳转，不覆盖旧画布历史。
 - `/studio/canvas-lab`：官方 Excalidraw 候选：无参数为本地独立草稿；带 project 参数为账号私有 Studio 项目，可从聊天图片打开或插入。旧草稿仅副本导入，不覆盖。
 
@@ -23,7 +23,7 @@ docker compose --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --b
 同源入口 :8080 (Nginx)
   /studio/*          → React 静态产物
   /api/studio/*      → Studio API :3001 → New API :3000 /api/user/self、/v1
-  /api/*、/console等 → New API :3000
+  /api/*、原生账号页面 → New API :3000
   /v1/*              → 对浏览器入口拒绝，防止绕过业务授权
 ```
 
@@ -92,7 +92,7 @@ Studio 会话只保存 New API 的数字 owner ID，不保存密码或复制账�
 
 ## 安全配置交接
 
-`localhost:8080` 只对运行 Compose 的那台机器可达，不是云执行环境到用户浏览器的共享预览地址。只有在环境实际提供受保护的端口预览和用户接管能力时，才能把原生 `/setup`、`/console` 作为远程配置入口；不要假设有 Personal Vault，也不要为交接临时公开管理后台或数据。
+`localhost:8080` 只对运行 Compose 的那台机器可达，不是云执行环境到用户浏览器的共享预览地址。只有在环境实际提供受保护的端口预览和用户接管能力时，才能把原生 `/setup`、`/sign-in`、`/security`、`/wallet` 作为远程配置入口；不要假设有 Personal Vault，也不要为交接临时公开管理后台或数据。
 
 没有上述能力时，最小方式是用户在自己的电脑/已授权私有测试主机运行本分支 Compose，再在该机器的浏览器完成原生账号、渠道与受限统一 token 配置，并以本机受保护文件将 token 交给 Studio。助手可以准备非秘密配置与测试步骤，密码、两个渠道密钥及 token 的最终录入/提交由用户完成。使用新测试账号、token 或权限设置前需明确目标实例与授权范围；已有生产实例不能默认为测试目标。
 

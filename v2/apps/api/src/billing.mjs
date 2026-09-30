@@ -16,8 +16,8 @@ export function moneySettings(status) {
     || !Number.isFinite(status.usd_exchange_rate) || status.usd_exchange_rate <= 0) throw new StudioError('网关额度或汇率配置无效', 502)
   return { currency: 'CNY', quotaPerUnit: status.quota_per_unit, usdExchangeRate: status.usd_exchange_rate }
 }
-export function quotaToMoney(quota, settings) {
-  if (!Number.isSafeInteger(quota) || quota < 0) throw new StudioError('网关计费数据无效', 502)
+export function quotaToMoney(quota, settings, allowNegative = false) {
+  if (!Number.isSafeInteger(quota) || (!allowNegative && quota < 0)) throw new StudioError('网关计费数据无效', 502)
   return quota / settings.quotaPerUnit * settings.usdExchangeRate
 }
 
@@ -65,10 +65,10 @@ export async function billingSummary(config, authorization, account, fetcher = f
   const ratio = pricing.group_ratio?.[account.group]
   if (!Number.isFinite(ratio) || ratio < 0) throw new StudioError('账号分组计费倍率无效', 502)
   const configured = config.models.filter(m => isAvailable(config, m))
-  return { ...settings, balance: quotaToMoney(account.quota, settings), spent: quotaToMoney(account.used_quota, settings),
+  return { ...settings, balance: quotaToMoney(account.quota, settings, true), spent: quotaToMoney(account.used_quota, settings),
     requestCount: account.request_count, groupRatio: ratio,
     prices: configured.flatMap(m => { const row = pricing.data?.find(p => p.model_name === m.upstreamModelId); return row ? [priceCard(row, m, ratio)] : [] }),
-    recentCalls: (logs.data?.items ?? []).filter(row => row.token_name !== '模型测试').slice(0, 10).map(row => ({
+    recentCalls: (logs.data?.items ?? []).slice(0, 10).map(row => ({
       id: row.id, model: row.model_name, createdAt: row.created_at, cost: quotaToMoney(row.quota, settings),
       inputTokens: row.prompt_tokens, outputTokens: row.completion_tokens,
     })),

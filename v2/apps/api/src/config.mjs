@@ -29,6 +29,14 @@ export function loadConfig(env = process.env) {
     catch { throw new Error('无法读取普通模型路由人工核验记录') }
     validateNormalRouting(normalRoutingEvidence, gateway.toString(), models)
   }
+  const relayCredentialMode = z.enum(['personal', 'user-token']).parse(env.GOUO_RELAY_CREDENTIAL_MODE || 'personal')
+  let userTokenQuotaCap, userTokenLifetimeSeconds
+  if (relayCredentialMode === 'user-token') {
+    if (new URL(env.GOUO_BACKEND_DEV_TARGET || gateway.origin).origin !== gateway.origin) throw new Error('每用户账号与扣费网关必须属于同一 New API 实例')
+    if (env.GOUO_RELAY_API_KEY || env.GOUO_RELAY_API_KEY_FILE || env.GOUO_RELAY_OWNER_ID || relayRoutingMode !== 'model') throw new Error('每用户模式不能使用共享令牌、固定 owner 或管理员渠道后缀')
+    userTokenQuotaCap = z.coerce.number().int().positive().max(2147483647).parse(env.GOUO_USER_TOKEN_QUOTA_CAP)
+    userTokenLifetimeSeconds = z.coerce.number().int().min(60).max(31536000).parse(env.GOUO_USER_TOKEN_LIFETIME_SECONDS)
+  }
   if (env.GOUO_RELAY_API_KEY && env.GOUO_RELAY_API_KEY_FILE) throw new Error('统一 relay 只能选择环境变量或密钥文件其中一种')
   let relayKey = env.GOUO_RELAY_API_KEY || ''
   if (env.GOUO_RELAY_API_KEY_FILE) {
@@ -45,12 +53,13 @@ export function loadConfig(env = process.env) {
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
     relayKey,
     relayRoutingMode, normalRoutingEvidence,
-    relayOwnerId,
+    relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }
 }
 export function generationEnabled(config) {
+  if (config.relayCredentialMode === 'user-token') return Boolean(config.allowGeneration && config.relayRoutingMode === 'model' && config.userTokenQuotaCap > 0 && config.userTokenLifetimeSeconds >= 60)
   return Boolean(config.relayKey && config.allowGeneration && Number.isSafeInteger(config.relayOwnerId) && config.relayOwnerId > 0)
 }
 export function isAvailable(config, model) {
@@ -64,7 +73,7 @@ export function catalog(config) {
     models: config.models.map(m => ({ id: m.id, displayName: m.displayName, kind: m.kind, accessible: isAvailable(config, m),
       provider: 'New API', qualities: m.qualities ?? [], aspectRatios: Object.keys(m.sizes ?? {}),
       ...(m.kind === 'image' ? { operations: m.operations } : {}),
-      description: m.kind === 'video' ? '后续接入视频生成' : isAvailable(config, m) ? '已配置并经过渠道验证' : '尚未配置或验证',
+      description: m.kind === 'video' ? '后续接入视频生成' : m.availabilityReason ?? (isAvailable(config, m) ? '已配置并经过渠道验证' : '尚未配置或验证'),
     })),
   }
 }

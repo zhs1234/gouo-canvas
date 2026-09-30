@@ -12,7 +12,7 @@ test('same-origin stack authenticates, streams image tools, attributes usage and
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('协议测试用户')
   const cookies = await page.context().cookies()
-  expect(cookies.find(cookie => cookie.name === 'fixture_refresh')).toMatchObject({ httpOnly: true, sameSite: 'Lax' })
+  expect(cookies.find(cookie => cookie.name === 'fixture_refresh')).toMatchObject({ httpOnly: true, sameSite: 'Strict' })
   const refreshed = page.waitForResponse(response => response.url().endsWith('/api/user/auth/refresh') && response.status() === 200)
   await page.reload()
   await refreshed
