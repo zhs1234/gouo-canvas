@@ -16,10 +16,13 @@ export function loadConfig(env = process.env) {
   if (new Set(models.map(m => m.id)).size !== models.length) throw new Error('模型目录有重复 ID')
   const gateway = new URL(env.GOUO_GATEWAY_BASE_URL || 'http://127.0.0.1:3000/v1')
   if (!['http:', 'https:'].includes(gateway.protocol) || gateway.username || gateway.password || gateway.search || gateway.hash) throw new Error('网关地址格式无效')
+  const relayOwnerId = env.GOUO_RELAY_OWNER_ID ? Number(env.GOUO_RELAY_OWNER_ID) : undefined
+  if (relayOwnerId !== undefined && (!Number.isSafeInteger(relayOwnerId) || relayOwnerId <= 0)) throw new Error('网关令牌所属账号 ID 无效')
   return {
     models, gateway: gateway.toString().replace(/\/$/, ''),
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
     relayKey: env.GOUO_RELAY_API_KEY || '',
+    relayOwnerId,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }
@@ -30,6 +33,8 @@ export function isAvailable(config, model) {
 export function catalog(config) {
   return {
     generationEnabled: config.allowGeneration && Boolean(config.relayKey),
+    conversationMode: config.models.some(m => m.kind === 'chat' && isAvailable(config, m)) ? 'agent'
+      : config.models.some(m => m.kind === 'image' && isAvailable(config, m)) ? 'image' : 'unavailable',
     models: config.models.map(m => ({ id: m.id, displayName: m.displayName, kind: m.kind, accessible: isAvailable(config, m),
       provider: 'New API', qualities: m.qualities ?? [], aspectRatios: Object.keys(m.sizes ?? {}),
       ...(m.kind === 'image' ? { operations: m.operations } : {}),

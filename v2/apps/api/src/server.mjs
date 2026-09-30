@@ -3,12 +3,12 @@ import { z } from 'zod'
 import { catalog, isAvailable } from './config.mjs'
 import { Ledger } from './ledger.mjs'
 import { generateImage, StudioError } from './images.mjs'
-import { runAgent } from './agent.mjs'
+import { runAgent, runImage } from './agent.mjs'
 
 const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
 const runBody = z.object({ runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
   sessionId: z.string().max(100), conversationId: z.string().max(100), canvasId: z.string().max(100).optional(),
-  attachments: z.array(z.object({ url: z.string().max(12 * 1024 * 1024), mimeType: z.string(), assetId: z.string(), source: z.enum(['upload', 'canvas']), name: z.string().optional() })).max(4).optional(),
+  attachments: z.array(z.object({ url: z.string().max(12 * 1024 * 1024), mimeType: z.string(), assetId: z.string(), source: z.enum(['upload', 'canvas', 'canvas-ref']), name: z.string().optional() })).max(4).optional(),
   imageGenerationPreference: z.object({ mode: z.enum(['auto', 'manual']), models: z.array(z.string()).max(1) }).optional(),
   videoGenerationPreference: z.unknown().optional(), mentions: z.array(z.unknown()).max(20).optional(),
   history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(8000).optional(), contentBlocks: z.array(z.unknown()).max(100).nullable().optional() }).passthrough()).max(12).optional(),
@@ -32,6 +32,7 @@ export function createServer(config, overrides = {}) {
     try { response = await fetcher(new URL('/api/user/self', config.authOrigin), { headers: { Authorization: token }, redirect: 'error', signal: AbortSignal.timeout(10_000) }) } catch { throw new StudioError('账号服务暂不可用', 502) }
     const body = await response.json().catch(() => null)
     if (!response.ok || body?.success !== true || !Number.isSafeInteger(body.data?.id) || body.data.id <= 0) throw new StudioError('登录会话已失效', 401)
+    if (config.relayOwnerId !== undefined && body.data.id !== config.relayOwnerId) throw new StudioError('当前账号尚未连接自己的生成令牌', 403)
     request.studioUser = body.data.id
   })
   async function execute(request, kind, payload, action) {
@@ -69,8 +70,15 @@ export function createServer(config, overrides = {}) {
     if (parsed.data.videoGenerationPreference) throw new StudioError('视频生成将在后续接入')
     if (parsed.data.mentions?.some(m => m?.mentionType !== 'image-model')) throw new StudioError('品牌库和自定义技能尚未接入')
     for (const id of parsed.data.imageGenerationPreference?.models ?? []) selectModel(id, 'image')
-    const model = selectModel(parsed.data.model, 'chat')
-    return execute(request, 'agent', parsed.data, () => (overrides.runAgent ?? runAgent)(config, model, parsed.data))
+    const selected = parsed.data.model ? config.models.find(m => m.id === parsed.data.model) : undefined
+    if (parsed.data.model && !selected) throw new StudioError('所选模型尚未接入', 503)
+    if (selected?.kind === 'image' && parsed.data.imageGenerationPreference?.models?.some(id => id !== selected.id)) throw new StudioError('两处图片模型选择不一致，请选择同一个模型')
+    const imageOnly = selected?.kind === 'image' || (!selected && !config.models.some(m => m.kind === 'chat' && isAvailable(config, m)))
+    const model = selectModel(imageOnly ? selected?.id ?? parsed.data.imageGenerationPreference?.models?.[0] : parsed.data.model, imageOnly ? 'image' : 'chat')
+    // The endpoint keeps one idempotency scope even when the selected mode changes.
+    return execute(request, 'agent', parsed.data, () => imageOnly
+      ? (overrides.runImage ?? runImage)(config, model, parsed.data)
+      : (overrides.runAgent ?? runAgent)(config, model, parsed.data))
   })
   return app
 }

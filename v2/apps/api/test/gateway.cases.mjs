@@ -8,6 +8,7 @@ import sharp from 'sharp'
 import { createServer } from '../src/server.mjs'
 import { generateImage, StudioError } from '../src/images.mjs'
 import { runAgent } from '../src/agent.mjs'
+import { loadConfig } from '../src/config.mjs'
 
 // Explicit local fixtures only. This suite never calls a real provider.
 const chat = { id: 'chat', displayName: 'Fixture chat', kind: 'chat', upstreamModelId: 'fixture-chat', enabled: true, verification: 'live-verified', vision: false }
@@ -37,6 +38,81 @@ test('unverified/disabled configuration remains unavailable even with a relay ke
     assert.equal((await app.inject('/api/studio/models')).json().data.models.every(m => !m.accessible), true)
     const response = await app.inject({ method: 'POST', url: '/api/studio/images', headers, payload: { prompt: 'test', model: 'image' } })
     assert.equal(response.statusCode, 503); assert.equal(calls, 0)
+  } finally { await app.close() }
+})
+
+test('a development relay token cannot be spent by another authenticated account', async () => {
+  let calls = 0
+  const app = createServer({ ...config(), relayOwnerId: 7 }, { fetch: authFetch, generateImage: async () => { calls++; return {} } })
+  try {
+    const other = await app.inject({ method: 'POST', url: '/api/studio/images', headers: { ...headers, authorization: 'Bearer fixture-user-8', 'new-api-user': '7' }, payload: { prompt: 'test', model: 'image' } })
+    assert.equal(other.statusCode, 403); assert.equal(calls, 0)
+    const owner = await app.inject({ method: 'POST', url: '/api/studio/images', headers, payload: { prompt: 'test', model: 'image' } })
+    assert.equal(owner.statusCode, 200); assert.equal(calls, 1)
+    assert.throws(() => loadConfig({ GOUO_RELAY_OWNER_ID: '0' }), /所属账号/)
+    assert.throws(() => loadConfig({ GOUO_RELAY_OWNER_ID: '1.5' }), /所属账号/)
+  } finally { await app.close() }
+})
+
+test('image-only conversations use the selected real image protocol once, including canvas references', async () => {
+  const upstream = Fastify(); const png = await pixels(); let images = 0; let edits = 0
+  upstream.post('/v1/images/generations', async req => {
+    assert.equal(req.headers.authorization, 'Bearer fixture-relay-secret')
+    assert.equal(req.body.model, 'fixture-image-2')
+    assert.equal(req.body.prompt, '原样发送的生图需求')
+    images++; return { data: [{ b64_json: png.toString('base64') }] }
+  })
+  upstream.addContentTypeParser(/^multipart\/form-data/, { parseAs: 'buffer' }, (_req, body, done) => done(null, body))
+  upstream.post('/v1/images/edits', async req => {
+    assert.match(req.body.toString(), /name="image\[\]"/)
+    edits++; return { data: [{ b64_json: png.toString('base64') }] }
+  })
+  await upstream.listen({ host: '127.0.0.1', port: 0 })
+  const second = { ...image, id: 'image2', upstreamModelId: 'fixture-image-2' }
+  const app = createServer({ ...config(), gateway: upstream.listeningOrigin + '/v1', models: [image, second] }, { fetch: authFetch })
+  const runId = crypto.randomUUID()
+  const payload = { runId, sessionId: 'fixture-session', conversationId: 'fixture-canvas', prompt: '原样发送的生图需求', imageGenerationPreference: { mode: 'manual', models: ['image2'] } }
+  const send = body => app.inject({ method: 'POST', url: '/api/studio/runs', headers: { ...headers, 'idempotency-key': body.runId }, payload: body })
+  try {
+    assert.equal((await app.inject('/api/studio/models')).json().data.conversationMode, 'image')
+    const first = await send(payload); assert.equal(first.statusCode, 200)
+    const events = first.json().data.events
+    assert.equal(events.find(e => e.type === 'tool.completed').artifacts[0].width, 32)
+    assert.equal(events.at(-1).type, 'run.completed')
+    assert.deepEqual((await send(payload)).json(), first.json()); assert.equal(images, 1)
+    assert.equal((await send({ ...payload, prompt: 'changed' })).statusCode, 409); assert.equal(images, 1)
+    assert.equal((await send({ ...payload, model: 'image', runId: crypto.randomUUID() })).statusCode, 422)
+    assert.equal((await send({ ...payload, model: 'missing', runId: crypto.randomUUID() })).statusCode, 503)
+    const reference = await send({ ...payload, runId: crypto.randomUUID(), attachments: [{ url: 'data:image/png;base64,' + png.toString('base64'), assetId: 'fixture-ref', source: 'canvas-ref', mimeType: 'image/png' }] })
+    assert.equal(reference.statusCode, 200); assert.equal(edits, 1)
+  } finally { await app.close(); await upstream.close() }
+})
+
+test('failed image-only conversations do not produce success events or repeat ambiguous requests', async () => {
+  const upstream = Fastify(); let calls = 0
+  upstream.post('/v1/images/generations', async (_req, reply) => { calls++; return reply.code(429).send({ error: 'fixture-only failure' }) })
+  await upstream.listen({ host: '127.0.0.1', port: 0 })
+  const app = createServer({ ...config(), models: [image], gateway: upstream.listeningOrigin + '/v1' }, { fetch: authFetch })
+  const runId = crypto.randomUUID()
+  const send = () => app.inject({ method: 'POST', url: '/api/studio/runs', headers: { ...headers, 'idempotency-key': runId }, payload: { runId, prompt: 'fixture', sessionId: 's', conversationId: 'c' } })
+  try {
+    assert.equal((await send()).statusCode, 502)
+    assert.equal((await send()).statusCode, 409); assert.equal(calls, 1)
+  } finally { await app.close(); await upstream.close() }
+})
+
+test('switching between image and agent modes cannot spend the same conversation request ID twice', async () => {
+  let images = 0; let agents = 0
+  const app = createServer(config(), { fetch: authFetch,
+    runImage: async () => { images++; return { events: [] } },
+    runAgent: async () => { agents++; return { events: [] } },
+  })
+  const runId = crypto.randomUUID()
+  const send = model => app.inject({ method: 'POST', url: '/api/studio/runs', headers: { ...headers, 'idempotency-key': runId }, payload: { runId, model, prompt: 'fixture', sessionId: 's', conversationId: 'c' } })
+  try {
+    assert.equal((await send('image')).statusCode, 200)
+    assert.equal((await send('chat')).statusCode, 409)
+    assert.equal(images, 1); assert.equal(agents, 0)
   } finally { await app.close() }
 })
 

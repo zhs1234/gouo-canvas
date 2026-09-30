@@ -1,6 +1,30 @@
 # 实际交付与验证状态
 
-## Loomic 集成：当前实际交付（2026-09-30）
+## 画布登录与实际图片渠道接通（2026-09-30，最新）
+
+原外网画布 helper 只提供静态页面和模型状态，拒绝账号/生成接口；业务服务也没有读取用户新配置的渠道令牌，并且对话入口强制要求聊天模型。因此“New API 渠道测试成功”没有接通画布。
+
+- 当前临时公网画布同源转发真实登录、profile、refresh、logout 和 Studio API。登录写入检查精确 Origin，认证 Cookie 为 Secure/HttpOnly/Strict；管理后台和 `/v1` 继续使用独立 New API 入口。helper 位于云环境 `/workspace/gouo-public-preview/`，可重用启动说明已保存到环境配置草稿。
+- 新增图片模式：只有图片渠道时，对话栏直接发送图片需求，不要求额外聊天模型；有聊天模型时仍可使用 LangGraph 工具循环。选择器、输入提示与按钮区分这两种行为，图片结果沿用 Loomic 事件契约进入原生画布。画布参考图的 `canvas-ref` 类型已与业务请求对齐。
+- `GOUO_RELAY_OWNER_ID` 可将开发 relay token 的生成权限限定到其原账号；其他真实账号及伪造 `New-Api-User` 不能消费该 token。Vite 子进程不继承 relay key。
+- 云环境启动 helper 只读现有开发 New API 数据库，在内存复用用户已创建的 token，不生成新 token、不复制 provider key。根据实际 `/v1/models` 可见列表生成服务器模型配置，并固定渠道 1，利用 New API `PinRetrySingleAttempt` 阻止内部重试。既有账号、权限、配置、余额和订阅没有被手工修改。
+
+用户单独授权一次真实 `gpt-image-2` 图片验证。实际 `POST /v1/images/generations`，`n=1`、`response_format=b64_json`、未指定质量/尺寸；HTTP 200 返回一张通过 Sharp 格式/像素校验的 **1254×1254 PNG**。耗时约 37 秒；New API 日志为同一次 attempt 的 channel_selected/request_completed，消费日志总数从 5 增至 6，没有第二次请求或失败重交。脱敏报告和测试图片保存在环境私有 state，未提交图片或凭据。
+
+仅环境中的 `gpt-image-2`、渠道 1、固定 New API `v1.0.0-rc.40` 的本次默认参数生成操作标为 live-verified 并启用。其余图片别名保持不可用；`gpt-image-2-4k` 未出现在该 token 的实际目录中。编辑、质量、比例参数、其他模型和一般文字聊天均未因此获得验证。仓库示例配置继续 pending/disabled；不能将本次结论套用到其他渠道或新安装环境。
+
+| 本次检查 | 实际结果 |
+| --- | --- |
+| `npm run check` | 类型检查、14 个领域/探测测试、10 个 API 测试及构建通过；随后补充跨创作模式复用请求 ID 的防重复消费检查，最终 `npm run test:api` 为 11 passed |
+| `npm run test:e2e` | 12 passed；新增仅图片渠道的模式选择、发送及结果进入画布检查；初次因两个生图按钮同名导致定位歧义，明确对话按钮名称后全套通过 |
+| 最终 `npm run build` | 通过，临时外网入口已使用更新后的生产构建 |
+| 公网真实账号 | 原生画布登录、内存 token、Secure/HttpOnly refresh、刷新恢复、退出撤销、匿名/外站拒绝、畸形图片请求拒绝通过；此账号检查没有发起模型调用 |
+| 密钥检查 | 实际 relay key 不在全部 128 个前端构建文件中；代码/测试/文档不包含真实密钥 |
+| 真实图片验证 | 用户授权后恰好一次 Images 调用成功；结果为 1254×1254 PNG |
+
+下一项仍为 B2：按用户选择验证其他模型及参考图编辑能力；视频、可恢复 Worker、云库、订阅权益仍未接入。临时 tunnel URL 随重启变化，环境休眠后服务需要按启动说明恢复；这不是生产部署。
+
+## Loomic 集成：此前交付（2026-09-30）
 
 - 用户选择成熟 Loomic 前端，图片优先、视频生成后续接入、不做视频剪裁；没有旧数据迁移，云项目/素材库继续暂缓。
 - 复用上游 `fancyboi999/Loomic` 提交 `bdb47a5adf900b48615af0bd914336e3770021b5` 的原生画布/工具栏/图层/文件/聊天/项目组件与样式。V2 的 Fabric starter 已替换；不是另写一个 Excalidraw 外壳。MIT LICENSE、原文件哈希和第三方声明随源码保留，见 LOOMIC.md。

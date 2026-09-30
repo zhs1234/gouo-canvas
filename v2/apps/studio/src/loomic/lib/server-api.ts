@@ -64,7 +64,12 @@ export async function uploadFile(owner: string, file: File, projectId?: string) 
   })
   return { url, asset: { id: crypto.randomUUID(), bucket: 'project-assets' as const, objectPath: file.name, mimeType: file.type, byteSize: file.size, workspaceId: owner, projectId: projectId ?? null, createdAt: new Date().toISOString() } }
 }
-export async function fetchModels() { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'chat' && m.accessible).map(m => ({ id: m.id, name: m.displayName, provider: m.provider })) } }
+export async function fetchModels() {
+  const models = (await fetchCatalog()).models
+    .filter((m): m is GatewayModel & { kind: 'chat' | 'image' } => (m.kind === 'chat' || m.kind === 'image') && m.accessible)
+    .sort((a, b) => Number(b.kind === 'chat') - Number(a.kind === 'chat'))
+  return { models: models.map(m => ({ id: m.id, name: m.displayName, provider: m.provider, kind: m.kind })) }
+}
 export async function fetchImageModels(): Promise<{ models: ImageModelInfo[] }> { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'image') } }
 export async function fetchVideoModels(): Promise<{ models: VideoModelInfo[] }> { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'video') } }
 export async function fetchWorkspaceSkills(_owner: string) { return { skills: [] as Array<{ id: string; name: string; slug: string; description: string; enabled: boolean }> } }

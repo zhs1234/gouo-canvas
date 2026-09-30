@@ -3,7 +3,7 @@ export type GatewayModel = {
   description: string; provider: string; qualities?: string[]; aspectRatios?: string[];
   operations?: Array<'generate' | 'edit'>;
 }
-export type GatewayCatalog = { models: GatewayModel[]; generationEnabled: boolean }
+export type GatewayCatalog = { models: GatewayModel[]; generationEnabled: boolean; conversationMode?: 'agent' | 'image' | 'unavailable' }
 export async function fetchCatalog(): Promise<GatewayCatalog> {
   const response = await fetch('/api/studio/models', { credentials: 'include', cache: 'no-store', redirect: 'error' })
   const body = await response.json()

@@ -6,6 +6,22 @@ import { z } from 'zod'
 import { generateImage, decodeImage, StudioError } from './images.mjs'
 import { isAvailable } from './config.mjs'
 
+// Image-only channels do not require an extra chat model or an LLM tool loop.
+// The UI labels this mode as image generation; the prompt is sent verbatim.
+export async function runImage(config, imageModel, payload) {
+  const base = { runId: payload.runId, timestamp: new Date().toISOString() }
+  const toolCallId = crypto.randomUUID()
+  const result = await generateImage(config, imageModel, {
+    prompt: payload.prompt, inputImages: (payload.attachments ?? []).map(a => a.url),
+  })
+  return { events: [
+    { ...base, type: 'run.started', sessionId: payload.sessionId, conversationId: payload.conversationId },
+    { ...base, type: 'tool.started', toolCallId, toolName: 'generate_image', input: { prompt: payload.prompt, model: imageModel.id } },
+    { ...base, type: 'tool.completed', toolCallId, toolName: 'generate_image', outputSummary: '图片已生成', artifacts: [{ type: 'image', ...result }] },
+    { ...base, type: 'run.completed' },
+  ] }
+}
+
 export async function runAgent(config, chatModel, payload) {
   const events = []
   const emit = (type, data = {}) => events.push({ type, runId: payload.runId, timestamp: new Date().toISOString(),

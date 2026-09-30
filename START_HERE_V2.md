@@ -37,6 +37,6 @@ New API 的部署说明以固定版本的上游文档为准，使用独立开发
 
 ## 边界
 
-当前是**可继续开发的工程起点**，不是完整商品图 SaaS。现有集成提供 Loomic 原生画布/聊天、本地项目/对话恢复、New API 认证桥接，以及 LangGraph + Images 协议适配。模型尚未 live-verified，HTTP 事件批次不等于流式/可恢复 Worker。本地 SQLite 只防重复提交；Job/Worker、云项目、月度订阅仍待实现。
+当前是**可继续开发的工程起点**，不是完整商品图 SaaS。现有集成提供 Loomic 原生画布/聊天、本地项目/对话恢复、New API 认证桥接，以及 LangGraph + Images 协议适配。仅图片渠道可以直接使用图片模式，不要求额外聊天模型。当前云环境在用户授权后已实测其 `gpt-image-2` 默认参数生成；仅对应仓库外环境配置启用该能力，仓库示例继续禁用，其他模型/编辑能力待验证。HTTP 事件批次不等于流式/可恢复 Worker。本地 SQLite 只防重复提交；Job/Worker、云项目、月度订阅仍待实现。
 
 依赖通过 npm 安装，不把 node_modules、完整第三方仓库或字体文件塞进仓库。V2 已附带通过 GitHub 检查时生成的 package-lock.json；setup 默认使用 npm ci，按锁定版本安装。

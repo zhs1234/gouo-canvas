@@ -47,6 +47,45 @@ test('Loomic canvas imports, saves, reloads and exports without a cloud account'
   expect(errors).toEqual([])
 })
 
+test('image-only channels expose direct generation in conversation and insert its result on the canvas', async ({ page }) => {
+  await mockAccount(page)
+  await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: {
+    generationEnabled: true, conversationMode: 'image', models: [{ id: 'fixture-image', displayName: '图片协议 fixture', kind: 'image', accessible: true, provider: 'Fixture', qualities: [], aspectRatios: [], operations: ['generate'] }],
+  } } }))
+  let calls = 0
+  await page.route('**/api/studio/runs', route => {
+    calls++
+    const payload = route.request().postDataJSON()
+    expect(payload.model).toBe('fixture-image')
+    expect(payload.prompt).toBe('本地图片协议测试，不调用真实模型')
+    expect(payload.accessToken).toBeUndefined()
+    expect(route.request().headers()['idempotency-key']).toBe(payload.runId)
+    const base = { runId: payload.runId, timestamp: new Date().toISOString() }
+    return route.fulfill({ json: { success: true, data: { events: [
+      { ...base, type: 'run.started', sessionId: payload.sessionId, conversationId: payload.conversationId },
+      { ...base, type: 'tool.started', toolCallId: 'fixture-direct', toolName: 'generate_image', input: { prompt: payload.prompt } },
+      { ...base, type: 'tool.completed', toolCallId: 'fixture-direct', toolName: 'generate_image', artifacts: [{ type: 'image', url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32 }] },
+      { ...base, type: 'run.completed' },
+    ] } } })
+  })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await page.getByLabel('用户名', { exact: true }).fill('studio-user')
+  await page.getByLabel('密码', { exact: true }).fill('test-password')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '图片生成', exact: true }).click()
+  await page.getByRole('button', { name: '生图 · 图片协议 fixture', exact: true }).click()
+  await page.getByPlaceholder('描述要生成的图片，发送后生成一张图片').fill('本地图片协议测试，不调用真实模型')
+  await page.getByRole('button', { name: '发送生图请求', exact: true }).click()
+  await expect(page.locator('img[alt="Generated image"]')).toHaveCount(1)
+  await saveDraft(page)
+  const scene = await exportScene(page)
+  const image = scene.elements.find(e => e.type === 'image' && !e.isDeleted)
+  expect(image).toBeTruthy(); expect(image.width / image.height).toBeCloseTo(1.5)
+  expect(calls).toBe(1)
+})
+
 test('local project list reopens drafts and new projects start with an empty canvas', async ({ page }) => {
   await localOnly(page)
   await page.getByRole('button', { name: '矩形 (R)', exact: true }).click()
