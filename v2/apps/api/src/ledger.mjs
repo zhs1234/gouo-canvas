@@ -13,7 +13,7 @@ export class Ledger {
     // establish whether a paid call finished; keep it blocked, never resubmit it.
     this.db.exec("UPDATE requests SET status='unknown' WHERE status='running'")
   }
-  begin(owner, kind, key, payload) {
+  begin(owner, kind, key, payload, busy = false) {
     const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
     const row = this.db.prepare('SELECT * FROM requests WHERE owner=? AND kind=? AND key=?').get(owner, kind, key)
     if (row) {
@@ -21,6 +21,8 @@ export class Ledger {
       if (row.status === 'completed') return { result: JSON.parse(row.result) }
       return { blocked: true }
     }
+    // 已有结果仍可重放；忙碌时不为尚未执行的新请求创建不确定记录。
+    if (busy) return { busy: true }
     this.db.prepare('INSERT INTO requests VALUES(?,?,?,?,?,?,?)').run(owner, kind, key, hash, 'running', null, new Date().toISOString())
     return { started: true }
   }

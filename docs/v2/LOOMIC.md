@@ -73,7 +73,7 @@ npm run dev
 
 后续配置流程：在 New API 配置实际模型渠道；复制示例到仓库外的服务端配置文件，填实际 upstreamModelId、操作/质量/比例映射，先保留 pending/disabled。按 `MODELS.md` 对具体渠道协议做探测，付费探测需要单独授权。只有该渠道 live-verified 后，管理员才启用对应模型、配置服务端 `GOUO_RELAY_API_KEY`、`GOUO_STUDIO_MODELS_FILE` 和生成开关，并重启 Studio API。视频始终不可用，直到另行实现适配。
 
-密钥只放服务端 `.env` 或机密管理设施，不用 VITE_*、不提交、不放浏览器存储或日志。复用单个开发账号的 relay token 时设置 `GOUO_RELAY_OWNER_ID` 为其真实账号 ID，其他账号不能代用；它不是多用户 token 管理或订阅授权服务。联合启动的 Vite 子进程不继承 relay key。当前账号采用 Bearer 内存令牌 + HttpOnly refresh Cookie。临时公网 helper 已验证同源账号/Studio 转发、精确 Origin 与 Secure/HttpOnly/Strict Cookie；生产 HTTPS、额度/并发与支付策略尚需验证，当前开发开关不替代生产收费授权。
+密钥只放服务端 `.env` 或机密管理设施，不用 VITE_*、不提交、不放浏览器存储或日志。复用单个开发账号的 relay token 时必须设置 `GOUO_RELAY_OWNER_ID` 为其真实账号 ID，其他账号不能代用。开启生成且提供 relay key 却缺少 owner 时，服务启动报错；目录与生成路由也拒绝无有效 owner 的配置。默认禁用生成的预览不要求 owner；它不是多用户 token 管理或订阅授权服务。联合启动的 Vite 子进程不继承 relay key。当前账号采用 Bearer 内存令牌 + HttpOnly refresh Cookie。临时公网 helper 已验证同源账号/Studio 转发、精确 Origin 与 Secure/HttpOnly/Strict Cookie；生产 HTTPS、额度/并发与支付策略尚需验证，当前开发开关不替代生产收费授权。
 
 ## 字体与许可证
 
@@ -86,3 +86,7 @@ npm run dev
 验证结果与命令见 `STATUS.md`。浏览器中已验证导入→保存→刷新→导出、本地项目再打开/新建、登录切换草稿、聊天失败提示、协议 fixture 的图片进入画布并恢复，以及移动端布局。API 测试包含真实 LangGraph 工具循环连接本地 OpenAI 协议 fixture，未调用付费渠道。
 
 当前云环境已在用户明确付费授权后，验证渠道 1 的 `gpt-image-2` 默认参数 Images 生成，并另外完成渠道 2 的 `gpt-5.6-sol` 调用该图片工具及对话总结的真实链路，返回 1254×1254 PNG，三次调用共 ¥0.5033058，详见 STATUS.md。本实例启用这两个已验证模型；token 与模型配置留在仓库外，仓库示例默认禁用，其他模型、视觉、编辑和视频仍待验证/实现。云库、模板商品字段、批量生成、可恢复队列与订阅不是本次交付。下一项是 B2 其余渠道能力验证；收费开放前完成 B3/S1。
+
+### 并发拒绝与请求重放
+
+当前单进程并发守卫在创建新 SQLite 请求记录之前拒绝同账号的忙碌请求，返回 409 并明确“本次请求尚未执行”。调用方可等待后使用同一请求 ID 重试；客户端不会自动重试生成。已有完成结果在忙碌期间仍可重放，正在执行或结果未知的同 ID 请求仍拒绝，参数变更仍冲突。真正发出后失败/重启遗留的 unknown 记录不会被此修复解除。旧版本已写成 unknown 的记录无法仅凭数据库辨认是否产生了上游调用，仍需核对网关，不自动清理或重新生成。此守卫不是多进程分布式锁或持久 Worker。

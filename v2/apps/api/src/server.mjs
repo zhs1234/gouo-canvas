@@ -1,6 +1,6 @@
 import Fastify from 'fastify'
 import { z } from 'zod'
-import { catalog, isAvailable } from './config.mjs'
+import { catalog, isAvailable, generationEnabled } from './config.mjs'
 import { Ledger } from './ledger.mjs'
 import { generateImage, StudioError } from './images.mjs'
 import { runAgent, runImage } from './agent.mjs'
@@ -33,7 +33,10 @@ export function createServer(config, overrides = {}) {
     try { response = await fetcher(new URL('/api/user/self', config.authOrigin), { headers: { Authorization: token }, redirect: 'error', signal: AbortSignal.timeout(10_000) }) } catch { throw new StudioError('账号服务暂不可用', 502) }
     const body = await response.json().catch(() => null)
     if (!response.ok || body?.success !== true || !Number.isSafeInteger(body.data?.id) || body.data.id <= 0) throw new StudioError('登录会话已失效', 401)
-    if (request.routeOptions.url !== '/api/studio/billing' && config.relayOwnerId !== undefined && body.data.id !== config.relayOwnerId) throw new StudioError('当前账号尚未连接自己的生成令牌', 403)
+    if (request.routeOptions.url !== '/api/studio/billing') {
+      if (config.allowGeneration && config.relayKey && !generationEnabled(config)) throw new StudioError('生成服务缺少有效的 GOUO_RELAY_OWNER_ID，请联系管理员配置令牌所属账号', 503)
+      if (config.relayOwnerId !== undefined && body.data.id !== config.relayOwnerId) throw new StudioError('当前账号尚未连接自己的生成令牌', 403)
+    }
     request.studioUser = body.data.id
     request.studioAccount = body.data
   })
@@ -42,11 +45,11 @@ export function createServer(config, overrides = {}) {
     const key = request.headers['idempotency-key']
     if (typeof key !== 'string' || !/^[\w-]{8,100}$/.test(key)) throw new StudioError('缺少有效请求标识', 400)
     const owner = request.studioUser
-    const begun = ledger.begin(owner, kind, key, payload)
+    const begun = ledger.begin(owner, kind, key, payload, busy.has(owner))
     if (begun.conflict) throw new StudioError('同一请求标识不能修改参数', 409)
     if (begun.blocked) throw new StudioError('该请求正在处理或结果待确认，不能重复提交；请检查网关记录', 409)
     if (begun.result) return { success: true, data: begun.result }
-    if (busy.has(owner)) { ledger.unknown(owner, kind, key); throw new StudioError('已有生成请求正在处理', 409) }
+    if (begun.busy) throw new StudioError('已有生成请求正在处理，本次请求尚未执行，请稍后重试', 409)
     busy.add(owner)
     try {
       const requests = []

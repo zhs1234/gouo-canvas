@@ -31,6 +31,8 @@
     "@excalidraw/excalidraw": "0.18.1"
   },
   "overrides": {
-    "@radix-ui/react-tabs": "1.1.21"
+    "@radix-ui/react-tabs": "1.1.21",
+    "nanoid@3.3.3": "3.3.19",
+    "lodash-es": "4.18.1"
   }
 }

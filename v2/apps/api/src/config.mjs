@@ -22,6 +22,7 @@ export function loadConfig(env = process.env) {
   if (!['http:', 'https:'].includes(gateway.protocol) || gateway.username || gateway.password || gateway.search || gateway.hash) throw new Error('网关地址格式无效')
   const relayOwnerId = env.GOUO_RELAY_OWNER_ID ? Number(env.GOUO_RELAY_OWNER_ID) : undefined
   if (relayOwnerId !== undefined && (!Number.isSafeInteger(relayOwnerId) || relayOwnerId <= 0)) throw new Error('网关令牌所属账号 ID 无效')
+  if (env.GOUO_ENABLE_GENERATION === 'true' && env.GOUO_RELAY_API_KEY && relayOwnerId === undefined) throw new Error('启用个人 relay 生成前必须配置 GOUO_RELAY_OWNER_ID 为令牌所属账号 ID')
   return {
     models, gateway: gateway.toString().replace(/\/$/, ''),
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
@@ -31,12 +32,15 @@ export function loadConfig(env = process.env) {
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }
 }
+export function generationEnabled(config) {
+  return Boolean(config.relayKey && config.allowGeneration && Number.isSafeInteger(config.relayOwnerId) && config.relayOwnerId > 0)
+}
 export function isAvailable(config, model) {
-  return Boolean(config.relayKey && config.allowGeneration && model.enabled && model.verification === 'live-verified' && model.kind !== 'video')
+  return Boolean(generationEnabled(config) && model.enabled && model.verification === 'live-verified' && model.kind !== 'video')
 }
 export function catalog(config) {
   return {
-    generationEnabled: config.allowGeneration && Boolean(config.relayKey),
+    generationEnabled: generationEnabled(config),
     conversationMode: config.models.some(m => m.kind === 'chat' && isAvailable(config, m)) ? 'agent'
       : config.models.some(m => m.kind === 'image' && isAvailable(config, m)) ? 'image' : 'unavailable',
     models: config.models.map(m => ({ id: m.id, displayName: m.displayName, kind: m.kind, accessible: isAvailable(config, m),
