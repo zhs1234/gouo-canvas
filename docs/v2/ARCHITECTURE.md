@@ -4,12 +4,12 @@
 
 用户选择商品主图、白底图、换背景/场景图、海报和批量输出，而不是先理解几十个模型参数。先做这五种通用工作流；淘宝/拼多多/抖音/社媒/外贸差异用模板与可配置导出预设表达，不复制五套应用。AI 模特、高清化、扩图是后续可插拔操作。没有视频范围。
 
-初期使用**模块化单体**：继续使用现有 Go/Gin/GORM，业务域分包；耗时任务在单独 worker 进程执行。不要为了新架构再造认证中心、独立支付微服务或同时维护三套数据库。
+2026-09-30 更新：New API 是独立的账号/模型网关，旧 One Hub server/ 保留为参考。当前已接入账号协议，云项目/素材库暂缓，无旧数据迁移。后续 V2 业务 API/worker 尚未实现，位置和身份校验边界在 B2 明确；不再默认复用旧 Session。不要另造认证中心或把网关当成已完成的商品图 SaaS。
 
 ```text
 Browser: React + Router + TanStack Query + Fabric
-  /api/user/*            -> existing session authentication
-  /api/studio/*          -> authenticated V2 business API
+  /api/user/*            -> New API account authentication (implemented)
+  /api/studio/*          -> planned authenticated V2 business API
                              projects / assets / models / jobs
                              subscriptions / entitlements / usage
                              SQL transaction + outbox
@@ -18,22 +18,21 @@ Browser: React + Router + TanStack Query + Fabric
                                       |
                               server-side worker
                           /                   \
-                validated One Hub      direct protocol adapters
-                internal relay          (when needed, approved hosts)
+                validated New API      direct protocol adapters
+                server-side relay       (when needed, approved hosts)
                           \                   /
                          provider image APIs
                                       |
                          private assets -> object storage
 ```
 
-浏览器不能获取 relay service token，也不能直接调用上游或通过旧 `/v1` 绕过 V2 权益。不要把“保留 One Hub”理解为所有新模型必须等待它支持。
+浏览器不能获取 relay service token，也不能直接调用上游或通过 `/v1` 绕过 V2 权益。浏览器持有的 New API 账号访问令牌仅驻留内存，刷新使用 HttpOnly Cookie。上述业务、队列与存储部分都是未来设计；当前不启动云库。
 
 ## 2. 目录
 
 ```text
 src/                         legacy UI, kept intact
-server/                      existing Go module and gateway
-  internal/studio/           new Go domains (B1+)
+server/                      legacy One Hub module, reference only
 v2/                          isolated npm workspace
   apps/studio/src/           pages and application integration
   packages/ui/src/           shared UI primitives
@@ -46,12 +45,14 @@ docs/v2/                     task contracts and design decisions
 
 旧 root package.json/package-lock.json 不升级、不转换为 workspace。V2 自带依赖树，旧 root `npm run build` 仍面向旧站。
 
-## 3. 复用地图（均需测试后接入）
+## 3. 历史代码复用地图（均需测试后接入）
+
+下表列出旧后端的参考位置，不表示 V2 继续使用其认证或网关。New API 独立锁定上游版本，不复制整个第三方仓库到本仓库；业务服务位置尚待 B2 确定。
 
 | 现有位置 | 处理 | 不应照搬的部分 |
 | --- | --- | --- |
-| server/middleware/auth.go、controller/user.go | 复用登录态与身份识别 | 不能接受客户端 userId 代替鉴权 |
-| server/providers、relay | 复用渠道与已验证协议 | 不能因模型出现在列表就判定图片支持 |
+| server/middleware/auth.go、controller/user.go | 仅参考历史身份校验；新账号使用 New API | 不能接受客户端 userId 代替鉴权 |
+| server/providers、relay | 仅参考协议行为；新网关使用 New API | 不能因模型出现在列表就判定图片支持 |
 | src/lib/gouoBackend.ts | 已参考账号 envelope；V2 建独立轻量 API client | 不搬其浏览器 relay token 路径到 V2 |
 | src/lib/openaiCompatibleImageApi.ts、falAiImageApi.ts | 提取协议行为与测试样例 | 上游执行迁移到 worker，非浏览器长请求 |
 | server/controller/gouo_cloud.go、model/gouo_cloud.go | 复用用户隔离与旧素材映射思路 | 旧 done/error 同步记录不是 durable job |
@@ -69,6 +70,6 @@ docs/v2/                     task contracts and design decisions
 
 ## 5. 运行与部署
 
-开发端口：旧 UI 5173、V2 5174、Go 默认 3000。生产目标同源 `/studio/`，静态文件在 `v2/apps/studio/dist`，API 仍由现有 Go 处理。需要单独新增 Nginx location 与 feature flag，但本提交不变更实际部署配置。
+开发端口：V2 5174、New API 3000；默认不启动旧 UI/One Hub。生产目标同源 `/studio/`，静态文件在 `v2/apps/studio/dist`；反向代理分别分发账号与未来业务 API。生产部署与身份桥接尚未实施。
 
-V2 初期不必另建管理员身份系统。模型渠道继续使用 One Hub 管理界面；项目/套餐/任务管理新增带 admin 权限的业务页。只引入一个设计体系；不同时嵌入 Fabric、Konva、tldraw、Filerobot 四套编辑器。
+V2 初期不必另建管理员身份系统。模型渠道使用 New API 原生管理界面；任务/套餐等业务管理后续单独实现。只引入一个设计体系；不同时嵌入 Fabric、Konva、tldraw、Filerobot 四套编辑器。

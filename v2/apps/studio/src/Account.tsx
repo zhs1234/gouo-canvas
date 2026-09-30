@@ -25,16 +25,16 @@ export default function Account() {
     catch (e) { setError(e instanceof Error ? e.message : '退出失败') }
     finally { setBusy(false) }
   }
-  return <Panel title="现有账号连接">
+  return <Panel title="New API 账号">
     {session.isPending ? <p>正在检查后端会话…</p> : session.data ? <>
       <p>当前账号：{session.data.display_name || session.data.username}</p>
       <Button onClick={signOut} disabled={busy}>退出登录</Button>
     </> : <>
-      <p>复用旧后端账号；仅在后端已经启动时可登录。本地编辑器不依赖登录。</p>
+      <p>使用 New API 账号登录。本地编辑器不依赖登录。</p>
       <form onSubmit={submit} className="stack">
         <label>用户名<input name="username" autoComplete="username" required maxLength={64} /></label>
         <label>密码<input name="password" type="password" autoComplete="current-password" required /></label>
-        <Button type="submit" disabled={busy}>{busy ? '处理中…' : '连接现有账号'}</Button>
+        <Button type="submit" disabled={busy}>{busy ? '处理中…' : '登录'}</Button>
       </form>
       {session.error && <Notice>{session.error.message}。请检查后端和 v2/.env。</Notice>}
     </>}

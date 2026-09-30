@@ -1,6 +1,8 @@
 # API 与数据契约（设计，不表示接口已经实现）
 
-公共 TypeScript 入口 `v2/packages/contracts/src/index.ts`。Go HTTP 边界必须做自己的运行时校验与鉴权，不能把前端校验当安全机制。统一成功 `{ success: true, data }`；失败 `{ success: false, error: { code, message, requestId } }`，禁止把上游密钥、完整错误响应或内部 URL 返给用户。账号旧接口继续使用旧 envelope，由 legacy client 独立处理。
+公共 TypeScript 入口 `v2/packages/contracts/src/index.ts`。服务端 HTTP 边界必须做自己的运行时校验与鉴权，不能把前端校验当安全机制。计划中的业务 API 成功 `{ success: true, data }`；失败 `{ success: false, error: { code, message, requestId } }`，禁止把上游密钥、完整错误响应或内部 URL 返给用户。已接入的 New API 账号接口使用上游 `{ success, message, data }` envelope，由 v2/apps/studio/src/api.ts 处理。
+
+2026-09-30 范围：云 Project/Asset 路由和表暂缓，下列数据设计是历史规划。B2/B3 需先确定不依赖云库的任务输入/输出契约与业务服务身份验证，不直接套用旧 Session 或执行旧迁移。
 
 ## 路由
 

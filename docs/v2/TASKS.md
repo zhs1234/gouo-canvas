@@ -1,16 +1,16 @@
 # Codex 任务清单
 
-工作方式：先执行 P0，然后按依赖完成 B1 → B2 → B3；E1 可在 B1 后并行；S1 的数据设计可以提前，但真实收费必须等 B3 的额度/幂等底座。每项单独形成可审查提交，更新 STATUS.md。不要一次性把整个清单标为完成。
+当前决策（2026-09-30）：使用 New API 作为账号与模型网关，没有旧数据迁移，云库暂缓。工作顺序为复验 P0 → B2 → B3，本地 E1 可先做；B1 及依赖云保存的部分等待后续需求。以下原有项目/素材设计保留作参考，不应自动执行。B2/B3 开始时先明确新业务服务的位置与 New API 身份验证方式，不默认写入旧 One Hub 的 server/。真实收费必须等额度/幂等底座。每项单独形成可审查提交，更新 STATUS.md。
 
 ## P0 — 安装、基线与现状确认（第一个任务）
 
 读取全部适用 AGENTS。运行 `node v2/scripts/setup.mjs`、`cd v2 && npm run check`，安装浏览器后运行 `npm run test:e2e`。已提交 CI 生成的真实 package-lock.json；使用 npm ci，不无故重新解析版本或手工编造 integrity。记录运行的 Node/npm/Go 版本。
 
-核实旧 UI、Go 测试基线；不要通过修改无关旧业务修复已有失败。缺少网路/工具/凭据时明确记录，允许继续不依赖它的任务。确认没有改 main、生产配置和数据。核对源代码中 Image 2.5 的实际限制，见 MODELS.md。
+验证固定版本 New API 的真实登录、刷新、退出和图片路由鉴权；旧 UI/Go 基线仅在改动旧代码时复验。缺少网络/工具/凭据时明确记录，允许继续不依赖它的任务。确认没有改 main、生产配置和数据。核对 New API 当前版本的模型协议行为，不沿用旧网关限制，见 MODELS.md。
 
 验收：V2 类型检查、14 个 Node 测试和 Playwright smoke 成功；依赖锁已提交；真实模型调用未自动发生。
 
-## B1 — Project / Asset 服务端闭环
+## B1 — Project / Asset 服务端闭环（暂缓，历史设计）
 
 位置：server/internal/studio/{projects,assets,httpapi}；新 `/api/studio/*` 路由；v2/apps/studio 的工作台与项目页。
 
@@ -22,7 +22,7 @@
 
 ## B2 — 多模型目录与协议兼容（Image 2.5 优先）
 
-位置：server/internal/studio/{models,adapters}，配置参考 v2/config/models.example.json。复用网关适配先通过测试；确实不支持时新增服务器端 direct adapter，不能逼用户换模型或把供应商密钥发给浏览器。
+配置参考 v2/config/models.example.json；新业务服务位置待本任务确定。复用固定版本 New API 的网关适配先通过测试；确实不支持时评估服务器端 direct adapter，不能逼用户换模型或把供应商密钥发给浏览器。当前不依赖 B1 云库。
 
 实现公开能力目录与仅管理员可编辑的渠道配置；modelKey、upstreamModelId、protocol、adapter、capabilityRevision 分离。先做 OpenAI Images JSON 与 multipart 编辑，再 Responses。后续独立适配 Gemini Content/Interactions、fal Queue、其他 native 协议。每个协议单独提交，不把不同接口假装成一套 Images JSON。
 
@@ -32,7 +32,7 @@ Image 2.5 优先核查官方两个 ID 与实际渠道别名，JSON 字段、模�
 
 ## B3 — Durable Job / Worker / Usage Reservation
 
-位置：server/internal/studio/{jobs,usage,outbox}，独立 worker 入口；按实际使用引入 Asynq。
+新业务服务位置在 B2 确定，划分 jobs/usage/outbox 与独立 worker 入口；按实际使用引入 Asynq。云库暂缓时不得宣称已有云端结果保存，输出保留/下载与删除策略需在本任务明确。
 
 POST job 返回 202 + jobId。数据库事务写 job/reservation/outbox，server 校验套餐权益与素材归属。后台 worker 执行、保存私有结果、持久化状态；浏览器只查询，不持有上游长连接或 service token。刷新/关页不丢任务。
 

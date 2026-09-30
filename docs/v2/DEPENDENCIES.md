@@ -16,6 +16,8 @@
 
 ## 按任务引入，不提前堆依赖
 
+New API：已选择 https://github.com/QuantumNous/new-api 作为独立账号/模型网关服务，开发固定 `v1.0.0-rc.40`，源码提交 `0aec08fee811ec6136828fda790551b49e410301`。使用官方 Linux amd64 发布资产，核对官方校验清单并固定 SHA-256；未修改上游源码，不增加 npm 依赖。上游为 AGPL-3.0，保留署名和许可证，修改/对外服务时按实际集成方式履行义务。当前 RC 开发验证不等于生产验证。
+
 Asynq：B3 使用 Go/Redis 队列时引入 `hibiken/asynq`，并检查匹配 Redis 版本和部署拓扑。Uppy：W1 确实需要批量/恢复上传时引入。rembg：需要服务端抠图时作为隔离 worker，并分别核查 Python 包和权重许可证。ComfyUI：后期复杂图像流程可评估，不是首发必需。
 
 现有微信/支付宝/Stripe SDK、GORM、Redis、OSS/S3 驱动优先复用，但要验证业务安全，不再重复引入 GoPay 或第二套认证平台。Fabric 与 Filerobot/tldraw/Konva 不同时引入；更换编辑器需要新 ADR 和真实收益证据。
@@ -38,6 +40,7 @@ Asynq：B3 使用 Go/Redis 队列时引入 `hibiken/asynq`，并检查匹配 Red
 - Uppy：https://github.com/transloadit/uppy
 - rembg：https://github.com/danielgatis/rembg
 - One Hub：https://github.com/MartialBE/one-hub
+- New API：https://github.com/QuantumNous/new-api（2026-09-30 选定，替换 One Hub）
 - Codex AGENTS：https://developers.openai.com/codex/guides/agents-md/
 - Codex 环境：https://developers.openai.com/codex/cloud/environments/
 
