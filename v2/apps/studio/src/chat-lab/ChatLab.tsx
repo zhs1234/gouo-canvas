@@ -22,11 +22,12 @@ function LabRuntime({ model, imageModel, thread, reload }: { model: string; imag
   const initialMessages = useMemo(() => restoreMessages(thread), [thread])
   const runtime = useLocalRuntime(adapter, { initialMessages })
   const [stopped, setStopped] = useState(false)
+  const unknown = thread.runs.some(run => run.status === 'unknown')
   const unresolved = thread.runs.some(run => run.status === 'running' || run.status === 'unknown')
   return <AssistantRuntimeProvider runtime={runtime}><ThreadPrimitive.Root className="lab-thread"><ThreadPrimitive.Viewport><ThreadPrimitive.Empty>开始聊天，可通过智能体生成图片。</ThreadPrimitive.Empty><ThreadPrimitive.Messages components={{ Message }} /></ThreadPrimitive.Viewport>
     <ComposerPrimitive.Root onSubmit={() => setStopped(false)}><ComposerPrimitive.Input aria-label="消息" placeholder="发送消息…" disabled={unresolved || needsRefresh} /><ComposerPrimitive.Send disabled={!model || unresolved || needsRefresh}>发送</ComposerPrimitive.Send><ComposerPrimitive.Cancel onClick={() => setStopped(true)}>停止接收</ComposerPrimitive.Cancel></ComposerPrimitive.Root>
     {stopped && <p role="status">已停止接收，保留部分内容。供应商任务和费用可能继续，请查看账号记录。</p>}
-    {(unresolved || needsRefresh) && <div><p>任务记录或费用待刷新确认；刷新仅查询，不会重新生成。</p><button onClick={reload}>刷新任务记录</button></div>}
+    {(unresolved || needsRefresh) && <div><p>{unknown ? '服务中断后任务结果未知，无法自动恢复。可新建会话继续；原任务费用仍需核对，刷新仅查询。' : '任务记录或费用待刷新确认；刷新仅查询，不会重新生成。'}</p><button onClick={reload}>刷新任务记录</button></div>}
     <p>历史按 New API 账号保存。费用以账号账单为准。<Link to="/">查看账号</Link></p>
   </ThreadPrimitive.Root></AssistantRuntimeProvider>
 }

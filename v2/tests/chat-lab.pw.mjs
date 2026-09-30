@@ -60,7 +60,7 @@ test('Stop only stops reception with an explicit billing caveat', async ({ page 
   await expect(page.getByRole('status')).toContainText('费用可能继续')
 })
 
-test('server history survives reload without regeneration and running state blocks writes', async ({ page }) => {
+test('server history survives reload without regeneration and running or unknown state blocks writes', async ({ page }) => {
   const { threads } = await setup(page)
   threads[0].runs = [{runId:'stored-run',prompt:'原来的问题',status:'running',events:[{type:'message.delta',delta:'保留的部分回复'}]}]
   let calls = 0
@@ -73,6 +73,11 @@ test('server history survives reload without regeneration and running state bloc
   threads[0].runs[0].status='completed'
   await page.getByRole('button',{name:'刷新任务记录'}).click()
   await expect(page.getByLabel('消息',{exact:true})).toBeEnabled()
+  threads[0].runs[0].status='unknown'
+  await page.reload()
+  await expect(page.getByText('服务中断后任务结果未知，无法自动恢复。可新建会话继续；原任务费用仍需核对，刷新仅查询。',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'刷新任务记录'}).click()
+  await expect(page.getByRole('button',{name:'发送',exact:true})).toBeDisabled()
   expect(calls).toBe(0)
 })
 test('thread switch suppresses late results from old stream', async ({page}) => {
