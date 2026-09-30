@@ -47,26 +47,15 @@ test('Loomic canvas imports, saves, reloads and exports without a cloud account'
   expect(errors).toEqual([])
 })
 
-test('image-only channels expose direct generation in conversation and insert its result on the canvas', async ({ page }) => {
+test('image-only channels stay in image preferences and cannot submit an Agent request', async ({ page }) => {
   await mockAccount(page)
   await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: {
     generationEnabled: true, conversationMode: 'image', models: [{ id: 'fixture-image', displayName: '图片协议 fixture', kind: 'image', accessible: true, provider: 'Fixture', qualities: [], aspectRatios: [], operations: ['generate'] }],
   } } }))
   let calls = 0
-  await page.route('**/api/studio/runs', route => {
+  await page.route(/\/api\/studio\/(runs|images)$/, route => {
     calls++
-    const payload = route.request().postDataJSON()
-    expect(payload.model).toBe('fixture-image')
-    expect(payload.prompt).toBe('本地图片协议测试，不调用真实模型')
-    expect(payload.accessToken).toBeUndefined()
-    expect(route.request().headers()['idempotency-key']).toBe(payload.runId)
-    const base = { runId: payload.runId, timestamp: new Date().toISOString() }
-    return route.fulfill({ json: { success: true, data: { events: [
-      { ...base, type: 'run.started', sessionId: payload.sessionId, conversationId: payload.conversationId },
-      { ...base, type: 'tool.started', toolCallId: 'fixture-direct', toolName: 'generate_image', input: { prompt: payload.prompt } },
-      { ...base, type: 'tool.completed', toolCallId: 'fixture-direct', toolName: 'generate_image', artifacts: [{ type: 'image', url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32 }] },
-      { ...base, type: 'run.completed' },
-    ] } } })
+    return route.abort()
   })
   await page.goto('./')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
@@ -74,16 +63,19 @@ test('image-only channels expose direct generation in conversation and insert it
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: '图片生成', exact: true }).click()
-  await page.getByRole('button', { name: '生图 · 图片协议 fixture', exact: true }).click()
-  await page.getByPlaceholder('描述要生成的图片，发送后生成一张图片').fill('本地图片协议测试，不调用真实模型')
-  await page.getByRole('button', { name: '发送生图请求', exact: true }).click()
-  await expect(page.locator('img[alt="Generated image"]')).toHaveCount(1)
-  await saveDraft(page)
-  const scene = await exportScene(page)
-  const image = scene.elements.find(e => e.type === 'image' && !e.isDeleted)
-  expect(image).toBeTruthy(); expect(image.width / image.height).toBeCloseTo(1.5)
-  expect(calls).toBe(1)
+  await page.getByRole('button', { name: 'Agent', exact: true }).click()
+  await expect(page.getByText('Agent Model', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Auto (workspace default)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /图片协议 fixture/ })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await page.getByTitle('Image model', { exact: true }).click()
+  await expect(page.getByRole('button', { name: '图片协议 fixture', exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.getByLabel('输入消息', { exact: true }).fill('本地图片协议测试，不调用真实模型')
+  await page.getByRole('button', { name: '发送消息', exact: true }).click()
+  await expect(page.getByText('尚未配置可用的对话模型，请先接通 New API 对话渠道', { exact: false })).toBeVisible()
+  expect((await exportScene(page)).elements.filter(e => !e.isDeleted)).toHaveLength(0)
+  expect(calls).toBe(0)
 })
 
 test('local project list reopens drafts and new projects start with an empty canvas', async ({ page }) => {
@@ -137,12 +129,25 @@ test('canvas and chat remain usable on a mobile viewport', async ({ page }) => {
 
 test('fixture agent results enter the canvas and persist; requests contain only account authorization', async ({ page }) => {
   const account = await mockAccount(page)
-  await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { generationEnabled: true, models: [{ id: 'fixture-chat', displayName: '本地协议测试', kind: 'chat', accessible: true, provider: 'Fixture', description: '仅用于测试' }] } } }))
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('fixture:seeded')) {
+      localStorage.setItem('loomic:agent-model', 'fixture-image')
+      localStorage.setItem('loomic:image-model-preference', JSON.stringify({ mode: 'manual', models: ['fixture-image'] }))
+      sessionStorage.setItem('fixture:seeded', 'true')
+    }
+  })
+  await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { generationEnabled: true, models: [
+    { id: 'fixture-chat', displayName: '本地协议测试', kind: 'chat', accessible: true, provider: 'Fixture', description: '仅用于测试' },
+    { id: 'fixture-image', displayName: '图片协议 fixture', kind: 'image', accessible: true, provider: 'Fixture', qualities: [], aspectRatios: [], operations: ['generate'] },
+    { id: 'disabled-chat', displayName: '未验证对话模型', kind: 'chat', accessible: false, provider: 'Fixture' },
+  ] } } }))
   let calls = 0
   await page.route('**/api/studio/runs', route => {
     calls++
     account.billing.balance = 99.75; account.billing.spent = 0.25; account.billing.requestCount = 3
     const payload = route.request().postDataJSON()
+    expect(payload.model).toBe('fixture-chat')
+    expect(payload.imageGenerationPreference).toEqual({ mode: 'manual', models: ['fixture-image'] })
     expect(payload).not.toHaveProperty('accessToken')
     expect(route.request().headers().authorization).toBe(`Bearer ${account.token}`)
     expect(route.request().headers()['idempotency-key']).toBe(payload.runId)
@@ -156,6 +161,15 @@ test('fixture agent results enter the canvas and persist; requests contain only 
   })
   await page.goto('./')
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('loomic:agent-model'))).toBeNull()
+  await page.getByRole('button', { name: 'Agent', exact: true }).click()
+  await expect(page.getByText('Agent Model', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /图片协议 fixture|未验证对话模型|生图 ·/ })).toHaveCount(0)
+  await page.getByRole('button', { name: '本地协议测试', exact: true }).click()
+  await page.getByTitle('Image model', { exact: true }).click()
+  await expect(page.getByRole('button', { name: '图片协议 fixture', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Manual', exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
   await page.getByRole('button', { name: '矩形 (R)', exact: true }).click()
   await page.mouse.move(200, 200); await page.mouse.down(); await page.mouse.move(420, 350); await page.mouse.up()
   await saveDraft(page)
@@ -189,6 +203,8 @@ test('fixture agent results enter the canvas and persist; requests contain only 
   await saveDraft(page)
   await page.reload()
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '本地协议测试', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('loomic:agent-model'))).toBe('fixture-chat')
   await expect(page.getByText('本地测试结果，未调用 AI。', { exact: true })).toBeVisible()
   expect((await exportScene(page)).elements.filter(e => !e.isDeleted && e.type === 'image')).toHaveLength(1)
   expect(calls).toBe(1)

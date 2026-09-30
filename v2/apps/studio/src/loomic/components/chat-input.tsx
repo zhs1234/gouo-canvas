@@ -46,7 +46,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   selectedCanvasElements,
 }, ref) {
   const [value, setValue] = useState("");
-  const [modelKind, setModelKind] = useState<'chat' | 'image'>('chat');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { preference } = useImageModelPreference();
@@ -265,7 +264,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={modelKind === 'image' ? '描述要生成的图片，发送后生成一张图片' : '描述你的想法，或输入 @ 引用画布素材'}
+          placeholder="描述你的想法，或输入 @ 引用画布素材"
           aria-label="输入消息"
           rows={1}
           style={{ scrollbarWidth: "none" }}
@@ -300,7 +299,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               </>
             )}
             {/* Agent model selector */}
-            <AgentModelSelector compact onModeChange={setModelKind} />
+            <AgentModelSelector compact />
             {/* Model preference button */}
             <div className="relative">
               <button
@@ -327,7 +326,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           </div>
           <button
             onClick={handleSubmit}
-            aria-label={modelKind === 'image' ? '发送生图请求' : '发送消息'}
+            aria-label="发送消息"
             disabled={disabled || !hasContent || isUploading}
             className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/80 active:bg-primary/90 disabled:opacity-20 disabled:cursor-not-allowed"
           >

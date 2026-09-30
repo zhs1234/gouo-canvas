@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useAgentModel } from "@/hooks/use-agent-model";
 import { fetchModels } from "@/lib/server-api";
 
-type ModelOption = { id: string; name: string; provider: string; kind: 'chat' | 'image' };
+type ModelOption = { id: string; name: string; provider: string };
 
 // Sparkle icon SVG path from design spec
 const SPARKLE_ICON_PATH =
@@ -32,19 +32,28 @@ function ProviderLogo({ provider }: { provider: string }) {
   return null;
 }
 
-export function AgentModelSelector({ compact, onModeChange }: { compact?: boolean; onModeChange?: (kind: 'chat' | 'image') => void } = {}) {
+export function AgentModelSelector({ compact }: { compact?: boolean } = {}) {
   const { model, setModel } = useAgentModel();
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState<ModelOption[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // Fetch available models
   useEffect(() => {
     fetchModels()
-      .then((data) => setModels(data.models))
+      .then((data) => {
+        setModels(data.models);
+        setLoaded(true);
+      })
       .catch(() => {});
   }, []);
+
+  // Remove obsolete image selections only after the chat catalog has loaded.
+  useEffect(() => {
+    if (loaded && model && !models.some((m) => m.id === model)) setModel(null);
+  }, [loaded, model, models, setModel]);
 
   // Close on outside click
   useEffect(() => {
@@ -75,10 +84,7 @@ export function AgentModelSelector({ compact, onModeChange }: { compact?: boolea
 
   const isActive = model !== null;
   const selectedModel = models.find((m) => m.id === model);
-  const activeKind = (selectedModel ?? models[0])?.kind ?? 'chat';
-  const imageOnly = models.length > 0 && models.every(m => m.kind === 'image');
-  const displayLabel = selectedModel ? `${activeKind === 'image' ? '生图 · ' : ''}${selectedModel.name}` : imageOnly ? '图片生成' : 'Agent';
-  useEffect(() => { onModeChange?.(activeKind); }, [activeKind, onModeChange]);
+  const displayLabel = selectedModel ? selectedModel.name : "Agent";
 
   // Auto-positioning popover (above or below based on available space)
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -144,7 +150,7 @@ export function AgentModelSelector({ compact, onModeChange }: { compact?: boolea
             className="w-56 rounded-xl border border-border bg-popover p-2 shadow-lg"
           >
             <div className="mb-2 px-2 text-xs font-medium text-muted-foreground">
-              创作模式
+              Agent Model
             </div>
             {/* Auto option */}
             <button
@@ -160,7 +166,7 @@ export function AgentModelSelector({ compact, onModeChange }: { compact?: boolea
               }`}
             >
               <span className="flex-1 text-left">
-                {imageOnly ? '自动（直接生成图片）' : '自动（智能体）'}
+                Auto (workspace default)
               </span>
               {!isActive && (
                 <svg
@@ -198,7 +204,7 @@ export function AgentModelSelector({ compact, onModeChange }: { compact?: boolea
                           : "hover:bg-muted"
                       }`}
                     >
-                      <span className="flex-1 text-left">{m.kind === 'image' ? '生图 · ' : ''}{m.name}</span>
+                      <span className="flex-1 text-left">{m.name}</span>
                       {model === m.id && (
                         <svg
                           className="h-3 w-3 text-accent-foreground"

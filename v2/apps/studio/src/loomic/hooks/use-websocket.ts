@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { StreamEvent, WsCommandAck, RunCreateRequest } from '../shared'
 import { request } from '../../api'
 import { fetchCatalog } from '../lib/gateway'
-import { fetchMessages } from '../lib/server-api'
+import { fetchMessages, fetchModels } from '../lib/server-api'
 import { readDraft } from '../lib/local-drafts'
 import type { StudioUsage } from '../lib/billing'
 type EventCallback = (event: StreamEvent) => void
@@ -34,13 +34,19 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
       let usage: StudioUsage | undefined
       try {
         if (!owner) throw new Error('本地对话尚未加载')
+        if (owner === 'local:guest') throw new Error('请先登录 New API 账号')
         const messages = (await fetchMessages(owner, payload.sessionId)).messages
         const canvas = await readDraft(owner, payload.canvasId || 'draft')
+        const models = (await fetchModels()).models
+        controller.signal.throwIfAborted()
+        const model = payload.model ?? models[0]?.id
+        if (!model) throw new Error('尚未配置可用的对话模型，请先接通 New API 对话渠道')
+        if (!models.some(m => m.id === model)) throw new Error('所选对话模型当前不可用，请重新选择 Agent 模型')
         const { accessToken: _discard, ...safePayload } = payload
         const result = await request<{ events: StreamEvent[]; usage?: StudioUsage }>('/api/studio/runs', {
           method: 'POST', signal: controller.signal,
           headers: { 'Idempotency-Key': runId },
-          body: JSON.stringify({ ...safePayload, runId,
+          body: JSON.stringify({ ...safePayload, model, runId,
             history: messages.slice(-12).filter(m => m.role === 'assistant' || m.content !== payload.prompt),
             canvasContext: canvas.canvas.content.elements.filter(e => !e.isDeleted).slice(0, 80).map(e => ({ id: e.id, type: e.type, text: e.text, x: e.x, y: e.y, width: e.width, height: e.height })),
           }),
