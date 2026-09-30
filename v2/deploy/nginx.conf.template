@@ -44,7 +44,17 @@ server {
   # 画布仅通过业务服务调用模型，不能从公开入口绕过其授权边界。
   location = /v1 { return 404; }
   location ^~ /v1/ { return 404; }
+  location /api/ {
+    proxy_pass http://new-api:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_read_timeout 180s;
+  }
   location / {
+    # 原生控制台页面/静态资源只需读取；其他协议路径不能绕过业务入口写入。
+    limit_except GET { deny all; }
     proxy_pass http://new-api:3000;
     proxy_http_version 1.1;
     proxy_set_header Host $http_host;

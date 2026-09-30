@@ -61,6 +61,8 @@ test('same-origin stack authenticates, streams image tools, attributes usage and
   expect((await request.post('/api/user/login', { headers: { origin: 'https://untrusted.invalid' }, data: { username: 'studio-user', password: 'test-password' } })).status()).toBe(403)
   expect((await request.post('/api/studio/runs/stream', { headers: { ...headers, origin: 'https://untrusted.invalid' }, data: run.postDataJSON() })).status()).toBe(403)
   expect((await request.post('/v1/chat/completions', { headers: { origin: root }, data: {} })).status()).toBe(404)
+  expect((await request.post('/v1beta/models/fixture:generateContent', { headers: { origin: root }, data: {} })).status()).toBe(403)
+  expect((await request.post('/pg/chat/completions', { headers: { origin: root }, data: {} })).status()).toBe(403)
   expect((await request.get('/setup')).status()).toBe(200)
   expect((await request.get('/console')).status()).toBe(200)
 })
