@@ -4,10 +4,12 @@ import { readFile } from 'node:fs/promises'
 async function openLab(page) {
   await page.route('**/api/**', route => route.fulfill({ status: 401, json: { success: false } }))
   await page.goto('./canvas-lab')
+  await page.getByText('更多操作', { exact: true }).click()
   await expect(page.getByRole('button', { name: '插入测试素材', exact: true })).toBeEnabled()
   await expect(page.locator('.excalidraw .App-toolbar')).toBeVisible()
 }
 async function exported(page, button = '导出文档副本') {
+  if (await page.locator('.canvas-more').getAttribute('open') === null) await page.getByText('更多操作', { exact: true }).click()
   const waiting = page.waitForEvent('download')
   await page.getByRole('button', { name: button, exact: true }).click()
   return readFile(await (await waiting).path(), 'utf8')
@@ -27,6 +29,7 @@ test('official canvas lab preserves isolated image files, deduplicates artifacts
   await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
   await page.reload()
+  await page.getByText('更多操作', { exact: true }).click()
   await expect(page.getByRole('button', { name: '插入测试素材', exact: true })).toBeEnabled()
   const after = JSON.parse(await exported(page))
   expect(live(after).map(element => element.id)).toEqual(live(before).map(element => element.id))
@@ -190,6 +193,7 @@ test('native image selection resize rotation delete and undo retain image bytes'
   await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
   await page.reload()
+  await page.getByText('更多操作', { exact: true }).click()
   await expect(page.getByRole('button', { name: '插入测试素材', exact: true })).toBeEnabled()
   const reopened = JSON.parse(await exported(page))
   expect(live(reopened)[0].angle).toBe(live(restored)[0].angle)
@@ -204,6 +208,7 @@ test('native image crop preserves original file data through export and reopen',
   await page.getByRole('button', { name: '插入测试素材', exact: true }).click()
   const before = JSON.parse(await exported(page))
   const image = live(before)[0]
+  await page.getByText('更多操作', { exact: true }).click()
   const center = await point(page, image.x + image.width / 2, image.y + image.height / 2)
   await page.mouse.click(center.x, center.y)
   await page.keyboard.press('Enter')
@@ -216,6 +221,7 @@ test('native image crop preserves original file data through export and reopen',
   await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
   await page.reload()
+  await page.getByText('更多操作', { exact: true }).click()
   await expect(page.getByRole('button', { name: '插入测试素材', exact: true })).toBeEnabled()
   const reopened = JSON.parse(await exported(page))
   expect(live(reopened)[0].crop).toEqual(live(cropped)[0].crop)

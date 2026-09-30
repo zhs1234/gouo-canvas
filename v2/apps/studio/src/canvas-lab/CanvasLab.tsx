@@ -114,10 +114,10 @@ function CanvasLabEditor({ owner }: { owner: string }) {
     setStatus('已插入测试素材（未调用模型）')
   }
   return <main className="gouo-canvas-lab">
-    <header>
+    <header className="canvas-project-bar">
       <a href="/studio/">返回创作画布</a>
-      <strong>官方 Excalidraw 对照</strong>
-      <span>本机独立副本 · 不迁移原项目 · 不调用模型</span>
+      <div className="canvas-project-title"><strong>Excalidraw</strong><span>本机独立副本 · 不调用模型</span></div>
+      <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
       <label>导入文档副本<input aria-label="导入文档副本" type="file" accept=".excalidraw,application/json" disabled={!ready} onChange={event => { void importCopy(event.target.files?.[0]); event.target.value = '' }} /></label>
       <button disabled={!ready} onClick={() => void save()}>保存对照草稿</button>
       <button disabled={!ready} onClick={() => {
@@ -135,6 +135,7 @@ function CanvasLabEditor({ owner }: { owner: string }) {
       })()}>导出 PNG 副本</button>
       <button disabled={!ready} onClick={() => void readLegacyDrafts(owner).then(rows => { setLegacyDrafts(rows); setStatus(rows.length ? '仅列出当前账号或访客范围的旧草稿，点击导入副本' : '当前范围没有旧 Loomic 草稿') }).catch(error => setStatus(error.message))}>查看旧草稿（只读）</button>
       <button disabled={!ready} onClick={insertFixture}>插入测试素材</button>
+      </div></details>
       <output role="status">{status}</output>
     </header>
     {legacyDrafts.length > 0 && <aside aria-label="旧 Loomic 草稿副本">{legacyDrafts.map(({ key, draft }) => <button key={key} disabled={!ready} onClick={() => void importCopy(new File([JSON.stringify(draft)], `${draft.canvas.name}.json`, { type: 'application/json' }), draft)}>导入副本：{draft.canvas.name}</button>)}<p>仅导入画布；聊天与缩略图保留在独立数据库的原始快照，原项目不变。</p></aside>}

@@ -1,0 +1,19 @@
+// 来源 assistant-ui f008537，MIT；保留官方布局，Studio 适配见 UI-STARTER.md。
+import * as React from "react";
+
+import { cn } from "../../lib/utils";
+
+function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
+  return (
+    <textarea
+      data-slot="textarea"
+      className={cn(
+        "placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 bg-muted/60 focus-visible:bg-background field-sizing-content min-h-16 w-full min-w-0 rounded-lg border border-transparent px-3 py-2 text-base transition-colors outline-none focus-visible:ring-1 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:ring-1 md:text-sm",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export { Textarea };

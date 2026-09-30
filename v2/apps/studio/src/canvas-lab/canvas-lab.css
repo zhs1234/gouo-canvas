@@ -1,8 +1,23 @@
 .gouo-canvas-lab { height: 100dvh; display: flex; flex-direction: column; background: white; color: #202124; }
-.gouo-canvas-lab > header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px; font-size: 13px; border-bottom: 1px solid #ddd; }
-.gouo-canvas-lab header button, .gouo-canvas-lab header label { padding: 6px; border: 1px solid #bbb; border-radius: 5px; }
-.gouo-canvas-lab header input { max-width: 180px; }
-.gouo-canvas-lab header output { flex-basis: 100%; }
+ .canvas-project-bar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid #efedf4; font-size: 13px; min-height: 64px; flex-wrap: wrap; }
+.canvas-project-bar > a { color: #6965db; text-decoration: none; }
+.canvas-project-title { display: flex; flex-direction: column; gap: 3px; margin-right: auto; min-width: 0; }
+.canvas-project-title strong { font-size: 14px; font-weight: 600; }
+.canvas-project-title span { color: #868294; font-size: 11px; }
+.canvas-project-bar button, .canvas-more summary, .canvas-more-panel label { border: 1px solid #e9e6f0; border-radius: 8px; background: #fff; padding: 7px 11px; cursor: pointer; font: inherit; }
+.canvas-project-bar button:hover, .canvas-more summary:hover { background: #f5f3ff; }
+.canvas-project-bar button:disabled { opacity: .45; cursor: default; }
+.canvas-project-bar :is(button, summary, a):focus-visible { outline: 2px solid #6965db; outline-offset: 3px; }
+.canvas-project-bar output { flex-basis: 100%; color: #777281; font-size: 11px; overflow-wrap: anywhere; }
+.canvas-project-bar output[role="alert"] { color: #b42318; font-size: 13px; }
+.canvas-more { position: relative; }
+.canvas-more summary { list-style: none; user-select: none; }
+.canvas-more summary::-webkit-details-marker { display: none; }
+.canvas-more-panel { position: absolute; z-index: 20; right: 0; top: calc(100% + 8px); width: 260px; max-width: calc(100vw - 32px); padding: 10px; display: flex; flex-direction: column; gap: 6px; border: 1px solid #e9e6f0; border-radius: 12px; background: white; box-shadow: 0 8px 32px #211e3320; }
+.canvas-more-panel button { text-align: left; }
+.canvas-more-panel input { max-width: 100%; margin-top: 6px; }
+.canvas-more-panel a { color: #6965db; padding: 7px 11px; }
+@media (max-width: 600px) { .canvas-project-bar { gap: 8px; padding: 10px 12px; } .canvas-project-title { flex: 1; } .canvas-project-bar > button { font-size: 12px; } }
 .gouo-canvas-lab-editor { flex: 1; min-height: 0; position: relative; }
 /* 只在对照页恢复被 Loomic 全局样式隐藏的官方控件。 */
 .gouo-canvas-lab .excalidraw .App-menu_top__left,
@@ -12,3 +27,8 @@
 .gouo-canvas-lab .excalidraw .App-bottom-bar,
 .gouo-canvas-lab .excalidraw .shapes-section { display: flex !important; }
 .gouo-canvas-lab .excalidraw .ToolIcon__keybinding { display: block !important; }
+@media (max-width: 600px) {
+  .canvas-project-title { flex: 1 1 calc(100% - 60px); }
+  .canvas-project-title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .canvas-project-bar > button, .canvas-more { flex-shrink: 0; }
+}

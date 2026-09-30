@@ -79,3 +79,9 @@ Sharp 0.35 要求 Node >=20.9，当前项目 >=22.16 满足；它不再自动回
 assistant-ui `@assistant-ui/react@0.15.22`（MIT）用于 Studio 持久聊天入口，不替换 LangGraph 或 New API。安装新增 326 个 lock 路径，新增包许可字段均 MIT；API 与许可证按已安装固定版本检查，未复制整个上游仓库。完整归属在 `docs/v2/licenses/assistant-ui-MIT.txt`，同份文件随前端发布到 `/studio/assistant-ui-LICENSE.txt`。未配置 assistant-cloud 服务。详见 CHAT-LAB.md；不引入 tldraw 或新的商业许可证。
 
 V2 镜像只使用官方 New API `v1.0.0-rc.40` 发布二进制，amd64/arm64 SHA-256 固定于 `v2/deploy/NewAPI.Dockerfile`，并包含固定源码提交的 LICENSE/NOTICE/THIRD-PARTY-LICENSES。Node 与 Nginx 基础镜像以 manifest digest 固定。Docker Hub 匿名限流时使用公开 Docker Official Images 镜像源，未用陌生转发替换 New API 发布资产。此构建未修改 New API；既有 AGPL 义务仍适用。
+
+## 官方完整 default starter 的视觉确认阶段
+
+固定官方来源 `f008537f39f0936992b0f6d2433c092935df5faf`，与已安装 React 0.15.22 对应；详见 [UI-STARTER.md](UI-STARTER.md)。直接复用完整侧栏、消息、输入和主题，源代码与完整 MIT 许可保存在 chat-starter；不引入其 Next/AI SDK 后端。
+
+新增官方配套 `@assistant-ui/react-markdown@0.14.17`（MIT）及其 5 个配套依赖，实际 npm 生成锁文件。React、LangGraph、Excalidraw 和现有账户/计费协议保持既有版本；cn 复用已有 clsx/tailwind-merge 工具，不新增上游 cn 包。未使用的附件/独立图像/线程云操作组件不保留。当前 `npm audit --omit=dev` 0 告警。

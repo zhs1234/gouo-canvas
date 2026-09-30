@@ -114,9 +114,11 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
     }
   }, [])
   return <main className="gouo-canvas-lab">
-    <header><a href="/studio/projects">项目库</a><a href="/studio/">返回创作画布</a><strong>{project?.title ?? 'Studio 项目'}</strong><span>官方 Excalidraw · 账号私有项目</span>
+    <header className="canvas-project-bar"><a href="/studio/projects">项目库</a><div className="canvas-project-title"><strong>{project?.title ?? 'Studio 项目'}</strong><span>Excalidraw · 私有项目</span></div>
       <button disabled={!ready || blocked} onClick={() => void save(serialize())}>保存 Studio 项目</button>
       <button disabled={!ready} onClick={() => { const raw = serialize(); if (raw) download(raw, `${project?.title ?? 'studio'}.excalidraw`) }}>导出文档备份</button>
+      <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
+      <a href="/studio/">返回创作画布</a>
       <button onClick={() => void (async () => {
         // Local export must not wait for an in-flight or unresponsive remote save.
         const current = pending.current
@@ -128,6 +130,7 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
         if (raw) download(raw, 'studio-recovery.excalidraw')
         else setStatus('本机没有此项目备份')
       })().catch(() => setStatus('本机备份读取失败，请使用导出文档备份保存当前画布'))}>下载本机备份</button>
+      </div></details>
       {blocked && <button onClick={() => window.location.reload()}>重新加载服务器版本</button>}
       <output role={blocked ? 'alert' : 'status'}>{status}</output>
     </header>

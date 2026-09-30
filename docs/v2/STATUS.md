@@ -1,5 +1,21 @@
 # 实际交付与验证状态
 
+## 官方完整 UI 样板：等待视觉确认（2026-09-30）
+
+新云端环境终端、文件与 Chromium 可用；从授权分支远端 `124117340134af5ca3463863ba454ccc2e1878d2` 接手，PR #3 核验仍 draft、目标 `codex/new-api-v2`，未在默认 work/main 修改。
+
+- 用户拒绝旧自拼页面后，直接复用 assistant-ui 仍维护的主仓库 default starter 完整侧栏/消息/输入框/主题。固定来源 `f008537f39f0936992b0f6d2433c092935df5faf`，与现有 React 0.15.22 匹配，MIT 完整许可与来源注释保留。必要 Studio/New API 数据适配与精确来源清单见 [UI-STARTER.md](UI-STARTER.md)。
+- 既有 Studio transport、私有历史、账号费用、GeneratedImage 源定位与打开/插入项目保留；不引入 AI SDK 后端/第二套账号/云服务。新增同源配套 Markdown 包 0.14.17，未升级 LangGraph、React 或画布。
+- 官方 Excalidraw 外壳精简为项目条，其他操作收进“更多操作”。保存/冲突/本机恢复/离页提醒和原图数据逻辑不改；修复窄屏标题被挤成竖排。默认 Loomic 仍保留。
+- 实际 Chromium 截图：桌面聊天、暗色主题、移动聊天/抽屉、桌面和移动画布，共 6 张，已实际查看并保存 Library。账号、模型、文本和项目均明确 Playwright fixture；商品图为测试 SVG 经 Sharp 输出，不是 ImageGen，也不是真实生成。视觉替身不证明真实供应商验收。
+- `npm run check`：类型、14 领域、53 API、构建通过；冻结 UI 后类型/构建再通过。完整串行浏览器 **46/46**（含新增 1 项视觉验收、桌面/暗色/移动及窄屏标题断言）。先前相关 29 项也全部通过；首轮旧工具折叠/提示重复/欢迎文案测试差异已修正，不遗漏失败过程。
+- 隔离整栈 **2/2**：真实固定 New API 未初始化安全边界 + 实际 Nginx/Studio/SDK/SQLite→内存 New API 替身联调通过。本环境首次 Docker 内 npm 报 Exit handler never called；使用已有系统受信任 CA 的只读 BuildKit secret 后成功，override 仅在 /tmp，不改信任/TLS、不入仓库。随机测试容器/卷/镜像已自动回收。
+- `npm ls --all` 有效，完整/omitdev 审计均 0，`git diff --check` 通过。真实供应商调用 **0**，未创建真实凭据、合并或部署。
+
+此阶段只交官方成品视觉样板及后端薄适配。用户视觉确认之前暂停全面整合/默认切换/合并；不要把本地 localhost 当共享预览。Library 文件 ID 及最终分支 SHA 在本任务交付回复；截图本机目录为 `/workspace/scratch/gouo-ui-review/`，父线程应使用 Library 读取而非假设共享目录。
+
+---
+
 ## 接手增量：保存失败后的编辑与恢复副本保护（2026-09-30）
 
 从远端授权分支 `codex/qa-relay-owner-idempotency` 的 `bdff3de9d4f86239e5821039ec4cd31bfe5b8b3f` 接手；核验 PR #3 仍为 draft、目标 `codex/new-api-v2`。工作区最初在环境默认 `work` 分支，未在那里或 main 编辑。仓库及 `/workspace/.agents` 没有额外技能文件；已读根/V2 AGENTS 与交接文档，复用第三阶段既有证据。

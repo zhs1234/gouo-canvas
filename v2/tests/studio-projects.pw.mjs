@@ -34,6 +34,7 @@ async function fixture(page) {
   return state
 }
 async function exported(page, name = '导出文档备份') {
+  if (name === '下载本机备份' && await page.locator('.canvas-more').getAttribute('open') === null) await page.getByText('更多操作', { exact: true }).click()
   const waiting = page.waitForEvent('download')
   await page.getByRole('button', { name, exact: true }).click()
   return JSON.parse(await readFile(await (await waiting).path(), 'utf8'))

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AssistantRuntimeProvider, useLocalRuntime, ThreadPrimitive, MessagePrimitive, ComposerPrimitive } from '@assistant-ui/react'
+import { AssistantRuntimeProvider, useLocalRuntime } from '@assistant-ui/react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../loomic/lib/auth-context'
 import { fetchCatalog } from '../loomic/lib/gateway'
@@ -9,10 +9,27 @@ import Account from '../Account'
 import { BillingPanel } from '../loomic/components/billing-panel'
 import { fetchBilling } from '../loomic/lib/billing'
 import { restoreMessages, studioAdapter, type SavedThread } from './adapter'
-import { GeneratedImage } from './GeneratedImage'
+import { Thread } from '../chat-starter/components/assistant-ui/elements/thread.aui'
+import { ThreadListSidebar } from '../chat-starter/components/assistant-ui/elements/threadlist-sidebar.aui'
+import { SidebarInset, SidebarProvider, SidebarTrigger, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../chat-starter/components/ui/sidebar'
+import { Button } from '../chat-starter/components/ui/button'
+import { Input } from '../chat-starter/components/ui/input'
+import { Separator } from '../chat-starter/components/ui/separator'
+import { MessagesSquare, PlusIcon, SearchIcon, MoonIcon, SunIcon, FolderIcon, PanelsTopLeftIcon, UserIcon } from 'lucide-react'
+import '../chat-starter/theme.css'
 import './chat-lab.css'
-function Message() {
-  return <MessagePrimitive.Root className="lab-message"><MessagePrimitive.Parts components={{ Image: GeneratedImage, tools: { Fallback: ({ toolName, result }) => <details open><summary>{toolName === 'generate_image' ? '图片生成工具' : toolName}</summary>{result ? String(result) : '结果待确认'}</details> } }} /><MessagePrimitive.Error><p role="alert">请求失败或中断；请检查任务结果与账号费用，不会自动重试。</p></MessagePrimitive.Error></MessagePrimitive.Root>
+function StudioThreadList({ threads, id, create, select, loading }: { threads: SavedThread[]; id: string; create: () => void; select: (id: string) => void; loading: boolean }) {
+  const [search, setSearch] = useState('')
+  const sidebar = useSidebar()
+  return <nav aria-label="会话列表" className="flex flex-col gap-0.5">
+    <Button variant="ghost" className="h-8 justify-start gap-2 rounded-md px-2.5 text-sm font-normal" disabled={loading} onClick={() => { create(); sidebar.setOpenMobile(false) }} aria-label="＋ 新会话"><PlusIcon />新会话</Button>
+    {threads.length > 0 && <div className="relative px-0.5 py-1"><SearchIcon className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" /><Input aria-label="搜索会话" placeholder="搜索会话" value={search} onChange={e => setSearch(e.target.value)} className="h-8 ps-8 text-sm" /></div>}
+    <div className="text-muted-foreground px-2.5 pt-3 pb-1 text-xs">会话</div>
+    {threads.filter(t => t.title.toLowerCase().includes(search.toLowerCase())).map(t => <SidebarMenuButton key={t.id} aria-current={t.id === id ? 'page' : undefined} isActive={t.id === id} onClick={() => { select(t.id); sidebar.setOpenMobile(false) }}><span>{t.title}</span></SidebarMenuButton>)}
+  </nav>
+}
+function StudioShell({ list, toolbar, footer, children }: { list?: ReactNode; toolbar: ReactNode; footer: ReactNode; children: ReactNode }) {
+  return <SidebarProvider className="chat-starter"><div className="flex h-dvh w-full pr-0.5"><ThreadListSidebar footer={footer}>{list}</ThreadListSidebar><SidebarInset className="min-w-0"><header className="flex h-16 shrink-0 items-center gap-2 border-b px-4"><SidebarTrigger aria-label="切换侧栏" /><Separator orientation="vertical" className="mr-2 h-4" />{toolbar}</header><div className="flex-1 min-h-0 overflow-hidden">{children}</div></SidebarInset></div></SidebarProvider>
 }
 function LabRuntime({ model, imageModel, thread, reload }: { model: string; imageModel?: string; thread: SavedThread; reload: () => void }) {
   const lifetime = useRef(new AbortController())
@@ -25,14 +42,13 @@ function LabRuntime({ model, imageModel, thread, reload }: { model: string; imag
   const [stopped, setStopped] = useState(false)
   const unknown = thread.runs.some(run => run.status === 'unknown')
   const unresolved = thread.runs.some(run => run.status === 'running' || run.status === 'unknown')
-  return <AssistantRuntimeProvider runtime={runtime}><ThreadPrimitive.Root className="lab-thread"><ThreadPrimitive.Viewport><ThreadPrimitive.Empty>开始聊天，可通过智能体生成图片。</ThreadPrimitive.Empty><ThreadPrimitive.Messages components={{ Message }} /></ThreadPrimitive.Viewport>
-    <ComposerPrimitive.Root onSubmit={() => setStopped(false)}><ComposerPrimitive.Input aria-label="消息" placeholder="发送消息…" disabled={unresolved || needsRefresh} /><ComposerPrimitive.Send disabled={!model || unresolved || needsRefresh}>发送</ComposerPrimitive.Send><ComposerPrimitive.Cancel onClick={() => setStopped(true)}>停止接收</ComposerPrimitive.Cancel></ComposerPrimitive.Root>
-    {stopped && <p role="status">已停止接收，保留部分内容。供应商任务和费用可能继续，请查看账号记录。</p>}
-    {(unresolved || needsRefresh) && <div><p>{unknown ? '服务中断后任务结果未知，无法自动恢复。可新建会话继续；原任务费用仍需核对，刷新仅查询。' : '任务记录或费用待刷新确认；刷新仅查询，不会重新生成。'}</p><button onClick={reload}>刷新任务记录</button></div>}
-    <p>历史按 New API 账号保存。费用以账号账单为准。<Link to="/">查看账号</Link></p>
-  </ThreadPrimitive.Root></AssistantRuntimeProvider>
+  return <AssistantRuntimeProvider runtime={runtime}><div className="flex h-full flex-col">
+    <div className="flex-1 min-h-0"><Thread disabled={!model || unresolved || needsRefresh} onSubmit={() => setStopped(false)} onStop={() => setStopped(true)} components={{ ToolFallback: ({ toolName, result }) => <details open className="rounded-lg border p-3 text-sm"><summary>{toolName === 'generate_image' ? '图片生成工具' : toolName}</summary>{result ? String(result) : '结果待确认'}</details> }} /></div>
+    {stopped && <p role="status" className="studio-chat-notice">已停止接收，保留部分内容。供应商任务和费用可能继续，请查看账号记录。</p>}
+    {(unresolved || needsRefresh) && <div className="studio-chat-notice"><p>{unknown ? '服务中断后任务结果未知，无法自动恢复。可新建会话继续；原任务费用仍需核对，刷新仅查询。' : '任务记录或费用待刷新确认；刷新仅查询，不会重新生成。'}</p><Button variant="outline" onClick={reload}>刷新任务记录</Button></div>}
+  </div></AssistantRuntimeProvider>
 }
-function OwnedThreads({ model, imageModel }: { model: string; imageModel?: string }) {
+function OwnedThreads({ model, imageModel, toolbar, footer }: { model: string; imageModel?: string; toolbar: ReactNode; footer: ReactNode }) {
   const [params, setParams] = useSearchParams()
   const id = params.get('thread') || ''
   const [threads, setThreads] = useState<SavedThread[]>([])
@@ -74,9 +90,12 @@ function OwnedThreads({ model, imageModel }: { model: string; imageModel?: strin
     } catch (e) { if (active.current) setError((e as Error).message) }
     finally { if (active.current) setLoading(false) }
   }
-  return <div className="lab-layout"><aside><button onClick={create} disabled={loading}>＋ 新会话</button><nav aria-label="会话列表">{threads.map(t => <button key={t.id} aria-current={t.id === id ? 'page' : undefined} onClick={() => setParams({ thread: t.id })}>{t.title}</button>)}</nav>{nextList !== null && <button onClick={moreThreads}>更多会话</button>}<p>服务端账号会话，与本机画布草稿分开保存。</p></aside>
-    {error ? <p role="alert">{error}</p> : detail && detail.id === id ? <section className="lab-history"><p>上下文仅使用最近 6 次成功任务；当前最多显示 50 条任务。</p>{offset > 0 && <button onClick={() => setOffset(0)}>返回最新记录</button>}{detail.nextOffset != null && <button onClick={() => setOffset(detail.nextOffset!)}>查看更早记录</button>}<LabRuntime key={`${id}:${revision}:${offset}`} thread={detail} model={offset ? '' : model} imageModel={imageModel} reload={reload} /></section> : <p>{id ? '加载会话…' : '选择会话，或新建会话开始聊天。'}</p>}
-  </div>
+  return <StudioShell toolbar={toolbar} footer={footer} list={<><StudioThreadList threads={threads} id={id} create={() => void create()} select={id => setParams({ thread: id })} loading={loading} />{nextList !== null && <Button variant="ghost" onClick={moreThreads}>更多会话</Button>}</>}>
+    {error ? <p role="alert" className="studio-chat-notice">{error}</p> : detail && detail.id === id ? <section className="flex h-full flex-col">
+      {(offset > 0 || detail.nextOffset != null) && <div className="flex gap-2 px-4 py-2">{offset > 0 && <Button variant="ghost" onClick={() => setOffset(0)}>返回最新记录</Button>}{detail.nextOffset != null && <Button variant="ghost" onClick={() => setOffset(detail.nextOffset!)}>查看更早记录</Button>}</div>}
+      <div className="flex-1 min-h-0"><LabRuntime key={`${id}:${revision}:${offset}`} thread={detail} model={offset ? '' : model} imageModel={imageModel} reload={reload} /></div>
+    </section> : <div className="flex h-full items-center justify-center"><div className="w-full max-w-[44rem] px-6"><h1 className="mb-6 text-2xl font-medium tracking-tight">{id ? '加载会话…' : '今天有什么可以帮你？'}</h1>{!id && <Button onClick={() => void create()} disabled={loading}><PlusIcon />新会话</Button>}</div></div>}
+  </StudioShell>
 }
 export default function ChatLab() {
   const { user } = useAuth()
@@ -87,9 +106,12 @@ export default function ChatLab() {
   const [selected, select] = useState('')
   const model = chats.find(m => m.id === selected)?.id || chats[0]?.id || ''
   const imageModel = catalog.data?.models.find(m => m.kind === 'image' && m.accessible)?.id
-  return <main className="chat-lab"><header><Link to="/">← 返回画布与账号</Link><h1>聊天</h1><button onClick={() => setAccountOpen(v => !v)}>New API 账号</button><span>assistant-ui · Studio · New API</span><select aria-label="聊天模型" value={model} onChange={e => select(e.target.value)}><option value="" disabled>选择聊天模型</option>{chats.map(m => <option key={m.id} value={m.id}>{m.displayName}</option>)}</select></header>
-    {accountOpen && <section aria-label="账号与费用"><Account />{user && <BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} />}</section>}
-    {!user ? <p>请连接 New API 账号。</p> : <OwnedThreads key={user.id} model={model} imageModel={imageModel} />}
-    {catalog.error && <p role="alert">模型目录加载失败</p>}
-  </main>
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
+  const toolbar = <><span className="hidden text-sm text-muted-foreground md:block">Gouo Canvas</span><span className="hidden text-muted-foreground md:block">/</span><select className="min-w-0 max-w-48 bg-transparent text-sm outline-none" aria-label="聊天模型" value={model} onChange={e => select(e.target.value)}><option value="" disabled>选择聊天模型</option>{chats.map(m => <option key={m.id} value={m.id}>{m.displayName}</option>)}</select><div className="ml-auto"><Button variant="ghost" size="icon" aria-label="切换主题" onClick={() => { document.documentElement.classList.toggle('dark', !dark); setDark(!dark) }}>{dark ? <SunIcon /> : <MoonIcon />}</Button></div></>
+  const footer = <SidebarMenu><SidebarMenuItem><SidebarMenuButton render={<Link to="/projects" />}><FolderIcon /><span>项目库</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/canvas-lab" />}><PanelsTopLeftIcon /><span>官方画布</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/" />}><MessagesSquare /><span>Loomic 工作台</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton size="lg" onClick={() => setAccountOpen(v => !v)} aria-label="New API 账号"><div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 items-center justify-center rounded-lg"><UserIcon className="size-4" /></div><div className="flex flex-col text-left"><span className="font-semibold">{user?.display_name || user?.username || '登录账号'}</span><span className="text-xs text-muted-foreground">账号与费用</span></div></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
+  return <>
+    {user ? <OwnedThreads key={user.id} model={model} imageModel={imageModel} toolbar={toolbar} footer={footer} /> : <StudioShell toolbar={toolbar} footer={footer}><div className="flex h-full items-center justify-center"><div className="px-6"><h1 className="mb-4 text-2xl font-medium">今天有什么可以帮你？</h1><p className="mb-6 text-sm text-muted-foreground">请连接 New API 账号。</p><Button onClick={() => setAccountOpen(true)}>登录账号</Button></div></div></StudioShell>}
+    {accountOpen && <div className="account-overlay" onClick={() => setAccountOpen(false)}><section className="account-dialog" aria-label="账号与费用" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}><button className="account-close" aria-label="关闭账号" onClick={() => setAccountOpen(false)}>✕</button><Account />{user && <BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} />}</section></div>}
+    {catalog.error && <p role="alert" className="studio-chat-notice">模型目录加载失败</p>}
+  </>
 }
