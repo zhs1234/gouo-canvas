@@ -141,12 +141,13 @@ test('fixture agent results enter the canvas and persist; requests contain only 
   let calls = 0
   await page.route('**/api/studio/runs', route => {
     calls++
+    account.billing.balance = 99.75; account.billing.spent = 0.25; account.billing.requestCount = 3
     const payload = route.request().postDataJSON()
     expect(payload).not.toHaveProperty('accessToken')
     expect(route.request().headers().authorization).toBe(`Bearer ${account.token}`)
     expect(route.request().headers()['idempotency-key']).toBe(payload.runId)
     const base = { runId: payload.runId, timestamp: new Date().toISOString() }
-    return route.fulfill({ json: { success: true, data: { events: [
+    return route.fulfill({ json: { success: true, data: { usage: { state: 'settled', currency: 'CNY', cost: 0.25, requestCount: 3 }, events: [
       { ...base, type: 'tool.started', toolCallId: 'fixture-call', toolName: 'generate_image' },
       { ...base, type: 'tool.completed', toolCallId: 'fixture-call', toolName: 'generate_image', artifacts: [{ type: 'image', url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32 }] },
       { ...base, type: 'message.delta', messageId: 'fixture-message', delta: '本地测试结果，未调用 AI。' },
@@ -162,17 +163,28 @@ test('fixture agent results enter the canvas and persist; requests contain only 
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toHaveText('测试用户')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toHaveText('测试用户')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('账户余额')).toHaveText('¥100.00')
+  await page.getByText('查看模型单价', { exact: true }).click()
+  await expect(page.getByText('输入 ¥36.50 · 输出 ¥219.00 / 100万 token', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: '关闭账号窗口', exact: true }).click()
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
   expect((await exportScene(page)).elements.filter(e => !e.isDeleted)).toHaveLength(0)
   await page.getByLabel('输入消息', { exact: true }).fill('只做本地协议测试')
   await page.getByLabel('输入消息', { exact: true }).press('Enter')
   await expect(page.getByText('本地测试结果，未调用 AI。', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('账户余额')).toHaveText('¥99.75')
+  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await expect(page.getByText('最近创作费用：¥0.25（3 次模型调用）', { exact: true })).toBeVisible()
+  await expect(page.getByText('按实际用量结算 · 1 倍 · 已调用 3 次', { exact: true })).toBeVisible()
+  const reads = account.billingReads
+  await page.getByRole('button', { name: '刷新用量', exact: true }).click()
+  await expect.poll(() => account.billingReads).toBeGreaterThan(reads)
+  await page.getByRole('button', { name: '关闭账号窗口', exact: true }).click()
   await expect(page.getByText('输入你的想法开始创作', { exact: true })).toHaveCount(0)
   await saveDraft(page)
   await page.reload()
@@ -183,7 +195,7 @@ test('fixture agent results enter the canvas and persist; requests contain only 
 })
 
 test('native image panel switches verified model parameters, preserves references and output aspect ratio', async ({ page }) => {
-  await mockAccount(page)
+  const account = await mockAccount(page)
   const models = [
     { id: 'fixture-image-a', displayName: '协议模型 A', kind: 'image', accessible: true, provider: 'Fixture', qualities: ['xhigh'], aspectRatios: ['21:9'], operations: ['generate'] },
     { id: 'fixture-image-b', displayName: '协议模型 B', kind: 'image', accessible: true, provider: 'Fixture', qualities: ['max'], aspectRatios: ['1:1'], operations: ['generate', 'edit'] },
@@ -192,20 +204,21 @@ test('native image panel switches verified model parameters, preserves reference
   let calls = 0
   await page.route('**/api/studio/images', route => {
     calls++
+    account.billing.balance = 99.56; account.billing.spent = 0.44; account.billing.requestCount = 1
     const payload = route.request().postDataJSON()
     expect(payload.model).toBe('fixture-image-b')
     expect(payload.quality).toBe('max')
     expect(payload.aspectRatio).toBe('1:1')
     expect(payload.inputImages).toHaveLength(1)
     expect(payload.inputImages[0]).toMatch(/^data:image\/png;base64,/)
-    return route.fulfill({ json: { success: true, data: { url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32 } } })
+    return route.fulfill({ json: { success: true, data: { url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32, usage: { state: 'settled', currency: 'CNY', cost: 0.44, requestCount: 1 } } } })
   })
   await page.goto('./')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toHaveText('测试用户')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: 'AI 生成图片', exact: true }).click()
@@ -226,6 +239,9 @@ test('native image panel switches verified model parameters, preserves reference
   expect(image).toBeTruthy()
   expect(image.width / image.height).toBeCloseTo(1.5)
   expect(calls).toBe(1)
+  await expect(page.getByLabel('账户余额')).toHaveText('¥99.56')
+  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await expect(page.getByText('最近创作费用：¥0.44（1 次模型调用）', { exact: true })).toBeVisible()
 })
 
 test('switching projects aborts the previous transport so late results cannot enter a new canvas', async ({ page }) => {
@@ -249,7 +265,7 @@ test('switching projects aborts the previous transport so late results cannot en
     await page.getByLabel('用户名', { exact: true }).fill('studio-user')
     await page.getByLabel('密码', { exact: true }).fill('test-password')
     await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toHaveText('测试用户')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
     await page.getByLabel('输入消息', { exact: true }).fill('本地隔离测试，不调用模型')

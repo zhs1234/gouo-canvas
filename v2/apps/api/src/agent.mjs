@@ -5,6 +5,7 @@ import { createReactAgent, ToolNode } from '@langchain/langgraph/prebuilt'
 import { z } from 'zod'
 import { generateImage, decodeImage, StudioError } from './images.mjs'
 import { isAvailable } from './config.mjs'
+import { relayKey, recordGatewayResponse } from './relay.mjs'
 
 // Image-only channels do not require an extra chat model or an LLM tool loop.
 // The UI labels this mode as image generation; the prompt is sent verbatim.
@@ -41,8 +42,23 @@ export async function runAgent(config, chatModel, payload) {
     emit('tool.completed', { toolCallId: callId, toolName: 'generate_image', outputSummary: '图片已生成', artifacts: [artifact] })
     return '图片已生成并交给画布，请向用户简要说明结果。'
   }, { name: 'generate_image', description: '根据用户明确的生成或编辑图片请求创作一张图片。仅在用户要求生成时调用。', schema: z.object({ prompt: z.string().min(1).max(8000) }) })
-  const llm = new ChatOpenAI({ model: chatModel.upstreamModelId, apiKey: config.relayKey,
-    configuration: { baseURL: config.gateway }, maxRetries: 0, timeout: 120_000, maxTokens: 2000 })
+  let chatCalls = 0
+  let chatFailure
+  const gatewayFetch = async (url, init) => {
+    if (++chatCalls > (chatModel.maxChatCalls ?? 3)) {
+      chatFailure = new StudioError('对话调用已达到本次上限，未继续扣费')
+      throw chatFailure
+    }
+    const response = await fetch(url, init)
+    recordGatewayResponse(config, response)
+    if (!response.ok) {
+      chatFailure = new StudioError(`对话网关返回 HTTP ${response.status}，未自动重试`, 502)
+      throw chatFailure
+    }
+    return response
+  }
+  const llm = new ChatOpenAI({ model: chatModel.upstreamModelId, apiKey: relayKey(config, chatModel),
+    configuration: { baseURL: config.gateway, fetch: gatewayFetch }, maxRetries: 0, timeout: 120_000, maxTokens: chatModel.maxTokens ?? 2000 })
   const attachments = payload.attachments ?? []
   if (attachments.length && !chatModel.vision) throw new StudioError('当前智能体模型尚未验证图片理解能力，请取消参考图或配置视觉模型')
   for (const attachment of attachments) await decodeImage(attachment.url)
@@ -52,7 +68,7 @@ export async function runAgent(config, chatModel, payload) {
     if (text) messages.push(message.role === 'assistant' ? new AIMessage(text.slice(0, 8000)) : new HumanMessage(text.slice(0, 8000)))
   }
   messages.push(new HumanMessage({ content: [{ type: 'text', text: payload.prompt }, ...attachments.map(a => ({ type: 'image_url', image_url: { url: a.url } }))] }))
-  const agent = createReactAgent({ llm, tools: new ToolNode(imageModel && isAvailable(config, imageModel) ? [imageTool] : [], { handleToolErrors: false }) })
+  const agent = createReactAgent({ llm, tools: new ToolNode(chatModel.toolCalling && imageModel && isAvailable(config, imageModel) ? [imageTool] : [], { handleToolErrors: false }) })
   emit('run.started')
   try {
     const stream = await agent.stream({ messages }, { streamMode: 'updates', recursionLimit: 6 })
@@ -63,8 +79,8 @@ export async function runAgent(config, chatModel, payload) {
       }
     }
     emit('run.completed')
-  } catch {
-    emit('run.failed', { error: { code: 'gateway_failed', message: '模型请求失败或结果待确认；未自动重试，请检查网关记录。' } })
+  } catch (error) {
+    emit('run.failed', { error: { code: 'gateway_failed', message: chatFailure?.message ?? (error instanceof StudioError ? error.message : '模型请求失败或结果待确认；未自动重试，请检查网关记录。') } })
   }
   return { events }
 }

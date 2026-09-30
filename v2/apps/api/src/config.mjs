@@ -9,6 +9,10 @@ const model = z.object({
   qualities: z.array(z.string()).default([]), sizes: z.record(z.string()).default({}),
   operations: z.array(z.enum(['generate', 'edit'])).default(['generate']),
   vision: z.boolean().default(false), responseFormat: z.enum(['b64_json']).optional(),
+  channelId: z.number().int().positive().optional(),
+  toolCalling: z.boolean().default(false),
+  maxChatCalls: z.number().int().min(1).max(3).default(3),
+  maxTokens: z.number().int().min(64).max(4096).default(2000),
 }).strict()
 export function loadConfig(env = process.env) {
   const file = env.GOUO_STUDIO_MODELS_FILE || fileURLToPath(new URL('../../../config/loomic.models.example.json', import.meta.url))

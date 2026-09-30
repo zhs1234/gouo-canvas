@@ -9,7 +9,7 @@ test('New API login, reload restoration and logout keep access tokens out of bro
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toHaveText('测试用户')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
   const stored = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]))
@@ -36,7 +36,7 @@ test('invalid credentials and failed logout are reported without pretending auth
   await expect(page.getByRole('button', { name: '退出登录' })).toHaveCount(0)
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toHaveText('测试用户')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
   account.failLogout = true
@@ -53,7 +53,7 @@ test('expired reads recover once while unauthorized writes are never automatical
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toHaveText('测试用户')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
   let submissions = 0

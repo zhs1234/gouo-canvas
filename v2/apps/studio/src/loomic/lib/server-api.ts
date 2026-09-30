@@ -3,6 +3,7 @@ import type { CanvasDetail, ChatMessage, ChatMessageCreateRequest, ContentBlock 
 import { request } from '../../api'
 import { readDraft, changeDraft, rememberSessions, canvasForSession, deleteDraft } from './local-drafts'
 import { fetchCatalog, type GatewayModel } from './gateway'
+import { billingChanged, type StudioUsage } from './billing'
 export class ApiAuthError extends Error {}
 export class ApiApplicationError extends Error {
   constructor(public code: string, message: string) { super(message) }
@@ -74,7 +75,12 @@ export async function fetchImageModels(): Promise<{ models: ImageModelInfo[] }> 
 export async function fetchVideoModels(): Promise<{ models: VideoModelInfo[] }> { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'video') } }
 export async function fetchWorkspaceSkills(_owner: string) { return { skills: [] as Array<{ id: string; name: string; slug: string; description: string; enabled: boolean }> } }
 export async function generateImageDirect(_owner: string, prompt: string, options?: { model?: string; aspectRatio?: string; quality?: string; inputImages?: string[] }, signal?: AbortSignal) {
-  return request<GenerateImageResponse>('/api/studio/images', { method: 'POST', signal, headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ prompt, ...options }) })
+  let usage: StudioUsage | undefined
+  try {
+    const result = await request<GenerateImageResponse & { usage?: StudioUsage }>('/api/studio/images', { method: 'POST', signal, headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ prompt, ...options }) })
+    usage = result.usage
+    return result
+  } finally { billingChanged(_owner, usage) }
 }
 export async function generateVideoDirect(_owner: string, _prompt: string, _options?: { model?: string; duration?: number; resolution?: string; aspectRatio?: string; inputImages?: string[] }): Promise<GenerateVideoResponse> {
   throw new ApiApplicationError('video_not_enabled', '视频生成将在后续接入；当前可以使用图片画布')

@@ -4,6 +4,7 @@ import { catalog, isAvailable } from './config.mjs'
 import { Ledger } from './ledger.mjs'
 import { generateImage, StudioError } from './images.mjs'
 import { runAgent, runImage } from './agent.mjs'
+import { billingSummary, settledUsage } from './billing.mjs'
 
 const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
 const runBody = z.object({ runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
@@ -32,9 +33,11 @@ export function createServer(config, overrides = {}) {
     try { response = await fetcher(new URL('/api/user/self', config.authOrigin), { headers: { Authorization: token }, redirect: 'error', signal: AbortSignal.timeout(10_000) }) } catch { throw new StudioError('账号服务暂不可用', 502) }
     const body = await response.json().catch(() => null)
     if (!response.ok || body?.success !== true || !Number.isSafeInteger(body.data?.id) || body.data.id <= 0) throw new StudioError('登录会话已失效', 401)
-    if (config.relayOwnerId !== undefined && body.data.id !== config.relayOwnerId) throw new StudioError('当前账号尚未连接自己的生成令牌', 403)
+    if (request.routeOptions.url !== '/api/studio/billing' && config.relayOwnerId !== undefined && body.data.id !== config.relayOwnerId) throw new StudioError('当前账号尚未连接自己的生成令牌', 403)
     request.studioUser = body.data.id
+    request.studioAccount = body.data
   })
+  app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(config, request.headers.authorization, request.studioAccount, fetcher) }))
   async function execute(request, kind, payload, action) {
     const key = request.headers['idempotency-key']
     if (typeof key !== 'string' || !/^[\w-]{8,100}$/.test(key)) throw new StudioError('缺少有效请求标识', 400)
@@ -46,7 +49,10 @@ export function createServer(config, overrides = {}) {
     if (busy.has(owner)) { ledger.unknown(owner, kind, key); throw new StudioError('已有生成请求正在处理', 409) }
     busy.add(owner)
     try {
-      const result = await action()
+      const requests = []
+      const result = await action({ ...config, onGatewayResponse: info => requests.push(info) })
+      const usage = await settledUsage(config, request.headers.authorization, requests, fetcher)
+      if (usage) result.usage = usage
       ledger.complete(owner, kind, key, result)
       return { success: true, data: result }
     } catch (error) { ledger.unknown(owner, kind, key); throw error }
@@ -61,7 +67,7 @@ export function createServer(config, overrides = {}) {
     const parsed = imageBody.safeParse(request.body)
     if (!parsed.success) throw new StudioError('图片请求格式无效', 400)
     const model = selectModel(parsed.data.model, 'image')
-    return execute(request, 'image', parsed.data, () => (overrides.generateImage ?? generateImage)(config, model, parsed.data))
+    return execute(request, 'image', parsed.data, context => (overrides.generateImage ?? generateImage)(context, model, parsed.data))
   })
   app.post('/api/studio/runs', async request => {
     const parsed = runBody.safeParse(request.body)
@@ -76,9 +82,9 @@ export function createServer(config, overrides = {}) {
     const imageOnly = selected?.kind === 'image' || (!selected && !config.models.some(m => m.kind === 'chat' && isAvailable(config, m)))
     const model = selectModel(imageOnly ? selected?.id ?? parsed.data.imageGenerationPreference?.models?.[0] : parsed.data.model, imageOnly ? 'image' : 'chat')
     // The endpoint keeps one idempotency scope even when the selected mode changes.
-    return execute(request, 'agent', parsed.data, () => imageOnly
-      ? (overrides.runImage ?? runImage)(config, model, parsed.data)
-      : (overrides.runAgent ?? runAgent)(config, model, parsed.data))
+    return execute(request, 'agent', parsed.data, context => imageOnly
+      ? (overrides.runImage ?? runImage)(context, model, parsed.data)
+      : (overrides.runAgent ?? runAgent)(context, model, parsed.data))
   })
   return app
 }

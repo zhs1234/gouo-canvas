@@ -6,6 +6,7 @@ import { request } from '../../api'
 import { fetchCatalog } from '../lib/gateway'
 import { fetchMessages } from '../lib/server-api'
 import { readDraft } from '../lib/local-drafts'
+import type { StudioUsage } from '../lib/billing'
 type EventCallback = (event: StreamEvent) => void
 export type WebSocketHandle = {
   connected: boolean
@@ -29,13 +30,14 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
     const controller = new AbortController(); active.current.set(runId, controller)
     onAck?.({ type: 'command.ack', action: 'run.start', payload: { runId } } as WsCommandAck)
     void (async () => {
+      const owner = getOwner()
+      let usage: StudioUsage | undefined
       try {
-        const owner = getOwner()
         if (!owner) throw new Error('本地对话尚未加载')
         const messages = (await fetchMessages(owner, payload.sessionId)).messages
         const canvas = await readDraft(owner, payload.canvasId || 'draft')
         const { accessToken: _discard, ...safePayload } = payload
-        const result = await request<{ events: StreamEvent[] }>('/api/studio/runs', {
+        const result = await request<{ events: StreamEvent[]; usage?: StudioUsage }>('/api/studio/runs', {
           method: 'POST', signal: controller.signal,
           headers: { 'Idempotency-Key': runId },
           body: JSON.stringify({ ...safePayload, runId,
@@ -43,10 +45,14 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
             canvasContext: canvas.canvas.content.elements.filter(e => !e.isDeleted).slice(0, 80).map(e => ({ id: e.id, type: e.type, text: e.text, x: e.x, y: e.y, width: e.width, height: e.height })),
           }),
         })
+        usage = result.usage
         for (const event of result.events) emit(event)
       } catch (error) {
         emit({ type: controller.signal.aborted ? 'run.canceled' : 'run.failed', runId, timestamp: new Date().toISOString(), error: { code: 'request_failed', message: error instanceof Error ? error.message : '生成请求失败' } } as StreamEvent)
-      } finally { active.current.delete(runId) }
+      } finally {
+        active.current.delete(runId)
+        if (owner) window.dispatchEvent(new CustomEvent('gouo:billing-changed', { detail: { owner, usage } }))
+      }
     })()
   }, [getOwner, emit])
   const cancelRun = useCallback((id: string) => active.current.get(id)?.abort(), [])

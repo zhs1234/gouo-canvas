@@ -1,7 +1,7 @@
 import sharp from 'sharp'
-export class StudioError extends Error {
-  constructor(message, status = 422) { super(message); this.status = status }
-}
+import { StudioError } from './images-error.mjs'
+import { relayKey, recordGatewayResponse } from './relay.mjs'
+export { StudioError } from './images-error.mjs'
 export async function decodeImage(dataURL) {
   if (typeof dataURL !== 'string' || dataURL.length > 12 * 1024 * 1024 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(dataURL)) throw new StudioError('仅接受本地 PNG、JPEG、WebP 图片，单张不超过 8 MB')
   const data = Buffer.from(dataURL.slice(dataURL.indexOf(',') + 1), 'base64')
@@ -19,7 +19,7 @@ export async function generateImage(config, model, payload, fetcher = fetch) {
   if (!model.operations.includes(operation)) throw new StudioError('该模型当前不支持参考图编辑')
   const common = { model: model.upstreamModelId, prompt, n: 1, ...(quality ? { quality } : {}),
     ...(aspectRatio ? { size: model.sizes[aspectRatio] } : {}), ...(model.responseFormat ? { response_format: model.responseFormat } : {}) }
-  const headers = { Authorization: `Bearer ${config.relayKey}` }
+  const headers = { Authorization: `Bearer ${relayKey(config, model)}` }
   let body
   if (operation === 'edit') {
     body = new FormData()
@@ -33,6 +33,7 @@ export async function generateImage(config, model, payload, fetcher = fetch) {
   const response = await fetcher(`${config.gateway}/images/${operation === 'edit' ? 'edits' : 'generations'}`, {
     method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(120_000),
   })
+  recordGatewayResponse(config, response)
   if (!response.ok) throw new StudioError(`图片网关返回 HTTP ${response.status}，未自动重试`, 502)
   const raw = await response.json()
   const encoded = raw.data?.[0]?.b64_json

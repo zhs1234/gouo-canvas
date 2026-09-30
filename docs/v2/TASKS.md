@@ -22,6 +22,8 @@
 
 ## B2 — 多模型目录与协议兼容（Image 2.5 优先）
 
+2026-09-30 本实例已完成 `gpt-5.6-sol` 对话渠道 2 + `gpt-image-2` 图片渠道 1 的授权真实工具链验证和原生账单核对；跨渠道固定路由、受限工具循环、CNY 余额/用量/单价显示已实现。保留当前单价，default 1 倍计费；没有手工改余额或新增订阅。剩余别名价格依据、视觉/编辑/质量参数与其他协议继续按本任务验证，不能把这一次结果推广到全部模型。B3/S1 仍是公众销售、订阅和可恢复任务的前置工作。
+
 业务入口已在 v2/apps/api；Loomic 实际配置参考 v2/config/loomic.models.example.json，原 models.example.json 供 operator probe 参考。已完成 Images JSON/multipart、Chat Completions + LangGraph 工具循环的本地协议测试，仍待真实渠道验证。复用固定版本 New API 的网关适配；确实不支持时评估服务器端 direct adapter，不能逼用户换模型或把供应商密钥发给浏览器。当前不依赖 B1 云库。
 
 实现公开能力目录与仅管理员可编辑的渠道配置；modelKey、upstreamModelId、protocol、adapter、capabilityRevision 分离。先做 OpenAI Images JSON 与 multipart 编辑，再 Responses。后续独立适配 Gemini Content/Interactions、fal Queue、其他 native 协议。每个协议单独提交，不把不同接口假装成一套 Images JSON。

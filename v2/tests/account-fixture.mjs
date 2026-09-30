@@ -2,7 +2,14 @@ import { expect } from '@playwright/test'
 
 export async function mockAccount(page) {
   const user = { id: 7, username: 'studio-user', display_name: '测试用户' }
-  const state = { active: false, token: '', refreshes: 0, failLogout: false, rejectProfileOnce: false }
+  const state = { active: false, token: '', refreshes: 0, failLogout: false, rejectProfileOnce: false, billingReads: 0,
+    billing: { currency: 'CNY', balance: 100, spent: 0, requestCount: 0, groupRatio: 1, usdExchangeRate: 7.3,
+      prices: [{ id: 'fixture-chat', displayName: '本地协议测试', kind: 'chat', mode: 'tokens', tiers: [{ name: 'standard', rates: { p: 5, c: 30 } }] }], recentCalls: [] } }
+  await page.route('**/api/studio/billing', route => {
+    if (!state.active || route.request().headers().authorization !== `Bearer ${state.token}`) return route.fulfill({ status: 401, json: { success: false, message: '未登录' } })
+    state.billingReads++
+    return route.fulfill({ json: { success: true, data: state.billing } })
+  })
   const bundle = () => ({ access_token: state.token, token_type: 'Bearer', access_expires_at: Math.floor(Date.now() / 1000) + 600, session: { sid: 'test-session' }, user })
   await page.route('**/api/user/**', async (route) => {
     const request = route.request()

@@ -11,7 +11,7 @@ import { runAgent } from '../src/agent.mjs'
 import { loadConfig } from '../src/config.mjs'
 
 // Explicit local fixtures only. This suite never calls a real provider.
-const chat = { id: 'chat', displayName: 'Fixture chat', kind: 'chat', upstreamModelId: 'fixture-chat', enabled: true, verification: 'live-verified', vision: false }
+const chat = { id: 'chat', displayName: 'Fixture chat', kind: 'chat', upstreamModelId: 'fixture-chat', enabled: true, verification: 'live-verified', vision: false, toolCalling: true }
 const image = { id: 'image', displayName: 'Fixture image', kind: 'image', upstreamModelId: 'fixture-image', enabled: true, verification: 'live-verified', qualities: ['xhigh'], sizes: { '1:1': '1024x1024' }, operations: ['generate', 'edit'], responseFormat: 'b64_json' }
 const config = () => ({ models: [chat, image], relayKey: 'fixture-relay-secret', allowGeneration: true, gateway: 'http://fixture.invalid/v1', authOrigin: 'http://fixture.invalid', ledgerPath: ':memory:' })
 const headers = { authorization: 'Bearer fixture-user-7', 'idempotency-key': 'fixture-key-1234' }
@@ -164,21 +164,41 @@ test('URL-only results and gateway errors cannot be reported as a successful ima
   assert.equal(attempts, 1)
 })
 
-test('LangGraph agent invokes the image tool through a local OpenAI-protocol fixture', async () => {
-  const upstream = Fastify(); const png = await pixels(); let chats = 0; let images = 0
-  upstream.post('/v1/chat/completions', async req => {
-    assert.equal(req.headers.authorization, 'Bearer fixture-relay-secret')
+test('LangGraph pins each model to its channel and enforces a bounded tool loop without retries', async () => {
+  const upstream = Fastify(); const png = await pixels(); let chats = 0; let images = 0; let rejectChat = false
+  upstream.post('/v1/chat/completions', async (req, reply) => {
+    assert.equal(req.headers.authorization, 'Bearer fixture-relay-secret-2')
     chats++
-    return { id: 'fixture-completion-' + chats, object: 'chat.completion', created: 1, model: 'fixture-chat', usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 }, choices: [{ index: 0, finish_reason: chats === 1 ? 'tool_calls' : 'stop', message: chats === 1 ? { role: 'assistant', content: '', tool_calls: [{ id: 'fixture-tool', type: 'function', function: { name: 'generate_image', arguments: JSON.stringify({ prompt: 'local fixture product' }) } }] } : { role: 'assistant', content: '本地协议测试已完成。' } }] }
+    reply.header('X-Oneapi-Request-Id', 'fixture-chat-' + chats)
+    if (rejectChat) return reply.code(503).send({ error: { message: 'fixture-secret-must-not-be-shown' } })
+    const start = req.body.messages.at(-1).role === 'user'
+    return { id: 'fixture-completion-' + chats, object: 'chat.completion', created: 1, model: 'fixture-chat', usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 }, choices: [{ index: 0, finish_reason: start ? 'tool_calls' : 'stop', message: start ? { role: 'assistant', content: '', tool_calls: [{ id: 'fixture-tool', type: 'function', function: { name: 'generate_image', arguments: JSON.stringify({ prompt: 'local fixture product' }) } }] } : { role: 'assistant', content: '本地协议测试已完成。' } }] }
   })
-  upstream.post('/v1/images/generations', async () => { images++; return { data: [{ b64_json: png.toString('base64') }] } })
+  upstream.post('/v1/images/generations', async (req, reply) => {
+    assert.equal(req.headers.authorization, 'Bearer fixture-relay-secret-1')
+    images++; reply.header('X-Oneapi-Request-Id', 'fixture-image-' + images)
+    return { data: [{ b64_json: png.toString('base64') }] }
+  })
   await upstream.listen({ host: '127.0.0.1', port: 0 })
   try {
-    const c = { ...config(), gateway: upstream.listeningOrigin + '/v1' }
-    const result = await runAgent(c, chat, { runId: crypto.randomUUID(), sessionId: 'fixture-session', conversationId: 'fixture-canvas', prompt: '生成一张测试图' })
+    const requests = []
+    const c = { ...config(), models: [{ ...image, channelId: 1 }], gateway: upstream.listeningOrigin + '/v1', onGatewayResponse: info => requests.push(info) }
+    const payload = { runId: crypto.randomUUID(), sessionId: 'fixture-session', conversationId: 'fixture-canvas', prompt: '生成一张测试图' }
+    const result = await runAgent(c, { ...chat, channelId: 2, maxChatCalls: 2 }, payload)
     assert.equal(chats, 2); assert.equal(images, 1)
+    assert.deepEqual(requests.map(r => r.requestId), ['fixture-chat-1', 'fixture-image-1', 'fixture-chat-2'])
     assert.equal(result.events.some(e => e.type === 'tool.completed' && e.artifacts[0].type === 'image'), true)
     assert.equal(result.events.at(-1).type, 'run.completed')
     assert.equal(result.events.some(e => e.delta === '本地协议测试已完成。'), true)
+    const limited = await runAgent(c, { ...chat, channelId: 2, maxChatCalls: 1 }, { ...payload, runId: crypto.randomUUID() })
+    assert.equal(chats, 3); assert.equal(images, 2)
+    assert.equal(limited.events.at(-1).type, 'run.failed')
+    assert.equal(limited.events.filter(e => e.type === 'tool.completed').length, 1)
+    rejectChat = true
+    const rejected = await runAgent(c, { ...chat, channelId: 2, maxChatCalls: 2 }, { ...payload, runId: crypto.randomUUID() })
+    assert.equal(chats, 4); assert.equal(images, 2)
+    assert.equal(rejected.events.at(-1).error.message, '对话网关返回 HTTP 503，未自动重试')
+    assert.equal(requests.at(-1).status, 503)
+    assert.doesNotMatch(JSON.stringify(rejected), /fixture-secret/)
   } finally { await upstream.close() }
 })
