@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { useAuth } from '../loomic/lib/auth-context'
-import { getIdentityEpoch } from '../api'
+import { getIdentityEpoch, assertIdentityEpoch } from '../api'
 
 type LeaveCheck = () => Promise<boolean> | boolean
-const GuardContext = createContext<((check: LeaveCheck) => () => void) | null>(null)
+type NavigationChecks = { register: (check: LeaveCheck) => () => void; check: () => Promise<boolean> }
+const GuardContext = createContext<NavigationChecks | null>(null)
 
 export function WorkspaceNavigationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
@@ -18,6 +19,24 @@ export function WorkspaceNavigationProvider({ children }: { children: ReactNode 
     guards.current.set(key, check); generation.current++
     return () => { guards.current.delete(key); generation.current++ }
   }, [])
+  const checking = useRef(false)
+  const check = useCallback(async () => {
+    if (checking.current) return false
+    checking.current = true
+    const startedGeneration = generation.current
+    const startedIdentity = getIdentityEpoch()
+    const startedOwner = currentOwner.current
+    const checks = [...guards.current.values()]
+    try {
+      assertIdentityEpoch(startedIdentity)
+      for (const guard of checks) {
+        if (!await guard()) return false
+        assertIdentityEpoch(startedIdentity)
+        if (generation.current !== startedGeneration || currentOwner.current !== startedOwner) return false
+      }
+      return alive.current && generation.current === startedGeneration && currentOwner.current === startedOwner
+    } catch { return false } finally { checking.current = false }
+  }, [])
   const shouldBlock = useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string; search: string; hash: string }; nextLocation: { pathname: string; search: string; hash: string } }) =>
     guards.current.size > 0 && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search || currentLocation.hash !== nextLocation.hash), [])
   const blocker = useBlocker(shouldBlock)
@@ -29,31 +48,30 @@ export function WorkspaceNavigationProvider({ children }: { children: ReactNode 
     const location = blocker.location.key
     if (attempt.current?.location === location) return
     const id = Symbol('navigation attempt')
-    attempt.current = { location, id }
     const startedGeneration = generation.current
     const startedIdentity = getIdentityEpoch()
-    const checks = [...guards.current.values()]
-    void (async () => {
-      let allowed = true
-      try {
-        for (const check of checks) {
-          if (!await check()) { allowed = false; break }
-          if (generation.current !== startedGeneration || getIdentityEpoch() !== startedIdentity) { allowed = false; break }
-        }
-      } catch { allowed = false }
+    attempt.current = { location, id }
+    void check().then(allowed => {
       if (!alive.current || attempt.current?.id !== id) return
       if (allowed && generation.current === startedGeneration && getIdentityEpoch() === startedIdentity) blocker.proceed()
       else blocker.reset()
-    })()
-  }, [blocker, owner])
-  return <GuardContext.Provider value={register}>{children}</GuardContext.Provider>
+    })
+  }, [blocker, owner, check])
+  const context = useMemo(() => ({ register, check }), [register, check])
+  return <GuardContext.Provider value={context}>{children}</GuardContext.Provider>
 }
 
 export function useWorkspaceLeaveGuard(check: LeaveCheck): void {
-  const register = useContext(GuardContext)
-  if (!register) throw new Error('Workspace leave guard requires WorkspaceNavigationProvider')
+  const context = useContext(GuardContext)
+  if (!context) throw new Error('Workspace leave guard requires WorkspaceNavigationProvider')
   const latest = useRef(check)
   latest.current = check
   const stable = useMemo(() => () => latest.current(), [])
-  useLayoutEffect(() => register(stable), [register, stable])
+  useLayoutEffect(() => context.register(stable), [context, stable])
+}
+
+export function useWorkspaceLeaveCheck(): () => Promise<boolean> {
+  const context = useContext(GuardContext)
+  if (!context) throw new Error('Workspace leave check requires WorkspaceNavigationProvider')
+  return context.check
 }

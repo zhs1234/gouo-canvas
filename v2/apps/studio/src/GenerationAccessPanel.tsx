@@ -33,7 +33,7 @@ export function GenerationAccessPanel({ userId }: { userId: number }) {
       {access.data.canRenew && <button type="button" disabled={busy || uncertain || !access.data.version} onClick={() => { void renew() }}>{busy ? '正在续用…' : '续用有限生成权限'}</button>}
     </>}
     <p className="text-xs text-muted-foreground">生成权限到期或用完不会清除 New API 钱包余额。续用需核验本人原生资金与批准的有限权限，不会充值、重新领取试用或发送模型请求。后续余额生成仍需每次发送单独同意。</p>
-    <a href="/keys">前往 New API 核对令牌</a>
+    <a href="/keys" target="_blank" rel="noopener noreferrer">前往 New API 核对令牌</a>
     {result && <p role={uncertain ? 'alert' : 'status'}>{result}</p>}
   </section>
 }

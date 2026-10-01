@@ -18,7 +18,7 @@ export default function AuthRecovery({ error, loading, retry }: { error: Error |
       <p>{error instanceof ApiError && error.status === 403 ? '原生账号拒绝了身份访问，请在账号安全页面核对停用或权限状态。' : '工作区内容已暂时隐藏，未保存草稿仍保留在当前页面。请保持页面打开。'}</p>
       <p>此操作只重新读取身份，不会重新提交生成、付款偏好或其它业务操作。</p>
       <button type="button" disabled={loading || remaining > 0} onClick={() => { void retry() }}>{loading ? '正在恢复…' : remaining > 0 ? `等待 ${remaining} 秒后恢复` : '重新恢复会话'}</button>
-      <p><a href="/security">前往原生账号安全页面</a></p>
+      <p><a href="/security" target="_blank" rel="noopener noreferrer">前往原生账号安全页面</a></p>
     </>}
   </section>
 }

@@ -1,3 +1,4 @@
+import { openAccountSection, closeAccount } from './workspace-account-fixture.mjs'
 import { test, expect } from '@playwright/test'
 import { mockAccount } from './account-fixture.mjs'
 
@@ -30,11 +31,12 @@ async function openStream(page) {
     }
   })
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
   await page.getByLabel('输入消息', { exact: true }).fill('仅测试流式协议')
   await page.getByLabel('输入消息', { exact: true }).press('Enter')
   await expect.poll(() => page.evaluate(() => window.streamFixture.calls)).toBe(1)

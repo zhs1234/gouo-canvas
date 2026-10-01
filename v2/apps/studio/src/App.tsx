@@ -7,6 +7,7 @@ import CanvasPage from './loomic/CanvasPage'
 import ProjectsPage from './loomic/ProjectsPage'
 import { WorkspaceShell } from './workspace/WorkspaceShell'
 import { WorkspaceNavigationProvider } from './workspace/WorkspaceNavigationProvider'
+import { WorkspaceAccountProvider } from './workspace/WorkspaceAccountProvider'
 const ChatLab = lazy(() => import('./chat-lab/ChatLab'))
 const CanvasLab = lazy(() => import('./canvas-lab/CanvasLab'))
 function CanvasWorkspace() {
@@ -24,7 +25,7 @@ function DefaultWorkspace() {
   return params.has('id') || params.has('session') ? <LegacyRedirect path="/canvas" /> : <Suspense fallback={<p>正在打开聊天…</p>}><ChatLab /></Suspense>
 }
 export default function App() {
-  return <ThemeProvider attribute="class" defaultTheme="light" enableSystem><AuthProvider><ToastProvider><WorkspaceNavigationProvider><Routes>
+  return <ThemeProvider attribute="class" defaultTheme="light" enableSystem><AuthProvider><ToastProvider><WorkspaceNavigationProvider><WorkspaceAccountProvider><Routes>
     <Route path="/" element={<DefaultWorkspace />} />
     <Route path="/chat" element={<Suspense fallback={<p>正在打开聊天…</p>}><ChatLab /></Suspense>} />
     <Route path="/chat-lab" element={<LegacyRedirect path="/chat" />} />
@@ -34,5 +35,5 @@ export default function App() {
     <Route path="/editor" element={<LegacyRedirect path="/canvas" />} />
     <Route path="/board" element={<LegacyRedirect path="/canvas" />} />
     <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes></WorkspaceNavigationProvider></ToastProvider></AuthProvider></ThemeProvider>
+  </Routes></WorkspaceAccountProvider></WorkspaceNavigationProvider></ToastProvider></AuthProvider></ThemeProvider>
 }

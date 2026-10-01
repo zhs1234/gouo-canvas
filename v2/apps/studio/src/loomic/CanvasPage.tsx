@@ -265,7 +265,7 @@ function CanvasPageContent() {
       {/* Canvas always takes full width; on mobile/tablet, ChatSidebar overlays instead of side-by-side */}
       <div className="flex-1 relative min-w-0 overflow-hidden">
         {/* Local save and New API account controls */}
-        <div className="absolute top-3 right-3 z-20">
+        <div className={`absolute top-3 z-20 ${chatOpen ? 'right-3' : 'right-24'}`}>
           <AccountMenu owner={accessToken} canvasId={canvasData.id} api={excalidrawApi} />
         </div>
         <CanvasEditor

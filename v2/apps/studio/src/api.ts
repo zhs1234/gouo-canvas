@@ -162,21 +162,26 @@ export async function login(username: string, password: string): Promise<User> {
   recoveryError = null
   identityInvalidated = false
   knownAnonymous = false
+  const epoch = sessionVersion
   const value = await send<Session>('/api/user/login', { method: 'POST', body: JSON.stringify({ username, password }) })
+  assertIdentityEpoch(epoch)
   session = validateSession(value)
   const user = await currentUser()
   if (!user) throw new Error('登录会话已失效，请重试')
   return user
 }
 
-export async function logout(): Promise<void> {
+export async function logout(): Promise<number> {
+  const epoch = sessionVersion
   if (refreshing) await refreshing.catch(() => null)
+  assertIdentityEpoch(epoch)
   const headers = new Headers()
   if (session) {
     headers.set('Authorization', `Bearer ${session.access_token}`)
     headers.set('X-Auth-Session', session.session.sid)
   }
   const result = await send<{ revoked_sid?: string; cookie_cleared?: boolean } | undefined>('/api/user/auth/logout', { method: 'POST', headers })
+  assertIdentityEpoch(epoch)
   // The pinned server may revoke a Bearer session without clearing a different
   // browser cookie. Do not claim a complete sign-out in that case.
   if (result?.cookie_cleared === false) throw new Error('浏览器会话已切换，请刷新页面后再退出登录')
@@ -186,6 +191,7 @@ export async function logout(): Promise<void> {
   identityInvalidated = false
   knownAnonymous = true
   identityChannel?.postMessage('identity-invalidated')
+  return sessionVersion
 }
 
 // 流式写操作只发送一次，不能自动重放可能已经计费的请求。

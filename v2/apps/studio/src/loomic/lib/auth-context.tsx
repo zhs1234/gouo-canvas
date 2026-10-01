@@ -11,8 +11,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [recoveryIssue, setRecoveryIssue] = useState<Error | null>(null)
   useEffect(() => subscribeAuthRecovery(setRecoveryIssue), [])
   async function signOut() {
-    await logout()
+    const completedEpoch = await logout()
     await client.cancelQueries()
+    assertIdentityEpoch(completedEpoch)
     client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
     client.setQueryData(['session'], null)
   }

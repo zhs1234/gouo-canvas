@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
-import { publicEncrypt, constants } from 'node:crypto'
+import { publicEncrypt, constants, createHash } from 'node:crypto'
 import { createServer } from '../../apps/api/src/server.mjs'
 import { loadConfig } from '../../apps/api/src/config.mjs'
 
@@ -49,6 +49,17 @@ async function encryptedPassword(password) {
   return { password_encrypted: publicEncrypt({ key: key.public_key, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, Buffer.from(password)).toString('base64'), encryption_key_id: key.kid }
 }
 async function login(password) { return native('/api/user/login', undefined, { username: 'fixture-account', ...await encryptedPassword(password) }) }
+const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
+const preservedProfileFields = ['id', 'username', 'has_password', 'role', 'status', 'group', 'quota', 'used_quota', 'request_count', 'setting', 'sidebar_modules', 'permissions']
+function profileSnapshot(account) {
+  return Object.fromEntries(preservedProfileFields.map(key => { assert.ok(Object.hasOwn(account, key), `Native self DTO must expose ${key}`); return [key, account[key]] }))
+}
+async function tokenSnapshot(token) {
+  const data = successful(await native('/api/token/?page=1&page_size=100', token))
+  assert.ok(Array.isArray(data.items)); assert.equal(data.total, data.items.length)
+  const fields = ['id', 'user_id', 'status', 'name', 'created_time', 'accessed_time', 'expired_time', 'remain_quota', 'unlimited_quota', 'model_limits_enabled', 'model_limits', 'allow_ips', 'used_quota', 'group', 'cross_group_retry', 'auto_groups']
+  return data.items.map(row => Object.fromEntries(fields.map(key => { assert.ok(Object.hasOwn(row, key), `Native token DTO must expose ${key}`); return [key, row[key]] }))).sort((a, b) => a.id - b.id)
+}
 try {
   await compose('up', '-d')
   const published = (await compose('port', 'new-api', '3000')).trim()
@@ -67,6 +78,22 @@ try {
   assert.equal((await update(current.access_token, { display_name: '隔离账户验收' })).statusCode, 200)
   assert.equal(successful(await native('/api/user/self', current.access_token)).display_name, '隔离账户验收')
   assert.equal(successful(await native('/api/subscription/self', current.access_token)).billing_preference, pref)
+  const profileBefore = profileSnapshot(successful(await native('/api/user/self', current.access_token)))
+  const tokensBefore = await tokenSnapshot(current.access_token)
+  const studioProfile = (payload) => studio.inject({ method: 'PUT', url: '/api/studio/profile', headers: { authorization: 'Bearer ' + current.access_token }, payload })
+  const privateUpdated = await studioProfile({ display_name: '  私有显示名验收  ' })
+  assert.equal(privateUpdated.statusCode, 200)
+  assert.deepEqual(privateUpdated.json(), { success: true, data: { id: owner, display_name: '私有显示名验收', confirmed: true } })
+  assert.equal(privateUpdated.headers['cache-control'], 'no-store')
+  const profileAfter = successful(await native('/api/user/self', current.access_token))
+  assert.equal(profileAfter.display_name, '私有显示名验收')
+  assert.equal(digest(profileSnapshot(profileAfter)), digest(profileBefore), 'Native profile, settings and financial fields must remain unchanged')
+  const tokensAfter = await tokenSnapshot(current.access_token)
+  assert.equal(digest(tokensAfter), digest(tokensBefore), 'Native token metadata must remain unchanged')
+  assert.equal(successful(await native('/api/subscription/self', current.access_token)).billing_preference, pref)
+  const privatePutsBeforeRejected = nativePuts
+  for (const payload of [{ display_name: ' ', }, { display_name: '名称', id: owner + 1 }, { display_name: '名称', setting: '{}' }, { password: newPassword }, { display_name: '名称', billing_preference: 'wallet_only' }]) assert.equal((await studioProfile(payload)).statusCode, 422)
+  assert.equal(nativePuts, privatePutsBeforeRejected)
   const putsBeforeRejected = nativePuts
   for (const payload of [{ language: 'zh' }, { display_name: 'x', role: 100 }, { password_encrypted: 'x' }]) assert.equal((await update(current.access_token, payload)).statusCode, 422)
   assert.equal(nativePuts, putsBeforeRejected)
@@ -86,7 +113,8 @@ try {
   assert.equal((await login(oldPassword)).body.success, false)
   assert.equal(successful(await login(newPassword)).user.id, owner)
   assert.equal(successful(await native('/api/subscription/self', refreshed.access_token)).billing_preference, pref)
-  assert.equal(nativePuts, 4)
+  assert.equal(nativePuts, 5)
   const evidence = { sourceCommit: '0aec08fee811ec6136828fda790551b49e410301', binarySha256: checksum, owner, generationEnabled: false, trialEnabled: false, modelCalls: 0, realPaidCost: 0, profileConfirmed: true, billingPreferenceUnchanged: true, unknownFieldsRejected: true, missingProofStatus: missing.statusCode, missingProofCode: missing.json().code, actualEncryptedVerification: true, passwordRotated: true, sameProofRejectedStatus: reused.statusCode, sameProofRejectedCode: reused.json().code, currentRefreshPreserved: true, oldAccessAndOtherSessionRevoked: true, oldPasswordRejected: true, newPasswordAccepted: true, nativePuts }
+  Object.assign(evidence, { studioProfileConfirmed: true, studioProfileUnknownFieldsRejectedWithoutWrites: true, preservedProfileFields, nativeSettingsAndFinancialFieldsUnchanged: true, nativeTokenMetadataUnchanged: true, nativeTokenCount: tokensBefore.length, nativeTokenCoverage: tokensBefore.length ? 'existing token metadata' : 'empty token list remains empty; populated token case not exercised', completeTokenKeyFetched: false, tokenKeysPersistedOrOutput: false })
   await writeFile(join(directory, 'evidence.json'), JSON.stringify(evidence, null, 2)); console.log(JSON.stringify(evidence, null, 2)); console.log('Evidence: ' + join(directory, 'evidence.json'))
 } finally { if (studio) await studio.close(); await compose('down', '--volumes', '--remove-orphans') }

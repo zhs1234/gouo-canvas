@@ -544,7 +544,7 @@ const MessageError: FC = () => {
       <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
         {failure && <p>{failure.message}</p>}
         <p>请求失败或中断；请检查任务结果与账号费用，不会自动重试。</p>
-        {failure?.walletSuggested && <p><a href="/wallet">前往原生钱包充值</a></p>}
+        {failure?.walletSuggested && <p><a href="/wallet" target="_blank" rel="noopener noreferrer">前往原生钱包充值</a></p>}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

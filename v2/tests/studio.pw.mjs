@@ -1,3 +1,4 @@
+import { openAccountSection, closeAccount } from './workspace-account-fixture.mjs'
 import { test, expect } from '@playwright/test'
 
 import { mockAccount } from './account-fixture.mjs'
@@ -14,7 +15,7 @@ test('confirmed logout gates another tab without refresh or writes until explici
   await other.evaluate(() => { window.authDraftEditor = document.querySelector('.excalidraw'); const marker = document.createElement('span'); marker.id = 'old-private-tab'; marker.textContent = 'OLD_PRIVATE_TAB'; window.authDraftEditor.append(marker) })
   const initialRefreshes = second.refreshes; let writes = 0
   other.on('request', request => { if (['POST','PUT','DELETE'].includes(request.method()) && !request.url().endsWith('/api/user/auth/refresh')) writes++ })
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByRole('button', { name: '退出登录' }).click()
   await expect(other.getByRole('heading', { name: '会话暂时无法恢复' })).toBeVisible()
   await expect(other.getByText('OLD_PRIVATE_TAB', { exact: true })).toBeHidden()
@@ -45,7 +46,7 @@ test('failed logout does not invalidate another tab', async ({ page, context }) 
   await page.goto('./canvas'); await other.goto('./canvas')
   await expect(other.getByRole('button', { name:'本地保存', exact:true })).toBeEnabled()
   const initialRefreshes = second.refreshes
-  await page.getByRole('button', { name:'New API 账号', exact:true }).click()
+  await openAccountSection(page)
   await page.getByRole('button', { name:'退出登录' }).click()
   await expect(page.getByText('退出失败，请重试', {exact:true})).toBeVisible()
   await expect(other.getByRole('button', {name:'本地保存', exact:true})).toBeEnabled()
@@ -53,12 +54,38 @@ test('failed logout does not invalidate another tab', async ({ page, context }) 
   expect(second.refreshes).toBe(initialRefreshes)
 })
 
+test('late logout response cannot clear an identity invalidated during its request', async ({ page }) => {
+  const account = await mockAccount(page); account.active = true
+  let release, logouts = 0
+  const held = new Promise(resolve => { release = resolve })
+  await page.route('**/api/user/auth/logout', async route => {
+    logouts++; await held
+    await route.fulfill({ json: { success: true, data: { cookie_cleared: true } } })
+  })
+  await page.goto('./canvas')
+  await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
+  await page.evaluate(() => {
+    window.observedInvalidations = 0
+    window.identityWitness = new BroadcastChannel('gouo-studio-identity')
+    window.identityWitness.onmessage = () => { window.observedInvalidations++ }
+    window.logoutAttempt = import('/studio/src/api.ts').then(api => api.logout()).then(() => 'unexpected success', error => error.message)
+  })
+  await expect.poll(() => logouts).toBe(1)
+  await page.evaluate(() => { const channel = new BroadcastChannel('gouo-studio-identity'); channel.postMessage('identity-invalidated'); channel.close() })
+  await expect(page.getByRole('heading', { name: '会话暂时无法恢复' })).toBeVisible()
+  release()
+  expect(await page.evaluate(() => window.logoutAttempt)).toMatch(/身份已变化|另一个标签页已退出账号/)
+  expect(await page.evaluate(() => window.observedInvalidations)).toBe(1)
+  expect(logouts).toBe(1)
+  await expect(page.getByRole('heading', { name: '会话暂时无法恢复' })).toBeVisible()
+})
+
 test('cross-tab logout with no replacement cookie recovers as guest with exactly one explicit refresh', async ({ page, context }) => {
   const first = await mockAccount(page); first.active = true
   const other = await context.newPage(); const second = await mockAccount(other); second.active = true
   await page.goto('./canvas'); await other.goto('./canvas')
   await expect(other.getByRole('button', { name:'本地保存', exact:true })).toBeEnabled()
-  await page.getByRole('button', { name:'New API 账号', exact:true }).click()
+  await openAccountSection(page)
   await page.getByRole('button', { name:'退出登录' }).click()
   await expect(other.getByRole('heading', { name:'会话暂时无法恢复' })).toBeVisible()
   const initialRefreshes = second.refreshes; second.active = false
@@ -66,7 +93,7 @@ test('cross-tab logout with no replacement cookie recovers as guest with exactly
   other.on('request', request => { if (['POST','PUT','DELETE'].includes(request.method()) && !request.url().endsWith('/api/user/auth/refresh')) writes++ })
   await other.getByRole('button', {name:'重新恢复会话'}).click()
   await expect(other.getByRole('heading', {name:'会话暂时无法恢复'})).toHaveCount(0)
-  await other.getByRole('button', {name:'New API 账号',exact:true}).click()
+  await openAccountSection(other)
   await expect(other.getByRole('button', {name:'登录',exact:true})).toBeVisible()
   expect(second.refreshes).toBe(initialRefreshes+1); expect(writes).toBe(0)
 })
@@ -83,7 +110,7 @@ test('a broadcast during pending refresh prevents both unsent ordinary and strea
   await other.route('**/api/studio/race-*',route=>{business++;return route.fulfill({json:{success:true,data:{}}})})
   await other.evaluate(()=>{window.raceResults=Promise.all([window.raceApi.request('/api/studio/race-normal',{method:'POST',body:'{}'}),window.raceApi.requestStream('/api/studio/race-stream',{method:'POST',body:'{}'})].map(promise=>promise.then(()=>false,()=>true)))})
   await expect.poll(()=>pending).toBe(true)
-  await page.getByRole('button',{name:'New API 账号',exact:true}).click();await page.getByRole('button',{name:'退出登录'}).click()
+  await openAccountSection(page);await page.getByRole('button',{name:'退出登录'}).click()
   await expect(other.getByRole('heading',{name:'会话暂时无法恢复'})).toBeVisible()
   release();expect(await other.evaluate(()=>window.raceResults)).toEqual([true,true]);expect(business).toBe(0)
   await expect(other.getByRole('heading',{name:'会话暂时无法恢复'})).toBeVisible()
@@ -94,7 +121,7 @@ test('a second invalidation during manual identity read cannot publish its old o
   const other=await context.newPage();const second=await mockAccount(other);second.active=true
   await page.goto('./canvas');await other.goto('./canvas')
   await expect(other.getByRole('button',{name:'本地保存',exact:true})).toBeEnabled()
-  await page.getByRole('button',{name:'New API 账号',exact:true}).click();await page.getByRole('button',{name:'退出登录'}).click()
+  await openAccountSection(page);await page.getByRole('button',{name:'退出登录'}).click()
   await expect(other.getByRole('heading',{name:'会话暂时无法恢复'})).toBeVisible()
   let pending=false,release;const gate=new Promise(resolve=>{release=resolve});let reads=0,refreshes=0
   await other.route('**/api/user/auth/refresh',route=>{refreshes++;expect(route.request().headers()['x-auth-session']).toBeUndefined();return route.fallback()})
@@ -127,6 +154,7 @@ test('non-JSON refresh 429 stays behind an explicit recovery gate, preserves sta
   expect(refreshes).toBe(1)
   expect(writes).toEqual([])
   await page.getByRole('button', { name: '重新恢复会话' }).click()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   expect(refreshes).toBe(2)
   expect(writes).toEqual([])
@@ -166,7 +194,7 @@ test('disabled identity is a recovery error while an explicit 401 remains anonym
   await page.unroute('**/api/user/auth/refresh')
   await page.getByRole('button', { name: '重新恢复会话' }).click()
   await expect(page.getByRole('heading', { name: '会话暂时无法恢复' })).toHaveCount(0)
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible()
 })
 
@@ -200,22 +228,24 @@ test('manual recovery into a different owner clears the old workspace before exp
 test('New API login, reload restoration and logout keep access tokens out of browser storage', async ({ page }) => {
   const account = await mockAccount(page)
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
   const stored = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)]))
   expect(stored).not.toContain('test-access-token')
   expect(stored).not.toContain('test-password')
   await page.reload()
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
   expect(account.refreshes).toBeGreaterThanOrEqual(2)
   await page.getByRole('button', { name: '退出登录' }).click()
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
+  await openAccountSection(page)
   await expect(page.getByRole('button', { name: '登录', exact: true })).toBeVisible()
   expect(account.active).toBe(false)
 })
@@ -223,7 +253,7 @@ test('New API login, reload restoration and logout keep access tokens out of bro
 test('invalid credentials and failed logout are reported without pretending authentication succeeded', async ({ page }) => {
   const account = await mockAccount(page)
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('wrong-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
@@ -231,8 +261,9 @@ test('invalid credentials and failed logout are reported without pretending auth
   await expect(page.getByRole('button', { name: '退出登录' })).toHaveCount(0)
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
   account.failLogout = true
   await page.getByRole('button', { name: '退出登录' }).click()
@@ -244,12 +275,13 @@ test('expired reads recover once while unauthorized writes are never automatical
   const account = await mockAccount(page)
   account.rejectProfileOnce = true
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
   let submissions = 0
   await page.route('**/api/studio/jobs', (route) => {
@@ -269,7 +301,7 @@ test('a successful envelope without a valid auth session cannot log the user in'
   await mockAccount(page)
   await page.route('**/api/user/login', (route) => route.fulfill({ json: { success: true, data: { user: { id: 7, username: 'studio-user' } } } }))
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
@@ -281,17 +313,18 @@ test('a successful envelope without a valid auth session cannot log the user in'
 test('account entry reuses pinned native routes on the same origin', async ({ page }) => {
   await mockAccount(page)
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   for (const [name, path] of [
     ['前往 New API 登录', '/sign-in?redirect=%2Fstudio%2F'],
     ['注册账号', '/sign-up'], ['忘记密码', '/forgot-password'],
     ['账号资料', '/profile'], ['账号安全与登录会话', '/security'],
     ['余额与充值', '/wallet'], ['用量记录', '/usage-logs'],
-    ['管理后台（需要管理员权限）', '/users'],
   ]) {
     const link = page.getByRole('link', { name, exact: true })
     await expect(link).toHaveAttribute('href', path)
     expect(await link.evaluate(a => new URL(a.href).origin)).toBe(new URL(page.url()).origin)
+    await expect(link).toHaveAttribute('target', '_blank')
+    await expect(link).toHaveAttribute('rel', /noopener/)
   }
 })
 
@@ -301,6 +334,7 @@ test('native login return restores the account without a Studio password submiss
   let logins = 0
   page.on('request', request => { if (new URL(request.url()).pathname === '/api/user/login') logins++ })
   await page.goto('./canvas')
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   expect(logins).toBe(0)
   expect(account.refreshes).toBeGreaterThan(0)
@@ -313,7 +347,7 @@ test('logout cannot claim success when upstream preserves a different browser se
     success: true, data: { revoked_sid: 'test-session', cookie_cleared: false },
   } }))
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByRole('button', { name: '退出登录' }).click()
   await expect(page.getByText('浏览器会话已切换，请刷新页面后再退出登录', { exact: true })).toBeVisible()
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
@@ -323,10 +357,11 @@ test('disabled or revoked native session restores as anonymous and cannot submit
   const account = await mockAccount(page)
   account.active = true
   await page.goto('./canvas')
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   account.active = false
   await page.reload()
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await expect(page.getByRole('button', { name: '退出登录' })).toHaveCount(0)
   let submissions = 0
   await page.route('**/api/studio/jobs', route => { submissions++; return route.fulfill({ json: { success: true } }) })

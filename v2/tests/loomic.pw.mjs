@@ -1,3 +1,4 @@
+import { openAccountSection, closeAccount } from './workspace-account-fixture.mjs'
 import { test, expect } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import sharp from 'sharp'
@@ -80,11 +81,12 @@ test('image-only channels stay in image preferences and cannot submit an Agent r
     return route.abort()
   })
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
   await page.getByRole('button', { name: 'Agent', exact: true }).click()
   await expect(page.getByText('Agent Model', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Auto (workspace default)', exact: true })).toBeVisible()
@@ -200,16 +202,20 @@ test('fixture agent results enter the canvas and persist; requests contain only 
   await page.getByRole('button', { name: '矩形 (R)', exact: true }).click()
   await page.mouse.move(200, 200); await page.mouse.down(); await page.mouse.move(420, 350); await page.mouse.up()
   await saveDraft(page)
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('账户余额')).toHaveText('¥100.00')
+  await openAccountSection(page, 'billing')
+  await expect(page.getByLabel('账户用量')).toContainText('100.00')
   await page.getByText('查看模型单价', { exact: true }).click()
   await expect(page.getByText('输入 ¥36.50 · 输出 ¥219.00 / 100万 token', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: '关闭账号窗口', exact: true }).click()
@@ -218,8 +224,8 @@ test('fixture agent results enter the canvas and persist; requests contain only 
   await page.getByLabel('输入消息', { exact: true }).fill('只做本地协议测试')
   await page.getByLabel('输入消息', { exact: true }).press('Enter')
   await expect(page.getByText('本地测试结果，未调用 AI。', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('账户余额')).toHaveText('¥99.75')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page, 'billing')
+  await expect(page.getByLabel('账户用量')).toContainText('¥99.75')
   await expect(page.getByText('调用记录折算：¥0.25（3 次模型调用）；实扣待核对。', { exact: true })).toBeVisible()
   await expect(page.getByText('New API 用量记录 · 1 倍 · 已调用 3 次', { exact: true })).toBeVisible()
   const reads = account.billingReads
@@ -258,12 +264,14 @@ test('native image panel switches verified model parameters, preserves reference
     return route.fulfill({ json: { success: true, data: { url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32, usage: { state: 'settled', currency: 'CNY', cost: 0.44, requestCount: 1 } } } })
   })
   await page.goto('./canvas')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: 'AI 生成图片', exact: true }).click()
   await expect(page.getByRole('button', { name: 'xhigh', exact: true })).toBeVisible()
@@ -284,8 +292,8 @@ test('native image panel switches verified model parameters, preserves reference
   expect(image).toBeTruthy()
   expect(image.width / image.height).toBeCloseTo(1.5)
   expect(calls).toBe(1)
-  await expect(page.getByLabel('账户余额')).toHaveText('¥99.56')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page, 'billing')
+  await expect(page.getByLabel('账户用量')).toContainText('¥99.56')
   await expect(page.getByText('调用记录折算：¥0.44（1 次模型调用）；实扣待核对。', { exact: true })).toBeVisible()
 })
 
@@ -306,12 +314,14 @@ test('switching projects aborts the previous transport so late results cannot en
   })
   try {
     await page.goto('./canvas')
-    await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+    await openAccountSection(page)
     await page.getByLabel('用户名', { exact: true }).fill('studio-user')
     await page.getByLabel('密码', { exact: true }).fill('test-password')
     await page.getByRole('button', { name: '登录', exact: true }).click()
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await expect(page.getByRole('dialog', { name: 'New API 账号', exact: true })).toHaveCount(0)
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
     await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
     await page.getByLabel('输入消息', { exact: true }).fill('本地隔离测试，不调用模型')
     await page.getByLabel('输入消息', { exact: true }).press('Enter')
@@ -366,6 +376,7 @@ test('image client omits false consent and never retries failed paid sends', asy
     return route.fulfill({ status: 503, json: { success: false, message: 'Explicit fixture failure' } })
   })
   await page.goto('./canvas')
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await page.evaluate(async () => {
     const api = await import('/studio/src/loomic/lib/server-api.ts')

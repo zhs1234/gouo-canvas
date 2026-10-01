@@ -1,5 +1,23 @@
 # 实际交付与验证状态
 
+## T1.9 全页面账号菜单、设置与安全退出（2026-10-01）
+
+基于 T1.8 `e0b205d`，仍在 `codex/registration-trial`，当前项目内由三位gpt-6.1-sol子智能体与根协调。聊天、官方画布、项目库和原Loomic共用底部账户菜单及设置分栏，参考实际ChatGPT已登录/访客截图。Loomic原本地保存保留，顶部账号也开同一面板；设置不导航，使用已有BaseUI语义/焦点/手机抽屉与同owner keepMounted。资料/余额/试用/有限权限复用现有组件和本人Query，不复制未实现订阅或另造IAM/钱包。设计、接口、标签页边界见 [ACCOUNT-SETTINGS.md](ACCOUNT-SETTINGS.md)。
+
+`PUT /api/studio/profile` 仅精确trim1–20Unicode的display_name；fresh本人身份/owner busy、原严格bridge唯一NativePUT、同owner/名称只读确认。禁止setting/role/quota/group/password/owner等字段，写后错误统一unknown，无自动重放/原始错误泄露。prepared精确selfPUT原已转Studio资料/密码proof白名单，本轮未解封或改安全配置。请求前当前tab严格sessionStorage保护记录读回；损坏/拒写0PUT。未知同tab关闭/切页/reload仍阻断，只可显式本人读取核对，不匹配保持unknown；记录只含owner/name/state，无凭据，不是跨浏览器或关闭整个tab后的全局事务。
+
+退出前共享真实保存check，失败0logout且可导出，成功原生signOut不reload。原生cookie_cleared:false/失败仍不冒称成功；登录/退出响应及取消查询后epoch fence防止旧异步结果清/发布新身份。所有原生资料/安全/令牌/钱包及错误充值链接新tab保留草稿；去误导/users入口，公开部署令牌限制仍是prepared规则，没有冒称默认edge已应用。
+
+三位子智能体实际独立主8080访客浏览器实操：四页原地菜单/关闭/返回、桌面键盘Enter/Arrow/Escape、20Tab限制与焦点恢复、390手机drawer→settings→关闭/无溢出。另1440真实本地96×64PNG导入→顶部设置→聊天→返回→导出，1image/1file、原bytes哈希 `e19402fcc636532bfbfb12b431dc89a2352181b0aaba3b6bb054c5f2c1c4fd6a` 完全一致。报告 `.local/t19-{ui,review,local-canvas}-report.json`，截图 `output/playwright/t19-*`。独立实操发现并修正表单样式缺失、996px顶部“对话”覆盖账号、996×500关闭按钮随内容滚出，保留原发现/临时CSS预览与最终bundle复验区别。正式bundle冷读确认输入42px/可见边框与中性分类；390×500正文滚到底关闭/分类仍可达，Tab/Escape正常。996/390原工作台保存/账号/对话按钮普通点击均命中自身，无横溢出，移动再次导出原图hash相同。
+
+新随机真实固定Native账户合同 **exit0**：私有profile修改真实成功，前后本人id/username/has_password/role/status/group/quota/used/request_count/setting/sidebar_modules/permissions安全哈希与计费偏好不变；禁止字段0NativePUT。原资料/安全proof改密/旧会话撤销/refresh合同保留，总PUT精确5。token实际0条前后空，不冒称非空token合同已验；未取完整key。两次自身隔离测试均清理，0模型/真实采购。最终 `.local/t19-account-native-final.log`、`.local/native-account-XOC2BN/evidence.json`，固定日常同binary `a5fd598…`；不是日常用户改密或资金操作。
+
+最终 `npm run check` **exit0：51领域/157API、类型、build12.77秒**，`.local/t19-check-final.log`；完整 `npm run test:e2e -- --workers=1 --reporter=line` **135/135、3.7分钟、exit0**，`.local/t19-e2e-final.log`；`npm run test:stack` **exit0**：随机真实未初始化Native边界、明确personal契约替身2/2（12.7秒）、fresh user-token契约替身1/1（4.1秒），自身随机栈自动清理，`.local/t19-stack-final.log`。整栈属于最终source，不等于付费模型/支付。`git diff --check` exit0。此前完整132/132、3.6分钟通过后，真实实操新增Q20–Q22视觉/遮挡/矮视口修复和三项用例，需要最终独立复验；首15例12通过/3fixture失败、次42例41通过/1已知中文错误匹配失败保留；旧界面49/49定向通过。原保存/授权/unknown断言无删除。
+
+日常只重构建Studio API/web，`up --wait --no-deps studio-api web`，Native ID/StartedAt/二进制不变，原setup/root_init false，实际generation/trial/tokenRenewal全关闭；`.local/t19-preview-{before,after}.json`。最终再仅更新web并只读 `stack:status`：edge/studio/newApi ready、accountInitialized/generationEnabled false，三服务healthy，Native ID/启动/binary前后严格相同。无系统安装、依赖/锁、上游pin/main、push/merge、真实试用资金/安全配置或生产部署变化。
+
+原28场景仍16通过/12partial/0未执行，P和真实支付未验；导航/账号自动例与访客实操不增加此计数。G1公开限流/G2退款候选启用继续受批准门项约束。下一T1.10剩余账号与双用户子场景的隔离验收，先补F/N可执行子项，真实配置和 paid tests 不擅自启用，整体成熟产品仍持续推进。
+
 ## T1.8 默认聊天、共享侧栏与安全画布出口（2026-10-01）
 
 基于 T1.7 `c1fc0cf`，仍在 `codex/registration-trial`。按用户实际报告修复画布缺少互通出口：默认 `/studio/` 进入完整 assistant-ui 聊天，聊天、官方画布、项目库与原 Loomic 工作台共用固定侧栏；手机用原 Sidebar Sheet。实际在内置浏览器查看未登录 chatgpt.com，并在用户现有 Edge 查看已登录首页、账户菜单与设置页，截图及具体路线见 [WORKSPACE-NAVIGATION.md](WORKSPACE-NAVIGATION.md)。原图、旧草稿、未知字段、编辑器与许可证保留，没有另造账号/钱包/画布引擎。

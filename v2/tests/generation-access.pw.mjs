@@ -1,3 +1,4 @@
+import { openAccountSection, closeAccount } from './workspace-account-fixture.mjs'
 import { test, expect } from '@playwright/test'
 import { mockAccount } from './account-fixture.mjs'
 
@@ -31,13 +32,13 @@ for (const entry of ['./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', './ca
     // An unrelated owner 71 must not clear owner 7's consent.
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('gouo:clear-balance-consent', { detail: { owner: 'local:71' } })))
     await expect(consent).toBeChecked()
-    await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+    await openAccountSection(page, 'access')
     const panel = page.getByRole('region', { name: '生成权限' })
     await expect(panel).toContainText('不会清除 New API 钱包余额')
     await panel.getByRole('button', { name: '续用有限生成权限' }).click()
     await expect(panel).toContainText('没有充值、重新领取试用或发送模型请求')
     await expect(panel.getByRole('button', { name: '续用有限生成权限' })).toHaveCount(0)
-    await page.getByRole('button', { name: entry.startsWith('./chat') ? '关闭账号' : '关闭账号窗口', exact: true }).click()
+    await page.getByRole('button', { name: '关闭账号窗口', exact: true }).click()
     await expect(consent).not.toBeChecked()
     expect(f.counts().writes).toBe(1); expect(f.counts().generations).toBe(0)
     expect(f.counts().reads).toBeGreaterThanOrEqual(2)
@@ -49,7 +50,7 @@ for (const outcome of ['network', '401']) {
     const f = await setup(page, './chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
     let writes = 0
     await page.route('**/api/studio/access/renew', route => { writes++; return outcome === 'network' ? route.abort() : route.fulfill({ status: 401, json: { success: false, message: 'fixture session expired' } }) })
-    await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+    await openAccountSection(page, 'access')
     const panel = page.getByRole('region', { name: '生成权限' })
     await panel.getByRole('button', { name: '续用有限生成权限' }).click()
     await expect(panel.getByRole('alert')).toContainText('请勿再次提交')
@@ -62,17 +63,19 @@ for (const outcome of ['network', '401']) {
 test('display name update sends only Unicode name, then confirms same owner; unknown writes stay blocked', async ({ page }) => {
   const f = await setup(page, './')
   let owner = 7, displayName = '测试用户', writes = 0, fail = false
-  await page.route('**/api/user/self', route => {
+  await page.route('**/api/studio/profile', route => {
     if (route.request().method() === 'PUT') {
       writes++; expect(Object.keys(route.request().postDataJSON())).toEqual(['display_name'])
       if (fail) return route.abort()
       displayName = route.request().postDataJSON().display_name
       return route.fulfill({ json: { success: true, message: '' } })
     }
-    return route.fulfill({ json: { success: true, data: { id: owner, username: 'studio-user', display_name: displayName } } })
+    return route.fulfill({ status: 405, json: { success: false } })
   })
+  await page.route('**/api/user/self', route => route.fulfill({ json: { success: true, data: { id: owner, username: 'studio-user', display_name: displayName } } }))
+  if (await page.getByRole('dialog', { name: '账号与设置', exact: true }).isVisible()) { await expect(page.getByText('当前账号：测试用户', { exact: true })).toBeVisible(); await closeAccount(page) }
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   const input = page.getByLabel('显示名称', { exact: true })
   await input.fill('😀'.repeat(21)); await page.getByRole('button', { name: '更新显示名称' }).click()
   await expect(page.getByText('显示名称需为 1–20 个字符')).toBeVisible(); expect(writes).toBe(0)
@@ -85,13 +88,14 @@ test('display name update sends only Unicode name, then confirms same owner; unk
   await expect(page.getByRole('button', { name: '更新显示名称' })).toBeDisabled()
   expect(writes).toBe(2)
   await page.getByRole('button', { name: '退出登录' }).click()
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
   owner = 11; displayName = '另一个用户'
   await page.route('**/api/user/login', route => {
     f.account.token = 'fixture-other-owner'
     f.account.active = true
     return route.fulfill({ json: { success: true, data: { access_token: f.account.token, token_type: 'Bearer', access_expires_at: Math.floor(Date.now() / 1000) + 600, session: { sid: 'fixture-other-session' }, user: { id: owner, username: 'studio-user' } } } })
   })
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('fixture-other')
   await page.getByLabel('密码', { exact: true }).fill('fixture-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
@@ -108,7 +112,7 @@ test('disabled, incompatible, unknown and unavailable access never offer renewal
   const f = await setup(page, './chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
   let state = 'disabled'
   await page.route('**/api/studio/access', route => route.fulfill({ json: { success: true, data: { state, message: `权限状态：${state}`, canRenew: false } } }))
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page, 'access')
   const panel = page.getByRole('region', { name: '生成权限' })
   for (const next of ['disabled', 'incompatible', 'unknown', 'unavailable']) {
     state = next

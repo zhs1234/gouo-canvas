@@ -1,5 +1,7 @@
 # New API 原生账号入口与固定协议
 
+> 2026-10-01 T1.9增量：所有Studio页共享账户菜单/设置，私有 `PUT /api/studio/profile` 只允许本人显示名称，复用既有严格Native桥/只读确认，不改账号或资金权威。退出前真实保存、不reload；sameowner面板与单tab非秘密意图保护未知结果；登录/退出晚响应epoch核验。实际新随机固定Native、UI/整栈结果和限制见 [ACCOUNT-SETTINGS.md](ACCOUNT-SETTINGS.md)、STATUS顶部。prepared原精确selfPUT仍转Studio资料/密码proof白名单，未解封Nativesetting写。
+
 核对固定 SHA `0aec08fee811ec6136828fda790551b49e410301`，不升级上游或重写 IAM。日常实例未创建账号；隔离 Native 测试使用独立合成账号。Studio 账号面板优先链接同源 New API 原生 UI，复用其 Turnstile、密码加密、登录验证、MFA、passkey、注册和密码恢复流程。基础密码表单只适用于未启用额外验证的实例；不声称完整实现上游登录流程。
 
 T1.5b新增私有未知模型令牌续用恢复，限定相同稳定instanceId/本人owner/v2批准/proof，恢复审计与binding不涉及账号创建、密码或会话；原key409，完整模型key不读取/输出。首次没有Studio binding可在精确默认旧权限证据下CAS插入，不虚构旧绑定。仍须每次业务操作fresh原生鉴权，账号数字ID不能跨实例复用；详见 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)。日常真实配置未启用，真实账号安全设置未改。

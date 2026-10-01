@@ -1,3 +1,4 @@
+import { openAccountSection, closeAccount } from './workspace-account-fixture.mjs'
 import { test, expect } from '@playwright/test'
 import { mockAccount } from './account-fixture.mjs'
 async function setup(page) {
@@ -156,11 +157,12 @@ test('logout hides server history and login restores the same owner thread', asy
   threads[0].runs=[{runId:'saved',prompt:'账号私有问题',status:'completed',events:[{type:'message.delta',delta:'账号私有回答'}]}]
   await page.goto('./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
   await expect(page.getByText('账号私有回答',{exact:true})).toBeVisible()
-  await page.getByRole('button',{name:'New API 账号',exact:true}).click()
+  await openAccountSection(page)
   await page.getByRole('button',{name:'退出登录',exact:true}).click()
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
   await expect(page.getByText('请连接 New API 账号。',{exact:true})).toBeVisible()
   await expect(page.getByText('账号私有回答',{exact:true})).toHaveCount(0)
-  await page.getByRole('button',{name:'New API 账号',exact:true}).click()
+  await openAccountSection(page)
   await page.getByLabel('用户名',{exact:true}).fill('studio-user')
   await page.getByLabel('密码',{exact:true}).fill('test-password')
   await page.getByRole('button',{name:'登录',exact:true}).click()
@@ -267,13 +269,14 @@ test('balance consent is omitted by default, captured once and cleared on logout
   expect(payloads[1].payWithBalance).toBe(true)
   expect(payloads[2]).not.toHaveProperty('payWithBalance')
   await checkbox.check()
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await openAccountSection(page)
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: '账号与设置', exact: true })).not.toBeVisible()
+  await openAccountSection(page)
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await page.getByRole('button', { name: '关闭账号', exact: true }).click()
+  await page.getByRole('button', { name: '关闭账号窗口', exact: true }).click()
   await expect(checkbox).not.toBeChecked()
   expect(payloads).toHaveLength(3)
 })

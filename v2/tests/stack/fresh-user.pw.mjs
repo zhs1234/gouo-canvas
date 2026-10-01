@@ -27,7 +27,7 @@ test('fresh ordinary accounts with zero quota, own model/token/charges and canva
   await page.getByLabel('密码', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByText('当前账号：新普通测试用户', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '关闭账号', exact: true }).click()
+  await page.getByRole('button', { name: '关闭账号窗口', exact: true }).click()
   await page.getByRole('button', { name: '新会话', exact: true }).click()
   await expect(page).toHaveURL(/thread=/)
   const sent = page.waitForRequest(r => r.url().endsWith('/api/studio/runs/stream') && r.method() === 'POST')

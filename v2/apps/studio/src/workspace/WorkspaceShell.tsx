@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { FolderIcon, MessagesSquare, PanelsTopLeftIcon, PencilRuler, UserIcon } from 'lucide-react'
-import { useAuth } from '../loomic/lib/auth-context'
+import { FolderIcon, MessagesSquare, PanelsTopLeftIcon, PencilRuler } from 'lucide-react'
+import { WorkspaceAccountMenu } from './WorkspaceAccountMenu'
 import { ThreadListSidebar } from '../chat-starter/components/assistant-ui/elements/threadlist-sidebar.aui'
 import { SidebarInset, SidebarProvider, SidebarTrigger, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../chat-starter/components/ui/sidebar'
 import { Separator } from '../chat-starter/components/ui/separator'
@@ -25,7 +25,5 @@ function WorkspaceNavigation() {
 }
 
 export function WorkspaceShell({ list, toolbar, title, footer, notice, children }: { list?: ReactNode; toolbar?: ReactNode; title?: string; footer?: ReactNode; notice?: ReactNode; children: ReactNode }) {
-  const { user } = useAuth()
-  const defaultFooter = <SidebarMenu><SidebarMenuItem><SidebarMenuButton render={<Link to="/chat" />}><UserIcon /><span>{user?.display_name || user?.username || '登录账号'}</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
-  return <SidebarProvider className="chat-starter workspace-shell"><CloseDrawerAfterNavigation /><div className="flex h-dvh min-h-0 min-w-0 w-full pr-0.5"><ThreadListSidebar footer={footer ?? defaultFooter}><WorkspaceNavigation />{list}</ThreadListSidebar><SidebarInset className="min-h-0 min-w-0"><header className={`workspace-header flex shrink-0 items-center gap-2 px-4 ${toolbar ? 'h-16 border-b' : 'h-10'}`}><SidebarTrigger aria-label="切换侧栏" />{toolbar ? <><Separator orientation="vertical" className="mr-2 h-4" />{toolbar}</> : <span className="sr-only">{title}</span>}</header>{notice}<div className="workspace-content flex-1 min-h-0 min-w-0 overflow-hidden">{children}</div></SidebarInset></div></SidebarProvider>
+  return <SidebarProvider className="chat-starter workspace-shell"><CloseDrawerAfterNavigation /><div className="flex h-dvh min-h-0 min-w-0 w-full pr-0.5"><ThreadListSidebar footer={footer ?? <WorkspaceAccountMenu />}><WorkspaceNavigation />{list}</ThreadListSidebar><SidebarInset className="min-h-0 min-w-0"><header className={`workspace-header flex shrink-0 items-center gap-2 px-4 ${toolbar ? 'h-16 border-b' : 'h-10'}`}><SidebarTrigger aria-label="切换侧栏" />{toolbar ? <><Separator orientation="vertical" className="mr-2 h-4" />{toolbar}</> : <span className="sr-only">{title}</span>}</header>{notice}<div className="workspace-content flex-1 min-h-0 min-w-0 overflow-hidden">{children}</div></SidebarInset></div></SidebarProvider>
 }

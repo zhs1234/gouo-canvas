@@ -13,6 +13,7 @@ import { inspectTrialFunding, purchaseTrial } from './trial-funding.mjs'
 import { readFundingAccount } from './funding.mjs'
 import { FundingState } from './funding-state.mjs'
 import { validateAccountUpdate, passthroughAccountUpdate } from './account-update.mjs'
+import { profileBody, updateStudioProfile } from './profile.mjs'
 import { inspectWalletFunding } from './wallet-funding.mjs'
 import { readStudioToken, proveRetired, createReplacement, approvedReplacement } from './relay-access.mjs'
 import { RelayRenewals, accessVersion, buildRenewalTarget } from './relay-renewals.mjs'
@@ -71,6 +72,15 @@ export function createServer(config, overrides = {}) {
     request.studioAccount = body.data
   })
   app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(request.studioConfig ?? config, request.headers.authorization, request.studioAccount, fetcher) }))
+  app.put('/api/studio/profile', async (request, reply) => {
+    const body = profileBody(request.body)
+    const owner = request.studioUser
+    if (busy.has(owner)) throw new StudioError('本人已有操作正在处理，请等待完成后再修改账号', 409)
+    busy.add(owner)
+    reply.header('Cache-Control', 'no-store')
+    try { return { success: true, data: await updateStudioProfile(config, request.headers.authorization, owner, body, fetcher) } }
+    finally { busy.delete(owner) }
+  })
   // The native UI keeps its own security-proof and auth-rotation flow. Only
   // this exact PUT is routed here by the opt-in edge; no new account system.
   app.put('/api/user/self', async (request, reply) => {
