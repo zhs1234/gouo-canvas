@@ -14,6 +14,8 @@ import { readFundingAccount } from './funding.mjs'
 import { FundingState } from './funding-state.mjs'
 import { validateAccountUpdate, passthroughAccountUpdate } from './account-update.mjs'
 import { inspectWalletFunding } from './wallet-funding.mjs'
+import { readStudioToken, proveRetired, createReplacement } from './relay-access.mjs'
+import { RelayRenewals, accessVersion } from './relay-renewals.mjs'
 
 const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), payWithBalance: z.boolean().optional(), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
 const runBody = z.object({ threadId: z.string().uuid().optional(), runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
@@ -31,11 +33,12 @@ export function createServer(config, overrides = {}) {
   const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, requestTimeout: 150_000 })
   const fetcher = overrides.fetch ?? fetch
   const ledger = new Ledger(config.ledgerPath)
-  let trial, history, fundingState, projects
+  let trial, history, fundingState, projects, renewals
   try {
     trial = new Trial(ledger.db, config.trial, config.accountInstanceId ?? config.trial?.instanceId)
     history = new History(ledger.db)
     fundingState = new FundingState(ledger.db)
+    renewals = new RelayRenewals(ledger.db)
     projects = new Projects(ledger.db, history)
   } catch (error) { ledger.close(); throw error }
   const busy = new Set()
@@ -115,6 +118,74 @@ export function createServer(config, overrides = {}) {
     if (trial.remaining(request.studioUser, benefit) === 0 && trial.grant(request.studioUser)?.status === 'active') return { state: 'exhausted', reason: '该类别试用次数已用完' }
     return trialAccess(request)
   }
+  async function renewalFunds(request, context) {
+    const account = await readFundingAccount(config, request.headers.authorization, request.studioUser, fetcher)
+    if (account.group !== request.studioAccount.group) throw new StudioError('账号分组已变化，请刷新权限后再续用', 409)
+    if (trial.grant(account.id) && trial.grant(account.id).status !== 'active') throw new StudioError('原试用领取记录待核对，不能续用', 409)
+    if (account.quota > 0) {
+      await inspectWalletFunding(config, request.headers.authorization, account, trial.grant(account.id), fetcher)
+      return { account, quota: Math.min(account.quota, context.userTokenQuotaCap) }
+    }
+    if (config.trial && trial.grant(account.id)?.status === 'active' && (trial.remaining(account.id, 'chat') > 0 || trial.remaining(account.id, 'image') > 0)) {
+      const funding = await inspectFunding({ ...request, studioAccount: account })
+      if (funding.state === 'active') return { account, quota: funding.tokenQuota }
+    }
+    throw new StudioError('本人原生资金不足，不能续用生成权限；未充值或重新领取试用', 402)
+  }
+  function renewalReady(owner) {
+    fundingState.assertReady(owner); renewals.assertReady(owner)
+    if (renewals.unresolvedGeneration(owner)) throw new StudioError('本人旧生成请求或占用次数尚未核对，不能续用权限；不会自动重试或退款', 409)
+  }
+  app.get('/api/studio/access', async request => {
+    const unavailable = message => ({ success: true, data: { state: 'unavailable', message, canRenew: false } })
+    if (config.relayCredentialMode !== 'user-token' || !generationEnabled(config)) return unavailable('生成权限尚未开放，由管理员核验配置后启用')
+    const owner = request.studioUser
+    if (fundingState.blocked(owner) || renewals.blocked(owner) || renewals.unresolvedGeneration(owner) || trial.grant(owner)?.status === 'unknown') {
+      return { success: true, data: { state: 'unknown', message: '本人旧操作结果待核对，已暂停权限续用；查询不会重试写入或模型', canRenew: false } }
+    }
+    const context = await userModels(config, request.headers.authorization, request.studioAccount, fetcher)
+    const inspected = await readStudioToken(context, request.headers.authorization, request.studioAccount, fetcher, renewals.binding(owner))
+    const messages = { ready: '生成权限可用，模型费用由 New API 结算', missing: '首次发送时核验并建立有限生成权限，查询不会创建',
+      expired: '有限生成权限已到期，原生钱包余额与旧试用记录保留', exhausted: '有限生成权限已用完，原生钱包余额与旧试用记录保留',
+      disabled: '生成令牌已停用，不能通过续用绕过停用；请联系管理员', incompatible: '生成权限与批准配置不一致，请联系管理员核对' }
+    let canRenew = false
+    if (config.tokenRenewalPolicy && !busy.has(owner) && ['expired', 'exhausted'].includes(inspected.state)) {
+      try { await renewalFunds(request, context); canRenew = true } catch (error) {
+        return { success: true, data: { state: inspected.state, message: messages[inspected.state] + '；' + error.message, canRenew: false } }
+      }
+    }
+    return { success: true, data: { state: inspected.state, message: messages[inspected.state], canRenew,
+      ...(canRenew ? { version: accessVersion(config, owner, inspected), approvedLifetimeSeconds: config.userTokenLifetimeSeconds } : {}),
+      ...(inspected.token ? { expiresAt: inspected.token.expired_time } : {}) } }
+  })
+  app.post('/api/studio/access/renew', async request => {
+    const payload = z.object({ version: z.string().regex(/^[0-9a-f]{64}$/), confirm: z.literal(true) }).strict().safeParse(request.body)
+    const key = request.headers['idempotency-key'], owner = request.studioUser
+    if (!payload.success || typeof key !== 'string' || !z.string().uuid().safeParse(key).success) throw new StudioError('请查询本人权限并明确确认本次续用', 400)
+    const previous = renewals.replay(owner, key, payload.data)
+    if (previous) return { success: true, data: previous }
+    if (!config.tokenRenewalPolicy || config.relayCredentialMode !== 'user-token' || !generationEnabled(config)) throw new StudioError('生成权限续用尚未开放，未修改原生令牌', 503)
+    if (busy.has(owner)) throw new StudioError('本人已有操作正在处理，请等待完成后再续用', 409)
+    renewalReady(owner); busy.add(owner)
+    let begun = false
+    try {
+      const context = await userModels(config, request.headers.authorization, request.studioAccount, fetcher)
+      const inspected = await readStudioToken(context, request.headers.authorization, request.studioAccount, fetcher, renewals.binding(owner))
+      if (payload.data.version !== accessVersion(config, owner, inspected)) throw new StudioError('本人权限已变化，请重新查询后再明确续用', 409)
+      if (!['expired', 'exhausted'].includes(inspected.state)) throw new StudioError('仅已知到期或耗尽的有限权限可以续用；不能扩大或启用停用令牌', 409)
+      const funds = await renewalFunds(request, context)
+      const target = { name: 'gouo-studio-' + crypto.randomUUID().replaceAll('-', ''), quota: funds.quota,
+        expiredTime: inspected.nativeNow + config.userTokenLifetimeSeconds }
+      renewals.begin(owner, key, payload.data, inspected.token.id, target); begun = true
+      await proveRetired(context, request.headers.authorization, funds.account, fetcher, inspected)
+      // No purchase, preference change, old-token PUT or model request.
+      const binding = await createReplacement(context, request.headers.authorization, funds.account, fetcher, target)
+      const result = { state: 'ready', message: '有限生成权限已续用；没有充值、重新领取试用或发送模型请求' }
+      renewals.complete(owner, key, binding, result)
+      return { success: true, data: result }
+    } catch (error) { if (begun) renewals.unknown(owner, key); throw error }
+    finally { busy.delete(owner) }
+  })
   async function inspectFunding(request) {
     const owner = request.studioUser
     const grant = trial.grant(owner)
@@ -208,6 +279,7 @@ export function createServer(config, overrides = {}) {
     let transportStarted = false, externalStarted = false
     try {
       fundingState.assertReady(owner)
+      renewals.assertReady(owner)
       let context = config
       const managedFunding = config.relayCredentialMode === 'user-token'
       if (config.relayCredentialMode === 'user-token') {
@@ -234,7 +306,7 @@ export function createServer(config, overrides = {}) {
       }
       externalStarted = true
       if (managedFunding && fundingSelection[benefit] === 'trial') funding = await ensureTrial(request)
-      if (config.relayCredentialMode === 'user-token') context = await userRelay(context, request.headers.authorization, request.studioAccount, fetcher, funding)
+      if (config.relayCredentialMode === 'user-token') context = await userRelay({ ...context, userTokenBinding: renewals.binding(owner) }, request.headers.authorization, request.studioAccount, fetcher, funding)
       if (payload.threadId) history.begin(owner, payload)
       transport?.start()
       transportStarted = Boolean(transport)

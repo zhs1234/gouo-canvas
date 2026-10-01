@@ -1,0 +1,11 @@
+{
+  "sourceCommit": "0aec08fee811ec6136828fda790551b49e410301",
+  "gatewayOrigin": "http://127.0.0.1:3000",
+  "instanceId": "00000000-0000-4000-8000-000000000000",
+  "operatorVerified": false,
+  "relayIngress": "studio-only",
+  "tokenWrites": "studio-only",
+  "completeKeys": "studio-only",
+  "redisEnabled": false,
+  "batchUpdateEnabled": false
+}

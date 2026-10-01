@@ -94,6 +94,10 @@ Studio 会话只保存 New API 的数字 owner ID，不保存密码或复制账�
 
 ## 安全配置交接
 
+T1.4 的有限生成权限续用与原生登录导航均为 prepared opt-in 配置。日常栈仍不启用试用、生成或续用；人工核验文件不会自行开放网络。具体原生固定版本、三个私有模型入口、Redis/batch关闭、状态/version/幂等合同及unknown限制见 [TOKEN-RENEWAL.md](TOKEN-RENEWAL.md)。`GOUO_ENABLE_TOKEN_RENEWAL=false` 是示例默认值。未知续用不能借付款偏好恢复工具解锁。
+
+新增可重复测试：`node tests/stack/token-native.cases.mjs` 验真实固定Native token合同（不验真实部署排他性），`node tests/stack/account-browser-isolation.mjs start` 创建随机prepared账号浏览器栈，`refresh-web <state.json>` 只刷新该栈Studio静态构建，`stop <state.json>` 只清理该栈。真实UI注册/安全证明/密码旋转与Studio显示名称证据见ACCOUNT-CONTRACT；测试账号/额度均合成，没有真实供应商费用。完整CLI操作是验收证据，不声明脚本自动完成用户交互。
+
 `localhost:8080` 只对运行 Compose 的那台机器可达，不是云执行环境到用户浏览器的共享预览地址。只有在环境实际提供受保护的端口预览和用户接管能力时，才能把原生 `/setup`、`/sign-in`、`/security`、`/wallet` 作为远程配置入口；不要假设有 Personal Vault，也不要为交接临时公开管理后台或数据。
 
 没有上述能力时，最小方式是用户在自己的电脑/已授权私有测试主机运行本分支 Compose，再在该机器的浏览器完成原生账号、渠道与受限统一 token 配置，并以本机受保护文件将 token 交给 Studio。助手可以准备非秘密配置与测试步骤，密码、两个渠道密钥及 token 的最终录入/提交由用户完成。使用新测试账号、token 或权限设置前需明确目标实例与授权范围；已有生产实例不能默认为测试目标。

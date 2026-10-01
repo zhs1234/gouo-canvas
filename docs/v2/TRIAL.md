@@ -69,6 +69,8 @@ T1.2 追加隔离原生验收退出0：保留第一个零钱包用户六笔订�
 
 T1.3 追加真实固定 Native 验收两次退出0：保留原混合资金链，关闭 Studio 试用和更换批准计划后默认纯聊天各402，明确 true 各产生一笔 wallet_only 消费12quota；旧 grant/reservations快照不变、原 receipt仍唯一、token ID/期限不变。第二位用户最终钱包9452、订阅使用548、总用量1096、token498904、日志10条；两户共13chat＋3image，真实采购0。首次新增场景触发固定 Native `POST /api/token/2/key` 的默认 CriticalRateLimit（20/IP/20分钟），测试在原消费 settled 后显式重启隔离 Native清内存窗口、保留DB，使用新run ID；未修改限流或重发失败请求。证据 `.local/native-trial-s4CXmO/evidence.json`。其他真实账户/恢复/edge及完整测试结果见 STATUS 最新节。
 
-下一项 T1.4：有限 token 到期/耗尽的可审查续用流程及原生资料/密码完整浏览器路径。真实计划与入口仍遵从暂不启用的用户决定；获批准后再验真实渠道、价格与费用上界。整体产品准备好之后，按 [QA_ACCEPTANCE.md](QA_ACCEPTANCE.md) 让多个子智能体分别模拟新用户、回访聊天、画布创作和跨账号访问，统计发现、复现条件、严重级别、修复和复验结果。
+T1.4 增加 [TOKEN-RENEWAL.md](TOKEN-RENEWAL.md) 的只读权限状态及显式续用：旧Native token不可整份PUT续额，确认严格失效后新建有限token，单事务保存新的owner binding。unknown创建/读回和旧未知生成/held均阻止新生成与续用，跨重启保留；不重领、不充值、不动旧token额度/期限、不发模型。真实固定Native两例到期/零额各一次POST、同key不再POST、旧ID/key/额度/期限/used不变（零额仅status1→4），Native钱包/订阅/用量/消费日志不变，采购0。prepared edge另验关闭公有model-token写入/完整key和relay，不将人工政策JSON当实际部署证明。
+
+下一项 T1.5：未知token续用的私有停服核对恢复，及原生消费异常与最终用户体验门槛。真实计划与入口仍遵从暂不启用的用户决定；获批准后再验真实渠道、价格与费用上界。整体产品准备好之后，按 [QA_ACCEPTANCE.md](QA_ACCEPTANCE.md) 让多个子智能体分别模拟新用户、回访聊天、画布创作和跨账号访问，统计发现、复现条件、严重级别、修复和复验结果。
 
 固定源码依据：[原生计划与本人接口](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/controller/subscription.go)、[一次领取及预扣](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/model/subscription.go)、[原生资金选择](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/service/billing_session.go)、[默认偏好](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/common/str.go)、[令牌认证](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/middleware/auth.go)。

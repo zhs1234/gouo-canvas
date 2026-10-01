@@ -6,7 +6,11 @@
 
 密码修改继续经过原生 `/api/verify` 的 `account.password.change` / `account.password.set` 安全证明，再提交原始 Native DTO；桥接透传调用者 Bearer、`X-Security-Proof`、`X-Auth-Session`，不转发 Cookie 或共享 relay key。每次只发一个有界 PUT，原样保留 Native 状态、code 与旋转 bundle。原生密码修改返回 `access_token/token_type/access_expires_at/session/has_password/notification_warning`；当前 refresh secret 保持，旧 access token 和其它会话被撤销。网络/解析/不完整成功包均502并提示结果待确认、不重新提交。Native 500也可能发生在提交后，错误不等于密码未修改。
 
-`node v2/tests/stack/account-native.cases.mjs` 两次退出0：固定真实 Native 验证显示名修改、setting 不变、非法字段0次 PUT、缺 proof403、真实加密验证取得 proof、密码旋转、旧JWT/其它会话401、同 proof失效、当前 Cookie/SID刷新、旧密码失败/新密码登录成功。无模型或金额操作。此为真实 HTTP 合同测试；原生 `/profile`、`/security` 完整浏览器交互、邮件/MFA/passkey仍待验收，不能由API成功推导。
+`node v2/tests/stack/account-native.cases.mjs` 两次退出0：固定真实 Native 验证显示名修改、setting 不变、非法字段0次 PUT、缺 proof403、真实加密验证取得 proof、密码旋转、旧JWT/其它会话401、同 proof失效、当前 Cookie/SID刷新、旧密码失败/新密码登录成功。无模型或金额操作。此为T1.3真实 HTTP 合同证据；邮件/MFA/passkey仍待验收，不能由API成功推导。
+
+2026-10-01 T1.4 追加真实 CLI 浏览器：独立 Native 注册→加密登录→安全页 `account.password.change` proof→精确 PUT 改密→当前 Cookie 刷新200/另一context旧会话401→旧密码拒绝/新密码接受→Studio恢复。固定原生 `/profile` 没有显示名称编辑控件，因此新增Studio薄表单，只PUT本人 `display_name`，随后本人GET精确核对成功再更新session缓存；unknown写不重交，owner切换清空表单与结果。实际浏览器一次PUT200/GET200与NativeSQLite保存一致，无账号替身、模型或资金变更。
+
+实际验收发现原生注册丢失redirect、原生客户端navigate到Studio停在Native404、Nginx `/studio` slash跳转附带容器8080导致跨测试origin。prepared edge现在 `absolute_redirect off`，Native HTML仅注入自有 `/studio/native-navigation.js`：缺redirect的auth入口默认Studio，登录/注册间保持目标，Native history去Studio时完整加载同源document。显式 `/security` 留在原生，外部redirect不由bridge执行；Native自己的权限/redirect安全验证仍保留。该脚本只修跨SPA导航，不重写原生账号流程或上游源码。真实Native CLI已复验注册到Studio自动Cookie恢复、同隔离端口与显式security目标；6个明确导航HTML fixture浏览器回归分列。证据 `.local/native-browser-T0RoAH/security-evidence.json`，脚本 `tests/stack/account-browser-isolation.mjs start|refresh-web|stop`，只管理本次随机项目。
 
 已核对 `web/src/routes/` 与 `web/src/features/auth/hooks/use-auth-redirect.ts`：
 
@@ -19,7 +23,7 @@
 | 余额充值 / 用量 | `/wallet` / `/usage-logs` |
 | 用户管理（上游权限控制） | `/users` |
 
-此 SHA 的原生前端使用上述路由；旧文档的 `/console` 不能作为其当前入口证据。登录页接受 `redirect`，并经 `sanitizeAuthRedirect` 限制为同源 HTTP(S) 地址；成功登录及已登录访问均可返回 `/studio/`。返回时 Studio 通过刷新 Cookie 恢复内存 access token。
+此 SHA 的原生前端使用上述路由；旧文档的 `/console` 不能作为其当前入口证据。登录页接受 `redirect`，并经 `sanitizeAuthRedirect` 限制为同源 HTTP(S) 地址；实际prepared入口需上述跨SPA脚本才能完整加载 `/studio/`。返回时 Studio 通过刷新 Cookie 恢复内存 access token。prepared公网 `/keys` 只允许masked model-token读取，写入/完整key关闭，有限续用改由Studio显式入口；`/users` 管理后台保持私有。`/api/user/token` 是Native security proof保护的账号PAT，不是model token。
 
 协议证据为固定 SHA 的 `controller/user.go`、`controller/auth_session.go`、`service/auth_session.go` 和 `router/api-router.go`：
 

@@ -6,6 +6,7 @@ import { useAuth } from '../loomic/lib/auth-context'
 import { fetchCatalog } from '../loomic/lib/gateway'
 import { request } from '../api'
 import Account from '../Account'
+import { GenerationAccessPanel } from '../GenerationAccessPanel'
 import { BalanceConsent, useBalanceConsent } from '../BalanceConsent'
 import { TrialPanel } from '../TrialPanel'
 import { useTrial } from '../trial'
@@ -120,7 +121,7 @@ export default function ChatLab() {
   const footer = <SidebarMenu><SidebarMenuItem><SidebarMenuButton render={<Link to="/projects" />}><FolderIcon /><span>项目库</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/canvas-lab" />}><PanelsTopLeftIcon /><span>官方画布</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/" />}><MessagesSquare /><span>Loomic 工作台</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton size="lg" onClick={() => setAccountOpen(v => !v)} aria-label="New API 账号"><div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 items-center justify-center rounded-lg"><UserIcon className="size-4" /></div><div className="flex flex-col text-left"><span className="font-semibold">{user?.display_name || user?.username || '登录账号'}</span><span className="text-xs text-muted-foreground">账号与费用</span></div></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
   return <>
     {user ? <OwnedThreads key={user.id} model={model} imageModel={imageModel} toolbar={toolbar} footer={footer} /> : <StudioShell toolbar={toolbar} footer={footer}><div className="flex h-full items-center justify-center"><div className="px-6"><h1 className="mb-4 text-2xl font-medium">今天有什么可以帮你？</h1><p className="mb-6 text-sm text-muted-foreground">请连接 New API 账号。</p><Button onClick={() => setAccountOpen(true)}>登录账号</Button></div></div></StudioShell>}
-    {accountOpen && <div className="account-overlay" onClick={() => setAccountOpen(false)}><section className="account-dialog" aria-label="账号与费用" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}><button className="account-close" aria-label="关闭账号" onClick={() => setAccountOpen(false)}>✕</button><Account />{user && <><TrialPanel userId={user.id} /><BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} /></>}</section></div>}
+    {accountOpen && <div className="account-overlay" onClick={() => setAccountOpen(false)}><section className="account-dialog" aria-label="账号与费用" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}><button className="account-close" aria-label="关闭账号" onClick={() => setAccountOpen(false)}>✕</button><Account />{user && <><TrialPanel userId={user.id} /><GenerationAccessPanel key={user.id} userId={user.id} /><BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} /></>}</section></div>}
     {catalog.error && <p role="alert" className="studio-chat-notice">模型目录加载失败</p>}
   </>
 }

@@ -27,15 +27,17 @@ export async function userModels(config, authorization, account, fetcher) {
 }
 
 export async function userRelay(config, authorization, account, fetcher, trialFunding) {
+  const boundName = config.userTokenBinding?.name ?? tokenName
   const fundedByTrial = trialFunding?.state === 'active' && Number.isSafeInteger(trialFunding.tokenQuota) && trialFunding.tokenQuota > 0
   if (!fundedByTrial && (!Number.isSafeInteger(account.quota) || account.quota <= 0)) throw new StudioError('账号余额不足，请在原生钱包查看额度或联系管理员', 402)
   const allowed = config.models.filter(model => model.enabled && model.verification === 'live-verified' && model.kind !== 'video').map(model => model.upstreamModelId)
   if (!allowed.length) throw new StudioError('当前账号分组没有可用模型，请联系管理员', 403)
   const find = async () => {
-    const data = await native(config, authorization, '/api/token/search?keyword=' + tokenName + '&p=1&page_size=100', fetcher)
+    const data = await native(config, authorization, '/api/token/search?keyword=' + encodeURIComponent(boundName) + '&p=1&page_size=100', fetcher)
     if (!Array.isArray(data?.items) || !Number.isSafeInteger(data.total) || data.total > 100) throw new StudioError('账户令牌列表无法完整核验，请在原生令牌页面检查', 503)
-    const rows = data.items.filter(row => row.name === tokenName)
+    const rows = data.items.filter(row => row.name === boundName)
     if (rows.length > 1) throw new StudioError('发现重复的 Studio 令牌，请在原生令牌页面核对，未自动修改', 409)
+    if (config.userTokenBinding && (!rows[0] || rows[0].id !== config.userTokenBinding.id)) throw new StudioError('本人生成权限绑定已变化，请联系管理员核对；未重新创建', 409)
     return rows[0]
   }
   let token = await find()

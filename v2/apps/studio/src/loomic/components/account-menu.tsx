@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { UserRound, X, Check, HardDrive } from 'lucide-react'
 import { useAuth } from '../lib/auth-context'
 import Account from '../../Account'
+import { GenerationAccessPanel } from '../../GenerationAccessPanel'
 import { TrialPanel } from '../../TrialPanel'
 import { useToast } from './toast'
 import { saveCanvas } from '../lib/server-api'
@@ -61,6 +62,7 @@ export function AccountMenu({ owner, canvasId, api }: { owner: string; canvasId:
       <button className="account-close" type="button" aria-label="关闭账号窗口" onClick={() => setOpen(false)}><X size={18} /></button>
       <Account />
       {user && <TrialPanel userId={user.id} />}
+      {user && <GenerationAccessPanel key={user.id} userId={user.id} />}
       {user && <BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} usage={usage} />}
       <div className="gateway-status"><p>模型连接</p>{error ? <p role="alert">{error}</p> : catalog ? <p>{catalog.models.filter(m => m.accessible).length ? `可用模型：${catalog.models.filter(m => m.accessible).map(m => m.displayName).join('、')}` : '尚未配置可用的生成模型'}</p> : <p>正在检查连接…</p>}<p>画布和对话保存在当前浏览器，请及时导出备份。</p></div>
     </div></div>, document.body)}

@@ -58,12 +58,20 @@ export function loadConfig(env = process.env) {
   const accountInstanceId = env.GOUO_ACCOUNT_INSTANCE_ID ? z.string().uuid().parse(env.GOUO_ACCOUNT_INSTANCE_ID) : trial?.instanceId
   if (trial && accountInstanceId !== trial.instanceId) throw new Error('账号实例标识必须与批准试用实例一致')
   if (relayCredentialMode === 'user-token' && !accountInstanceId) throw new Error('每用户模式需要稳定的 GOUO_ACCOUNT_INSTANCE_ID；关闭试用不能复用另一实例的账号 ID')
+  let tokenRenewalPolicy
+  if (env.GOUO_ENABLE_TOKEN_RENEWAL === 'true') {
+    if (relayCredentialMode !== 'user-token' || !env.GOUO_TOKEN_RENEWAL_POLICY_FILE) throw new Error('权限续用需要每用户模式及私有受控入口核验记录')
+    tokenRenewalPolicy = z.object({ sourceCommit: z.literal(normalRoutingEvidence.sourceCommit), gatewayOrigin: z.literal(gateway.origin),
+      instanceId: z.literal(accountInstanceId), operatorVerified: z.literal(true), relayIngress: z.literal('studio-only'),
+      tokenWrites: z.literal('studio-only'), completeKeys: z.literal('studio-only'), redisEnabled: z.literal(false), batchUpdateEnabled: z.literal(false),
+    }).strict().parse(JSON.parse(readFileSync(env.GOUO_TOKEN_RENEWAL_POLICY_FILE, 'utf8')))
+  }
   return {
     models, gateway: gateway.toString().replace(/\/$/, ''),
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
     relayKey,
     relayRoutingMode, normalRoutingEvidence,
-    relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds, trial, accountInstanceId,
+    relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds, trial, accountInstanceId, tokenRenewalPolicy,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }

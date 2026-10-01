@@ -1,5 +1,33 @@
 # 实际交付与验证状态
 
+## T1.4 有限权限明确续用与真实原生账户浏览器路径（2026-10-01，默认关闭）
+
+在 `codex/registration-trial`、T1.3 `2793093` 上完成，仍含合并V2基线 `abe46c4`。三位 gpt-6.1-sol 子智能体分别做有限token安全实现/审查与真实Native验证、账号真实CLI/edge验收、薄UI与浏览器反例；全部开发留当前项目。没有新增依赖/修改lockfile、push/merge/main改动或生产部署，本轮远程CI未执行。
+
+新增 `/api/studio/access` 本人只读状态，以及严格版本摘要、UUID幂等键、明确confirm的 `/api/studio/access/renew`。默认关闭；需要固定版本、同网关/实例、人工核验studio-only relay/token写入/完整模型key和关闭Redis/batch的严格政策。只支持旧权限严格Native Date到期，或耗尽status4；启用零额内部GET `/v1/models`取得明确拒绝并核对status4，不发供应商请求。先持久intent，再创建新的有限token，不PUT/DELETE旧token，不充值/改偏好/重新领取。成功结果与新owner binding同事务，key仅本次服务器内存。unknown创建/读取、重启pending与旧未核对生成/held阻止续用；unknown续用也阻止新生成。金额仍只在New API；详见 [TOKEN-RENEWAL.md](TOKEN-RENEWAL.md)。
+
+assistant-ui/Loomic账号区接入只读权限与明确续用；续用清本人旧余额授权、保留另一owner，不自动生成或重交。新增Studio显示名称薄表单，精确Native PUT后本人GET确认成功再更新缓存，unknown/换owner清理状态。真实固定Native profile没有名字控件、注册丢redirect、Native SPA导航Studio停404，以及 `/studio` 301附容器端口均已发现并修复：prepared Native HTML注入自有导航脚本、认证目标保留、跨SPA完整同源document加载、相对slash跳转。显式security目标与外部redirect安全边界保留；账号链接间距也已修正。邮件/MFA/passkey/真实支付没有由这次密码流程证明。
+
+prepared edge关闭公有 Native模型token所有写入、删除及单个/批量完整key；masked读与Native本人账号PAT路径分列。PAT不是model relay key，原生security proof保护保持。所有relay/管理入口仍私有；人工JSON和准备模板不证明真实部署排他性，本轮日常栈未应用该override。
+
+本轮最终实际验证：
+
+| 命令 | 结果及证据边界 |
+| --- | --- |
+| `npm run check` | 类型、**22/22**领域/探测/恢复、**142/142**API、生产构建通过（10.62秒）；既有第三方chunk警告。`.local/t1-4-check-final.log` |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **68/68**（1.7分钟），含新增6续用/显示名与6跨SPA导航，以及既有聊天/画布/移动/旧稿/原图；明确fixture。`.local/t1-4-browser-final.log` |
+| `npm run test:stack` | **退出0**：真实固定Native未初始化边界、personal契约替身2/2、fresh user-token契约替身1/1；当前构建及实际Nginx/SDK/browser。仅清理随机测试项目。`.local/t1-4-stack-final.log` |
+| `node tests/stack/token-native.cases.mjs` | **退出0**：真实固定Native到期ID1→2、enabled零额ID3→status4后新ID4，每例1次POST、同key重放0POST、0PUT/DELETE；旧key/ID/额度/期限/used保持、钱包/订阅/消费日志不变；0模型/费用。`.local/native-token-Q263Xh/evidence.json`，明确未证明prepared排他入口 |
+| `node tests/stack/account-browser-isolation.mjs start|refresh-web|stop` + Playwright skill CLI真实UI | 注册、加密登录、Native安全proof改密、当前Cookie刷新200/另一context旧会话401、旧密码拒绝/新密码成功、Studio恢复；新注册保留redirect并自动完整加载同隔离53174Studio；显示名实际PUT200/GET200与NativeSQLite一致。显式security仍Native；0channels/subscriptions/tokens/consume/model/费用。`.local/native-browser-T0RoAH/security-evidence.json`；脱敏截图 `output/playwright/` |
+| `node tests/stack/trial-edge.cases.mjs` | **退出0**：真实固定Native空库＋authenticated echo分列；所有模型token写入/key错误method/query/编码/路径变体404，protectedTokenCalls0；metadata/账号PAT路由reachable且匿名401、Bearer保留；相对301与NativeHTML仅一次script注入、精确profile桥仍通过。echo不是Native安全proof验收 |
+| prepared Compose `config --quiet`、新增脚本`node --check`、`git diff --check` | 通过；示例续用政策operatorVerified=false有意不能启用 |
+
+保留验收问题：首次原生跨SPA跳转缺陷曾短暂只读加载日常8080 Studio，立即返回隔离端口，无日常账号/配置/模型变更；修复后同隔离origin保持。长CLI流程遇明确Native429，等待默认窗口自然到期后显式登录成功，未重启Native/改安全设置或重发未知请求。一次失败登录snapshot输出合成测试密码，后续已抑制填充密码的snapshot输出；原始CLI文件只留忽略目录，不进入commit。初次语法检查误加v2路径、准备Compose校验误写文件名属于本地命令路径错误，正确路径检查通过；不是放宽保护或应用成功。最终完整测试一次通过。
+
+日常开发预览已用同一默认 Compose 重构建并 `up --wait`，退出0；只更新 Studio/web，Native保持原running实例。三个服务healthy，仅127.0.0.1:8080发布；health200、匿名access401、Native setup `status=false/root_init=false`。当前Studio实际加载generation=false、trial=false、renewal=false，Nginx prepared=false；没有初始化账号/渠道、换用受控入口、启用试用或真实收费。日志 `.local/t1-4-preview-refresh.log`。访问 `http://localhost:8080/studio/` 可查看当前界面。
+
+下一项 **T1.5**：原生费用记录的证据语义，以及未知token续用的私有停服核对恢复。独立只读审查已确认固定Native在资金/token结算失败后可能仍写consume log，而Studio只凭该日志标settled；当前没有证据显示Studio因此额外扣款/退款，但日志不能证明实扣成功。需要改为用量已记录并兼容历史，再单独完成可审查unknown恢复；不要用钱包差额/一次GET/原funding恢复冒充确认。真实资金/配置/供应商仍待明确批准，最终28场景四角色多智能体用户模拟尚未执行，本阶段不能声称产品或公开收费完成。
+
 ## T1.3 安全账户桥接、未知偏好核对恢复与独立钱包生命周期（2026-10-01，默认关闭）
 
 在 `codex/registration-trial`、T1.2 `2cbfd90` 上完成本轮，仍包含合并V2基线 `abe46c4`。三位 gpt-6.1-sol 子智能体分别实现/验收固定Native账户与edge、私有恢复流程和钱包合同，并做独立安全审查；全部文件与忽略的证据留在当前项目。没有push、merge、部署或main改动，本轮远程CI尚未执行。

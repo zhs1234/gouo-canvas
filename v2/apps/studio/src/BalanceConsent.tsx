@@ -5,6 +5,17 @@ export function useBalanceConsent(scope: string) {
   const current = useRef(choice)
   current.current = choice.scope === scope ? choice : { scope, allowed: false }
   useEffect(() => { setChoice({ scope, allowed: false }) }, [scope])
+  useEffect(() => {
+    const clear = (event: Event) => {
+      const owner = (event as CustomEvent).detail?.owner
+      if (typeof owner !== 'string' || !/^local:\d+$/.test(owner)) return
+      if (!scope.startsWith(owner + ':') && !scope.startsWith(owner.slice(6) + ':')) return
+      current.current = { scope, allowed: false }
+      setChoice(current.current)
+    }
+    window.addEventListener('gouo:clear-balance-consent', clear)
+    return () => window.removeEventListener('gouo:clear-balance-consent', clear)
+  }, [scope])
   const consume = useCallback(() => {
     const allowed = current.current.scope === scope && current.current.allowed
     current.current = { scope, allowed: false }
