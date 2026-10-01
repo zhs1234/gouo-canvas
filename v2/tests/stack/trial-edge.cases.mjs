@@ -17,6 +17,7 @@ const origin = 'http://127.0.0.1:' + port
 const file = join(directory, 'compose.yml'), emptyEnv = join(directory, 'empty.env')
 let contractFile
 const configPath = resolve('deploy/nginx.studio-only.conf').replaceAll('\\', '/')
+const apiSourcePath = resolve('apps/api/src').replaceAll('\\', '/')
 await writeFile(emptyEnv, '')
 await writeFile(file, `services:
   new-api:
@@ -39,6 +40,11 @@ await writeFile(file, `services:
       GOUO_STUDIO_LEDGER_PATH: /data/requests.sqlite
       GOUO_ENABLE_GENERATION: 'false'
     tmpfs: ['/data:uid=1000,gid=1000,mode=0700']
+    volumes:
+      - type: bind
+        source: ${JSON.stringify(apiSourcePath)}
+        target: /app/apps/api/src
+        read_only: true
   web:
     image: gouo-v2-web:latest
     environment:
@@ -112,7 +118,8 @@ try {
   for (const path of profileWriteAliases) for (const method of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
     assert.equal((await request(path, method)).status, 404, method + ' ' + path)
   }
-  for (const method of ['HEAD', 'POST', 'PUT', 'PATCH', 'OPTIONS']) {
+  assert.equal((await request('/api/user/self', 'PUT')).status, 401)
+  for (const method of ['HEAD', 'POST', 'PATCH', 'OPTIONS']) {
     assert.equal((await request('/api/user/self', method)).status, 404, method + ' exact self')
   }
   assert.equal((await request('/api/status', 'POST')).status, 404)
@@ -132,7 +139,7 @@ try {
   // Explicit contract echo only: proves Nginx credential/query stripping.
   // This does not install or live-verify any native task plugin.
   contractFile = join(directory, 'contract.yml')
-  const echo = "require('node:http').createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({fixture:true,path:req.url,headers:req.headers}))}).listen(3000,'0.0.0.0')"
+  const echo = "let puts=0;require('node:http').createServer((req,res)=>{res.setHeader('Content-Type','application/json');if(req.url==='/fixture-stats'){res.end(JSON.stringify({puts}));return}if(req.method==='PUT')puts++;const record={fixture:true,path:req.url,headers:req.headers,success:true,message:'',data:{id:7,status:1,group:'default',quota:0}};res.end(JSON.stringify(record))}).listen(3000,'0.0.0.0')"
   await writeFile(contractFile, JSON.stringify({ services: { 'new-api': { entrypoint: ['node'], command: ['-e', echo] } } }))
   await compose('up', '-d', '--wait', '--wait-timeout', '90')
   const fixtureHeaders = {
@@ -152,14 +159,24 @@ try {
   }
   const account = JSON.parse((await request('/api/user/self', 'GET', fixtureHeaders)).body)
   assert.equal(account.headers.authorization, fixtureHeaders.Authorization, 'registered native account API retains its authentication')
-  // The echo upstream returns 200 for every request, so a 404 proves these
-  // language/sidebar writes never reached it, rather than failing native auth.
-  for (const body of [{ language: 'zh' }, { sidebar_modules: '{}' }, { username: 'fixture', password: 'fixture' }]) {
-    for (const path of ['/api/user/self', '/api/user/self?language=zh', ...profileWriteAliases]) {
+  const stats = async () => JSON.parse((await compose('exec', '-T', 'studio-api', 'node', '-e', "fetch('http://new-api:3000/fixture-stats').then(r=>r.text()).then(console.log)")).trim())
+  for (const body of [{ language: 'zh' }, { sidebar_modules: '{}' }, { role: 100 }, { password_encrypted: 'fixture', encryption_key_id: 'fixture' }, { display_name: 'fixture', password: 'fixture-password' }]) {
+    for (const path of ['/api/user/self', '/api/user/self?language=zh']) {
+      assert.equal((await request(path, 'PUT', { ...fixtureHeaders, 'Content-Type': 'application/json' }, JSON.stringify(body))).status, 422, path)
+    }
+    for (const path of profileWriteAliases) {
       assert.equal((await request(path, 'PUT', { ...fixtureHeaders, 'Content-Type': 'application/json' }, JSON.stringify(body))).status, 404, path)
     }
   }
-  console.log('Explicit Nginx echo contract passed: HTML/static upstream sees no caller credentials or query; native account API still receives its Bearer. This is not live plugin/MFA verification.')
+  assert.equal((await stats()).puts, 0, 'invalid update bodies never reach Native PUT')
+  const profile = await request('/api/user/self', 'PUT', { ...fixtureHeaders, 'Content-Type': 'application/json' }, JSON.stringify({ display_name: 'fixture profile' }))
+  assert.equal(profile.status, 200)
+  const forwarded = JSON.parse(profile.body)
+  assert.equal(forwarded.fixture, true); assert.equal(forwarded.path, '/api/user/self')
+  assert.equal(forwarded.headers.authorization, fixtureHeaders.Authorization)
+  assert.equal(forwarded.headers.cookie, undefined)
+  assert.equal((await stats()).puts, 1, 'valid profile body reaches exactly one Native PUT')
+  console.log('Explicit Nginx echo contract passed: HTML/static strips credentials/query; account GET retains Bearer; exact PUT uses current Studio bridge, invalid bodies reach zero Native PUTs and valid profile reaches one. This is not live plugin/MFA verification.')
 } catch (error) {
   console.error(await compose('logs', '--no-color', '--tail', '25').catch(() => ''))
   throw error

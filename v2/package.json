@@ -15,7 +15,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run build --workspace @gouo/studio",
     "typecheck": "tsc --noEmit -p apps/studio/tsconfig.json",
-    "test": "tsc -p packages/contracts/tsconfig.json && node --test tests/contracts-cases.mjs tests/probe-cases.mjs",
+    "test": "tsc -p packages/contracts/tsconfig.json && node --test tests/contracts-cases.mjs tests/probe-cases.mjs tests/recovery.cases.mjs",
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm test && npm run test:api && npm run build",
     "test:api": "npm test --workspace @gouo/studio-api",

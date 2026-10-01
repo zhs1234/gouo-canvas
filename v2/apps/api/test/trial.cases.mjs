@@ -15,12 +15,13 @@ const config = {
   ],
   gateway: 'http://fixture.invalid/v1', authOrigin: 'http://fixture.invalid', ledgerPath: ':memory:', allowGeneration: true,
   relayCredentialMode: 'user-token', relayRoutingMode: 'model', userTokenQuotaCap: 1000, userTokenLifetimeSeconds: 3600,
+  accountInstanceId: 'b6770961-570c-40ad-92f9-963846a15ed0',
   normalRoutingEvidence: { sourceCommit: '0aec08fee811ec6136828fda790551b49e410301', retryTimes: 0, gatewayOrigin: 'http://fixture.invalid', operatorVerified: true, verifiedAt: '2026-10-01' },
   trial: { sourceCommit: '0aec08fee811ec6136828fda790551b49e410301', gatewayOrigin: 'http://fixture.invalid', instanceId: 'b6770961-570c-40ad-92f9-963846a15ed0', minUserId: 7, planId: 3, relayIngress: 'studio-only', operatorVerified: true, plan },
 }
 function fixture(options = {}) {
   const accounts = new Map([7, 8].map(id => [id, { id, status: 1, role: 1, group: 'default', quota: 0 }]))
-  const subscriptions = new Map(), preferences = new Map(), tokens = new Map(), calls = [], models = []
+  const subscriptions = new Map(), preferences = new Map(), tokens = new Map(), calls = [], models = [], plans = [{ plan: { id: 3, enabled: true, ...plan } }]
   const fetch = async (url, init) => {
     const path = new URL(url).pathname, owner = Number(init.headers.Authorization.split('-').at(-1))
     calls.push({ path, owner, method: init.method ?? 'GET' })
@@ -28,7 +29,7 @@ function fixture(options = {}) {
     let data
     if (path === '/api/user/self') data = account
     else if (path === '/api/user/models') data = account.group === 'blocked' ? [] : ['fixture-chat', 'fixture-image']
-    else if (path === '/api/subscription/plans') data = [{ plan: { id: 3, enabled: true, ...plan } }]
+    else if (path === '/api/subscription/plans') data = plans
     else if (path === '/api/subscription/self') {
       const sub = subscriptions.get(owner)
       data = { billing_preference: preferences.get(owner) ?? 'subscription_first', all_subscriptions: sub ? [{ subscription: sub }] : [], subscriptions: sub?.status === 'active' && sub.end_time > Date.now() / 1000 ? [{ subscription: sub }] : [] }
@@ -65,7 +66,7 @@ function fixture(options = {}) {
     if (payload.prompt === 'with image') { await submit(context, 'image'); await submit(context, 'chat') }
     return { events: [{ type: 'run.completed' }] }
   }, generateImage: async context => { await submit(context, 'image'); return { url: 'explicit-fixture' } }, runImage: async context => { await submit(context, 'image'); return { events: [{ type: 'run.completed' }] } } }
-  return { accounts, subscriptions, preferences, tokens, calls, models, overrides }
+  return { accounts, subscriptions, preferences, tokens, calls, models, plans, overrides }
 }
 const headers = (owner, id) => ({ authorization: 'Bearer fixture-user-' + owner, ...(id ? { 'idempotency-key': id } : {}) })
 const send = (app, owner = 7, prompt = 'text', id = crypto.randomUUID(), model = 'chat', url = '/api/studio/runs', consent) => app.inject({ method: 'POST', url, headers: headers(owner, id), payload: { runId: id, prompt, model, sessionId: 's', conversationId: 'c', ...(consent === undefined ? {} : { payWithBalance: consent }) } })
@@ -205,7 +206,7 @@ test('installation identity and plan rotation cannot reset previously granted be
     assert.throws(() => createServer({ ...c, trial: { ...c.trial, instanceId: crypto.randomUUID() } }, f.overrides), /另一 New API 实例/)
     app = createServer({ ...c, trial: { ...c.trial, planId: 4 } }, f.overrides)
     const before = f.calls.length
-    assert.equal((await send(app)).statusCode, 409)
+    assert.equal((await send(app)).statusCode, 402)
     assert.deepEqual(f.calls.slice(before).map(c => c.path), ['/api/user/self', '/api/user/models'])
     assert.equal(f.models.length, 1)
   } finally { await app.close(); rmSync(dir, { recursive: true, force: true }) }
@@ -314,6 +315,12 @@ test('unknown wallet preference blocks every new key across restart and even a m
     f.preferences.set(7, 'wallet_only')
     assert.equal((await send(app, 7, 'image only', crypto.randomUUID(), 'image')).statusCode, 409)
     assert.equal((await send(app, 8)).statusCode, 200)
+    await app.close(); app = createServer({ ...c, trial: undefined }, f.overrides)
+    const closed = await status(app)
+    assert.equal(closed.state, 'unavailable'); assert.equal(closed.pendingReconciliation, true)
+    assert.match(closed.message, /付款偏好写入结果待核对/)
+    assert.equal(closed.chat.preservedRemaining, 0); assert.equal(closed.image.preservedRemaining, 1)
+    assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 409)
   } finally { await app.close(); rmSync(dir, { recursive: true, force: true }) }
 })
 
@@ -349,4 +356,160 @@ test('ambiguous paid model records source intent and never retries or returns a 
     assert.deepEqual(record.attempts, [])
     assert.equal((await status(app)).chat.used, 4)
   } finally { await app.close() }
+})
+
+test('wallet continuation survives retired, removed or rotated plans without resetting any trial record', async () => {
+  for (const change of ['disabled', 'removed', 'rotated', 'closed']) {
+    const dir = mkdtempSync(join(tmpdir(), 'gouo-wallet-lifecycle-')), f = fixture(), c = { ...config, ledgerPath: join(dir, 'requests.sqlite') }
+    let app = createServer(c, f.overrides)
+    try {
+      for (let i = 0; i < 4; i++) assert.equal((await send(app)).statusCode, 200)
+      f.accounts.get(7).quota = 10000
+      if (change === 'disabled') f.plans[0].plan.enabled = false
+      if (change === 'removed') f.plans.splice(0)
+      if (['rotated', 'closed'].includes(change)) {
+        await app.close()
+        app = createServer({ ...c, trial: change === 'closed' ? undefined : { ...c.trial, planId: 4 } }, f.overrides)
+      }
+      const before = f.calls.length
+      assert.equal((await send(app)).statusCode, 402, change)
+      assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 200, change)
+      assert.equal(f.models.at(-1).preference, 'wallet_only')
+      assert.ok(f.calls.slice(before).every(c => c.path !== '/api/subscription/plans'), 'wallet needs no current plan, ' + change)
+      assert.equal(f.calls.filter(c => c.path === '/api/subscription/balance/pay').length, 1)
+      const { DatabaseSync } = await import('node:sqlite'), reader = new DatabaseSync(c.ledgerPath, { readOnly: true })
+      try {
+        assert.equal(reader.prepare('SELECT plan_id FROM trial_grants WHERE owner=7').get().plan_id, 3)
+        assert.equal(reader.prepare("SELECT COUNT(*) AS n FROM trial_reservations WHERE owner=7 AND benefit='chat'").get().n, 4)
+        assert.equal(reader.prepare("SELECT COUNT(*) AS n FROM trial_reservations WHERE owner=7 AND benefit='image'").get().n, 0)
+      } finally { reader.close() }
+    } finally { await app.close(); rmSync(dir, { recursive: true, force: true }) }
+  }
+})
+
+test('known expired trial can use explicitly authorized wallet while preserving unused local benefits', async () => {
+  const f = fixture(), app = createServer(config, f.overrides)
+  try {
+    assert.equal((await send(app)).statusCode, 200)
+    f.subscriptions.get(7).end_time = 1
+    f.accounts.get(7).quota = 10000
+    assert.equal((await send(app, 7, 'image', crypto.randomUUID(), 'image')).statusCode, 402)
+    assert.equal((await send(app, 7, 'image', crypto.randomUUID(), 'image', '/api/studio/runs', true)).statusCode, 200)
+    assert.equal(f.models.at(-1).preference, 'wallet_only')
+    const s = await status(app)
+    assert.equal(s.state, 'expired')
+    assert.equal(s.chat.preservedRemaining, 3); assert.equal(s.image.preservedRemaining, 1)
+    assert.equal(s.image.used, 0); assert.equal(s.image.held, 0)
+    assert.equal(f.calls.filter(c => c.path === '/api/subscription/balance/pay').length, 1)
+  } finally { await app.close() }
+})
+
+test('closing trial preserves installation binding and requires explicit wallet consent even for never-granted mature users', async () => {
+  const f = fixture(), app = createServer({ ...config, trial: undefined }, f.overrides)
+  try {
+    f.accounts.get(7).quota = 10000
+    assert.equal((await send(app)).statusCode, 402)
+    assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 200)
+    assert.equal(f.subscriptions.size, 0)
+    assert.equal(f.models.at(-1).preference, 'wallet_only')
+    assert.ok(f.calls.every(c => c.path !== '/api/subscription/plans' && c.path !== '/api/subscription/balance/pay'))
+  } finally { await app.close() }
+  assert.throws(() => createServer({ ...config, accountInstanceId: undefined, trial: undefined }), /实例标识/)
+})
+
+test('subscription read failures and missing old receipts never turn a free or exhausted request into wallet fallback', async () => {
+  for (const exhausted of [false, true]) {
+    const f = fixture(), app = createServer(config, f.overrides)
+    try {
+      for (let i = 0; i < (exhausted ? 4 : 1); i++) assert.equal((await send(app)).statusCode, 200)
+      f.accounts.get(7).quota = 10000
+      f.subscriptions.delete(7)
+      const before = f.models.length
+      assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 409)
+      assert.equal(f.models.length, before)
+      assert.equal(f.calls.filter(c => c.path === '/api/subscription/balance/pay').length, 1)
+    } finally { await app.close() }
+  }
+})
+
+test('retiring a plan with three chats and one image unused never silently spends or consumes preserved benefits', async () => {
+  for (const change of ['disabled', 'rotated', 'closed']) {
+    const dir = mkdtempSync(join(tmpdir(), 'gouo-unused-wallet-')), f = fixture(), c = { ...config, ledgerPath: join(dir, 'requests.sqlite') }
+    let app = createServer(c, f.overrides)
+    try {
+      assert.equal((await send(app)).statusCode, 200)
+      assert.equal((await status(app)).chat.remaining, 3)
+      assert.equal((await status(app)).image.remaining, 1)
+      f.accounts.get(7).quota = 10000
+      if (change === 'disabled') f.plans[0].plan.enabled = false
+      else {
+        await app.close()
+        app = createServer({ ...c, trial: change === 'closed' ? undefined : { ...c.trial, planId: 4 } }, f.overrides)
+      }
+      const modelCount = f.models.length
+      for (const kind of ['chat', 'image']) {
+        assert.equal((await send(app, 7, 'text', crypto.randomUUID(), kind)).statusCode, 402, change + ':' + kind)
+        assert.equal(f.models.length, modelCount + (kind === 'image' ? 1 : 0))
+        const result = await send(app, 7, 'text', crypto.randomUUID(), kind, '/api/studio/runs', true)
+        assert.equal(result.statusCode, 200, result.body)
+        assert.equal(f.models.at(-1).preference, 'wallet_only')
+        assert.equal(result.json().data.fundingSelection[kind], 'wallet')
+      }
+      assert.equal(f.calls.filter(call => call.path === '/api/subscription/balance/pay').length, 1)
+      const { DatabaseSync } = await import('node:sqlite'), db = new DatabaseSync(c.ledgerPath, { readOnly: true })
+      try {
+        assert.deepEqual({ ...db.prepare('SELECT plan_id,status FROM trial_grants WHERE owner=7').get() }, { plan_id: 3, status: 'active' })
+        assert.equal(db.prepare("SELECT COUNT(*) AS n FROM trial_reservations WHERE owner=7 AND benefit='chat'").get().n, 1)
+        assert.equal(db.prepare("SELECT COUNT(*) AS n FROM trial_reservations WHERE owner=7 AND benefit='image'").get().n, 0)
+        assert.equal(db.prepare("SELECT COUNT(*) AS n FROM trial_reservations WHERE owner=7 AND status!='used'").get().n, 0)
+      } finally { db.close() }
+    } finally { await app.close(); rmSync(dir, { recursive: true, force: true }) }
+  }
+})
+
+test('wallet account changes after preflight stop gateway intent without new permissions or trial consumption', async () => {
+  for (const change of ['disabled', 'group', 'balance', 'revoked']) {
+    const f = fixture()
+    let revoked = false
+    const seed = createServer(config, f.overrides)
+    try { assert.equal((await send(seed)).statusCode, 200) } finally { await seed.close() }
+    // A fresh in-memory ledger needs no grant: this is the closed-trial mature
+    // wallet path, with the owner's existing finite Native token retained.
+    f.accounts.get(7).quota = 10000
+    const beforeModels = f.models.length
+    const beforePurchase = f.calls.filter(call => call.path === '/api/subscription/balance/pay').length
+    const beforePreferences = f.calls.filter(call => call.path === '/api/subscription/self/preference').length
+    const beforePermissions = f.calls.filter(call => call.path === '/api/token/' && call.method === 'POST').length
+    const app = createServer({ ...config, trial: undefined }, {
+      ...f.overrides,
+      fetch: async (url, init) => {
+        if (revoked && new URL(url).pathname === '/api/user/self') return Response.json({ success: false, message: 'fixture revoked' }, { status: 401 })
+        return f.overrides.fetch(url, init)
+      },
+      runAgent: async context => {
+        if (change === 'disabled') f.accounts.get(7).status = 2
+        if (change === 'group') f.accounts.get(7).group = 'changed'
+        if (change === 'balance') f.accounts.get(7).quota = 0
+        if (change === 'revoked') revoked = true
+        await context.onGatewayRequest({ kind: 'chat', modelId: 'chat' })
+        assert.fail('changed wallet account must not reach gateway fetch')
+      },
+    })
+    const id = crypto.randomUUID()
+    try {
+      const response = await send(app, 7, 'text', id, 'chat', '/api/studio/runs', true)
+      assert.equal(response.statusCode, { disabled: 403, group: 409, balance: 402, revoked: 401 }[change], response.body)
+      assert.equal(f.models.length, beforeModels)
+      assert.equal(f.calls.filter(call => call.path === '/api/subscription/self/preference').length, beforePreferences)
+      assert.equal(f.calls.filter(call => call.path === '/api/subscription/balance/pay').length, beforePurchase)
+      assert.equal(f.calls.filter(call => call.path === '/api/token/' && call.method === 'POST').length, beforePermissions)
+      revoked = false; f.accounts.get(7).status = 1; f.accounts.get(7).group = 'default'
+      const record = await app.inject({ url: '/api/studio/requests/agent/' + id, headers: headers(7) })
+      assert.equal(record.statusCode, 200)
+      assert.deepEqual(record.json().data.submissions, [])
+      assert.deepEqual(record.json().data.attempts, [])
+      assert.equal((await send(app, 7, 'text', id, 'chat', '/api/studio/runs', true)).statusCode, 409)
+      assert.equal(f.models.length, beforeModels)
+    } finally { await app.close() }
+  }
 })

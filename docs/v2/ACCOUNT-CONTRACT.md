@@ -1,8 +1,12 @@
 # New API 原生账号入口与固定协议
 
-本轮核对固定 SHA `0aec08fee811ec6136828fda790551b49e410301`，不升级上游、不创建账号或重写 IAM。Studio 账号面板优先链接同源 New API 原生 UI，复用其 Turnstile、密码加密、登录验证、MFA、passkey、注册和密码恢复流程。基础密码表单只适用于未启用额外验证的实例；不声称完整实现上游登录流程。
+核对固定 SHA `0aec08fee811ec6136828fda790551b49e410301`，不升级上游或重写 IAM。日常实例未创建账号；隔离 Native 测试使用独立合成账号。Studio 账号面板优先链接同源 New API 原生 UI，复用其 Turnstile、密码加密、登录验证、MFA、passkey、注册和密码恢复流程。基础密码表单只适用于未启用额外验证的实例；不声称完整实现上游登录流程。
 
-2026-10-01 prepared trial edge 的新增限制：全部公开 PUT `/api/user/self` 暂时拒绝，原生 language/sidebar setting 快照更新可覆盖账号付款偏好，造成试用误扣钱包。资料/安全页面读取仍可用，资料与密码提交须 T1.3 安全适配器；不要把页面可打开等同于修改完整可用。该 override 尚未应用到日常8080，原生日常入口保持原配置，详见 TRIAL.md。
+2026-10-01 T1.3：prepared trial edge 的精确 PUT `/api/user/self` 改由 Studio 安全桥接，只允许单独 `display_name`（1–20 Unicode 字符）或 `password`（8–128 Unicode 字符）及可选 `original_password`。用户名、owner、role、quota、group、setting、language/sidebar、登录加密 DTO、混合资料/密码字段均422，不达 Native PUT。原生 language/sidebar 全 setting 快照会覆盖付款偏好，因此仍拒绝。账号桥接与生成使用同 owner 串行屏障，另一个 owner 独立；密码和 proof 不写 Studio 数据库或日志。该 override 尚未应用到日常8080，详见 TRIAL.md。
+
+密码修改继续经过原生 `/api/verify` 的 `account.password.change` / `account.password.set` 安全证明，再提交原始 Native DTO；桥接透传调用者 Bearer、`X-Security-Proof`、`X-Auth-Session`，不转发 Cookie 或共享 relay key。每次只发一个有界 PUT，原样保留 Native 状态、code 与旋转 bundle。原生密码修改返回 `access_token/token_type/access_expires_at/session/has_password/notification_warning`；当前 refresh secret 保持，旧 access token 和其它会话被撤销。网络/解析/不完整成功包均502并提示结果待确认、不重新提交。Native 500也可能发生在提交后，错误不等于密码未修改。
+
+`node v2/tests/stack/account-native.cases.mjs` 两次退出0：固定真实 Native 验证显示名修改、setting 不变、非法字段0次 PUT、缺 proof403、真实加密验证取得 proof、密码旋转、旧JWT/其它会话401、同 proof失效、当前 Cookie/SID刷新、旧密码失败/新密码登录成功。无模型或金额操作。此为真实 HTTP 合同测试；原生 `/profile`、`/security` 完整浏览器交互、邮件/MFA/passkey仍待验收，不能由API成功推导。
 
 已核对 `web/src/routes/` 与 `web/src/features/auth/hooks/use-auth-redirect.ts`：
 

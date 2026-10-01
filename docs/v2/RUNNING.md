@@ -87,7 +87,9 @@ npm run test:stack
 
 正式聊天 `/studio/chat` 可以直接打开原 New API 账号/费用面板，并在刷新、退出再登录后读取当前账号历史。默认画布菜单提供入口；旧画布对话仍在原 IndexedDB，不静默迁移。详情分页与模型上下文窗口见 CHAT-LAB.md；官方画布的只读副本导入与默认切换条件见 CANVAS_COMPARISON.md。
 
-Studio 会话只保存 New API 的数字 owner ID，不保存密码或复制账号体系。备份/恢复时需保持同一 New API 账号数据库与 Studio 业务数据库的对应关系；不能将旧 Studio 数据卷接到重建后会重新分配账号 ID 的另一套 New API 上。当前没有跨账号系统的历史迁移功能。图片以内嵌结果保存，历史尚无自动保留期限；大量图片的分页响应仍可能较大，部署前需评估容量、备份与保留策略。
+Studio 会话只保存 New API 的数字 owner ID，不保存密码或复制账号体系。每用户模式必须配置稳定 `GOUO_ACCOUNT_INSTANCE_ID` UUID；启用试用时可取批准policy.instanceId，同时配置必须一致。Studio数据卷永久绑定同账号数据库实例，关闭试用仍保留UUID；已有绑定而缺失/改为另一UUID拒绝启动。备份/恢复需保持同一 Native与Studio数据关系，重建账号库必须新UUID和业务卷，不能复用数字owner ID。当前没有跨账号系统的历史迁移。图片以内嵌结果保存，历史尚无自动保留期限；大量图片的分页响应仍可能较大，部署前需评估容量、备份与保留策略。
+
+未知付款偏好写入暂停本人所有新发送，关闭试用仍显示待核对；GET一致或重启Studio不会解除。T1.3私有本机恢复CLI的目标核验、显式停服/重启授权、只读inspect、连续锁会话及CAS见 [FUNDING-RECOVERY.md](FUNDING-RECOVERY.md)。仅支持固定单容器SQLite拓扑，不写Native偏好/钱，不释放旧unknown或次数；日常服务未执行该恢复。
 
 
 ## 安全配置交接

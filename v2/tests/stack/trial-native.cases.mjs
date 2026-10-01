@@ -201,6 +201,53 @@ try {
   const mixedSummary = (await studio.inject({ url: '/api/studio/trial', headers: mixedHeaders })).json().data
   assert.deepEqual(mixedSummary.chat, { limit: 4, remaining: 0, used: 4, held: 0 })
   assert.deepEqual(mixedSummary.image, { limit: 1, remaining: 0, used: 1, held: 0 })
+  // Test-only Studio policy changes against the same isolated Native instance
+  // and durable owner receipt. Neither change enables another free claim.
+  const readTrialReceipt = () => {
+    const db = new DatabaseSync(studioDatabasePath, { readOnly: true })
+    try { return { grant: { ...db.prepare('SELECT * FROM trial_grants WHERE owner=?').get(mixedUser.user.id) }, reservations: db.prepare('SELECT * FROM trial_reservations WHERE owner=? ORDER BY key,benefit').all(mixedUser.user.id).map(row => ({ ...row })) } }
+    finally { db.close() }
+  }
+  const unchangedReceipt = readTrialReceipt(), policyContinuation = []
+  await native('/api/subscription/admin/plans', admin.access_token, { plan: { ...plan, title: 'Synthetic replacement trial; never claimed', currency: 'USD', enabled: true, quota_reset_custom_seconds: 0 } })
+  const replacementId = (await native('/api/subscription/plans', mixedToken)).data.find(row => row.plan.title === 'Synthetic replacement trial; never claimed').plan.id
+  assert.notEqual(replacementId, policy.planId)
+  // Native CT is 20 requests/IP/20min, including login and token-key reads.
+  // A test-container lifecycle restart after durable settlement keeps security
+  // defaults intact and also exercises restart continuity of receipts/tokens.
+  let beforeRestartLogs
+  for (let i = 0; i < 30; i++) {
+    beforeRestartLogs = (await native('/api/log/self?type=2&p=1&page_size=100', mixedToken)).data.items
+    if (beforeRestartLogs.length === 8) break
+    await new Promise(res => setTimeout(res, 200))
+  }
+  assert.equal(beforeRestartLogs.length, 8)
+  await studio.close()
+  await compose('restart', 'new-api')
+  nativeOrigin = 'http://' + (await compose('port', 'new-api', '3000')).trim()
+  for (let i = 0; i < 60; i++) { try { if ((await fetch(nativeOrigin + '/api/status')).ok) break } catch {} await new Promise(res => setTimeout(res, 500)) }
+  const continuedConfig = { ...config, authOrigin: nativeOrigin, gateway: nativeOrigin + '/v1', normalRoutingEvidence: { ...config.normalRoutingEvidence, gatewayOrigin: nativeOrigin } }
+  for (const [mode, changedConfig] of [['disabled', { ...continuedConfig, trial: undefined }], ['replaced', { ...continuedConfig, trial: { ...config.trial, gatewayOrigin: nativeOrigin, planId: replacementId } }]]) {
+    await studio.close(); studio = createServer(changedConfig, { fetch: async (url, init) => {
+      const response = await fetch(url, init)
+      if (!response.ok) console.log(JSON.stringify({ isolatedNativeFailure: true, path: new URL(url).pathname, status: response.status }))
+      return response
+    } })
+    const before = { ...providerCalls }
+    assert.equal((await mixedSend('local fixture requires consent after ' + mode)).statusCode, 402)
+    assert.deepEqual(providerCalls, before)
+    const id = crypto.randomUUID(), response = await mixedSend('local fixture wallet after ' + mode, true, id)
+    assert.equal(response.statusCode, 200, response.body)
+    assert.equal(response.json().data.events.at(-1).type, 'run.completed', response.body)
+    const record = (await studio.inject({ url: '/api/studio/requests/agent/' + id, headers: mixedHeaders })).json().data
+    assert.deepEqual(record.submissions.map(row => row.selectedFundingSource), ['wallet'])
+    assert.deepEqual(readTrialReceipt(), unchangedReceipt)
+    const nativeReceipt = (await native('/api/subscription/self', mixedToken)).data
+    assert.equal(nativeReceipt.all_subscriptions.length, 1)
+    assert.equal(nativeReceipt.all_subscriptions[0].subscription.plan_id, policy.planId)
+    assert.equal(nativeReceipt.billing_preference, 'wallet_only')
+    policyContinuation.push({ mode, requestId: record.attempts[0].requestId, defaultStatus: 402, source: 'wallet', noNewClaim: true, oldReceiptAndCountsUnchanged: true })
+  }
   let mixedLogs, mixedStored
   const readMixed = `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/data/new-api.db',{readOnly:true});const owner=${mixedUser.user.id};
     console.log(JSON.stringify({wallet:db.prepare('SELECT quota FROM users WHERE id=?').get(owner).quota,subscription:db.prepare('SELECT amount_used FROM user_subscriptions WHERE user_id=?').get(owner).amount_used,
@@ -210,16 +257,20 @@ try {
   for (let i = 0; i < 30; i++) {
     mixedLogs = (await native('/api/log/self?type=2&p=1&page_size=100', mixedToken)).data.items
     mixedStored = JSON.parse((await compose('exec', '-T', 'new-api', 'node', '-e', readMixed)).split('\n').find(line => line.startsWith('{')))
-    if (mixedLogs.length === 8 && mixedStored.logs.n === 8 && mixedStored.logs.quota === 1072 && mixedStored.wallet === 9476 && mixedStored.subscription === 548) break
+    if (mixedLogs.length === 10 && mixedStored.logs.n === 10 && mixedStored.logs.quota === 1096 && mixedStored.wallet === 9452 && mixedStored.subscription === 548) break
     await new Promise(resolvePromise => setTimeout(resolvePromise, 200))
   }
   const mixedSources = mixedLogs.map(row => ({ ...row, billing: JSON.parse(row.other) }))
   assert.equal(mixedSources.filter(row => row.billing.billing_source === 'subscription').length, 5)
-  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'wallet').length, 3)
+  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'wallet').length, 5)
+  for (const continuation of policyContinuation) {
+    const log = mixedSources.find(row => row.request_id === continuation.requestId)
+    assert.equal(log.billing.billing_source, 'wallet'); assert.equal(log.billing.billing_preference, 'wallet_only'); assert.equal(log.quota, 12)
+  }
   assert.ok(mixedSources.every(row => row.billing.billing_preference === (row.billing.billing_source === 'wallet' ? 'wallet_only' : 'subscription_only')))
   assert.ok(mixedSources.filter(row => row.billing.billing_source === 'subscription').every(row => row.billing.wallet_quota_deducted === 0 && row.billing.subscription_consumed === row.quota && row.billing.subscription_plan_id === policy.planId))
   assert.equal(mixedSources.filter(row => row.billing.billing_source === 'subscription').reduce((sum, row) => sum + row.quota, 0), 548)
-  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'wallet').reduce((sum, row) => sum + row.quota, 0), 524)
+  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'wallet').reduce((sum, row) => sum + row.quota, 0), 548)
   const paidRecord = (await studio.inject({ url: '/api/studio/requests/agent/' + paidId, headers: mixedHeaders })).json().data
   assert.deepEqual(paidRecord.attempts.map(attempt => mixedSources.find(row => row.request_id === attempt.requestId).billing.billing_source), ['wallet', 'subscription', 'wallet'])
   assert.deepEqual(paidRecord.submissions.map(submission => submission.selectedFundingSource), ['wallet', 'trial', 'wallet'])
@@ -231,13 +282,16 @@ try {
   const mixedAccount = (await native('/api/user/self', mixedToken)).data
   const mixedTokens = (await native('/api/token/search?keyword=gouo-studio&p=1&page_size=100', mixedToken)).data.items
   assert.equal(mixedTokens.length, 1); assert.equal(mixedTokens[0].id, trialToken.id); assert.equal(mixedTokens[0].expired_time, trialToken.expired_time)
-  assert.equal(mixedTokens[0].remain_quota, 498928)
-  assert.equal(mixedAccount.quota, 9476); assert.equal(mixedAccount.used_quota, 1072)
-  assert.deepEqual(mixedStored, { wallet: 9476, subscription: 548, token: 498928, logs: { n: 8, quota: 1072 }, voucher: { status: 3, used_user_id: mixedUser.user.id } })
+  assert.equal(mixedTokens[0].remain_quota, 498904)
+  assert.equal(mixedAccount.quota, 9452); assert.equal(mixedAccount.used_quota, 1096)
+  assert.deepEqual(mixedStored, { wallet: 9452, subscription: 548, token: 498904, logs: { n: 10, quota: 1096 }, voucher: { status: 3, used_user_id: mixedUser.user.id } })
   assert.equal((await native('/api/user/self', token)).data.quota, 0)
   assert.equal((await native('/api/subscription/self', token)).data.all_subscriptions[0].subscription.amount_used, 560)
-  assert.deepEqual(providerCalls, { chat: 11, image: 3, anonymousRejected: 1 })
+  assert.deepEqual(providerCalls, { chat: 13, image: 3, anonymousRejected: 1 })
   const evidence = { sourceCommit: policy.sourceCommit, binarySha256: checksum.split(' ')[0], provider: 'local explicit fixture', procurementCost: 0, nativeWalletQuota: finalAccount.quota, nativeUsedQuota: finalAccount.used_quota, nativeTokenRemaining: tokens[0].remain_quota, nativeSubscriptionCount: 1, nativeConsumedQuota: self.all_subscriptions[0].subscription.amount_used, nativeConsumeLogCount: logs.length, nativeLogFunding: 'subscription_only; subscription source; wallet deducted 0', sqlite: stored, mixedContinuation: { voucherQuota, sqlite: mixedStored, paidRunSources: ['wallet', 'subscription', 'wallet'], paidImageSources: ['wallet'], beforeFetchIntentVerified: true, sameTokenIdAndExpiry: true, paidReplayNoCalls: true, alteredConsentReplayRejected: true, crossOwnerReadRejected: true, trial: mixedSummary }, providerCalls, trial: summary, realPaidProviderCalls: 0 }
+  evidence.policyContinuation = policyContinuation
+  evidence.isolatedNativeRestartBeforePolicyContinuation = true
+  evidence.testLifecycle = { firstExtensionFailure: 'Native POST /api/token/2/key returned 429 (default CriticalRateLimit 20 requests/IP/20 minutes); no failed run was resubmitted', restart: 'Isolated Native process stopped/restarted only after prior consume logs settled; unchanged security settings, persistent DB, fresh run IDs for added calls' }
   await writeFile(join(directory, 'evidence.json'), JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence))
   console.log('Isolated native trial passed. Evidence: ' + join(directory, 'evidence.json'))

@@ -5,7 +5,7 @@ const limits = { chat: 4, image: 1 }
 // This stores non-monetary introductory benefits. New API owns the funds,
 // token quota, pre-consumption and settlement; no balance is mirrored here.
 export class Trial {
-  constructor(db, policy) {
+  constructor(db, policy, accountInstanceId = policy?.instanceId) {
     this.db = db
     this.policy = policy
     db.exec(`CREATE TABLE IF NOT EXISTS trial_installation (id INTEGER PRIMARY KEY CHECK(id=1), instance_id TEXT NOT NULL);
@@ -14,10 +14,12 @@ export class Trial {
       CREATE TABLE IF NOT EXISTS trial_reservations (owner INTEGER NOT NULL, request_kind TEXT NOT NULL,
         key TEXT NOT NULL, benefit TEXT NOT NULL, status TEXT NOT NULL,
         PRIMARY KEY(owner,request_kind,key,benefit))`)
-    if (policy) {
+    if (accountInstanceId) {
       const installation = db.prepare('SELECT instance_id FROM trial_installation WHERE id=1').get()
-      if (installation && installation.instance_id !== policy.instanceId) throw new Error('试用数据库属于另一 New API 实例，请隔离数据；不能重复使用账号 ID')
-      db.prepare('INSERT OR IGNORE INTO trial_installation VALUES(1,?)').run(policy.instanceId)
+      if (installation && installation.instance_id !== accountInstanceId) throw new Error('业务数据库属于另一 New API 实例，请隔离数据；不能重复使用账号 ID')
+      db.prepare('INSERT OR IGNORE INTO trial_installation VALUES(1,?)').run(accountInstanceId)
+    } else if (db.prepare('SELECT instance_id FROM trial_installation WHERE id=1').get()) {
+      throw new Error('业务数据库已有账号实例标识，必须提供相同的 GOUO_ACCOUNT_INSTANCE_ID；不能通过关闭试用取消绑定')
     }
     // Ledger's exclusive process lock is held before restart recovery.
     db.exec("UPDATE trial_grants SET status='unknown' WHERE status='claiming'; UPDATE trial_reservations SET status='unknown' WHERE status='reserved'")
@@ -75,7 +77,10 @@ export class Trial {
     if (state === 'active' && chat.remaining === 0 && image.remaining === 0) state = 'exhausted'
     if (state === 'active' && pendingReconciliation) state = 'pending'
     // Disabled/unavailable never presents an unissued benefit as usable.
-    if (!['active', 'pending', 'eligible'].includes(state)) { chat.remaining = 0; image.remaining = 0 }
+    if (!['active', 'pending', 'eligible'].includes(state)) {
+      if (this.grant(owner)?.status === 'active' && (chat.remaining > 0 || image.remaining > 0)) { chat.preservedRemaining = chat.remaining; image.preservedRemaining = image.remaining }
+      chat.remaining = 0; image.remaining = 0
+    }
     return { state, message, chat, image, pendingReconciliation }
   }
 }

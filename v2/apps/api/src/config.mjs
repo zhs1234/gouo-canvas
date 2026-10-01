@@ -55,12 +55,15 @@ export function loadConfig(env = process.env) {
     trial = trialPolicySchema.parse(JSON.parse(readFileSync(env.GOUO_TRIAL_POLICY_FILE, 'utf8')))
     if (trial.gatewayOrigin !== gateway.origin || trial.sourceCommit !== normalRoutingEvidence.sourceCommit) throw new Error('注册试用必须绑定已核验的同一固定版本 New API 网关')
   }
+  const accountInstanceId = env.GOUO_ACCOUNT_INSTANCE_ID ? z.string().uuid().parse(env.GOUO_ACCOUNT_INSTANCE_ID) : trial?.instanceId
+  if (trial && accountInstanceId !== trial.instanceId) throw new Error('账号实例标识必须与批准试用实例一致')
+  if (relayCredentialMode === 'user-token' && !accountInstanceId) throw new Error('每用户模式需要稳定的 GOUO_ACCOUNT_INSTANCE_ID；关闭试用不能复用另一实例的账号 ID')
   return {
     models, gateway: gateway.toString().replace(/\/$/, ''),
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
     relayKey,
     relayRoutingMode, normalRoutingEvidence,
-    relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds, trial,
+    relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds, trial, accountInstanceId,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }

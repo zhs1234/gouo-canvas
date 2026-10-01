@@ -6,6 +6,7 @@ const config = {
   models: [{ id: 'image', kind: 'image', displayName: 'Fixture', upstreamModelId: 'fixture-image', enabled: true, verification: 'live-verified' }],
   gateway: 'http://fixture.invalid/v1', authOrigin: 'http://fixture.invalid', ledgerPath: ':memory:', allowGeneration: true,
   relayCredentialMode: 'user-token', relayRoutingMode: 'model', userTokenQuotaCap: 1000, userTokenLifetimeSeconds: 3600,
+  accountInstanceId: '2c2792b0-84c4-465d-a176-67f4c1ad9b0e',
   normalRoutingEvidence: { sourceCommit: '0aec08fee811ec6136828fda790551b49e410301', retryTimes: 0, gatewayOrigin: 'http://fixture.invalid', operatorVerified: true, verifiedAt: '2026-09-30' },
 }
 const json = data => new Response(JSON.stringify({ success: true, data }))
@@ -19,6 +20,7 @@ function fixture() {
     const account = accounts.get(owner)
     if (path === '/api/user/self') return json(account)
     if (path === '/api/user/models') return json(account.group === 'blocked' ? [] : ['fixture-image'])
+    if (path === '/api/subscription/self') return json({ billing_preference: 'wallet_only', subscriptions: [], all_subscriptions: [] })
     if (path === '/api/token/search') return json({ items: tokens.has(owner) ? [tokens.get(owner)] : [], total: tokens.has(owner) ? 1 : 0 })
     if (path === '/api/token/') {
       const body = JSON.parse(init.body)
@@ -34,7 +36,7 @@ function fixture() {
   }
   return { accounts, tokens, calls, fetch }
 }
-const send = (app, owner, key = crypto.randomUUID()) => app.inject({ method: 'POST', url: '/api/studio/images', headers: { authorization: 'Bearer fixture-user-' + owner, 'idempotency-key': key, 'new-api-user': '7' }, payload: { prompt: 'fixture', model: 'image' } })
+const send = (app, owner, key = crypto.randomUUID()) => app.inject({ method: 'POST', url: '/api/studio/images', headers: { authorization: 'Bearer fixture-user-' + owner, 'idempotency-key': key, 'new-api-user': '7' }, payload: { prompt: 'fixture', model: 'image', payWithBalance: true } })
 test('ordinary users get their own finite native tokens and charges; replay does not provision or charge again', async () => {
   const f = fixture(); let generated = 0
   const app = createServer(config, { fetch: f.fetch, generateImage: async context => {
@@ -117,9 +119,9 @@ test('per-user mode rejects shared secrets, mismatched authorities and implicit 
     const models = join(dir, 'models.json'), evidence = join(dir, 'routing.json')
     writeFileSync(models, JSON.stringify({ models: config.models })); writeFileSync(evidence, JSON.stringify(config.normalRoutingEvidence))
     const env = { GOUO_STUDIO_MODELS_FILE: models, GOUO_GATEWAY_BASE_URL: config.gateway, GOUO_NORMAL_ROUTING_EVIDENCE_FILE: evidence,
-      GOUO_RELAY_ROUTING_MODE: 'model', GOUO_RELAY_CREDENTIAL_MODE: 'user-token', GOUO_USER_TOKEN_QUOTA_CAP: '1000', GOUO_USER_TOKEN_LIFETIME_SECONDS: '3600' }
+      GOUO_RELAY_ROUTING_MODE: 'model', GOUO_RELAY_CREDENTIAL_MODE: 'user-token', GOUO_ACCOUNT_INSTANCE_ID: config.accountInstanceId, GOUO_USER_TOKEN_QUOTA_CAP: '1000', GOUO_USER_TOKEN_LIFETIME_SECONDS: '3600' }
     assert.equal(loadConfig(env).relayCredentialMode, 'user-token')
-    for (const change of [{ GOUO_RELAY_API_KEY: 'fixture' }, { GOUO_RELAY_OWNER_ID: '7' }, { GOUO_RELAY_ROUTING_MODE: 'pinned' }, { GOUO_USER_TOKEN_QUOTA_CAP: '' }, { GOUO_USER_TOKEN_LIFETIME_SECONDS: '' }, { GOUO_BACKEND_DEV_TARGET: 'https://other.invalid' }]) assert.throws(() => loadConfig({ ...env, ...change }))
+    for (const change of [{ GOUO_RELAY_API_KEY: 'fixture' }, { GOUO_RELAY_OWNER_ID: '7' }, { GOUO_RELAY_ROUTING_MODE: 'pinned' }, { GOUO_ACCOUNT_INSTANCE_ID: '' }, { GOUO_ACCOUNT_INSTANCE_ID: 'invalid' }, { GOUO_USER_TOKEN_QUOTA_CAP: '' }, { GOUO_USER_TOKEN_LIFETIME_SECONDS: '' }, { GOUO_BACKEND_DEV_TARGET: 'https://other.invalid' }]) assert.throws(() => loadConfig({ ...env, ...change }))
     assert.throws(() => loadConfig({ ...env, GOUO_RELAY_API_KEY_FILE: '/fixture/must-not-read' }), /共享令牌/)
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })
@@ -129,7 +131,7 @@ test('SSE token preflight failure returns the account error before starting a st
   f.tokens.get(7).status = 2
   const app = createServer(config, { fetch: f.fetch }), id = crypto.randomUUID()
   try {
-    const response = await app.inject({ method: 'POST', url: '/api/studio/runs/stream', headers: { authorization: 'Bearer fixture-user-7', 'idempotency-key': id }, payload: { runId: id, prompt: 'fixture', model: 'image', sessionId: 'fixture', conversationId: 'fixture' } })
+    const response = await app.inject({ method: 'POST', url: '/api/studio/runs/stream', headers: { authorization: 'Bearer fixture-user-7', 'idempotency-key': id }, payload: { runId: id, prompt: 'fixture', model: 'image', sessionId: 'fixture', conversationId: 'fixture', payWithBalance: true } })
     assert.equal(response.statusCode, 403); assert.match(response.json().message, /令牌已停用/)
     assert.doesNotMatch(response.headers['content-type'], /event-stream/)
   } finally { await app.close() }

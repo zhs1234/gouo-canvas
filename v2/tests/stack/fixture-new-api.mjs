@@ -10,6 +10,7 @@ const accounts = new Map([7, 8].map(id => [id, {
   role: id === 7 ? 10 : 1, status: 1, group: 'default', quota: 100000, used_quota: 0, request_count: 0,
 }]))
 const tokens = new Map()
+const preferences = new Map()
 const logs = []
 const png = await sharp({ create: { width: 48, height: 32, channels: 3, background: '#a8cf74' } }).png().toBuffer()
 const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)) }
@@ -75,6 +76,12 @@ const server = createServer(async (req, res) => {
       if (!session) return denied(res)
       if (accounts.get(session.owner)?.status !== 1) return json(res, 403, { success: false, message: '测试账号已禁用' })
       if (url.pathname === '/api/user/self') return ok(res, accounts.get(session.owner))
+      if (url.pathname === '/api/subscription/self') return ok(res, { billing_preference: preferences.get(session.owner) ?? 'subscription_first', subscriptions: [], all_subscriptions: [] })
+      if (url.pathname === '/api/subscription/self/preference' && req.method === 'PUT') {
+        if (!['wallet_only', 'subscription_only'].includes(body.billing_preference)) return json(res, 422, { success: false, message: 'Invalid fixture preference' })
+        preferences.set(session.owner, body.billing_preference)
+        return ok(res, { billing_preference: body.billing_preference })
+      }
       if (url.pathname === '/api/user/models') return ok(res, accounts.get(session.owner).group === 'blocked' ? [] : ['fixture-chat', 'fixture-image'])
       if (url.pathname === '/api/token/search') return ok(res, { total: [...tokens.values()].filter(t => t.user_id === session.owner).length, items: [...tokens.values()].filter(t => t.user_id === session.owner).map(t => ({ ...t, key: 'masked' })) })
       if (url.pathname === '/api/token/' && req.method === 'POST') {

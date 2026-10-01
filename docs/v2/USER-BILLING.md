@@ -4,7 +4,9 @@
 
 ## 当前实现
 
-2026-10-01 增量：[T1 注册试用及 T1.2 付费续用](TRIAL.md) 默认关闭，支持本人零钱包由原生一次性零价有限订阅供资；Studio 只限制 4 次发送＋1 次图片，不另造金额余额。真正启用须批准原生计划、cap/期限与 Studio-only 入口，并完成真实渠道验收。试用类别使用 subscription_only；该类别耗尽且用户明确勾选本次允许本人余额时使用 wallet_only，剩余其它类别试用保留。授权发送后即清除，不存浏览器、不自动沿用。领取未知只能通过原生receipt恢复；付款偏好写入未知阻断本人所有新生成，GET一致不能自动解锁，避免旧写入晚到。默认未授权不转为收费，下面原 wallet 模式描述继续适用于未启用或不符合试用的账号。
+2026-10-01 增量：[T1 注册试用、T1.2 付费续用、T1.3 独立钱包生命周期](TRIAL.md) 默认关闭，支持本人零钱包由原生一次性零价有限订阅供资；Studio 只限制 4 次发送＋1 次图片，不另造金额余额。真正启用须批准原生计划、cap/期限与 Studio-only 入口，并完成真实渠道验收。每用户模式所有钱包发送都要求本次 `payWithBalance:true`，包括从未领取的成熟账号与关闭试用的账号。剩余可用类别优先 subscription_only；耗尽或已核实过期/退役/关闭时，明确授权才选 wallet_only，旧领取与次数保留。授权发送后即清除，不存浏览器、不自动沿用。领取未知只能通过原生 receipt 恢复；付款偏好写入未知阻断本人所有新生成，GET一致不能自动解锁，避免旧写入晚到。
+
+钱包核验只读本人 `/api/subscription/self`、旧 grant 的唯一历史 receipt、本人启用状态/组/正余额，不访问当前 `/plans`，不依赖已退役计划的价格/开关/ID。未知/缺失/重复/跨 owner 的旧 receipt 拒绝；有剩余免费次数时的计划查询异常也拒绝，不能借网络失败自动转钱包。每次实际 gateway fetch 前重验本人资金，选择并确认 wallet_only。独立有限 token 的禁用/期限/耗尽仍拒绝，不因钱包充值自动续额或续期。未知偏好的私有恢复见 [FUNDING-RECOVERY.md](FUNDING-RECOVERY.md)，不确认费用或重发旧请求。
 
 原 personal 模式仍限定单一 `GOUO_RELAY_OWNER_ID`，不会因为多用户需求放开共享管理员令牌。新增显式 `user-token` 模式：Studio 每次用已验证的本人 Bearer 调用 `/api/user/self` 和 `/api/user/models?group=<本人组>`，仅显示配置且本组可用的模型；账号组与渠道必须在原生服务中正确配置。普通用户不追加管理员 `channelId` 后缀，模型由 New API 自己路由。账号和网关必须是同一实例；仍需固定版本/同网关 `RetryTimes=0` 核验记录，不静默降级或更换渠道。
 
@@ -23,6 +25,7 @@ New API 校验及扣除本人的钱包或已核验试用订阅与令牌额度，
 ```dotenv
 GOUO_ENABLE_GENERATION=false
 GOUO_RELAY_CREDENTIAL_MODE=user-token
+GOUO_ACCOUNT_INSTANCE_ID=<本账号数据库稳定 UUID>
 GOUO_RELAY_ROUTING_MODE=model
 GOUO_NORMAL_ROUTING_EVIDENCE_FILE=/run/gouo/normal-routing.evidence.json
 # 两项无默认商业值，批准后填写正整数；上限以原生 quota 单位计。

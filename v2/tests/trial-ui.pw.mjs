@@ -36,6 +36,11 @@ for (const entry of ['./chat', './']) {
       await expect(panel).not.toContainText('试用剩余')
       await expect(panel.getByRole('link')).toHaveCount(0)
     }
+    trial.chat.preservedRemaining = 2; trial.image.preservedRemaining = 1
+    trial.state = 'disabled'; trial.message = '原试用暂不可用'
+    await panel.getByRole('button').click()
+    await expect(panel).toContainText('原试用记录保留：聊天 2/4 次 · 图片 1/1 次，当前不可使用。余额付款不会扣除这些次数。')
+    delete trial.chat.preservedRemaining; delete trial.image.preservedRemaining
     fail = true
     await panel.getByRole('button').click()
     await expect(panel.getByRole('alert')).toContainText('试用状态暂时无法读取')

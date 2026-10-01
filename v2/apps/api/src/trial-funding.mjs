@@ -37,7 +37,7 @@ async function native(config, authorization, path, fetcher, body, method = body 
   return result.data
 }
 
-export async function inspectTrialFunding(config, authorization, account, fetcher, { checkPreference = true } = {}) {
+export async function inspectTrialFunding(config, authorization, account, fetcher, { checkPreference = true, allowUnavailable = false } = {}) {
   if (!config.trial) return { state: 'unavailable', reason: '注册试用尚未启用' }
   if (!Number.isSafeInteger(account?.id) || account.id < config.trial.minUserId || account.status !== 1) return { state: 'ineligible', reason: '账号不符合本次新用户试用条件' }
   const plans = await native(config, authorization, '/api/subscription/plans', fetcher)
@@ -45,8 +45,13 @@ export async function inspectTrialFunding(config, authorization, account, fetche
   if (!Array.isArray(plans) || !self || !Array.isArray(self.subscriptions) || !Array.isArray(self.all_subscriptions)
       || !['subscription_first', 'subscription_only', 'wallet_first', 'wallet_only'].includes(self.billing_preference)) throw new StudioError('原生试用资金数据无效', 502)
   const matchingPlans = plans.filter(row => row?.plan?.id === config.trial.planId)
-  if (matchingPlans.length !== 1 || matchingPlans[0].plan.enabled !== true
-      || Object.entries(config.trial.plan).some(([key, value]) => matchingPlans[0].plan[key] !== value)) throw new StudioError('原生试用计划与批准配置不一致，请联系管理员', 503)
+  const nativePlanSchema = z.object({ id: quota, enabled: z.boolean(), price_amount: z.number().finite().nonnegative(), total_amount: z.number().int().nonnegative().max(2147483647),
+    duration_unit: z.enum(['year', 'month', 'day', 'hour', 'custom']), duration_value: quota, custom_seconds: z.number().int().nonnegative().max(2147483647),
+    quota_reset_period: z.enum(['never', 'daily', 'weekly', 'monthly', 'custom']), max_purchase_per_user: z.number().int().nonnegative().max(2147483647),
+    allow_balance_pay: z.boolean(), allow_wallet_overflow: z.boolean(), upgrade_group: z.string(), downgrade_group: z.string() })
+  if (matchingPlans.length !== 1 || !nativePlanSchema.safeParse(matchingPlans[0].plan).success) throw new StudioError('原生试用计划数据缺失、重复或无效，请联系管理员', 503)
+  const retired = matchingPlans[0].plan.enabled !== true || Object.entries(config.trial.plan).some(([key, value]) => matchingPlans[0].plan[key] !== value)
+  if (retired && !allowUnavailable) throw new StudioError('原生试用计划与批准配置不一致，请联系管理员', 503)
   for (const row of [...self.subscriptions, ...self.all_subscriptions]) {
     const sub = row?.subscription
     if (!sub || !Number.isSafeInteger(sub.id) || sub.id <= 0 || sub.user_id !== account.id || !Number.isSafeInteger(sub.plan_id)
@@ -62,6 +67,7 @@ export async function inspectTrialFunding(config, authorization, account, fetche
   const history = self.all_subscriptions.filter(row => row.subscription.plan_id === config.trial.planId)
   if (history.length > 1) throw new StudioError('原生试用订阅重复，需核对', 503)
   const billingPreference = self.billing_preference
+  if (retired) return { state: 'retired', billingPreference, reason: '原生试用计划已停用或变更，原领取记录与剩余次数保留；未重新领取' }
   if (checkPreference && !['subscription_first', 'subscription_only'].includes(billingPreference)) return { state: 'unavailable', billingPreference, reason: '请到原生订阅页面选择订阅优先或仅订阅扣费，再领取或使用试用' }
   if (self.subscriptions.some(row => row.subscription.plan_id !== config.trial.planId && row.subscription.status === 'active' && row.subscription.end_time > Date.now() / 1000)) return { state: 'unavailable', billingPreference, reason: '账号还有其他活跃订阅，无法确认本次试用资金来源，请联系管理员' }
   if (!history.length) {

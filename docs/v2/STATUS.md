@@ -1,5 +1,40 @@
 # 实际交付与验证状态
 
+## T1.3 安全账户桥接、未知偏好核对恢复与独立钱包生命周期（2026-10-01，默认关闭）
+
+在 `codex/registration-trial`、T1.2 `2cbfd90` 上完成本轮，仍包含合并V2基线 `abe46c4`。三位 gpt-6.1-sol 子智能体分别实现/验收固定Native账户与edge、私有恢复流程和钱包合同，并做独立安全审查；全部文件与忽略的证据留在当前项目。没有push、merge、部署或main改动，本轮远程CI尚未执行。
+
+精确 PUT `/api/user/self` 在 prepared edge 下只路由 Studio 白名单：独立显示名，或原生password/original_password。保留原生安全proof、单次PUT、原状态/code与access旋转bundle；setting/language/sidebar、owner/权限/余额/组、登录密文和混合字段422不达Native，路径别名404。同owner资料操作与生成互斥，另一个owner独立；Cookie和共享key不转发，密码/proof/旋转token不落Studio账本。未知网络或不完整成功不自动重交。实际原生密码HTTP证明与完整浏览器流程分列，见 [ACCOUNT-CONTRACT.md](ACCOUNT-CONTRACT.md)。
+
+所有 user-token 钱包发送现在都要求本次 true，包含试用关闭/不符合/从未领取成熟账号。耗尽类别的钱包权威只来自本人历史receipt、稳定实例、fresh启用状态/组/正余额，不读取现行plans；合法过期/退役/关闭后的明确钱包使用保留未用次数。缺失/重复/跨owner/unknown旧receipt或免费计划查询异常仍拒绝，不自然回退。账号实例UUID绑定独立于试用开关，关闭后缺失/改UUID拒绝启动。TrialPanel以可选preservedRemaining展示旧grant余量当前不可用，不虚构新发放。
+
+新增 `scripts/reconcile-funding.mjs` 和无网络helper，只支持固定本机单Native/Studio、独立Docker SQLite卷、原生无宿主端口。操作员先显式停Studio，inspect只读；reconcile必须精确row hash和明确Native重启，连续持有Studio进程锁，实际stop/Pid0/同container新healthy boot/固定binary/topology核验后CAS+审计。仅设 `reconciled`，不确认Native偏好或收费，不动旧unknown/held，不启动Studio。任何中途失败屏障仍保留。逐段stdin在拼接前限32KiB，即使不发换行/EOF也拒绝；无JWT、账号设置或金额接口。使用与批准边界见 [FUNDING-RECOVERY.md](FUNDING-RECOVERY.md)。
+
+独立审查发现一项P2：关闭试用时GET先返回disabled，隐藏未知付款偏好原因；已把屏障检查放首位，补关闭后的pending状态及409拒绝，验证只读无新写。其余未发现已证实P0/P1，但不能由代码审查推导公众部署已验收。追加仅用一次免费聊天后保留3chat/1image的disabled/rotated/closed正反例，以及wallet preflight后账号禁用/改组/归零/撤销会话的gateway前拒绝，均无新模型intent/权限。
+
+本轮最终实际验证：
+
+| 命令 | 结果及证据边界 |
+| --- | --- |
+| `npm run check` | 类型、**22/22**领域/探测/恢复、**123/123**API、生产构建通过（10.60秒）；既有chunk警告，无依赖/lockfile变更。`.local/t1-3-check-final.log` |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **56/56**（1.6分钟）；明确fixture，完整聊天/画布/移动/旧草稿/原图/恢复及保留试用余量。`.local/t1-3-browser-final.log` |
+| `npm run test:stack` | **退出0**：实际固定Native未初始化安全边界、personal契约替身2/2、fresh user-token契约替身1/1，实际Nginx与Studio SDK/browser，只有随机测试资源清理。`.local/t1-3-stack.log` |
+| `node tests/stack/account-native.cases.mjs` | **两次退出0**：真实固定Native独立账号、显示名、禁止setting字段、真实verify proof/密码旋转、旧JWT/其它会话拒绝、当前Cookie刷新和新旧密码登录；0模型。`.local/native-account-QzGIP4/evidence.json` |
+| `node tests/stack/recovery-native.cases.mjs` | **退出0**：实际Docker停止/新boot、持久卷、锁、hash/CAS审计、重启后失败保留unknown、旧请求/次数不变、CLI不启动Studio；Native未初始化、0账户/模型 |
+| `node tests/stack/trial-native.cases.mjs` | **扩展后两次退出0**：真实固定Native＋当前Studio＋本机模型替身，原混合来源与政策关闭/更换后wallet均真实结算。`.local/native-trial-s4CXmO/evidence.json` |
+| `node tests/stack/trial-edge.cases.mjs` | **退出0**：实际固定Native空库及明确echo合同；exact/query PUT白名单、invalid0次Native PUT、valid1次、Bearer保留/Cookie不转发，aliases及relay拒绝、nginx -t通过；echo不是MFA验收 |
+| prepared Compose `config --quiet`、新脚本`node --check`、`git diff --check` | 通过，仅校验，不启用 |
+
+扩展真实Native数据：第一位用户6条订阅消费560；第二位用户四次纯聊后的未用图片，在原混合wallet→subscription→wallet中使用，后续付费图wallet；新增Studio试用关闭和批准计划更换时默认402、true纯聊各wallet_only消费12。第二位最终10条消费1096：subscription548/wallet548，钱包9452，原finite token498904、ID/期限不变，HTTP与Native SQLite一致。old grant和reservations完整快照不变，原receipt仍唯一，替换计划未领取。两户16次真实Native relay＝13chat＋3image，provider每次到达即核验Studio模型意图先落盘；供应商均loopback替身，真实采购成本0。合成voucher/价格/合规标记不代表商户支付或现实声明确认。
+
+保留失败与修复：本轮早期user-token旧测试缺实例UUID及计划轮换旧409断言失败，补固定隔离实例和已知退役402合同；没有放宽missing receipt409。新增preserved余量初次误对exhausted0/0保留，改为仅存在active旧grant且有余量。浏览器首跑54/56，新增文字断言漏“次”单位，修断言后完整56/56；界面行为未改。新增financial SQLite断言初次null-prototype对象误比较，归一化后22/22。account Native测试首次未启用测试密码加密，补仅隔离env；恢复实际显式启动首次缺测试实例UUID，补同实例env后通过；未解除实例保护。Native新增wallet验收首次key端点429（固定CriticalRateLimit 20/IP/20分钟），在原账单settled后明确停/重启隔离Native、保留DB、fresh run ID，未改限流/安全或重发失败run。恢复helper未终止行限长隐患已修并真实子进程验证。
+
+最终日常栈复核：`gouo-v2-web/studio-api/new-api`均running/healthy，仅web发布 **127.0.0.1:8080**，内部无宿主端口。Studio health200，Native setup `status=false/root_init=false`；generation=false、trial=false，当前Nginx没有prepared `studio_self`路由。未初始化日常账户/渠道、未修改安全设置、真实余额、真实计划或支付。仍不能称零余额正式用户已注册即用或真实供应商live-verified。
+
+下一任务 **T1.4**：有限token到期/耗尽的可审查续用流程，以及原生profile/security完整浏览器路径；SMTP/MFA/passkey、真实计划/入口/费用上界/供应商仍按用户暂不启用决定与独立授权处理。完整产品及最终28场景多智能体用户模拟尚未完成，QA_ACCEPTANCE仍是待执行计划。下文T1.2“资料/密码/恢复/独立钱包待实现”保留为当时状态，以本节为准。
+
+---
+
 ## T1.2 充值后单次余额授权与严格资金来源（2026-10-01，默认关闭）
 
 在 T1 `7195190` 上继续当前 `codex/registration-trial`，包含合并基线 `abe46c4`。三位 gpt-6.1-sol 子智能体分别负责前端、固定 Native 合同/实际隔离验收和独立安全审查；开发文件与证据留在本项目。没有 main 改动、push、merge 或部署。
