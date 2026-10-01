@@ -2,6 +2,10 @@
 
 ## T1.12 离线接收修复，Native恢复仍在验收（2026-10-02）
 
+验收设施已实现：opt-in `tests/stack/browser-offline-native.cases.mjs`限定同工作区`.local`、新随机loopback/固定binary/普通合成账号/明确本地供应商，拒绝覆盖报告、日常8080及旧QA端口、外部卷或公开provider。每条真实生成仅发送一次，供应商受控等待后继续原请求；图片对比可见/持久/供应商原PNG hash。恢复前后读取Native资金安全投影、Studio全表及provider hash；CDP观察仅保存类型/ID/时序，不落正文或凭据。严格429即停、仅记录安全Retry-After，不自动重试。`--resume-completed`只接受已有真实断网和终态证据的同实例报告，另开profile只读恢复；原blocked报告保持hash不变，成功也标`continuousEndToEndPassed=false`。
+
+设施本地测试`node --test tests/stack/browser-offline-fixture.cases.mjs`最终 **19/19** exit0（隔离护栏、脱敏、受控SSE、原图及分段恢复输入反例），`.local/t112-offline-fixture.log`；`--resume-completed ... --validate-only`实际仅输入校验通过，0 Native/浏览器。可用`npm run test:offline-fixture`复验；真实Nativerunner不进入默认check/CI，必须显式隔离确认和人工准备。新分段恢复尚未执行，不把输入校验记为N通过。
+
 共享`event-stream.ts`监听浏览器真实offline事件，取消本机reader并明确断线；读取前后及缓冲帧交付前检查，finally清理监听器与reader。已经交付的文本/工具不清空，不调用服务端取消，不自动重新发送；后端仍处理原请求。此修改适用于默认聊天与Loomic共用流读取。
 
 实际命令：`npm run typecheck` exit0；`npm test` **57/57** exit0（原51加6项离线领域测试），`.local/t112-offline-domain.log`；专属5187 Vite下`npm run test:e2e -- --config .local/system-playwright.config.mjs streaming.pw.mjs --workers=1 --reporter=line` **5/5** exit0，9.4秒；`npm run build` exit0，12.02秒，既有第三方chunk警告，`.local/t112-offline-build.log`。这些是明确浏览器Fetch/ReadableStream替身与实际offline事件的F合同，不能代替Native实测。
