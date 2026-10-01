@@ -1,6 +1,7 @@
 import { getViewportCenter } from "./canvas-elements";
+import type { RequestStatus } from "./request-recovery";
 
-export type ImageGeneratorStatus = "idle" | "generating" | "completed" | "error";
+export type ImageGeneratorStatus = "idle" | "generating" | "awaiting" | "completed" | "error";
 
 export type ImageGeneratorData = {
   type: "image-generator";
@@ -11,6 +12,10 @@ export type ImageGeneratorData = {
   quality: string;
   inputImages?: string[];
   errorMessage?: string;
+  // Same owner-scoped canvas draft as the placeholder; never an account token.
+  requestId?: string;
+  requestOwner?: string;
+  requestStatus?: RequestStatus;
 };
 
 function generateId(): string {

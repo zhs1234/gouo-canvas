@@ -1,9 +1,10 @@
 // Loomic UI boundary: IndexedDB documents, authenticated /api/studio/* model requests.
 import type { CanvasDetail, ChatMessage, ChatMessageCreateRequest, ContentBlock } from '../shared'
-import { request } from '../../api'
+import { currentUser, getIdentityEpoch, request } from '../../api'
 import { readDraft, changeDraft, rememberSessions, canvasForSession, deleteDraft } from './local-drafts'
 import { fetchCatalog, type GatewayModel } from './gateway'
 import { billingChanged, type StudioUsage } from './billing'
+import { createResultReader, parseRequestResult } from './request-recovery'
 export class ApiAuthError extends Error {}
 export class ApiApplicationError extends Error {
   constructor(public code: string, message: string) { super(message) }
@@ -73,14 +74,32 @@ export async function fetchModels() {
 export async function fetchImageModels(): Promise<{ models: ImageModelInfo[] }> { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'image') } }
 export async function fetchVideoModels(): Promise<{ models: VideoModelInfo[] }> { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'video') } }
 export async function fetchWorkspaceSkills(_owner: string) { return { skills: [] as Array<{ id: string; name: string; slug: string; description: string; enabled: boolean }> } }
-export async function generateImageDirect(_owner: string, prompt: string, options?: { model?: string; aspectRatio?: string; quality?: string; inputImages?: string[]; payWithBalance?: boolean }, signal?: AbortSignal) {
+export function createRequestResultReader(getOwner: () => string | null) {
+  return createResultReader((path, init) => request(path, init), getOwner, getIdentityEpoch)
+}
+export class ImageRequestError extends Error {
+  constructor(message: string, public requestId: string, cause: unknown, public submitted: boolean) { super(message, { cause }) }
+}
+export async function generateImageDirect(_owner: string, prompt: string, options?: { model?: string; aspectRatio?: string; quality?: string; inputImages?: string[]; payWithBalance?: boolean }, signal?: AbortSignal, requestId: string = crypto.randomUUID()) {
   const { payWithBalance, ...imageOptions } = options ?? {}
   let usage: StudioUsage | undefined
+  if (!/^local:[1-9]\d*$/.test(_owner) || !/^[\w-]{8,100}$/.test(requestId)) throw new Error('图片请求账号或原请求标识无效')
+  const epoch = getIdentityEpoch()
+  let submitted = false
   try {
-    const result = await request<GenerateImageResponse & { usage?: StudioUsage }>('/api/studio/images', { method: 'POST', signal, headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ prompt, ...imageOptions, ...(payWithBalance === true ? { payWithBalance: true } : {}) }) })
-    usage = result.usage
-    return result
-  } finally { billingChanged(_owner, usage) }
+    const user = await currentUser(signal)
+    if (epoch !== getIdentityEpoch() || !user || _owner !== `local:${user.id}`) throw new Error('账号已变化或登录失效，未发送图片请求')
+    signal?.throwIfAborted()
+    submitted = true
+    const result = await request<GenerateImageResponse & { usage?: StudioUsage }>('/api/studio/images', { method: 'POST', signal, headers: { 'Idempotency-Key': requestId }, body: JSON.stringify({ prompt, ...imageOptions, ...(payWithBalance === true ? { payWithBalance: true } : {}) }) })
+    if (epoch !== getIdentityEpoch()) throw new Error('账号已变化，未应用原账号图片结果')
+    const saved = parseRequestResult({ kind: 'image', requestId, status: 'completed', createdAt: new Date().toISOString(), result }, 'image', requestId).result
+    if (!saved || 'events' in saved) throw new Error('图片结果格式无效')
+    usage = saved.usage
+    return { ...saved, requestId }
+  } catch (cause) {
+    throw new ImageRequestError((submitted ? '接收中断或请求未完成；请读取原请求结果，已提交请求不会重发。' : '图片请求未发送。') + (cause instanceof Error ? ` ${cause.message}` : ''), requestId, cause, submitted)
+  } finally { if (epoch === getIdentityEpoch()) billingChanged(_owner, usage) }
 }
 export async function generateVideoDirect(_owner: string, _prompt: string, _options?: { model?: string; duration?: number; resolution?: string; aspectRatio?: string; inputImages?: string[] }): Promise<GenerateVideoResponse> {
   throw new ApiApplicationError('video_not_enabled', '视频生成将在后续接入；当前可以使用图片画布')

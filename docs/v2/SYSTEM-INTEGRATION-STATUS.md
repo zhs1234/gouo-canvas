@@ -1,5 +1,17 @@
 # 系统打通：实际进度
 
+## SYS-R2a 原请求读取接入与文本分段Native补验（2026-10-02）
+
+Loomic runId/owner/identity epoch绑定对应assistant；断流和Stop使用真实“停止接收”状态，不制造provider run.failed。在线EOF一次GET、恢复联网各原中断请求一次GET、本人手动GET；同kind/id并发读合并，没有定时轮询或POST重试。服务器快照替换文本和工具，真实run.failed保留、成功工具图按toolCallId只插一次；GET失败/格式错/身份变化不丢partial或误插异户画布。独立图片在首次发送前持久原ID/owner到本人canvas占位，刷新/重开读取原结果，不再生成该占位；旧无尺寸结果插图前解码真实bytes，失败仍保留原图下载和原ID。
+
+`request-recovery.ts`等9个新改文件复用现有数据与SDK；生图前fresh currentUser校验owner，读前/后及发布epoch校验覆盖A→B→A。新增12领域与4明确F浏览器：原失败终态+原PNG/去重/POST1，503保partial和原ID，图片占位跨reload GET原PNG/POST1，迟到A不显示/插B且旧A生成处理器对B零POST。root独立4/4 **8.9秒**，`.local/sys-r2-root-playwright.log`；agent4/4 7.9秒及首轮2/4失败trace保留（段落误断言/退出动画等待，未削语义）。`npm test`纳入新领域；root`npm run check` **57+12领域/195API、typecheck、build11.27秒exit0**。原流式5/5 **7.6秒**，`.local/system-r2-streaming.log`，保partial/刷新/零重发断言，改为实际接收/读取状态文字。
+
+**SYS-R2a完成范围**：同mountedpage Loomic恢复与跨reload直接图片恢复。Loomic完整reload虽然从本人IndexedDB保留原文本/图，但agent恢复ID未持久；SYS-R2b仍待完成。未改默认ChatLab/UI布局/账号/官方canvas/项目库，未用F替代Native验收。
+
+2026-10-01 23:48:52 UTC后，在同随机Native64432自然CT窗口结束，执行一次`--resume-completed .local/t112-text-final-offline-report.json`，新profile实际普通登录、本人GET、页面原终态恢复与完整reload cookie恢复通过。报告`.local/t112-text-resumed-readonly-report.json` **resumed-read-only-passed**，同原ef333515-e39f-4942-adce-9731cf74bc3c、**modelSends0**，Native/Studio/provider protected hashes不变；原blocked报告sha256保持。该阶段只读补验明确 **continuousEndToEndPassed=false**，不合并宣称连续离线成功。没有改CT参数/重启Native/重放原付费意图，既有失败报告保留。
+
+下一整合UI799ad3b并全量复验，随后T1.12图片/failed GET/未知响应及SYS-R2b。完整系统目标保持active。
+
 ## B3-I 持久图片任务合同通过（2026-10-02）
 
 新增image-jobs.mjs及5条本人认证路由，默认GOUO_ENABLE_IMAGE_JOBS=false、全局活跃上限2。202代表保存任务而非成功生成/预扣金额；同owner同步操作统一守卫、原image key去重域、immutable参数/组/能力/付款意图重新核验。job/outbox/非金额占用与请求接收同事务，模型外发前唯一提交标记和本次试用reserve同事务。私有原图BLOB/hash与output_saved同事务；本地完成不新模型或资金写。

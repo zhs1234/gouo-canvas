@@ -15,7 +15,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run build --workspace @gouo/studio",
     "typecheck": "tsc --noEmit -p apps/studio/tsconfig.json",
-    "test": "tsc -p packages/contracts/tsconfig.json && node --test tests/contracts-cases.mjs tests/probe-cases.mjs tests/recovery.cases.mjs tests/renewal-recovery.cases.mjs tests/renewal-host.cases.mjs tests/event-stream-offline.cases.mjs",
+    "test": "tsc -p packages/contracts/tsconfig.json && node --test tests/contracts-cases.mjs tests/probe-cases.mjs tests/recovery.cases.mjs tests/renewal-recovery.cases.mjs tests/renewal-host.cases.mjs tests/event-stream-offline.cases.mjs && node --experimental-strip-types --test tests/loomic-recovery.cases.mjs",
     "test:e2e": "playwright test",
     "test:offline-fixture": "node --test tests/stack/browser-offline-fixture.cases.mjs",
     "check": "npm run typecheck && npm test && npm run test:api && npm run build",

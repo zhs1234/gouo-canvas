@@ -42,6 +42,8 @@ import { ChatSkills } from "./chat-skills";
 import { useToast } from "./toast";
 import { ErrorBoundary } from "./error-boundary";
 import { SessionSelector } from "./session-selector";
+import { getIdentityEpoch } from "../../api";
+import { recoveredContentBlocks } from "../lib/request-recovery";
 
 type ChatSidebarProps = {
   accessToken: string;
@@ -140,7 +142,27 @@ export function ChatSidebar({
   const abortRef = useRef(false);
   const activeRunId = useRef<string | null>(null)
   const disposeRun = useRef<(() => void) | null>(null)
+  const { toast: showToast } = useToast();
+  const recoveryBindings = useRef(new Map<string, { owner: string; epoch: number; assistantId: string; sessionId: string; insertedTools: Set<string>; finish: (notSubmitted?: boolean) => void }>())
   useEffect(() => () => disposeRun.current?.(), [])
+  useEffect(() => ws.onRecovery((state, result) => {
+    const binding = recoveryBindings.current.get(state.runId)
+    if (!binding || binding.owner !== accessTokenRef.current || binding.epoch !== getIdentityEpoch()) return
+    if (state.status === 'not_submitted') updateSessionMessages(binding.sessionId, previous => previous.map(message => message.id === binding.assistantId
+      ? { ...message, contentBlocks: [...message.contentBlocks, { type: 'text', text: state.message }] } : message))
+    if (state.status !== 'receiving') binding.finish(state.status === 'not_submitted')
+    if (result?.status !== 'completed' || !result.result || !('events' in result.result)) return
+    if (!snapshotMessages(binding.sessionId).some(message => message.id === binding.assistantId)) return
+    updateSessionMessages(binding.sessionId, previous => previous.map(message => message.id === binding.assistantId
+      ? { ...message, contentBlocks: recoveredContentBlocks(result.result && 'events' in result.result ? result.result.events : [], message.contentBlocks) }
+      : message))
+    void replaceMessages(binding.owner, binding.sessionId, snapshotMessages(binding.sessionId)).catch(error => showToast(error instanceof Error ? error.message : '恢复内容本地保存失败', 'error'))
+    for (const event of result.result.events) {
+      if (event.type !== 'tool.completed' || binding.insertedTools.has(event.toolCallId)) continue
+      binding.insertedTools.add(event.toolCallId)
+      for (const artifact of event.artifacts ?? []) if (artifact.type === 'image') onImageGenerated?.(artifact)
+    }
+  }), [ws.onRecovery, accessTokenRef, snapshotMessages, updateSessionMessages, showToast, onImageGenerated])
   const messageMentionsRef = useRef(messageMentions);
   messageMentionsRef.current = messageMentions;
   const selectedCanvasElementsRef = useRef(selectedCanvasElements);
@@ -173,8 +195,6 @@ export function ChatSidebar({
   const { model: agentModel } = useAgentModel();
   const agentModelRef = useRef(agentModel);
   agentModelRef.current = agentModel;
-
-  const { toast: showToast } = useToast();
 
   // ── Sidebar resize ──
   const SIDEBAR_MIN = 300;
@@ -437,6 +457,8 @@ export function ChatSidebar({
       abortRef.current = false;
 
       const runOwner = accessTokenRef.current
+      const runEpoch = getIdentityEpoch()
+      const insertedTools = new Set<string>()
       let finished = false
       let saveTimer: ReturnType<typeof setTimeout> | undefined
       let saving = Promise.resolve()
@@ -463,6 +485,7 @@ export function ChatSidebar({
         const runIdRef = { current: "" };
 
         const cleanup = ws.onEvent((event) => {
+          if (runOwner !== accessTokenRef.current || runEpoch !== getIdentityEpoch()) { resolveStream(); return }
           if (!runIdRef.current || event.runId !== runIdRef.current) return;
           if (abortRef.current) {
             resolveStream();
@@ -497,8 +520,10 @@ export function ChatSidebar({
             event.type === "tool.completed" &&
             event.artifacts &&
             event.toolName !== "screenshot_canvas" &&
-            !backendInserted
+            !backendInserted &&
+            !insertedTools.has(event.toolCallId)
           ) {
+            insertedTools.add(event.toolCallId)
             for (const artifact of event.artifacts) {
               if (artifact.type === "image" && onImageGenerated) {
                 onImageGenerated(artifact as ImageArtifact);
@@ -583,6 +608,7 @@ export function ChatSidebar({
               const id = ack.payload.runId as string;
               runIdRef.current = id;
               activeRunId.current = id
+              recoveryBindings.current.set(id, { owner: runOwner, epoch: runEpoch, assistantId, sessionId: currentSessionId, insertedTools, finish: notSubmitted => { if (notSubmitted) finished = true; resolveStream() } })
               resolve(id);
             },
           );
@@ -808,6 +834,14 @@ export function ChatSidebar({
           <div ref={messagesEndRef} />
         </div>
       </ErrorBoundary>
+
+      {ws.runs.filter(run => run.sessionId === activeSessionId && run.status !== 'receiving').map(run => (
+        <div key={run.runId} className="px-4 pb-2 text-xs" role="status">
+          <p>{run.message}</p>
+          {run.status !== 'not_submitted' && <button type="button" className="mt-1 rounded border border-border px-3 py-1" onClick={() => void ws.recoverRun(run.runId)}>读取原请求结果</button>}
+          <p className="mt-1 text-[11px] text-muted-foreground">请求 {run.runId.slice(0, 8)}；此对话的恢复入口保留到离开或刷新页面。</p>
+        </div>
+      ))}
 
       {streaming && (
         <div className="px-4 pb-2">

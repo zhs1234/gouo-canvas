@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## SYS-R2a Loomic与独立图片只读恢复（2026-10-02）
+
+系统分支接入SYS-R1：Loomic按原runId读取并替换对应assistant快照，保留真实失败终态/已收原图、按toolCallId防重复插图；独立图片占位将原ID/owner保存到本人canvas customData，跨刷新仍只GET。恢复失败保留partial，无轮询或模型重发；读取前后身份epoch和生图前fresh账号核验拒绝迟到异户操作。新增12领域、4浏览器F合同，root独立4/4（8.9秒）；整合check69领域/195API、类型/build11.27秒exit0，旧streaming 5/5仍过。Agent原ID目前仅同mountedpage，完整刷新原内容保留但恢复ID尚未持久，因此只记SYS-R2a，不称完整SYS-R2。默认ChatLab由UI最终提交后再整合。
+
+T1.12文本自然限流窗口后只读补验实际passed：同runId原结果恢复与完整刷新通过，Native/Studio/provider保护hash不变，modelSends0；原blocked-rate-limit报告hash不变，continuousEndToEndPassed=false。不是一次连续离线用例通过。图片/未知/失败GET实测尚待继续，详情见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。
+
 ## B3-I 默认关闭的持久图片任务（2026-10-02）
 
 系统分支实现单图片202任务、同API内存授权执行、owner/全局并发限制、唯一外发屏障、本人只读结果、确定未提交取消/重新授权以及output_saved本地恢复。Native写标记只覆盖实际令牌/试用/偏好写入，已核验的写入与只读故障不制造全owner unknown；真实写未知继续屏障。账号Bearer/relay key不持久化，未改旧held/unknown。新增18项F合同覆盖child-process kill、授权/幂等/资金及只读与写未知对照；整合源树check实际69领域/195API、类型、build11.27秒exit0。Compose模板解析exit0；未启动B3或独立Worker。详见 [B3-JOBS.md](B3-JOBS.md)。前端接线、Native202实测、解码前原始输出暂存与持久后台授权仍待完成。
