@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## T1.12 离线接收修复，实际Native恢复待限流窗口（2026-10-02）
+
+系统分支共享事件流读取新增实际offline取消本机接收；已收内容保留、监听器清理、不取消供应商或自动重发。类型检查、57领域（新增6项）、5流式浏览器与build12.02秒均exit0；专属Vite5187未操作日常服务。新随机固定Native+本地零采购供应商实际单次文本发送已证明前段可见、navigatorfalse+原stream ERR_ABORTED、后台同run完整持久化，恢复GET200仍为原run；后续auth refresh429让UI恢复断言失败，严格记blocked-rate-limit，不记T1.12通过。原失败报告与合成Native用量均保留，等待自然CT窗口后仅GET恢复，不重发原请求。详情和命令见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。完整T1.12图片/未知/失败读验收未完成，下一仍T1.12；SYS-R2与B3-I实现并行进行。
+
 ## B3 持久任务授权方案（2026-10-02）
 
 系统分支新增 [B3-JOBS.md](B3-JOBS.md)，将B3拆为同进程持久图片任务、权威后台授权/资金约束、成熟队列独立Worker三阶段。固定Native的relay-only读取缺完整owner/token/group/receipt等执行证据；不以加密保存relay key冒称可安全无人值守续跑。B3-I使用内存授权，重启未提交需要本人重新授权，提交未知不重发；账号Bearer不持久化。设计审查没有新增依赖或Native配置，当前实现与验收仍进行中，完整B3未完成。下一验收仍为T1.12/SYS-R2。

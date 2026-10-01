@@ -1,5 +1,17 @@
 # 系统打通：实际进度
 
+## T1.12 离线接收修复，Native恢复仍在验收（2026-10-02）
+
+共享`event-stream.ts`监听浏览器真实offline事件，取消本机reader并明确断线；读取前后及缓冲帧交付前检查，finally清理监听器与reader。已经交付的文本/工具不清空，不调用服务端取消，不自动重新发送；后端仍处理原请求。此修改适用于默认聊天与Loomic共用流读取。
+
+实际命令：`npm run typecheck` exit0；`npm test` **57/57** exit0（原51加6项离线领域测试），`.local/t112-offline-domain.log`；专属5187 Vite下`npm run test:e2e -- --config .local/system-playwright.config.mjs streaming.pw.mjs --workers=1 --reporter=line` **5/5** exit0，9.4秒；`npm run build` exit0，12.02秒，既有第三方chunk警告，`.local/t112-offline-build.log`。这些是明确浏览器Fetch/ReadableStream替身与实际offline事件的F合同，不能代替Native实测。
+
+新随机固定Native `64432`/本地供应商实际owner6单次文本发送：前半段真实页面可见且保存；`context.setOffline(true)`得到navigatorOnline=false与原stream `net::ERR_ABORTED`；页面保留已收内容，供应商继续等待原请求。明确continue后同runId后台completed，费用recorded/unconfirmed。online历史GET200包含原completed，但随后账户refresh429导致页面恢复断言未通过，完整用例记录 **blocked-rate-limit**，不是passed。报告`.local/t112-text-final-offline-report.json`；不重启/改CT参数/换来源/重发模型，后续等待自然窗口仅GET恢复此原结果。
+
+过程失败保留：原owner3因fixture前半段帧被固定Native暂存，页面未显示；补合法空delta适配真实转发协议后使用全新owner5验收，前段113ms到达。该次仅setOffline没有断开已建立stream，严格断言失败，触发上述产品修复。两次均最后释放已接受的原本地供应商工作以保存终态，不能宣称生成阶段资金不变；没有重放旧请求。原生登录响应body因完整导航CDP丢失，改为真实登录后`/api/user/self`核owner/role/status/Bearer，记录观察限制；独立login-only通过、0模型。
+
+T1.12尚未完成：图片原图路径、自然窗口后的恢复、失败GET保留内容与上游未知屏障仍待实际验收。旧146浏览器/资金P门项未计新通过。下一继续T1.12；SYS-R2/B3-I在独立文件范围并行实现，完整系统目标保持active。
+
 ## B3 授权与执行边界审查（2026-10-02）
 
 方案见 [B3-JOBS.md](B3-JOBS.md)。已核对现有业务实现、固定Native鉴权/资金源码和成熟队列官方文档：有限relay key本身不能证明完整owner/token/group/资金receipt，也不能代替浏览器会话撤销证据。第一阶段采用同API进程内存授权和持久图片任务；重启未提交转needs_authorization，已提交未知保持unknown，不持久账号Bearer、不借管理员凭据。B3-II/III再解决权威后台授权与独立队列执行，不能以新增job表称完整Worker。
