@@ -195,8 +195,8 @@ test('fixture agent results enter the canvas and persist; requests contain only 
   await expect(page.getByText('本地测试结果，未调用 AI。', { exact: true })).toBeVisible()
   await expect(page.getByLabel('账户余额')).toHaveText('¥99.75')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
-  await expect(page.getByText('最近创作费用：¥0.25（3 次模型调用）', { exact: true })).toBeVisible()
-  await expect(page.getByText('按实际用量结算 · 1 倍 · 已调用 3 次', { exact: true })).toBeVisible()
+  await expect(page.getByText('调用记录折算：¥0.25（3 次模型调用）；实扣待核对。', { exact: true })).toBeVisible()
+  await expect(page.getByText('New API 用量记录 · 1 倍 · 已调用 3 次', { exact: true })).toBeVisible()
   const reads = account.billingReads
   await page.getByRole('button', { name: '刷新用量', exact: true }).click()
   await expect.poll(() => account.billingReads).toBeGreaterThan(reads)
@@ -261,7 +261,7 @@ test('native image panel switches verified model parameters, preserves reference
   expect(calls).toBe(1)
   await expect(page.getByLabel('账户余额')).toHaveText('¥99.56')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
-  await expect(page.getByText('最近创作费用：¥0.44（1 次模型调用）', { exact: true })).toBeVisible()
+  await expect(page.getByText('调用记录折算：¥0.44（1 次模型调用）；实扣待核对。', { exact: true })).toBeVisible()
 })
 
 test('switching projects aborts the previous transport so late results cannot enter a new canvas', async ({ page }) => {

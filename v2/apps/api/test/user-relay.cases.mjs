@@ -31,13 +31,13 @@ function fixture() {
     if (/\/api\/token\/\d+\/key/.test(path)) { assert.equal(tokens.get(owner).id, Number(path.split('/')[3])); return json({ key: String(owner).repeat(48) }) }
     if (path === '/api/status') return json({ quota_per_unit: 1000, usd_exchange_rate: 1 })
     if (path === '/api/pricing') return new Response(JSON.stringify({ success: true, group_ratio: { default: 1 }, data: [{ model_name: 'fixture-image', quota_type: 1, model_price: 0.1 }] }))
-    if (path === '/api/log/self') return json({ items: [{ request_id: 'fixture-native-' + owner, quota: 100, id: owner, model_name: 'fixture-image' }] })
+    if (path === '/api/log/self') return json({ page: 1, page_size: 2, total: 1, items: [{ type: 2, request_id: 'fixture-native-' + owner, quota: 100, id: owner, model_name: 'fixture-image' }] })
     throw new Error('Unexpected native contract path')
   }
   return { accounts, tokens, calls, fetch }
 }
 const send = (app, owner, key = crypto.randomUUID()) => app.inject({ method: 'POST', url: '/api/studio/images', headers: { authorization: 'Bearer fixture-user-' + owner, 'idempotency-key': key, 'new-api-user': '7' }, payload: { prompt: 'fixture', model: 'image', payWithBalance: true } })
-test('ordinary users get their own finite native tokens and charges; replay does not provision or charge again', async () => {
+test('ordinary users get their own finite native tokens and usage records; replay does not provision or call models again', async () => {
   const f = fixture(); let generated = 0
   const app = createServer(config, { fetch: f.fetch, generateImage: async context => {
     generated++; assert.equal(context.relayKey, String(context.relayOwnerId).repeat(48))
@@ -101,7 +101,7 @@ test('unknown result retains native request IDs across restart; read-only reconc
     await app.close(); app = createServer(c, overrides)
     assert.equal((await send(app, 7, key)).statusCode, 409)
     const detail = (await app.inject({ url: '/api/studio/requests/image/' + key, headers: { authorization: 'Bearer fixture-user-7' } })).json().data
-    assert.equal(detail.status, 'unknown'); assert.equal(detail.usage.state, 'settled'); assert.equal(detail.usage.cost, 0.1)
+    assert.equal(detail.status, 'unknown'); assert.equal(detail.usage.state, 'recorded'); assert.equal(detail.usage.settlementState, 'unconfirmed'); assert.equal(detail.usage.cost, 0.1)
     assert.deepEqual(detail.attempts.map(row => row.requestId), ['fixture-native-7'])
     assert.equal(generates, 1)
     assert.ok(f.calls.every(row => ['GET', 'POST'].includes(row.method)))

@@ -1,5 +1,7 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
+> 2026-10-01 T1.5a最新：T1.4已提交 `cc498a0`；本轮修复consume日志被误称settled的问题，完整唯一本人日志只表示recorded/实扣unconfirmed，旧settled/pending历史和重放只读兼容，金额/ID/旧库保留。22领域、147API、71浏览器、三阶段整栈通过；真实固定Native正常DTO/SQLite快照与16次本地替身relay另验，0真实采购。下一项T1.5b未知token续用私有停服恢复，当前旧target不足adopt、工具尚未实现；真实日常配置仍关闭、最终28场景四角色模拟未执行。详情见STATUS/BILLING-EVIDENCE/TOKEN-RENEWAL，以下旧下一项顺序按历史读取。
+
 > 2026-10-01 最新交接优先于下文历史：PR #3 已合并，基线 `abe46c4`；本机环境提交 `1545e25`、`40338ea`，当前功能分支 `codex/registration-trial` 从该 V2 基线派生，没有从main开发。T1 `7195190`、T1.2 `2cbfd90`、T1.3 `2793093` 已接通原生资金/明确付款/安全账户/停服恢复；本轮T1.4完成默认关闭的有限权限查询和明确新token续用、持久owner绑定与unknown屏障。真实固定Native两类token合同、完整注册/加密登录/proof改密/旧会话撤销/Studio恢复/显示名，以及prepared模型key私有边界分别通过。22领域、142API、68浏览器及三阶段整栈通过，0真实采购。日常8080仍未初始化，真实计划/入口未启用，详细证据与限制见STATUS/TRIAL/ACCOUNT-CONTRACT/TOKEN-RENEWAL。下一项 **T1.5 原生费用记录证据语义与未知token续用私有恢复**；consume log不能独立证明Native资金和token均结算成功，先修状态兼容，再单独核对恢复。最终28场景多智能体真实UI模拟仍待执行。下文draft PR、待合并、旧分支和旧下一步是历史记录。
 
 > 最新用户要求：用户继续授权账号管理、计费、新普通用户注册后可用性收尾，优先级 CI→fresh 普通用户闭环→原生账号→计费异常对账→移动恢复→最终 CI。简明计划见 TASKS.md，固定契约见 ACCOUNT-CONTRACT.md，每用户模式与真实执行阻塞见 USER-BILLING.md。真实配置默认关闭，未设赠额/售价/支付，父负责最终合并。

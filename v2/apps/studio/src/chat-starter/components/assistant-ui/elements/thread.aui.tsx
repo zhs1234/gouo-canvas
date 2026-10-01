@@ -2,6 +2,7 @@
 "use client";
 import type { ReactNode } from 'react';
 
+import { usageEvidence } from "../../../../loomic/lib/billing";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { GeneratedImage as Image } from "../../../../chat-lab/GeneratedImage";
@@ -545,6 +546,12 @@ const MessageError: FC = () => {
   );
 };
 
+const MessageUsage: FC = () => {
+  const usage = useAuiState(state => state.message.metadata.custom.usage);
+  const evidence = usageEvidence(usage);
+  return evidence ? <p className="text-xs text-muted-foreground mt-2" aria-label="调用记录">{evidence}</p> : null;
+};
+
 const AssistantMessage: FC = () => {
   const {
     ToolFallback: ToolFallbackComponent = ToolFallback,
@@ -642,6 +649,7 @@ const AssistantMessage: FC = () => {
           }}
         </MessagePrimitive.GroupedParts>
         <MessageError />
+        <MessageUsage />
       </div>
 
       <div

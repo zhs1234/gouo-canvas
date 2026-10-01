@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from '../src/server.mjs'
-import { priceCard, quotaToMoney, settledUsage } from '../src/billing.mjs'
+import { priceCard, quotaToMoney, recordedUsage } from '../src/billing.mjs'
 import { relayKey } from '../src/relay.mjs'
 
 const image = { id: 'image', displayName: 'Fixture image', kind: 'image', upstreamModelId: 'fixture-image', enabled: true, verification: 'live-verified', operations: ['generate'] }
@@ -17,7 +17,7 @@ function accountFetch(calls) {
     if (parsed.pathname === '/api/pricing') return new Response(JSON.stringify({ success: true, group_ratio: { default: 1 }, data: [{ model_name: 'fixture-image', model_ratio: 2.5, completion_ratio: 6, internal_url: 'fixture-hidden' }] }))
     if (parsed.pathname === '/api/log/self') {
       const id = parsed.searchParams.get('request_id')
-      return json({ items: id ? [{ request_id: 'unrelated-id', quota: 99999999 }, { request_id: id, quota: id === 'fixture-call-1' ? 12345 : 67890 }] : [
+      return json({ page: 1, page_size: id ? 2 : 10, total: id ? 1 : 2, items: id ? [{ type: 2, request_id: id, quota: id === 'fixture-call-1' ? 12345 : 67890 }] : [
         { id: 1, model_name: 'fixture-image', token_name: 'owner-token', quota: 1234, prompt_tokens: 20, completion_tokens: 30, created_at: 1, content: 'fixture-private-prompt', other: 'fixture-log-secret' },
         { id: 2, model_name: 'fixture-image', token_name: '模型测试', quota: 9999999, created_at: 1 },
       ] })
@@ -41,7 +41,7 @@ test('billing uses real account authorization, scopes another account correctly 
   } finally { await app.close() }
 })
 
-test('authoritative native charge is saved with the result and idempotent replay does not charge or settle again', async () => {
+test('native usage records are saved without claiming successful settlement; replay never repeats model or log queries', async () => {
   let generated = 0; const calls = []
   const app = createServer(config, { fetch: accountFetch(calls), generateImage: async context => {
     generated++
@@ -52,7 +52,8 @@ test('authoritative native charge is saved with the result and idempotent replay
   const send = () => app.inject({ method: 'POST', url: '/api/studio/images', headers, payload: { prompt: 'fixture' } })
   try {
     const first = await send(); assert.equal(first.statusCode, 200)
-    assert.equal(first.json().data.usage.state, 'settled')
+    assert.equal(first.json().data.usage.state, 'recorded')
+    assert.equal(first.json().data.usage.settlementState, 'unconfirmed')
     assert.equal(first.json().data.usage.quota, 80235)
     assert.equal(first.json().data.usage.cost, 80235 / 500000 * 7.3)
     const logReads = calls.filter(c => c.path === '/api/log/self').length
@@ -70,9 +71,61 @@ test('pending or unavailable native billing never becomes a fake zero charge or 
     const result = await app.inject({ method: 'POST', url: '/api/studio/images', headers, payload: { prompt: 'fixture' } })
     assert.equal(result.statusCode, 200); assert.equal(result.json().data.url, 'fixture-result')
     assert.equal(result.json().data.usage.state, 'pending'); assert.equal(result.json().data.usage.cost, undefined)
-    const duplicate = await settledUsage(config, headers.authorization, [{ requestId: 'same', status: 200 }, { requestId: 'same', status: 200 }], () => { throw new Error('must not query') })
+    const duplicate = await recordedUsage(config, headers.authorization, [{ requestId: 'same', status: 200 }, { requestId: 'same', status: 200 }], () => { throw new Error('must not query') })
     assert.equal(duplicate.state, 'pending')
   } finally { await app.close() }
+})
+
+test('consume log is recorded evidence even when funding/token settlement is not known to have succeeded', async () => {
+  let calls = 0
+  const fetcher = async url => {
+    calls++
+    const parsed = new URL(url)
+    assert.equal(parsed.origin, config.authOrigin)
+    if (parsed.pathname === '/api/status') return json({ quota_per_unit: 1000, usd_exchange_rate: 1 })
+    assert.equal(parsed.pathname, '/api/log/self')
+    assert.equal(parsed.searchParams.get('type'), '2')
+    return json({ page: 1, page_size: 2, total: 1, items: [{ type: 2, request_id: 'known-log', quota: 50 }] })
+  }
+  // Fixed Native emits this same public DTO after SettleBilling errors; it has
+  // no authoritative funding/token success field. No fake success is inferred.
+  const usage = await recordedUsage(config, headers.authorization, [{ requestId: 'known-log', status: 200 }], fetcher)
+  assert.deepEqual(usage, { state: 'recorded', settlementState: 'unconfirmed', requestCount: 1,
+    requestIds: ['known-log'], currency: 'CNY', quota: 50, cost: 0.05 })
+  assert.equal(calls, 2)
+})
+
+test('each request needs one complete consume-log page; duplicate/truncated/missing/wrong-type evidence stays pending', async () => {
+  const row = { type: 2, request_id: 'known-log', quota: 50 }
+  const page = { page: 1, page_size: 2, total: 1, items: [row] }
+  for (const invalid of [
+    { ...page, total: 2, items: [row, row] }, { ...page, total: 3 }, { ...page, total: 1, items: [row, row] },
+    { ...page, total: 0, items: [] }, { ...page, total: undefined }, { ...page, page: 2 }, { ...page, page_size: 1 },
+    { ...page, items: [{ ...row, type: 1 }] }, { ...page, items: [{ ...row, type: undefined }] },
+    { ...page, items: [{ ...row, request_id: 'other-log' }] }, { ...page, items: null },
+    { ...page, items: [{ ...row, quota: -1 }] }, { ...page, items: [{ ...row, quota: 0.5 }] },
+    { ...page, items: [{ ...row, quota: Number.MAX_SAFE_INTEGER + 1 }] },
+  ]) {
+    let calls = 0
+    const usage = await recordedUsage(config, headers.authorization, [{ requestId: 'known-log', status: 200 }], async url => {
+      calls++; return json(new URL(url).pathname === '/api/status' ? { quota_per_unit: 1000, usd_exchange_rate: 1 } : invalid)
+    })
+    assert.equal(usage.state, 'pending'); assert.equal(usage.cost, undefined); assert.equal(usage.quota, undefined)
+    assert.equal(usage.settlementState, 'unconfirmed'); assert.equal(calls, 2, 'Invalid evidence is never retried')
+  }
+})
+
+test('safe individual quotas cannot overflow aggregated recorded cost; zero remains recorded without settlement confirmation', async () => {
+  for (const quota of [Number.MAX_SAFE_INTEGER, 0]) {
+    const usage = await recordedUsage(config, headers.authorization, [{ requestId: 'log-a', status: 200 }, { requestId: 'log-b', status: 200 }], async url => {
+      const parsed = new URL(url)
+      return json(parsed.pathname === '/api/status' ? { quota_per_unit: 1000, usd_exchange_rate: 1 }
+        : { page: 1, page_size: 2, total: 1, items: [{ type: 2, request_id: parsed.searchParams.get('request_id'), quota }] })
+    })
+    assert.equal(usage.state, quota ? 'pending' : 'recorded')
+    assert.equal(usage.cost, quota ? undefined : 0)
+    assert.equal(usage.settlementState, 'unconfirmed')
+  }
 })
 
 test('price display preserves native token tiers and unknown expressions cannot silently turn into rates', () => {

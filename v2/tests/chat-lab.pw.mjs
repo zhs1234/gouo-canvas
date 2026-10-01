@@ -227,3 +227,32 @@ test('balance consent is omitted by default, captured once and cleared on logout
   await expect(checkbox).not.toBeChecked()
   expect(payloads).toHaveLength(3)
 })
+
+
+for (const state of ['recorded', 'settled', 'pending']) {
+  test(`fixture ${state} billing evidence preserves original download without automatic resend`, async ({ page }) => {
+    const { threads } = await setup(page)
+    const usage = { state, settlementState: 'unconfirmed', cost: 0.25, currency: 'CNY', requestCount: 3 }
+    threads[0].runs = [{ runId: savedRunId, prompt: '金额证据测试', status: 'completed', usage, events: [
+      { type: 'message.delta', delta: '保留真实输出' },
+      { type: 'tool.completed', toolCallId: 'saved-tool', artifacts: [{ type: 'image', url: savedImage }] },
+    ] }]
+    let sends = 0
+    await page.route('**/api/studio/runs/stream', route => { sends++; return route.abort() })
+    await page.goto('./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+    const evidence = page.getByLabel('调用记录', { exact: true })
+    await expect(evidence).toHaveText(state === 'pending'
+      ? '调用记录尚不完整；金额与实扣待核对，不会自动重发。'
+      : '调用记录折算：¥0.25（3 次模型调用）；实扣待核对。')
+    await expect(page.getByText('保留真实输出', { exact: true })).toBeVisible()
+    const link = page.getByRole('link', { name: '下载原图', exact: true })
+    await expect(link).toHaveAttribute('href', savedImage)
+    const downloaded = page.waitForEvent('download')
+    await link.click()
+    expect((await downloaded).suggestedFilename()).toContain('gouo-original')
+    await page.reload()
+    await expect(evidence).toBeVisible()
+    await expect(page.getByText(/成功扣费|已结算|正在结算/)).toHaveCount(0)
+    expect(sends).toBe(0)
+  })
+}

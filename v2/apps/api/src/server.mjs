@@ -7,7 +7,7 @@ import { Ledger } from './ledger.mjs'
 import { generateImage, StudioError } from './images.mjs'
 import { runAgent, runImage } from './agent.mjs'
 import { userModels, userRelay } from './user-relay.mjs'
-import { billingSummary, settledUsage } from './billing.mjs'
+import { billingSummary, recordedUsage, normalizeResultUsage } from './billing.mjs'
 import { Trial } from './trial.mjs'
 import { inspectTrialFunding, purchaseTrial } from './trial-funding.mjs'
 import { readFundingAccount } from './funding.mjs'
@@ -215,8 +215,8 @@ export function createServer(config, overrides = {}) {
     if (!['image', 'agent'].includes(request.params.kind) || !/^[\w-]{8,100}$/.test(request.params.id)) throw new StudioError('请求标识无效', 400)
     const record = ledger.detail(request.studioUser, request.params.kind, request.params.id)
     if (!record) throw new StudioError('请求不存在', 404)
-    const usage = await settledUsage(config, request.headers.authorization, record.attempts, fetcher)
-    return { success: true, data: { ...record, usage: usage ?? { state: 'pending', requestCount: 0, requestIds: [], currency: 'CNY' } } }
+    const usage = await recordedUsage(config, request.headers.authorization, record.attempts, fetcher)
+    return { success: true, data: { ...record, usage: usage ?? { state: 'pending', settlementState: 'unconfirmed', requestCount: 0, requestIds: [], currency: 'CNY' } } }
   })
   function pageOffset(request) {
     const parsed = z.coerce.number().int().min(0).max(1000000).safeParse(request.query.offset ?? 0)
@@ -271,8 +271,9 @@ export function createServer(config, overrides = {}) {
     if (begun.blocked) throw new StudioError('该请求正在处理或结果待确认，不能重复提交；请检查网关记录', 409)
     if (begun.result) {
       transport?.start()
-      transport?.finish(begun.result)
-      return { success: true, data: begun.result }
+      const result = normalizeResultUsage(begun.result)
+      transport?.finish(result)
+      return { success: true, data: result }
     }
     if (begun.busy) throw new StudioError('已有生成请求正在处理，本次请求尚未执行，请稍后重试', 409)
     busy.add(owner)
@@ -331,7 +332,7 @@ export function createServer(config, overrides = {}) {
         if (payload.threadId) history.event(owner, key, event)
         transport?.event(event)
       } } : {}), onGatewayResponse: info => { ledger.gateway(owner, kind, key, info); requests.push(info) } })
-      const usage = await settledUsage(config, request.headers.authorization, requests, fetcher)
+      const usage = await recordedUsage(config, request.headers.authorization, requests, fetcher)
       if (usage) result.usage = usage
       if (managedFunding) result.fundingSelection = fundingSelection
       // 会话终态与幂等结果同时提交，避免恢复时看到不一致的完成状态。

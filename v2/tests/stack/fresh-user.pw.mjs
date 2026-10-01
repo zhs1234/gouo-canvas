@@ -41,7 +41,7 @@ test('fresh ordinary accounts with zero quota, own model/token/charges and canva
   const replayHeaders = { ...headers, 'idempotency-key': run.headers()['idempotency-key'] }
   const replay = await request.post('/api/studio/runs', { headers: replayHeaders, data: run.postDataJSON() })
   expect(replay.status()).toBe(200)
-  expect((await replay.json()).data.usage).toMatchObject({ state: 'settled', requestCount: 3, cost: 0.3 })
+  expect((await replay.json()).data.usage).toMatchObject({ state: 'recorded', settlementState: 'unconfirmed', requestCount: 3, cost: 0.3 })
   expect((await (await request.get('/api/studio/requests/agent/' + run.headers()['idempotency-key'], { headers })).json()).data.attempts).toHaveLength(3)
   await page.getByRole('button', { name: '打开画布', exact: true }).click()
   await expect(page).toHaveURL(/canvas-lab/)

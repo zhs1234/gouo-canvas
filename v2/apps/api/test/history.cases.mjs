@@ -45,6 +45,39 @@ test('history is New API owner scoped; completed run survives restart and replay
   assert.equal((await get(app, 'threads/' + id)).json().data.runs.length, 1)
 })
 
+for (const legacyState of ['settled', 'pending']) test(`legacy ${legacyState} history and idempotent replay normalize DTOs only; stored records remain unchanged and generation never repeats`, async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'gouo-legacy-usage-')), path = join(dir, 'ledger.sqlite')
+  let calls = 0
+  const app = createServer(config(path), { fetch: auth, runAgent: async (_context, _model, body) => {
+    calls++; return { events: events(body) }
+  } })
+  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }) })
+  const id = await thread(app), body = payload(id)
+  assert.equal((await send(app, body)).statusCode, 200)
+  const db = new DatabaseSync(path)
+  const saved = JSON.parse(db.prepare('SELECT result FROM requests WHERE owner=7 AND key=?').get(body.runId).result)
+  const legacyUsage = { state: legacyState, ...(legacyState === 'settled' ? { quota: 50, cost: 0.05 } : {}),
+    requestIds: ['legacy-id'], requestCount: 1, currency: 'CNY' }
+  const expectedState = legacyState === 'settled' ? 'recorded' : 'pending'
+  saved.usage = legacyUsage; saved.events.at(-1).usage = legacyUsage
+  db.prepare('UPDATE requests SET result=? WHERE owner=7 AND key=?').run(JSON.stringify(saved), body.runId)
+  db.prepare('UPDATE studio_runs SET usage=?,events=? WHERE owner=7 AND run_id=?').run(JSON.stringify(legacyUsage), JSON.stringify(saved.events), body.runId)
+  const before = { result: db.prepare('SELECT result FROM requests WHERE owner=7 AND key=?').get(body.runId).result,
+    run: db.prepare('SELECT usage,events FROM studio_runs WHERE owner=7 AND run_id=?').get(body.runId) }
+  const history = (await get(app, 'runs/' + body.runId)).json().data
+  const replay = (await send(app, body)).json().data
+  for (const result of [history, replay]) {
+    assert.deepEqual(result.usage, { ...legacyUsage, state: expectedState, settlementState: 'unconfirmed' })
+    assert.equal(result.events.at(-1).usage.state, expectedState)
+    assert.equal(result.events.at(-1).usage.settlementState, 'unconfirmed')
+  }
+  assert.equal((await get(app, 'threads/' + id)).json().data.runs[0].usage.state, expectedState)
+  assert.equal(calls, 1)
+  assert.equal(db.prepare('SELECT result FROM requests WHERE owner=7 AND key=?').get(body.runId).result, before.result)
+  assert.deepEqual(db.prepare('SELECT usage,events FROM studio_runs WHERE owner=7 AND run_id=?').get(body.runId), before.run)
+  db.close()
+})
+
 test('history stores partial progress while running; busy ID stays reusable and model context comes from server', async t => {
   const gate = deferred()
   const started = deferred()

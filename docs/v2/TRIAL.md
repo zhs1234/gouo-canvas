@@ -29,6 +29,8 @@ T1.2 已接入三个发送入口的一次授权 checkbox「本次允许使用本
 
 聊天和图片分别优先使用剩余试用。聊天次数耗尽后，明确授权且本人原生 quota>0 才选钱包；剩余图片试用仍保留。每种类别在本次发送第一次实际调用时确定来源，其后聊天工具循环保持同来源，因此占掉第四次试用的工具总结仍免费。混合请求可以是钱包聊天→试用图片→钱包总结。付费调用不新增 trial reservation；每个 fetch 前持久化 `model_submissions` 的类别、模型与 `selectedFundingSource`，缺响应也保留意图。响应 `fundingSelection` 是选择意图，实际金额及来源必须通过真实 Native request_id 日志核验，不能拿它证明已扣费。
 
+T1.5a进一步区分日志与实扣：完整唯一consume日志为recorded，资金/token结算仍unconfirmed，缺完整记录为pending；旧settled历史只读规范化，记录金额与IDs保留。固定Native可以先返回输出、后写日志，也可能结算报错后仍记日志；等待记录出现不充当双步结算成功或旧handler终止证明。账单累计used_quota为用量折算，余额是当前本人Native快照，见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)。
+
 `funding_writes` 仅是本人账号全局偏好写入的安全状态，不是另一钱包。写前持久化 pending，单次 PUT 成功且读回确认才 confirmed；其余写结果 unknown。重启 pending→unknown，阻断所有新 ID/所有类别，已完成结果和本人历史仍可读。关闭试用后查询仍优先提示这一屏障。首次升级对旧 unknown claim 或没有响应证据的 unknown run 保守设屏障，可能包括其实只有模型失败的旧请求；没有旧写入证据时不能假设安全。建表、导入和恢复同事务，失败后可重试迁移。没有自动解锁或对外解锁接口；T1.3 提供本机停服、连续锁会话和实际 Native 进程重启证据的私有 CLI，见 [FUNDING-RECOVERY.md](FUNDING-RECOVERY.md)。恢复只记 reconciled，不确认偏好/收费，不改变旧模型 unknown 或 held 次数。
 
 付费仍使用同一有限本人 token，不因充值自动续额/续期。每次钱包 fetch 前重新核验本人状态、组及余额；实际预扣/结算和不足拒绝由 New API 完成，正余额不是成本硬上限。已耗尽类别的付费路径只核验旧唯一 receipt，不查询当前计划；已知过期/退役/关闭时，本次 true 可以只用钱包，保留未使用次数，不重新领取。查询缺失/重复/格式错误仍拒绝，不把未知免费失败转成钱包回退。状态中的可选 `preservedRemaining` 只展示旧 active grant 已记录的未用次数，当前不可使用；无 grant 不展示已发放权益。

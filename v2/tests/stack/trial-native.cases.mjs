@@ -10,6 +10,7 @@ import Fastify from 'fastify'
 import sharp from 'sharp'
 import { createServer } from '../../apps/api/src/server.mjs'
 import { loadConfig } from '../../apps/api/src/config.mjs'
+import { recordedUsage } from '../../apps/api/src/billing.mjs'
 
 const docker = process.env.GOUO_NATIVE_TEST_DOCKER ?? 'docker'
 await mkdir(resolve('.local'), { recursive: true })
@@ -123,11 +124,21 @@ try {
   studio = createServer(config)
   studioDatabasePath = config.ledgerPath
   const headers = { authorization: 'Bearer ' + token }
+  const usageChecks = []
+  const assertRecordedUsage = (response, requestCount, quota) => {
+    const usage = response.json().data.usage
+    assert.ok(['pending', 'recorded'].includes(usage?.state))
+    assert.equal(usage.settlementState, 'unconfirmed')
+    assert.equal(usage.requestCount, requestCount)
+    if (usage.state === 'recorded') assert.equal(usage.quota, quota)
+    usageChecks.push({ usage, requestCount, quota, authorization: requestCount === 3 && usageChecks.length === 0 ? headers.authorization : 'Bearer ' + mixedToken })
+  }
   assert.equal((await studio.inject({ url: '/api/studio/trial', headers })).json().data.state, 'eligible')
   const send = async prompt => { const id = crypto.randomUUID(); return studio.inject({ method: 'POST', url: '/api/studio/runs', headers: { ...headers, 'idempotency-key': id }, payload: { runId: id, prompt, model: 'fixture-chat', sessionId: 'native-fixture', conversationId: 'native-fixture' } }) }
   const first = await send('native fixture image')
   assert.equal(first.statusCode, 200, first.body)
   assert.equal(first.json().data.events.at(-1).type, 'run.completed', first.body)
+  assertRecordedUsage(first, 3, 524)
   for (let i = 0; i < 3; i++) { const response = await send('local fixture text'); assert.equal(response.statusCode, 200, response.body) }
   assert.equal((await send('local fixture exhausted')).statusCode, 402)
   const summary = (await studio.inject({ url: '/api/studio/trial', headers })).json().data
@@ -191,6 +202,7 @@ try {
   const paidId = crypto.randomUUID(), paid = await mixedSend('native fixture image', true, paidId)
   assert.equal(paid.statusCode, 200, paid.body)
   assert.equal(paid.json().data.events.at(-1).type, 'run.completed', paid.body)
+  assertRecordedUsage(paid, 3, 524)
   const beforeReplay = { ...providerCalls }
   assert.equal((await mixedSend('native fixture image', true, paidId)).body, paid.body)
   assert.equal((await mixedSend('native fixture image', false, paidId)).statusCode, 409)
@@ -198,6 +210,7 @@ try {
   assert.equal((await mixedSend('local fixture still needs explicit consent')).statusCode, 402)
   const paidImageId = crypto.randomUUID(), paidImage = await mixedSend('local fixture paid image', true, paidImageId, 'fixture-image')
   assert.equal(paidImage.statusCode, 200, paidImage.body)
+  assertRecordedUsage(paidImage, 1, 500)
   const mixedSummary = (await studio.inject({ url: '/api/studio/trial', headers: mixedHeaders })).json().data
   assert.deepEqual(mixedSummary.chat, { limit: 4, remaining: 0, used: 4, held: 0 })
   assert.deepEqual(mixedSummary.image, { limit: 1, remaining: 0, used: 1, held: 0 })
@@ -239,6 +252,7 @@ try {
     const id = crypto.randomUUID(), response = await mixedSend('local fixture wallet after ' + mode, true, id)
     assert.equal(response.statusCode, 200, response.body)
     assert.equal(response.json().data.events.at(-1).type, 'run.completed', response.body)
+    assertRecordedUsage(response, 1, 12)
     const record = (await studio.inject({ url: '/api/studio/requests/agent/' + id, headers: mixedHeaders })).json().data
     assert.deepEqual(record.submissions.map(row => row.selectedFundingSource), ['wallet'])
     assert.deepEqual(readTrialReceipt(), unchangedReceipt)
@@ -290,8 +304,18 @@ try {
   assert.deepEqual(providerCalls, { chat: 13, image: 3, anonymousRejected: 1 })
   const evidence = { sourceCommit: policy.sourceCommit, binarySha256: checksum.split(' ')[0], provider: 'local explicit fixture', procurementCost: 0, nativeWalletQuota: finalAccount.quota, nativeUsedQuota: finalAccount.used_quota, nativeTokenRemaining: tokens[0].remain_quota, nativeSubscriptionCount: 1, nativeConsumedQuota: self.all_subscriptions[0].subscription.amount_used, nativeConsumeLogCount: logs.length, nativeLogFunding: 'subscription_only; subscription source; wallet deducted 0', sqlite: stored, mixedContinuation: { voucherQuota, sqlite: mixedStored, paidRunSources: ['wallet', 'subscription', 'wallet'], paidImageSources: ['wallet'], beforeFetchIntentVerified: true, sameTokenIdAndExpiry: true, paidReplayNoCalls: true, alteredConsentReplayRejected: true, crossOwnerReadRejected: true, trial: mixedSummary }, providerCalls, trial: summary, realPaidProviderCalls: 0 }
   evidence.policyContinuation = policyContinuation
+  for (const check of usageChecks) {
+    let observed
+    for (let i = 0; i < 30; i++) {
+      observed = await recordedUsage(continuedConfig, check.authorization, check.usage.requestIds.map(requestId => ({ requestId, status: 200 })))
+      if (observed.state === 'recorded') break
+      await new Promise(res => setTimeout(res, 200))
+    }
+    assert.deepEqual({ state: observed.state, settlementState: observed.settlementState, requestCount: observed.requestCount, quota: observed.quota }, { state: 'recorded', settlementState: 'unconfirmed', requestCount: check.requestCount, quota: check.quota })
+  }
+  evidence.usageContract = { state: 'recorded', settlementState: 'unconfirmed', verifiedExistingResponses: usageChecks.length, initialStates: usageChecks.map(check => check.usage.state), boundedReadOnlyLogChecks: true, nativeFinancialSnapshotsCheckedSeparately: true }
   evidence.isolatedNativeRestartBeforePolicyContinuation = true
-  evidence.testLifecycle = { firstExtensionFailure: 'Native POST /api/token/2/key returned 429 (default CriticalRateLimit 20 requests/IP/20 minutes); no failed run was resubmitted', restart: 'Isolated Native process stopped/restarted only after prior consume logs settled; unchanged security settings, persistent DB, fresh run IDs for added calls' }
+  evidence.testLifecycle = { firstExtensionFailure: 'Native POST /api/token/2/key returned 429 (default CriticalRateLimit 20 requests/IP/20 minutes); no failed run was resubmitted', initialUsageAssertionFailure: 'An earlier fresh isolated run incorrectly required immediate recorded usage; actual response was pending/unconfirmed. That isolated run was cleaned up without resubmission; this fresh run checks original IDs read-only after log visibility.', restart: 'Isolated Native process stopped/restarted only after prior consume logs settled; unchanged security settings, persistent DB, fresh run IDs for added calls' }
   await writeFile(join(directory, 'evidence.json'), JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence))
   console.log('Isolated native trial passed. Evidence: ' + join(directory, 'evidence.json'))

@@ -45,7 +45,7 @@ async function fixture(t, options = {}) {
         assert.equal(parsed.pathname, '/api/log/self')
         const id = parsed.searchParams.get('request_id')
         calls.logs.push(id)
-        data = { items: [{ request_id: 'unrelated', quota: 999999 }, { request_id: id, quota: 100 }] }
+        data = { page: 1, page_size: 2, total: 1, items: [{ type: 2, request_id: id, quota: 100 }] }
       }
     }
     return Response.json({ success: true, data })
@@ -58,7 +58,7 @@ async function fixture(t, options = {}) {
   return { app, calls, payload, headers, send }
 }
 
-test('SDK upgrade: real tool loop settles all three gateway IDs once and preserves auth/replay boundaries', async t => {
+test('SDK upgrade: real tool loop records all three gateway IDs once and preserves auth/replay boundaries', async t => {
   const f = await fixture(t)
   assert.equal((await f.send(f.payload, { authorization: 'Bearer fixture-other', 'new-api-user': '7' })).statusCode, 403)
   assert.equal(f.calls.chats.length, 0)
@@ -72,7 +72,8 @@ test('SDK upgrade: real tool loop settles all three gateway IDs once and preserv
   assert.equal(f.calls.chats[1].messages.at(-1).role, 'tool')
   assert.equal(f.calls.chats[1].messages.at(-1).tool_call_id, 'fixture-tool')
   assert.deepEqual(data.usage.requestIds, ['chat-1', 'image-1', 'chat-2'])
-  assert.equal(data.usage.state, 'settled')
+  assert.equal(data.usage.state, 'recorded')
+  assert.equal(data.usage.settlementState, 'unconfirmed')
   assert.equal(data.usage.quota, 300)
   assert.deepEqual((await f.send()).json(), response.json())
   assert.equal((await f.send({ ...f.payload, prompt: 'changed' })).statusCode, 409)

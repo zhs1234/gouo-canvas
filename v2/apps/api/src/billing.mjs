@@ -75,22 +75,44 @@ export async function billingSummary(config, authorization, account, fetcher = f
   }
 }
 
-export async function settledUsage(config, authorization, requests, fetcher = fetch) {
+// Legacy saved results are normalized at DTO boundaries only, never rewritten.
+export function normalizeUsage(usage) {
+  if (!usage || !['settled', 'recorded', 'pending'].includes(usage.state)) return usage
+  return { ...usage, state: usage.state === 'settled' ? 'recorded' : usage.state, settlementState: 'unconfirmed' }
+}
+export function normalizeResultUsage(result) {
+  return { ...result, ...(result.usage ? { usage: normalizeUsage(result.usage) } : {}),
+    ...(Array.isArray(result.events) ? { events: result.events.map(event => event.usage ? { ...event, usage: normalizeUsage(event.usage) } : event) } : {}) }
+}
+
+export async function recordedUsage(config, authorization, requests, fetcher = fetch) {
   if (!requests.length) return undefined
   const requestIds = requests.map(r => r.requestId).filter(id => typeof id === 'string' && /^[\w-]{1,64}$/.test(id))
-  const pending = { state: 'pending', requestCount: requests.length, requestIds, currency: 'CNY' }
-  // Missing IDs or a failed call can have an unknown settlement. Show the
-  // account's authoritative totals; do not invent a zero charge or retry it.
-  if (requestIds.length !== requests.length || new Set(requestIds).size !== requestIds.length || requests.some(r => r.status < 200 || r.status >= 300)) return pending
+  const pending = { state: 'pending', settlementState: 'unconfirmed', requestCount: requests.length, requestIds, currency: 'CNY' }
+  // Native can write consume logs after a settlement error. These are usage
+  // records, never proof that funding and token adjustments both succeeded.
+  if (requestIds.length !== requests.length || new Set(requestIds).size !== requestIds.length || requests.some(r => !Number.isInteger(r.status) || r.status < 200 || r.status >= 300)) return pending
   try {
     const [status, ...records] = await Promise.all([
       accountJSON(config, authorization, '/api/status', fetcher),
       ...requestIds.map(id => accountJSON(config, authorization, '/api/log/self?type=2&p=1&page_size=2&request_id=' + encodeURIComponent(id), fetcher)),
     ])
     const settings = moneySettings(status.data)
-    const rows = records.map((record, i) => record.data?.items?.find(row => row.request_id === requestIds[i]))
-    if (rows.some(row => !row || !Number.isSafeInteger(row.quota) || row.quota < 0)) return pending
-    const quota = rows.reduce((sum, row) => sum + row.quota, 0)
-    return { ...pending, state: 'settled', quota, cost: quotaToMoney(quota, settings) }
+    const rows = []
+    for (const [i, record] of records.entries()) {
+      const page = record.data
+      if (page?.page !== 1 || page.page_size !== 2 || page.total !== 1 || !Array.isArray(page.items) || page.items.length !== 1) return pending
+      const row = page.items[0]
+      if (!row || row.type !== 2 || row.request_id !== requestIds[i] || !Number.isSafeInteger(row.quota) || row.quota < 0) return pending
+      rows.push(row)
+    }
+    let quota = 0
+    for (const row of rows) {
+      quota += row.quota
+      if (!Number.isSafeInteger(quota)) return pending
+    }
+    const cost = quotaToMoney(quota, settings)
+    if (!Number.isFinite(cost)) return pending
+    return { ...pending, state: 'recorded', quota, cost }
   } catch { return pending }
 }

@@ -14,9 +14,9 @@
 
 New API 校验及扣除本人的钱包或已核验试用订阅与令牌额度，Studio 不加减第二份余额。令牌禁用/过期/耗尽、重复同名、owner 不符、unlimited、扩大模型/分组权限均拒绝，不自动续额、续期、提高角色或放宽权限。原生查询与取 key 均按当前 JWT 的本人权限执行；已撤销或禁用账号不能生成。没有符合严格条件的试用原生资金时，零/负钱包余额在调用前返回 402，不创建令牌、不发模型请求。
 
-每个 run 可以发生多次对话/工具模型调用。Studio 保存 owner/kind/run 请求 ID、调用序号、New API request_id 与 HTTP 状态，并提供只读 `/api/studio/requests/:kind/:id` 核对；读取不生成、不退款、不改原去重状态。unknown 执行与 settled 费用可同时存在（例如扣费成功但素材处理失败）；无法确定的调用、缺 ID 或非成功 HTTP 仍 pending。SQLite 单实例守卫不是跨进程供应商 exactly-once；重启 unknown 与相同 ID 重放继续阻断。
+每个 run 可以发生多次对话/工具模型调用。Studio 保存 owner/kind/run 请求 ID、调用序号、New API request_id 与 HTTP 状态，并提供只读 `/api/studio/requests/:kind/:id` 核对；读取不生成、不退款、不改原去重状态。T1.5a 将完整唯一consume日志匹配表示为 `recorded`，不凭日志称已结算；`settlementState=unconfirmed`，缺ID/非成功HTTP/缺失/重复/异常日志仍pending。旧settled历史和重放兼容为recorded，保留金额/请求ID。unknown执行可与已有用量记录并存，仍不能自动退款或再提交，详见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)。SQLite 单实例守卫不是跨进程供应商 exactly-once；重启 unknown 与相同 ID 重放继续阻断。
 
-账单不再隐去名为“模型测试”的本人消费。允许显示原生已结算负余额，人民币值是 quota_per_unit/usd_exchange_rate 的当前折算，并非供应商采购成本，也不是产品售价或严格预算保护。原生 trust_quota_usd、预扣与实际结算可能导致负余额；¥5 测试预算不能仅凭钱包/令牌余额保证。失败不等于退款、断开不等于取消，不自动重试未知生成或原生非幂等退款。
+账单不再隐去名为“模型测试”的本人记录。允许显示原生当前负余额；spent是累计used_quota折算，recentCalls金额是消费日志折算，均不是某次请求实扣成功回执。人民币值使用 quota_per_unit/usd_exchange_rate 的当前折算，并非供应商采购成本，也不是产品售价或严格预算保护。原生 trust_quota_usd、预扣与实际结算可能导致负余额；¥5 测试预算不能仅凭钱包/令牌余额保证。失败不等于退款、断开不等于取消，不自动重试未知生成或原生非幂等退款。
 
 ## 准备配置，保持关闭
 

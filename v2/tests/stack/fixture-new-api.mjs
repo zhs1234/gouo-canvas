@@ -19,7 +19,7 @@ const denied = res => json(res, 401, { success: false, message: '测试会话已
 const bundle = session => ({ access_token: session.access, token_type: 'Bearer', access_expires_at: Math.floor(Date.now() / 1000) + 600, session: { sid: session.id }, user: accounts.get(session.owner) })
 const authorized = req => [...sessions.values()].find(s => req.headers.authorization === `Bearer ${s.access}`)
 const charge = (model, owner = 7) => {
-  const row = { id: logs.length + 1, user_id: owner, request_id: randomUUID(), model_name: model, quota: 100,
+  const row = { id: logs.length + 1, user_id: owner, type: 2, request_id: randomUUID(), model_name: model, quota: 100,
     created_at: Math.floor(Date.now() / 1000), prompt_tokens: 10, completion_tokens: 10, token_name: 'fixture-relay' }
   logs.push(row)
   const account = accounts.get(owner)
@@ -94,7 +94,14 @@ const server = createServer(async (req, res) => {
         return token?.user_id === session.owner ? ok(res, { key: token.key }) : denied(res)
       }
       if (url.pathname === '/api/pricing') return json(res, 200, { success: true, group_ratio: { default: 1 }, data: ['fixture-chat', 'fixture-image'].map(model_name => ({ model_name, quota_type: 1, model_price: 0.1 })) })
-      if (url.pathname === '/api/log/self') return ok(res, { items: logs.filter(row => row.user_id === session.owner && (!url.searchParams.has('request_id') || row.request_id === url.searchParams.get('request_id'))).toReversed().slice(0, 10) })
+      if (url.pathname === '/api/log/self') {
+        const type = Number(url.searchParams.get('type') || 0)
+        const page = Math.max(1, Number(url.searchParams.get('p') || 1))
+        const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get('page_size') || 10)))
+        const matching = logs.filter(row => row.user_id === session.owner && (!type || row.type === type)
+          && (!url.searchParams.has('request_id') || row.request_id === url.searchParams.get('request_id'))).toReversed()
+        return ok(res, { page, page_size: pageSize, total: matching.length, items: matching.slice((page - 1) * pageSize, page * pageSize) })
+      }
     }
     // Legacy pinned fixture belongs to the admin fixture, just like the fixed upstream contract.
     if (/^Bearer fixture-relay-\d+$/.test(req.headers.authorization ?? '') && accounts.get(7).role < 10) return json(res, 403, { success: false, message: '普通用户不支持指定渠道' })

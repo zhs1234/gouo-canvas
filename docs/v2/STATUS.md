@@ -1,5 +1,31 @@
 # 实际交付与验证状态
 
+## T1.5a 原生费用记录证据与旧历史兼容（2026-10-01）
+
+在T1.4 `cc498a0d3c048f2594891d2cda20353c06753ce8` 上继续，分支仍 `codex/registration-trial`，三位gpt-6.1-sol子智能体分别实现API证据/历史兼容、中文UI/原图浏览器回归、固定Native主源与stack/真实日志复验。没有新增依赖、lockfile/上游源码/main改动、push/merge、生产或真实资金操作。
+
+修复已证实P2：固定Native文本路径在SettleBilling错误后仍可能写消费日志、累计used_quota更早已增加，原Studio只凭日志标settled会误称成功。`recordedUsage`现在只在每个本人request_id都有完整唯一Nativepage1/size2/total1/items1/type2匹配、quota非负safe整数且聚合无溢出时返回recorded，缺失/重复/异常为pending；两者settlementState=unconfirmed，不确认资金和token双步提交。保留原金额/IDs/调用数/输出，不补扣/退款/重发。真正settled须Native提供请求级提交成功凭据，不能用钱包差额、日志或GET稳定代替，见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)。
+
+旧settled/pending结果、历史事件及完成幂等重放在对外DTO只读规范化；旧SQLite JSON原样保留，不重新查询模型或改旧金额。assistant-ui消息显示记录说明，Loomic及账号账单区把spent改称累计用量折算，recentCalls为记录折算/实扣待核对，余额仍Native当前本人余额。pending不承诺稍后必然结算成功；原图下载、历史刷新与输出仍保留。
+
+最终实际验证：
+
+| 命令 | 结果及证据边界 |
+| --- | --- |
+| `npm run check` | 类型、**22/22**领域/探测/恢复、**147/147**API、构建通过（12.00秒），既有第三方chunk警告。`.local/t1-5a-check-final.log` |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **71/71**（1.9分钟）；新增recorded/旧settled/pending三例，真实点击fixture原图下载、reload后证据/输出保留、0自动发送；旧完整UI/草稿/画布/手机回归保留。`.local/t1-5a-browser-final.log` |
+| `npm run test:stack` | **退出0**：真实固定Native未初始化边界；显式personal替身2/2与fresh user-token替身1/1。fixture分页/type/total与固定Native主源同步，实际Nginx/SDK/browser验新状态；仅随机测试资源清理。`.local/t1-5a-stack-final.log` |
+| `node tests/stack/trial-native.cases.mjs` | **退出0**：五个既有即时成功DTO实际pending/unconfirmed；原生日志和SQLite快照完成后，以原request IDs调用真实recordedUsage做有界只读核验，5组recorded/unconfirmed，quota524/524/500/12/12。严格Native分页/type/total保持，0新增模型操作。`.local/native-trial-WnvyRt/evidence.json` |
+| 额外定向API/浏览器、`node --check`、`git diff --check` | API定向14/14；中文金额回归2/2及三状态原图用例3/3；脚本/差异通过，无依赖变化 |
+
+真实Native正常快照保持：零钱包owner消费6条560、订阅560、token499440；混合owner消费10条1096、订阅548、钱包9452、token498904且ID/期限不变。原wallet→subscription→wallet与试用关闭/更换后wallet明确授权路径保留，旧grant/次数未变。共13chat/3image全部供应商为loopback替身，真实供应商调用/费用0。记录可见性只是recorded证据，金额一致另由Native SQLite快照核验，不宣称完成Native结算故障注入。
+
+保留一次验收失败：首版新增Native断言误要求即时响应recorded，实际日志尚未可见、pending/unconfirmed正确，测试失败后只清理自己的随机栈、未重交旧请求。修正测试假设，用全新隔离栈验证即时pending与后续只读recorded，保护未放宽。本轮API/完整浏览器/整栈最终均通过。
+
+日常预览再次以原默认Compose重构建/`up --wait`退出0，Studio/web更新，原Native未重启。仅三个服务healthy、web回环8080发布，Native setup仍status=false/root_init=false；Studio实际generation/trial/renewal全false，prepared=false。没有录入真实账户、计划、渠道或安全配置。`.local/t1-5a-preview-refresh.log`，预览 `http://localhost:8080/studio/`。
+
+下一任务 **T1.5b**：未知有限权限续用的私有停服核对恢复。只读方案审查确认当前旧target仅name/quota/expiry，不足安全adopt；需版本化批准快照、真实旧Native handler终止与只读SQLite（含soft-deleted/重复/跨owner）、原key仍拒绝的独立恢复终态、CAS/binding/audit同事务，并保留旧run/held/funding屏障。方案尚未实现、工具不可用；不由当前政策填补旧operation并自动解锁。真实计划/入口/生成/续用仍关闭，最终28场景四角色QA未执行，目标继续进行。
+
 ## T1.4 有限权限明确续用与真实原生账户浏览器路径（2026-10-01，默认关闭）
 
 在 `codex/registration-trial`、T1.3 `2793093` 上完成，仍含合并V2基线 `abe46c4`。三位 gpt-6.1-sol 子智能体分别做有限token安全实现/审查与真实Native验证、账号真实CLI/edge验收、薄UI与浏览器反例；全部开发留当前项目。没有新增依赖/修改lockfile、push/merge/main改动或生产部署，本轮远程CI未执行。

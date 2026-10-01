@@ -33,7 +33,7 @@ test('same-origin stack authenticates, streams image tools, attributes usage and
   const replay = await request.post('/api/studio/runs', { headers, data: run.postDataJSON() })
   expect(replay.status()).toBe(200)
   const replayBody = await replay.json()
-  expect(replayBody.data.usage).toMatchObject({ state: 'settled', requestCount: 3, cost: 0.3 })
+  expect(replayBody.data.usage).toMatchObject({ state: 'recorded', settlementState: 'unconfirmed', requestCount: 3, cost: 0.3 })
   const after = (await (await request.get('/api/studio/billing', { headers })).json()).data
   expect(after.requestCount).toBe(3)
   expect(after.spent).toBe(before.spent)
@@ -106,7 +106,7 @@ test('server-owned assistant threads recover a disconnected stream and survive r
   const recovered = (await (await request.get(`/api/studio/runs/${runId}`, { headers })).json()).data
   expect(recovered.threadId).toBe(first.id)
   expect(recovered.events.filter(event => event.type === 'message.delta').map(event => event.delta).join('')).toBe('协议替身纯文本回复。')
-  expect(recovered.usage).toMatchObject({ state: 'settled', requestCount: 1, cost: 0.1 })
+  expect(recovered.usage).toMatchObject({ state: 'recorded', settlementState: 'unconfirmed', requestCount: 1, cost: 0.1 })
   expect((await billing()).requestCount).toBe(before.requestCount + 1)
   expect((await request.post('/api/studio/runs', { headers: { ...headers, 'idempotency-key': runId }, data: payload })).status()).toBe(200)
   expect((await billing()).requestCount).toBe(before.requestCount + 1)

@@ -1,4 +1,5 @@
 import { StudioError } from './images.mjs'
+import { normalizeResultUsage } from './billing.mjs'
 
 // 与幂等账本共用数据库；只保存业务会话，不复制账号或网关凭据。
 export class History {
@@ -35,9 +36,9 @@ export class History {
     return this.thread(row)
   }
   run(row) {
-    return { runId: row.run_id, threadId: row.thread_id, prompt: row.prompt, model: row.model,
+    return normalizeResultUsage({ runId: row.run_id, threadId: row.thread_id, prompt: row.prompt, model: row.model,
       status: row.status, events: row.status === 'running' || row.status === 'unknown' ? this.db.prepare('SELECT event FROM studio_run_events WHERE owner=? AND run_id=? ORDER BY sequence').all(row.owner, row.run_id).map(event => JSON.parse(event.event)) : JSON.parse(row.events), ...(row.usage ? { usage: JSON.parse(row.usage) } : {}),
-      createdAt: row.created_at, updatedAt: row.updated_at }
+      createdAt: row.created_at, updatedAt: row.updated_at })
   }
   getRun(owner, id) {
     const row = this.db.prepare('SELECT * FROM studio_runs WHERE owner=? AND run_id=?').get(owner, id)

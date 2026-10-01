@@ -18,6 +18,8 @@
 
 未知/他人资源返回 404，列表及详情分页最多 50 项。持久化运行状态为 running/completed/failed/unknown；进程重启不恢复执行，未完成变 unknown。停止接收不是供应商取消。带 threadId 的请求不使用客户端历史，同 ID 重放沿用原请求指纹，不随新历史变化；busy 前拒绝不创建假消息。未带 threadId 的既有画布协议保留兼容。
 
+2026-10-01 T1.5a 实际费用DTO：完整唯一Native本人type2日志匹配为 `usage.state=recorded`；尚无完整记录为pending；二者 `settlementState=unconfirmed`，不等于资金/token均成功。quota/cost/requestCount/requestIds保留，旧settled在对外读取及重放兼容recorded，不重写旧金额或再次生成。balance是当前原生钱包；spent是累计used_quota折算，recentCalls.cost是日志折算，不是请求级扣款回执。见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)。
+
 ## 后续规划路由（未全部实现）
 
 | 方法与路径 | 输入 / 结果 | 约束 |
