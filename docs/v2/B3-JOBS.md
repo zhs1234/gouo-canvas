@@ -1,6 +1,24 @@
 # B3 持久图片任务：授权与恢复方案
 
-2026-10-02，系统打通计划的B3设计审查。本文件是可实施方案，不是已实现接口。当前SYS-R1只有原请求结果GET，没有202任务或Worker。
+2026-10-02，系统分支已实现并合同验证B3-I。默认关闭，同API进程内存授权执行；尚未接入前端或完成Native任务实测。独立Worker、持久后台授权及原始输出在解码前暂存仍未完成，以下分别区分当前合同与后续方案。
+
+## 当前 B3-I 接口
+
+`GOUO_ENABLE_IMAGE_JOBS=false`默认关闭受理和重新授权；`GOUO_MAX_IMAGE_JOBS=2`限制全实例活跃任务，允许1–16。原结果GET、确定外发前取消和已保存输出的本地完成不依赖生成开关。同期每owner只能有一个活跃操作，复用同步生成/资料/领取/续用守卫；模型提交未知只锁原key，未知Native写则锁全owner。
+
+| 路由 | 当前行为 |
+| --- | --- |
+| `POST /api/studio/image-jobs` | UUID Idempotency-Key；保存不可变参数、模型批准版本、付款意图和通知意图后202。重复同参数返回原任务，不新生成；漂移或原unknown/needs_authorization/cancelled返回409。 |
+| `GET /api/studio/image-jobs/:id` | 仅本人、private/no-store；真实状态；completed可返回已保存原图与保守费用。 |
+| `POST /api/studio/image-jobs/:id/authorize` | body仅`{"confirm":true}`；只允许确定未提交的needs_authorization，重新核验原参数/组/模型/付款来源，202后执行同一任务。 |
+| `POST /api/studio/image-jobs/:id/cancel` | body仅`{"confirm":true}`；需要无模型提交、无本次试用预留、无未知Native写证据；只释放新业务占用。 |
+| `POST /api/studio/image-jobs/:id/finalize` | 仅output_saved；核验本人原图hash和元数据，本地事务完成，不再次调用模型。 |
+
+新增image_jobs/image_job_reservations/image_job_outbox保存业务状态，不保存账号Bearer/relay key/Cookie或自建金额。接收和提交屏障各自使用SQLite事务；提交前trial reserve与唯一model_submissions同事务。进程重启明确区分未提交需授权、已提交未知、已保存原图本地完成。原图验证成功后与output_saved同事务写私有asset BLOB；**响应收到但解码/持久化前崩溃仍unknown，不假称已实现B3.3原始输出暂存**。
+
+执行阶段只在真实POST创建令牌/购买试用和PUT资金偏好前建立Native写标记；token-key的只读POST及搜索故障不伪装成未知写。标记仅由原helper的完整receipt/token/readback成功清除，响应丢失或崩溃不自动解锁。
+
+实际18项新顶层F合同覆盖匿名/异户、参数/批准漂移、重复/并发、取消/授权/关闭开关、SQLite原子回滚、密钥不落盘、三阶段child-process kill、原图本地恢复及真实写未知和只读失败对照。全check实际69领域/195API、类型和build11.27秒通过，详情见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。没有真实付费调用或独立队列依赖。
 
 ## 先交付的 B3-I
 

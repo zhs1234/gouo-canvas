@@ -86,8 +86,21 @@ export class Projects {
     const saved = this.db.prepare('SELECT id FROM studio_assets WHERE owner=? AND run_id=? AND tool_call_id=? AND artifact_index=?').get(owner, runId, toolCallId, artifactIndex)
     return this.asset(owner, saved.id)
   }
+  saveImage(owner, runId, prepared) {
+    const { bytes, metadata } = prepared, id = randomUUID(), now = new Date().toISOString()
+    this.db.prepare('INSERT OR IGNORE INTO studio_assets VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id, owner, runId, 'image-job', 0,
+      `image/${metadata.format}`, metadata.width, metadata.height, bytes, createHash('sha256').update(bytes).digest('hex'), now)
+    const saved = this.db.prepare("SELECT id FROM studio_assets WHERE owner=? AND run_id=? AND tool_call_id='image-job' AND artifact_index=0").get(owner, runId)
+    return this.asset(owner, saved.id)
+  }
+  verifySavedImage(owner, id) {
+    const asset = this.asset(owner, id, true)
+    const bytes = Buffer.from(asset.dataURL.slice(asset.dataURL.indexOf(',') + 1), 'base64')
+    if (createHash('sha256').update(bytes).digest('hex') !== asset.sha256) throw new StudioError('已保存原图完整性校验失败，未重新生成', 502)
+    return asset
+  }
 }
-async function validateImage(dataURL) {
+export async function validateImage(dataURL) {
   if (typeof dataURL !== 'string' || dataURL.length > 40 * 1024 * 1024 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(dataURL)) throw new StudioError('仅支持有效的内嵌 PNG、JPEG、WebP 图片', 400)
   const encoded = dataURL.slice(dataURL.indexOf(',') + 1), bytes = Buffer.from(encoded, 'base64')
   if (!bytes.length || bytes.length > 30 * 1024 * 1024 || bytes.toString('base64') !== encoded) throw new StudioError('图片编码或大小无效', 400)

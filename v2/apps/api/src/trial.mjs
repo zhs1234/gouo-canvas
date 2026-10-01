@@ -46,9 +46,9 @@ export class Trial {
   assertAvailable(owner, benefit) {
     if (this.remaining(owner, benefit) === 0) throw new StudioError(`${benefit === 'chat' ? '聊天' : '生图'}试用次数已用完，请充值后明确勾选本次使用 New API 余额`, 402)
   }
-  reserve(owner, requestKind, key, benefit) {
+  reserve(owner, requestKind, key, benefit, ownTransaction = true) {
     if (!(benefit in limits)) throw new StudioError('试用类型无效', 500)
-    this.db.exec('BEGIN IMMEDIATE')
+    if (ownTransaction) this.db.exec('BEGIN IMMEDIATE')
     try {
       const grant = this.grant(owner)
       if (grant?.status !== 'active' || grant.plan_id !== this.policy.planId) throw new StudioError('试用尚未开通或领取结果待确认', 409)
@@ -59,11 +59,18 @@ export class Trial {
         this.assertAvailable(owner, benefit)
         this.db.prepare('INSERT INTO trial_reservations VALUES(?,?,?,?,?)').run(owner, requestKind, key, benefit, 'reserved')
       }
-      this.db.exec('COMMIT')
-    } catch (error) { this.db.exec('ROLLBACK'); throw error }
+      if (ownTransaction) this.db.exec('COMMIT')
+    } catch (error) { if (ownTransaction) this.db.exec('ROLLBACK'); throw error }
   }
   finish(owner, requestKind, key, success) {
     this.db.prepare('UPDATE trial_reservations SET status=? WHERE owner=? AND request_kind=? AND key=? AND status=\'reserved\'').run(success ? 'used' : 'unknown', owner, requestKind, key)
+  }
+  finishSavedImage(owner, key) {
+    // Only this new job's durable, validated output can resolve its own held
+    // benefit after a crash. Historical unknown reservations are untouched.
+    this.db.prepare(`UPDATE trial_reservations SET status='used' WHERE owner=? AND request_kind='image' AND key=? AND benefit='image'
+      AND status IN ('reserved','unknown') AND EXISTS (SELECT 1 FROM image_jobs j WHERE j.owner=? AND j.key=? AND j.status='output_saved' AND j.asset_id IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM model_submissions s WHERE s.owner=? AND s.kind='image' AND s.key=?)`).run(owner, key, owner, key, owner, key)
   }
   summary(owner, state, message) {
     const benefit = kind => {

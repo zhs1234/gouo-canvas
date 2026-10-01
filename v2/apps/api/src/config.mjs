@@ -73,6 +73,8 @@ export function loadConfig(env = process.env) {
     relayRoutingMode, normalRoutingEvidence,
     relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds, trial, accountInstanceId, tokenRenewalPolicy,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
+    enableImageJobs: env.GOUO_ENABLE_IMAGE_JOBS === 'true',
+    maxImageJobs: z.coerce.number().int().min(1).max(16).parse(env.GOUO_MAX_IMAGE_JOBS ?? 2),
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }
 }

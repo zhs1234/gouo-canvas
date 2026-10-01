@@ -79,7 +79,7 @@ export class Ledger {
       CASE WHEN status='completed' AND length(CAST(result AS BLOB))<=? THEN result END AS result
       FROM requests WHERE owner=? AND kind=? AND key=?`).get(limit, owner, kind, key)
     if (!row) return null
-    if (!['running', 'unknown', 'completed'].includes(row.status)) throw new Error('Invalid saved request state')
+    if (!['running', 'unknown', 'completed', 'cancelled_before_submission'].includes(row.status)) throw new Error('Invalid saved request state')
     if (row.status !== 'completed') return { status: row.status, createdAt: row.createdAt }
     if (row.resultBytes === null || row.resultBytes > limit) throw new Error('Invalid saved request result size')
     return { status: row.status, createdAt: row.createdAt, result: JSON.parse(row.result) }

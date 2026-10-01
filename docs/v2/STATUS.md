@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## B3-I 默认关闭的持久图片任务（2026-10-02）
+
+系统分支实现单图片202任务、同API内存授权执行、owner/全局并发限制、唯一外发屏障、本人只读结果、确定未提交取消/重新授权以及output_saved本地恢复。Native写标记只覆盖实际令牌/试用/偏好写入，已核验的写入与只读故障不制造全owner unknown；真实写未知继续屏障。账号Bearer/relay key不持久化，未改旧held/unknown。新增18项F合同覆盖child-process kill、授权/幂等/资金及只读与写未知对照；整合源树check实际69领域/195API、类型、build11.27秒exit0。Compose模板解析exit0；未启动B3或独立Worker。详见 [B3-JOBS.md](B3-JOBS.md)。前端接线、Native202实测、解码前原始输出暂存与持久后台授权仍待完成。
+
 ## Agent 模型完成标记校验（2026-10-02）
 
 系统分支发现固定Native可能在供应商意外EOF后仍转发DONE。Agent现在通过现有SDK回调检查每一次实际调用的finish_reason：仅stop/tool_calls可继续，最终必须stop；缺失、length、content_filter或非法值保留已收内容和原图，记录真实run.failed、费用待确认，不自动再调用模型。未完成规划不能进入图片工具。11项新增SDK/本地HTTP合同测试实际11/11 exit0，含batch/SSE、正常工具链、未知规划/总结、原图保留、原ID GET和精确重放零新增模型/资金写。它们是F合同，固定Native的未知响应实测仍待完成。详见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。

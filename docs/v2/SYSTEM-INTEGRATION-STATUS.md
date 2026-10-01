@@ -1,5 +1,15 @@
 # 系统打通：实际进度
 
+## B3-I 持久图片任务合同通过（2026-10-02）
+
+新增image-jobs.mjs及5条本人认证路由，默认GOUO_ENABLE_IMAGE_JOBS=false、全局活跃上限2。202代表保存任务而非成功生成/预扣金额；同owner同步操作统一守卫、原image key去重域、immutable参数/组/能力/付款意图重新核验。job/outbox/非金额占用与请求接收同事务，模型外发前唯一提交标记和本次试用reserve同事务。私有原图BLOB/hash与output_saved同事务；本地完成不新模型或资金写。
+
+restart accepted/ready→needs_authorization，submitted→unknown，output_saved→仅本地finalize，completed→GET。只有确定未提交的新业务占用可取消；旧held/unknown不迁移。每job内存fetch包装器只标记实际Native token-create/trial-purchase/preference-write，原helper完整凭证成功后清除；只读token-key POST/搜索/验证失败转needs_authorization，不锁全owner；写响应丢失保持native_pending unknown全owner锁。
+
+`apps/api/test/image-jobs.cases.mjs`新增 **18项顶层F合同**，含child-process实际终止accepted/submitted/output_saved、事务回滚、上限/重放、关闭开关、异户/参数/能力/组/付款漂移、已保存图校验、凭据不落SQLite，以及停用/过期/耗尽/缺失token与只读故障、确认购买后读故障和实际购买/令牌/偏好响应丢失对照。root整合源树`npm run check` **exit0：57+12领域、195API、typecheck、build11.27秒**，`.local/system-b3-r2-check.log`；API195含此前11项终止标记测试。`docker compose --env-file deploy/.env.example -f deploy/compose.yml config --quiet` exit0，仅解析未部署。
+
+本轮没有开启Native任务/模型、持久Bearer/管理员替代或安装队列。**B3-I后端合同已实现，完整B3未完成**：前端接线和N实测尚无，收到响应但解码前崩溃仍unknown，B3.3原始输出暂存未实现；B3-II权威后台授权和B3-III独立Worker仍按设计待办。下一整合SYS-R2/UI并继续T1.12。
+
 ## Agent 供应商完成证据校验（2026-10-02）
 
 固定Native源码的OpenAI stream helper会在上游不完整响应之后发送传输DONE；DONE不是模型完成证据。`agent.mjs`复用ChatOpenAI实际聚合结果的handleLLMEnd，不另造SSE解析器；每次模型调用必须有stop/tool_calls，最终调用必须stop。缺少或非法终止原因标为真实run.failed，保留已有文本/工具原PNG；费用recorded/unconfirmed，已外发试用占用仍held，未做释放/退款。未完成规划在图片工具和后续gateway fetch之前拦截，maxRetries仍0。
