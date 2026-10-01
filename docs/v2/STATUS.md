@@ -1,5 +1,13 @@
 # 实际交付与验证状态
 
+## 系统打通全面计划与独立分工（2026-10-02）
+
+用户要求先全面计划、再逐步实现，并与“规划并逐页优化 ChatGPT UI”并行避免冲突。已完成三个独立子智能体的实现审计，计划见 [SYSTEM-INTEGRATION-PLAN.md](SYSTEM-INTEGRATION-PLAN.md)，本线程逐阶段结果见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。系统分支为 `codex/system-integration`，独立worktree基于`6e8c4c8`；原`codex/registration-trial`未切换。UI chat负责布局与呈现，系统负责API、恢复、持久任务及运行验收，交叉ChatLab文件暂由UI chat处理。
+
+本次原工作区`npm run check`实际exit0：51领域、157API、类型和build13.74秒；未新复验历史146浏览器/Native/P。独立worktree`npm ci`实际exit0：876包、881审计、0漏洞，锁文件未改。审计确认现有私有项目/原图和默认聊天已实现，B3仍缺Worker和持久授权来源；Loomic无threadId及独立生图缺只读原请求查询，默认聊天失败刷新隐藏已有内容已交接UI负责人。恢复合同保持模型unknown原key/held与资金/续用unknown全owner屏障的区别。
+
+没有模型调用、日常Native/API或旧资金/unknown/held操作、push/merge/main或部署。下一具体实现 **SYS-R1**，统一agent/image原请求只读恢复；后续 **T1.12** 实际浏览器断网，再按计划实施B3和运营验收。全面计划不等于完成系统。
+
 ## T1.11 双账号完整地址隔离与画布只读重开（2026-10-01）
 
 基于 T1.10 `f7a0fe5`，仍在 `codex/registration-trial` 和当前项目。三位 gpt-6.1-sol 子智能体分别执行独立双 profile UI、同浏览器换户与 Native HTTP 合同、故障反例和独立证据复核。新随机 `55075` 运行真实固定 Native `0aec08fee811ec6136828fda790551b49e410301` / binary SHA256 `a5fd598cc77e26ab2709305049fdd5fbbff722111be79f0ad89a493c3e094529`，本地供应商和两个普通账号均明确合成，真实采购0。各账号仅一次用户发送，准备阶段合4chat/2image、Native6消费日志；不能将初始采样到准备完成之间的合法生成变化说成数据不变。

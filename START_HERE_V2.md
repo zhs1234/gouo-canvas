@@ -1,5 +1,7 @@
 # Gouo Canvas V2 — Codex 从这里开始
 
+2026-10-02 系统打通主线：先读 [SYSTEM-INTEGRATION-PLAN.md](docs/v2/SYSTEM-INTEGRATION-PLAN.md) 与 [SYSTEM-INTEGRATION-STATUS.md](docs/v2/SYSTEM-INTEGRATION-STATUS.md)。系统开发与ChatGPT基准UI改版并行，采用独立worktree/明确文件边界；当前先补统一只读请求恢复与实际断网验收，再实现持久任务和运行维护。原文历史阶段以STATUS顶部及此计划为准，真实配置/资金/付费/生产启用门保持。
+
 目标：为淘宝、拼多多、抖音等国内电商，以及社媒、外贸和海报场景建设图片工作台。当前先做图片生成与编辑，后期接入视频生成，不做视频剪裁。New API 原生用量计费已接入；月度订阅、独立业务额度/审计账本为后续任务。
 
 决策：新前台 + 新业务域，迁移现有可用能力；优先复用成熟 GitHub 项目。保留旧站，不能以旧 UI 兼容为理由放弃新产品目标，也不能把所有后端功能未经审查直接当成可靠基础。
