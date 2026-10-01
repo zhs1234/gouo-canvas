@@ -1,5 +1,9 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
+> 2026-10-01 T1.7最新：基于8f51853，退款独立候选同一补丁SHA f17e8c…在SQLite/MySQL/Postgres各6/6通过，完整上游model包SQLite退出0；真实Native本地供应商失败预扣基线持久consumed20，最终候选在线396ms refunded/sub0/token0。仅随机隔离，默认pin/日常二进制/旧资金和held未改，全部临时退款栈已清理；不证明两步异步退款所有故障原子性。门项和可审查源码见NATIVE_REFUND_TRANSACTION_GATE.md。A7四子态及D5组无模型子态补验，Q9权限空态提示修正，原28当前16通过/12partial/0未执行，P未验。51领域、151API、93浏览器/2.7分钟通过；首轮两个失败及证据边界保留。日常只更新web，Native启动不变、setup false、真实generation/trial/renewal全关闭，没有push/merge/部署。
+
+> 用户最新优先级 **T1.8**：画布没有明确出口是致命交互问题；要求实际打开chatgpt.com截图、布局参考ChatGPT、默认聊天、主要入口固定侧栏。当前正在实现共同assistant-ui外壳和安全导航，保留旧Loomic/官方Excalidraw、原图和旧草稿；真实保存失败须留页可导出。上面93浏览器结果是导航改动前，需独立验证新布局。后面的旧“默认画布”与“下一T1.7”只按历史读取。
+
 > 2026-10-01 T1.6 最新：基于0350f75，在codex/registration-trial完成四角色独立浏览器实操和八项产品修复，当前准确28场景统计及F/N/P边界见QA_ACCEPTANCE_REPORT.md；保留原失败证据与实际同数据复验。51领域、151API、87浏览器/2.2分钟及三阶段stack通过（stack先于Q8搜索增量，增量后完整API/PW/build另验）。JWT仅内存、跨标签静态失效与epoch竞态防护、429明确手动恢复、草稿保存后导航、持续导入错误/实际失败原因/原生钱包、正确官方路径及本人服务端标题搜索均完成。合成零钱包实际Native试用闭环与原图/旧库保留，不等于真实供应商/支付，采购0。真实CT共享IP20/1200造成部分门项等待，未调整；logself实际吃GA而非CT，纠正源码归纳，启用决策见NATIVE_RATE_LIMIT_GATE.md。日常只更新web/Studio，Native原ID/启动时间不变、setup仍false、generation/trial/renewal全false、默认edge；无push/merge/部署或锁变化。下一T1.7补隔离剩余场景与启用门槛，整体产品仍未完成。下文旧“最终28未执行”是历史基线，以本报告当前实际部分执行为准。
 
 > T1.6最终补充：28核心F/N范围16通过、11partial、1未执行，所有P未验；provider23实际到达/Native22消费日志/3个held分列。自然窗口后B历史搜索/Stop/新线程与指定会话撤销、D6重启新ID屏障复验完成，未验补充子项仍partial。G2新增真实Native预扣门项：owner6日志和userused36、sub/token56，唯一失败NativeID预扣20仍consumed；退款SysLog有SQLite锁但缺requestID关联，不认定根因/结算/退款。history.failed与trial.unknown是不同状态，安全证据及调查门槛见BILLING-EVIDENCE。下一T1.7优先准备G2最小重现/可审查方案，保持旧held/资金/模型key不动，不静默升级pin。

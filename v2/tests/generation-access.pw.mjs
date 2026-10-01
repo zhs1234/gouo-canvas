@@ -3,7 +3,7 @@ import { mockAccount } from './account-fixture.mjs'
 
 async function setup(page, entry) {
   const account = await mockAccount(page); account.active = true
-  await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { models: [{ id: 'chat', kind: 'chat', displayName: 'Fixture', accessible: true }] } } }))
+  await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { generationEnabled: true, models: [{ id: 'chat', kind: 'chat', displayName: 'Fixture', accessible: true }] } } }))
   const thread = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', title: 'Fixture', runs: [] }
   await page.route('**/api/studio/threads', route => route.fulfill({ json: { success: true, data: { items: [thread], nextOffset: null } } }))
   await page.route('**/api/studio/threads/*', route => route.fulfill({ json: { success: true, data: thread } }))

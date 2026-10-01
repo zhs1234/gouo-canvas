@@ -1,0 +1,2 @@
+# Keep the reviewed patch digest identical across Windows and Linux checkouts.
+refund-transaction.patch text eol=lf whitespace=-space-before-tab

@@ -1,5 +1,26 @@
 # 实际交付与验证状态
 
+## T1.7 原生退款候选、剩余试用子项与权限提示（2026-10-01）
+
+基于 `8f51853`，仍在 `codex/registration-trial`。为G2准备固定Native `0aec08fee811ec6136828fda790551b49e410301` 的独立可审查补丁，退款预扣记录与订阅金额改用同一数据库事务；默认上游pin和日常二进制未变。补丁SHA256 `f17e8c2cd9a603ed8bd2024a006d1fd2fa74deff44251665c201fe979c2da9e5`，源码及许可证保留；具体代码、重现、证据边界和启用条件见 [NATIVE_REFUND_TRANSACTION_GATE.md](NATIVE_REFUND_TRANSACTION_GATE.md)。候选仅在新随机隔离环境使用，没有修复旧验收卷资金或释放旧held。
+
+最终同一补丁的六个退款合同分别在SQLite 3.50.4、MySQL 8.4.11、Postgres 16.15 **6/6通过，合18/18**。未改上游的对照SQLite 3失败/3通过，MySQL和Postgres各1失败/5通过；后两者的事务marker故障在基线留下实际金额36而预期回滚56。候选完整 `go test ./model -count=1 -timeout=180s -v` 退出0、7.600秒（194个顶层PASS/4个顶层SKIP，完整包仅SQLite）。不是所有包三库全验。现有Go1.26.5和项目私有缓存完成构建，没有安装系统组件或新增npm依赖。
+
+新显式 opt-in `subscription-refund-native.cases.mjs` 使用真实Native与明确本地供应商：实际收到一次请求后丢socket，重试配置核实为0。最终基线观测HTTP500、provider1次；在线只读查询持续busy，停止仅其自身随机Native后确认Pid0的持久证据仍为record consumed20/sub20/token20。最终候选同样HTTP500/provider1次，396ms首次在线只读确认record refunded/sub0/token0、remain500000；钱包/本人用量/次数均0，有限token ID/期限不变。最终候选镜像ID `sha256:713a5ca07697b5ab4d34059d864f8728f50528471c4d0aaebb60e71eebc9c3fb`，二进制SHA256 `eda77079be207ebdc505ba0540ffd359074397d28853819029a0bc9d02b38e75`。五个新隔离案例合5次本地供应商到达、0真实采购，全部自身临时栈和三库容器已清理。此前失败读取/旧候选证据保留；不重交旧unknown，不将此候选的两步异步退款称为全故障原子结算。
+
+另一新随机用户验收环境补A7的ineligible/disabled/unavailable/expired四子态和D5组无模型子态：实际中文提示/拒绝新发送，provider0、Native用量/次数/token/log0、Studio grant/reservation/submission0。expired采用明确合成已到期订阅，不冒称自然worker生命周期。修正Q9：模型目录为空或失败时显示可理解的中文原因、关闭发送并清除旧选择，历史保留；同SPA目录刷新失败反例也通过。当前原28场景计数 **16通过/12partial/0未执行**；A7、D5完整范围仍partial，P仍未验，详情见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。
+
+| 实际最终命令 | 结果与范围 |
+| --- | --- |
+| `npm run check` | exit0，51领域/151API、类型和构建11.79秒；既有第三方chunk警告。`.local/t17-check.log` |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **93/93，2.7分钟，exit0**；`.local/t17-e2e-final.log`。首轮91通过/2失败：一个旧fixture缺generationEnabled已修，另一冷启动输入定位超时根因未证实；原用例定向22/22及完整重跑通过，保留原失败。 |
+| 退款三库、完整model包与真实Native新案例 | 上述18/18、完整model包exit0、明确失败预扣候选在线退款观测通过；日志和元数据见门项文档。未重新声称新版完整stack已运行。 |
+| `node --check` / `git diff --check` | exit0；补丁专属LF规则保证Windows/Linux校验摘要一致。 |
+
+日常仅重构建web并 `up -d --wait --no-deps web` exit0。三服务healthy、只发布loopback8080；Native ID `fcf367b723ca…` 与StartedAt `2026-10-01T04:26:19.489050028Z` 不变，日常二进制SHA256 `a5fd598cc77e26ab2709305049fdd5fbbff722111be79f0ad89a493c3e094529` 不变，setup/root_init false；Studio实际generation/trial/tokenRenewalPolicy全关闭。证据 `.local/t17-preview-{before,after}.json`。没有日常Native重启、试用资金/安全配置启用、真实付费、push/merge/main或生产部署。
+
+用户最新报告将 **T1.8 默认聊天与统一侧栏导航** 提升为当前首要任务：按实际chatgpt.com截图调整共享布局；默认进入聊天，聊天/画布/项目库入口固定侧栏，旧画布URL仍可打开。站内与浏览器返回必须等待真实保存成功；失败留页可导出，保留原图/旧草稿/账号隔离。这项正在实施，以上93浏览器结果属于导航改动前T1.7，不能当作T1.8验证。
+
 ## T1.6 四角色实际使用、八项修复与完整回归（2026-10-01）
 
 基于 `0350f75`，仍在 `codex/registration-trial`，全部工作在当前项目。三位 gpt-6.1-sol 子智能体与主任务按新用户、回访聊天、电商画布、双账号异常四角色，通过各自真实浏览器 profile 使用独立随机 Native＋Studio＋web＋明确本地 provider 环境；不是仅源码审查。完整统计、原失败与同数据复验、证据分级和剩余门项见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。真实供应商／支付未执行，采购支出0；不将本阶段称为成熟产品已完成。

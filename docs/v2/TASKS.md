@@ -2,6 +2,10 @@
 
 ## 最新用户要求（2026-10-01，本机环境复核后）
 
+当前首要 **T1.8 默认聊天与统一侧栏导航**：用户报告画布无明确出口，要求实际打开chatgpt.com截图、参考其侧栏/聊天布局。默认 `/studio/` 进入完整assistant-ui聊天；聊天、画布、项目库固定共同侧栏，旧Loomic入口及id/session/search/hash可恢复。站内和浏览器返回经过真实保存guard，失败留页并可导出，未知私有保存不自动重试；验证桌面/手机、原图/旧草稿/跨账号与旧URL。禁止为了布局更换编辑器或另造状态/账号/财务系统，完成后继续原多角色问题统计。
+
+T1.7已完成可审查退款独立候选和限定剩余UI子项；详见 [NATIVE_REFUND_TRANSACTION_GATE.md](NATIVE_REFUND_TRANSACTION_GATE.md) / [STATUS.md](STATUS.md)。同一补丁退款三库18/18、完整model包SQLite退出0，真实新隔离Native失败预扣候选396ms在线退款观测通过；日常pin/二进制/旧held与资金未改，真实配置仍不启用。原28当前16通过/12partial/0未执行，P未验；Q9权限空态提示修正。51领域、151API、93浏览器通过均属于导航改动前，不能代替T1.8验证。以下旧下一T1.7、默认画布及历史计数保留作背景。
+
 T1.6已实施四角色真实浏览器的限定验收与8项修复；28场景当前通过/partial/未执行和原失败、同数据复验见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)，不再把原计划当成“全部尚未执行”，也不把本阶段称为整体成熟产品完成。51领域、151API、87浏览器与三阶段stack通过，真实采购0；stack先于Q8搜索增量，增量由完整API/PW/build验。身份恢复/跨标签/竞态、草稿失败导航、导入错误、生成原因和钱包入口、官方画布路径及本人服务端搜索已修。当前新下一具体任务 **T1.7 隔离剩余场景与启用门槛核验**。先补报告剩余F/N子项；公开限流/可信代理/原生key桶需要确切方案审批，候选与未变默认值见 [NATIVE_RATE_LIMIT_GATE.md](NATIVE_RATE_LIMIT_GATE.md)。真实计划/入口暂不启用决定保留，付费供应商和商户支付另需授权；以下T1.5b“下一T1.6”是历史记录。
 
 最终核心F/N计数16通过/11partial/1未执行，P全未验。T1.7优先核对新增G2：唯一实际失败NativeID的预扣20仍consumed、token/sub56与consume/userused36不一致；锁退款错误缺requestID关联，不能断言请求根因/已结算或自行补退款。准备新随机环境最小重现、原生原子资金/token证据及可审查修正方案，详细当前证据见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)；旧held/资金不改、模型不重发、固定pin不暗换，再补其余隔离UI子项。

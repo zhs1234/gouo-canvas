@@ -34,3 +34,11 @@ New API 继续独立负责账号、钱包、订阅资金、模型令牌、预扣
 当前已证实“失败请求的持久预扣20仍为consumed”，**未证明真实采购、成功结算、退款完成或特定退款错误的请求级根因**。稳定GET、等待、无consume日志、HTTP500、用户累计用量均不能代替原生资金/token退款的原子提交凭据。Studio历史failed和requests.completed只表明错误已存；trial reservation unknown/held继续保留，同键只读重放不再模型，新的独立请求也不清旧占用。
 
 T1.7需在新随机隔离环境准备最小可复现失败退款、原生前后持久记录/token/sub两步证据和审查方案，定位事务与请求日志关联，再按明确维护批准处理。不能用Studio另造退款账本、手工改原生金额、释放held、重交失败模型或静默升级固定pin修饰结果；日常注册试用和生成保持关闭。详见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。
+
+## T1.7 独立候选的实际证据（旧G2未改）
+
+已提供同一固定来源的可审查退款事务补丁和显式opt-in新隔离重现，详见 [NATIVE_REFUND_TRANSACTION_GATE.md](NATIVE_REFUND_TRANSACTION_GATE.md)。补丁将订阅金额delta与预扣record退款marker放进同一个交易；SQLite/MySQL/Postgres的同六合同合18/18通过，对照基线实际失败，完整model包另仅SQLite通过。没有用Studio金额表补退款或修改日常固定pin。
+
+最终新基线请求 `202610011040395314524828268d9d6vFzgpxyd` 只有一次本地供应商实际到达，HTTP500；在线查询busy，停止仅其自身随机Native/Pid0后的持久证据 consumed20/sub20/token20。最终新候选请求 `202610011057269047304928268d9d6YRmcAFuU` 同样一次到达/HTTP500，396ms首次在线只读核实record refunded/sub0/token0/remain500000、钱包/本人用量/次数0、tokenID和期限不变；镜像/补丁/二进制摘要均由案例核验。两例不同随机账号/卷，不能由候选结果推断旧G2已退款；原旧request/run/reservation/held保持。
+
+该在线完整一致快照证明本次失败退款的实测结果，不提供所有成功生成的请求级原子结算凭据。Native资金与token仍分两步异步执行；进程中断、重置窗口、迟到清理、所有渠道与真实采购等边界未全覆盖，`settlementState=unconfirmed` 保留。日常generation/trial/renewal仍关闭，候选部署、真实金额和安全入口都待独立明确启用请求。
