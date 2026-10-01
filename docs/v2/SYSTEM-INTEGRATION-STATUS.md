@@ -1,5 +1,11 @@
 # 系统打通：实际进度
 
+## B3 授权与执行边界审查（2026-10-02）
+
+方案见 [B3-JOBS.md](B3-JOBS.md)。已核对现有业务实现、固定Native鉴权/资金源码和成熟队列官方文档：有限relay key本身不能证明完整owner/token/group/资金receipt，也不能代替浏览器会话撤销证据。第一阶段采用同API进程内存授权和持久图片任务；重启未提交转needs_authorization，已提交未知保持unknown，不持久账号Bearer、不借管理员凭据。B3-II/III再解决权威后台授权与独立队列执行，不能以新增job表称完整Worker。
+
+此次仅设计审查，没有安装队列依赖、改变Native pin、储存凭据或运行模型。B3-I已开始实现；接口、测试与202行为尚未验收，未计完成。
+
 ## SYS-R1 原请求只读结果恢复（2026-10-02）
 
 已实现`GET /api/studio/requests/:kind/:id/result`，复用Ledger，支持无threadId agent与独立image终态。新接口仅本人身份校验＋只读存储，字段白名单，不回显内部元数据；running/unknown保持原状态，completed保留真实失败事件和保守费用。旧费用核对GET/会话history合同未改。完整DTO见 [API-DATA.md](API-DATA.md)。

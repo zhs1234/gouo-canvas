@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## B3 持久任务授权方案（2026-10-02）
+
+系统分支新增 [B3-JOBS.md](B3-JOBS.md)，将B3拆为同进程持久图片任务、权威后台授权/资金约束、成熟队列独立Worker三阶段。固定Native的relay-only读取缺完整owner/token/group/receipt等执行证据；不以加密保存relay key冒称可安全无人值守续跑。B3-I使用内存授权，重启未提交需要本人重新授权，提交未知不重发；账号Bearer不持久化。设计审查没有新增依赖或Native配置，当前实现与验收仍进行中，完整B3未完成。下一验收仍为T1.12/SYS-R2。
+
 ## SYS-R1 统一只读原请求结果（2026-10-02）
 
 独立`codex/system-integration`基于计划提交`f4b5792`，新增`GET /api/studio/requests/:kind/:id/result`，支持无threadId agent与直接image，按真实Native owner读取原Ledger终态。running/unknown不伪造失败/取消，不释放held；completed保存的run.failed和recorded/unconfirmed费用真实保留。公开白名单不含token/provider/channel/submissions，48MiB存储上限、40MiB单图编码边界，损坏数据脱敏502且原行不变。旧费用GET和historyGET未改；前端接线/Worker尚未实现。详见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md) / [API-DATA.md](API-DATA.md)。

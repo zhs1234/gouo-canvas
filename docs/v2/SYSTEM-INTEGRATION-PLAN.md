@@ -31,6 +31,8 @@ UI 浏览器测试使用 5186。系统检查使用自己的端口或新随机 Co
 
 两项 B3 结构问题必须先解决：当前 Ledger 长期持有 API 单进程 EXCLUSIVE 锁，构造即将 running/reserved 转 unknown；不能简单让 worker 再打开同一 Ledger。user-token 执行又依赖本次账号 Bearer 读取本人模型/token/key/用量；不能把账号 Bearer/Cookie 保存到 job/outbox，或借管理员 token 在用户离线后执行。
 
+独立授权设计审查后，将B3分为同进程持久图片任务B3-I、权威后台授权/资金约束B3-II、成熟队列与独立Worker B3-III。首阶段未提交任务重启后needs_authorization、已提交未知不重发；不持久Bearer，不把加密relay key冒称完整授权。细节见 [B3-JOBS.md](B3-JOBS.md)，完整B3验收条件仍保留。
+
 ## 实施顺序与验收
 
 每阶段先完成 coherent scope，再运行相关负授权/幂等/故障检查，写实际结果并单独提交。不能把接口骨架、字段、测试替身或计划标成完整功能。
