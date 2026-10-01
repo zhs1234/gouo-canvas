@@ -1,5 +1,32 @@
 # 实际交付与验证状态
 
+## T1.5b 未知有限权限续用的私有核对（2026-10-01）
+
+基于T1.5a `9ca25f97a2aa427cc3261412c165fec68601401a`，仍在 `codex/registration-trial`。三位gpt-6.1-sol子智能体分别实现API不可变批准/proof、只读恢复helper与反例、真实固定Native恢复合同，另做交叉只读审查。没有依赖或锁文件变化，没有上游/legacy/main改动、push/merge、生产部署、真实资金/安全配置或付费模型操作。
+
+创建前先持久化严格v2 target（实例/owner/固定版本/旧元数据/NativeDate/完整有限权限/cap/lifetime/policyhash），取得旧退休证明后CAS保存proof，再执行唯一Native创建POST。旧v1不回填、不变成v2。新增私有 `scripts/reconcile-renewal.mjs` 的inspect/adopt/close-empty：Studio显式离线、连续Ledger锁、精确容器/二进制/私有SQLite拓扑、当前批准重核对，实际停止同一Native并确认Pid0后只读全部同名token（含软删除/跨owner），新boot/healthy/HTTPDate后取得相同元数据，最后Studio事务内再次CAS行/binding并写审计。Native卷只读、helper无网络、不读取完整key。详见 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)。
+
+adopt只接纳批准的唯一、本人、未用、未消费、未软删除、未到期且完整权限一致目标，首次默认旧权限可对真实null binding做CAS插入；close-empty只支持完整v2/proof且目标完全不存在。终态adopted/reconciled_empty的原key仍409，旧run/held/funding屏障不清除，不充值/续额/重领/重发。缺proof、旧v1、重复/软删除/跨owner、消费、漂移、配置变化均保守拒绝；政策变更或本人组模型只是目录子集暂不自动恢复。
+
+审查修复并增加反例：首次续用没有binding而被误拒；恢复终态被混称普通完成；损坏JSON错误可能回显片段；旧表没有proof列导致只读inspect失败。旧表现在仅PRAGMA读取并SELECT NULL ASproof，工具不迁移。host错误报告Native running/stopped/state unknown，不承诺失败后自动开机；工具始终不启动Studio。两库核验不是跨库原子CAS，受控入口维护窗口和每次生成新鲜权限检查仍必需，不把旧handler终止当成结算或退款证明。
+
+最终实际验证：
+
+| 命令 | 结果与证据边界 |
+| --- | --- |
+| `npm run check` | 类型、领域、**150/150 API**与构建通过（11.91秒，既有第三方chunk警告）。其间领域49/49；helper后续旧schema/CLI反例加入后单独 `npm test` **51/51**通过，`.local/t1-5b-domain-final.log`。host失败状态文案更改后定向6/6再验通过。 |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **71/71**（1.8分钟），保留assistant-ui/原图/草稿/画布/手机与账号回归；`.local/t1-5b-browser-final.log`。没有新增UI功能或替换编辑器。 |
+| `npm run test:stack` | **退出0**，真实固定Native未初始化边界、personal替身2/2及fresh user-token替身1/1；`.local/t1-5b-stack-final.log`，仅清理自身随机资源。 |
+| `node tests/stack/renewal-recovery-native.cases.mjs` | **退出0，两例**：真实创建后丢响应的owner2→adopted/首次null binding→ready；创建未发出的owner3→reconciled_empty→expired/canRenew。原key409、错误哈希不重启、CLI仍保持Studio停止。Native token/key指纹/钱包/用量/订阅/日志前后相同，旧unknown run/held/funding不动，0模型/真实费用。`.local/t1-5b-renewal-native-evidence.json`保留安全stdout与断言总结，不导出完整数据库快照；HTTP写0依据已执行只读路径，不冒称独立方法计数器。 |
+| `node tests/stack/token-native.cases.mjs` | **退出0，两例**：新版v2/proof到期old1→new2、启用零额old3→new4；各创建1、重放0，旧key/quota/expiry/used及钱包/订阅/日志保持。零额退休仅Native `/v1/models`鉴权1次，模型0/真实费用0。`.local/native-token-iEJnvE/evidence.json`。 |
+| `node --check`、交叉只读review、`git diff --check` | 脚本/差异通过；领域覆盖audit失败事务回滚、持续锁、nonce/哈希/CAS、秘密字段/损坏JSON/超长输入、同名/软删除/跨owner/使用/模型期限漂移与旧key拒绝。 |
+
+真实恢复测试全部使用随机独立卷、合成账号/有限批准/fixture资金，无Native或Studio宿主端口，无可调用供应商；不能冒称公开部署排他性、真实支付或付费模型验证。真实源额外核对固定main.go的BATCH_UPDATE_ENABLED与进程退出实现，未升级/修改上游。后续helper输入白名单/旧表反例及host失败状态提示不改变已执行Native主路径，单独反例复验通过，没有重新制造或重交旧unknown。
+
+本机默认Compose仅重构建web/Studio并 `up --wait --no-deps studio-api web` **退出0**，三个服务healthy、仅web回环8080发布、health200；Native ID与原StartedAt完全相同，未重启、setup仍status=false/root_init=false。实际Studio loadConfig generation/trial/renewal全false，Nginx容器模板SHA256与默认模板相同（prepared未应用）。`.local/t1-5b-preview-refresh.log`与`.local/t1-5b-preview-evidence.json`；恢复未在日常卷执行。预览 `http://localhost:8080/studio/`。
+
+下一任务 **T1.6 综合用户验收与问题修复**：按QA_ACCEPTANCE四角色、28场景执行独立浏览器实操，F/N/P分别统计，先准备隔离真实Native＋明确本地供应商替身，真实配置/付费未批准场景列门槛。此轮局部恢复测试不计作最终28场景已完成，整体成熟产品目标继续进行。
+
 ## T1.5a 原生费用记录证据与旧历史兼容（2026-10-01）
 
 在T1.4 `cc498a0d3c048f2594891d2cda20353c06753ce8` 上继续，分支仍 `codex/registration-trial`，三位gpt-6.1-sol子智能体分别实现API证据/历史兼容、中文UI/原图浏览器回归、固定Native主源与stack/真实日志复验。没有新增依赖、lockfile/上游源码/main改动、push/merge、生产或真实资金操作。

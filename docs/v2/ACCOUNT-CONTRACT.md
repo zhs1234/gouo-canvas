@@ -2,6 +2,8 @@
 
 核对固定 SHA `0aec08fee811ec6136828fda790551b49e410301`，不升级上游或重写 IAM。日常实例未创建账号；隔离 Native 测试使用独立合成账号。Studio 账号面板优先链接同源 New API 原生 UI，复用其 Turnstile、密码加密、登录验证、MFA、passkey、注册和密码恢复流程。基础密码表单只适用于未启用额外验证的实例；不声称完整实现上游登录流程。
 
+T1.5b新增私有未知模型令牌续用恢复，限定相同稳定instanceId/本人owner/v2批准/proof，恢复审计与binding不涉及账号创建、密码或会话；原key409，完整模型key不读取/输出。首次没有Studio binding可在精确默认旧权限证据下CAS插入，不虚构旧绑定。仍须每次业务操作fresh原生鉴权，账号数字ID不能跨实例复用；详见 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)。日常真实配置未启用，真实账号安全设置未改。
+
 2026-10-01 T1.3：prepared trial edge 的精确 PUT `/api/user/self` 改由 Studio 安全桥接，只允许单独 `display_name`（1–20 Unicode 字符）或 `password`（8–128 Unicode 字符）及可选 `original_password`。用户名、owner、role、quota、group、setting、language/sidebar、登录加密 DTO、混合资料/密码字段均422，不达 Native PUT。原生 language/sidebar 全 setting 快照会覆盖付款偏好，因此仍拒绝。账号桥接与生成使用同 owner 串行屏障，另一个 owner 独立；密码和 proof 不写 Studio 数据库或日志。该 override 尚未应用到日常8080，详见 TRIAL.md。
 
 密码修改继续经过原生 `/api/verify` 的 `account.password.change` / `account.password.set` 安全证明，再提交原始 Native DTO；桥接透传调用者 Bearer、`X-Security-Proof`、`X-Auth-Session`，不转发 Cookie 或共享 relay key。每次只发一个有界 PUT，原样保留 Native 状态、code 与旋转 bundle。原生密码修改返回 `access_token/token_type/access_expires_at/session/has_password/notification_warning`；当前 refresh secret 保持，旧 access token 和其它会话被撤销。网络/解析/不完整成功包均502并提示结果待确认、不重新提交。Native 500也可能发生在提交后，错误不等于密码未修改。

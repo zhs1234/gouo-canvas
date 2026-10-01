@@ -7,7 +7,8 @@ import { DatabaseSync } from 'node:sqlite'
 import { createServer } from '../src/server.mjs'
 import { Ledger } from '../src/ledger.mjs'
 import { Trial } from '../src/trial.mjs'
-import { RelayRenewals } from '../src/relay-renewals.mjs'
+import { RelayRenewals, buildRenewalTarget, renewalTargetSchema, retirementProofSchema } from '../src/relay-renewals.mjs'
+import { approvedReplacement } from '../src/relay-access.mjs'
 
 const instance = '2c2792b0-84c4-465d-a176-67f4c1ad9b0e'
 const config = { models: [{ id: 'chat', kind: 'chat', upstreamModelId: 'fixture-chat', displayName: 'Fixture', enabled: true, verification: 'live-verified' }],
@@ -35,6 +36,7 @@ function fixture(options = {}) {
     }
     if (path === '/api/token/' && method === 'POST') {
       const body = JSON.parse(init.body); assert.equal(body.unlimited_quota, false)
+      await options.beforeCreate?.(owner, body)
       tokens.get(owner).push({ ...body, id: nextId++, user_id: owner, status: 1, auto_groups: [], used_quota: 0 })
       await options.onCreate?.(owner)
       if (options.lostCreate) throw new Error('fixture lost creation result')
@@ -126,6 +128,9 @@ test('unknown creation/readback survives restart, blocks new keys and generation
       try {
         assert.equal(db.prepare('SELECT COUNT(*) AS n FROM relay_bindings').get().n, 0)
         assert.equal(db.prepare("SELECT status FROM relay_renewals WHERE owner=7").get().status, 'unknown')
+        const row = db.prepare('SELECT target,proof FROM relay_renewals WHERE owner=7').get()
+        assert.equal(renewalTargetSchema.parse(JSON.parse(row.target)).version, 2)
+        assert.equal(retirementProofSchema.parse(JSON.parse(row.proof)).kind, 'hard-expired')
         assert.doesNotMatch(JSON.stringify(db.prepare('SELECT * FROM relay_renewals').all()), /never-store-this-key|dddddddddddddddddddddddddddddddddddddddddddddddd/)
       } finally { db.close() }
     } finally { await app.close(); assert.equal(resolve(dirname(directory)), resolve(tmpdir())); rmSync(directory, { recursive: true, force: true }) }
@@ -142,11 +147,100 @@ test('generation/held/failed history and startup pending are durable renewal bar
     assert.equal(renewals.unresolvedGeneration(7), true)
     ledger.complete(7, 'agent', 'fixture-unknown', { events: [{ type: 'run.completed' }] })
     assert.equal(renewals.unresolvedGeneration(7), false)
-    renewals.begin(7, 'fixture-operation', { version: 'x' }, 7, { name: 'gouo-studio-fixture', quota: 100, expiredTime: 123 })
+    // A historical v1 row is left byte-for-byte intact; new API intents require v2.
+    ledger.db.prepare("INSERT INTO relay_renewals(owner,key,hash,old_id,target,status,result) VALUES(7,'fixture-operation','fixture-hash',7,?,'pending',NULL)").run(JSON.stringify({ name: 'gouo-studio-fixture', quota: 100, expiredTime: 123 }))
     new RelayRenewals(ledger.db)
     assert.equal(renewals.blocked(7), true); assert.equal(renewals.binding(7), undefined)
     assert.throws(() => renewals.begin(7, 'different-operation', {}, 7, {}), /待核对/)
+    const old = ledger.db.prepare("SELECT target,proof FROM relay_renewals WHERE key='fixture-operation'").get()
+    assert.equal(old.target, JSON.stringify({ name: 'gouo-studio-fixture', quota: 100, expiredTime: 123 }))
+    assert.equal(old.proof, null); assert.equal(renewalTargetSchema.safeParse(JSON.parse(old.target)).success, false)
   } finally { ledger.close() }
+})
+
+test('immutable v2 approval and exact retirement proof are durable before the only Native creation POST', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'gouo-renewal-proof-')), path = join(directory, 'ledger.sqlite')
+  let observed
+  const f = fixture({ beforeCreate: async (owner, body) => {
+    const db = new DatabaseSync(path, { readOnly: true })
+    try {
+      const row = db.prepare('SELECT * FROM relay_renewals WHERE owner=?').get(owner)
+      assert.equal(row.status, 'pending')
+      const target = renewalTargetSchema.parse(JSON.parse(row.target)), proof = retirementProofSchema.parse(JSON.parse(row.proof))
+      assert.equal(target.owner, owner); assert.equal(target.instanceId, instance)
+      assert.equal(proof.kind, 'hard-expired'); assert.ok(proof.metadata.expired_time < proof.nativeNow)
+      assert.deepEqual(body, target.approved)
+      assert.equal(target.approved.expired_time, target.approvedNativeNow + target.limits.lifetimeSeconds)
+      assert.doesNotMatch(JSON.stringify(row), /never-store-this-key|dddddddddddddddddddddddddddddddddddddddddddddddd/)
+      observed = { target: row.target, proof: row.proof }
+    } finally { db.close() }
+  } })
+  const app = createServer({ ...config, ledgerPath: path }, f.overrides)
+  t.after(async () => { await app.close(); rmSync(directory, { recursive: true, force: true }) })
+  const view = await access(app), key = crypto.randomUUID()
+  assert.equal((await renew(app, view.version, key)).statusCode, 200)
+  assert.ok(observed)
+  const db = new DatabaseSync(path, { readOnly: true })
+  try {
+    const row = db.prepare('SELECT target,proof FROM relay_renewals WHERE owner=7').get()
+    assert.deepEqual({ ...row }, observed, 'completion never edits approval or retirement proof')
+  } finally { db.close() }
+})
+
+test('unknown retirement authentication persists v2 intent but no proof or new token, including after restart', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'gouo-renewal-proof-unknown-')), path = join(directory, 'ledger.sqlite')
+  const f = fixture(), original = f.overrides.fetch
+  f.overrides.fetch = async (url, options) => {
+    if (url.pathname === '/v1/models') throw new Error('synthetic proof response lost')
+    return original(url, options)
+  }
+  Object.assign(f.tokens.get(7)[0], { remain_quota: 0, expired_time: Math.floor(Date.now() / 1000) + 1800 })
+  let app = createServer({ ...config, ledgerPath: path }, f.overrides)
+  t.after(async () => { await app.close(); rmSync(directory, { recursive: true, force: true }) })
+  const view = await access(app), key = crypto.randomUUID()
+  assert.notEqual((await renew(app, view.version, key)).statusCode, 200)
+  assert.equal(f.tokens.get(7).length, 1)
+  const db = new DatabaseSync(path, { readOnly: true })
+  try {
+    const row = db.prepare('SELECT target,proof,status FROM relay_renewals WHERE owner=7').get()
+    assert.equal(row.status, 'unknown'); assert.equal(row.proof, null); assert.equal(JSON.parse(row.target).version, 2)
+  } finally { db.close() }
+  await app.close(); app = createServer({ ...config, ledgerPath: path }, f.overrides)
+  assert.equal((await renew(app, view.version, key)).statusCode, 409)
+  assert.equal((await access(app)).state, 'unknown')
+  assert.equal(f.calls.some(c => c.path === '/api/token/' && c.method === 'POST'), false)
+})
+
+test('approval/proof schemas reject identity, permission, clock and secret changes; proof is write-once and recovery outcomes never replay', () => {
+  const f = fixture(), { key: secret, ...oldMetadata } = f.tokens.get(7)[0]
+  const now = Math.floor(Date.now() / 1000)
+  const target = buildRenewalTarget(config, 7, { token: oldMetadata, nativeNow: now },
+    approvedReplacement(config, 'gouo-studio-' + 'a'.repeat(32), 1000, now + 3600))
+  for (const change of [t => { t.owner = 8 }, t => { t.oldBinding.id = 8 }, t => { t.oldMetadata.key = 'secret' },
+    t => { t.instanceId = 'wrong' }, t => { t.sourceCommit = 'f'.repeat(40) }, t => { t.approved.model_limits = 'broader' },
+    t => { t.approved.unlimited_quota = true }, t => { t.approved.remain_quota = 1001 }, t => { t.approved.expired_time++ },
+    t => { t.approved.allow_ips = '127.0.0.1' }, t => { t.approved.auto_groups = ['auto'] }, t => { t.version = 1 }]) {
+    const invalid = structuredClone(target); change(invalid); assert.equal(renewalTargetSchema.safeParse(invalid).success, false)
+  }
+  const db = new DatabaseSync(':memory:'), renewals = new RelayRenewals(db), payload = { version: 'fixture' }
+  const proof = { version: 1, kind: 'hard-expired', nativeNow: now, metadata: oldMetadata }
+  try {
+    assert.throws(() => renewals.begin(8, 'owner-mismatch', payload, 7, target))
+    renewals.begin(7, 'operation', payload, 7, target)
+    assert.throws(() => renewals.complete(7, 'operation', { id: 100, name: target.approved.name }, {}), /退休证据/)
+    for (const invalid of [{ ...proof, nativeNow: oldMetadata.expired_time }, { ...proof, metadata: { ...oldMetadata, user_id: 8 } },
+      { ...proof, metadata: { ...oldMetadata, model_limits: 'changed' } }, { ...proof, metadata: { ...oldMetadata, remain_quota: 399 } }]) {
+      assert.throws(() => renewals.saveProof(7, 'operation', invalid))
+    }
+    renewals.saveProof(7, 'operation', proof)
+    assert.throws(() => renewals.saveProof(7, 'operation', proof), /证据已存在/)
+    assert.throws(() => renewals.complete(7, 'operation', { id: 7, name: target.approved.name }, {}), /绑定/)
+    for (const status of ['adopted', 'reconciled_empty']) {
+      db.prepare('UPDATE relay_renewals SET status=? WHERE owner=7').run(status)
+      assert.equal(renewals.blocked(7), false)
+      assert.throws(() => renewals.replay(7, 'operation', payload), /不能再次提交/)
+    }
+  } finally { db.close() }
 })
 
 test('owner exclusion covers simultaneous renew, profile and generation while another owner remains independent', async t => {

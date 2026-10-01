@@ -1,4 +1,5 @@
 import { StudioError } from './images-error.mjs'
+import { renewalTargetSchema, renewalPolicyHash } from './relay-renewals.mjs'
 
 const baseName = 'gouo-studio'
 const fail = (message, unknown = false) => Object.assign(new StudioError(message, unknown ? 502 : 409), { unknown })
@@ -67,7 +68,9 @@ export async function proveRetired(config, auth, account, fetcher, inspection) {
   const binding = { id: inspection.token.id, name: inspection.token.name }
   let current = await readStudioToken(config, auth, account, fetcher, binding)
   if (['disabled', 'incompatible', 'missing'].includes(current.state)) throw fail('令牌停用或权限变化，不能续用')
-  if (current.token.expired_time < current.nativeNow || (current.token.status === 4 && current.token.remain_quota <= 0)) return current
+  const withProof = kind => ({ ...current, retirementProof: { version: 1, nativeNow: current.nativeNow, kind, metadata: current.token } })
+  if (current.token.expired_time < current.nativeNow) return withProof('hard-expired')
+  if (current.token.status === 4 && current.token.remain_quota <= 0) return withProof('exhausted-status')
   if (current.token.status !== 1 || current.token.remain_quota > 0) throw fail('旧令牌尚未获得永久失效证据')
   const key = (await call(config, auth, `/api/token/${binding.id}/key`, fetcher, 'POST', {})).data?.key
   if (typeof key !== 'string' || !/^(?:sk-)?[A-Za-z0-9]{48}$/.test(key)) throw fail('原生令牌证明格式无效', true)
@@ -81,17 +84,31 @@ export async function proveRetired(config, auth, account, fetcher, inspection) {
   try { current = await readStudioToken(config, auth, account, fetcher, binding) }
   catch { throw fail('旧令牌状态确认待确认', true) }
   if (current.token?.status !== 4 || current.token.remain_quota > 0 || current.state !== 'exhausted') throw fail('旧令牌未确认耗尽停用', true)
-  return current
+  return withProof('exhausted-auth-rejection')
+}
+
+export function approvedReplacement(config, name, quota, expiredTime) {
+  return { name, remain_quota: quota, expired_time: expiredTime, unlimited_quota: false, model_limits_enabled: true,
+    model_limits: models(config).join(','), allow_ips: '', group: '', cross_group_retry: false, auto_groups: [] }
 }
 
 // A single POST. Unknown outcomes never trigger a search, retry or replacement.
 export async function createReplacement(config, auth, account, fetcher, target) {
+  let body
+  if (target?.version === 2) {
+    const snapshot = renewalTargetSchema.parse(target)
+    if (snapshot.owner !== account.id || snapshot.instanceId !== config.accountInstanceId
+      || snapshot.gatewayOrigin !== new URL(config.gateway).origin
+      || snapshot.policyHash !== renewalPolicyHash(config.tokenRenewalPolicy)
+      || snapshot.limits.quotaCap !== config.userTokenQuotaCap || snapshot.limits.lifetimeSeconds !== config.userTokenLifetimeSeconds
+      || JSON.stringify(snapshot.approved) !== JSON.stringify(approvedReplacement(config, snapshot.approved.name, snapshot.approved.remain_quota, snapshot.approved.expired_time))) throw fail('批准快照与当前生成权限不一致')
+    body = snapshot.approved
+    target = { name: body.name, quota: body.remain_quota, expiredTime: body.expired_time }
+  }
   if (!/^gouo-studio-[A-Za-z0-9_-]+$/.test(target?.name ?? '') || target.name.length > 50
     || !Number.isSafeInteger(target.quota) || target.quota <= 0 || target.quota > config.userTokenQuotaCap
     || !Number.isSafeInteger(target.expiredTime) || target.expiredTime <= 0 || account.status !== 1 || !models(config).length) throw fail('批准的有限令牌配置无效')
-  await call(config, auth, '/api/token/', fetcher, 'POST', { name: target.name, remain_quota: target.quota,
-    unlimited_quota: false, expired_time: target.expiredTime, model_limits_enabled: true,
-    model_limits: models(config).join(','), allow_ips: '', group: '', cross_group_retry: false })
+  await call(config, auth, '/api/token/', fetcher, 'POST', body ?? approvedReplacement(config, target.name, target.quota, target.expiredTime))
   let verified
   try { verified = await readStudioToken(config, auth, account, fetcher, { name: target.name }) }
   catch { throw fail('新令牌创建后的读取结果待确认', true) }

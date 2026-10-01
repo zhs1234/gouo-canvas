@@ -18,7 +18,7 @@
 - Native 证明操作前先落 pending intent。任何证明、创建或读回异常统一 unknown，重启 pending 也成为 unknown。一个已创建但未确认的新 token 不能凭名称自动认领；Native 名称没有唯一约束，GET 也不能证明旧 POST 已结束。
 - unknown 续用阻止本人后续所有新生成与续用。旧 running/unknown/failed 模型请求、held 试用占用、未知原生试用领取、未知付款偏好也阻止续用；不自动退款或解占用。
 
-目前**没有续用 unknown 的操作员恢复工具**。不要手改 SQLite、清屏障、改旧 key 或借 `reconcile-funding.mjs` 解锁；该工具只核对付款偏好，不能确认 token 创建结果。T1.5a已澄清日志不能证明实扣，T1.5b需要另行实现停服、固定实例证据、旧/新令牌核对和可审查恢复。浏览器未知提示只允许刷新只读查询，不会再提交相同或新的写请求。只读方案审查已确认旧target缺批准模型/完整权限/退休证明，不能拿当前配置补齐并adopt；Native搜索隐藏软删除且name非唯一，恢复需持久库完整证据、实际结束旧handler、版本化快照、原key仍409及CAS/binding/audit同事务。方案尚未实现，不等于恢复可用。
+T1.5b已提供私有停服恢复工具 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)：新续用先持久化严格v2批准快照与退休proof，再执行唯一创建POST；未知结果经连续锁、实际Native旧进程结束、前后只读持久核验及审计/CAS事务，才可adopt已创建且未使用的目标，或close-empty完全不存在的目标。原key仍409。旧v1、缺proof、软删除、重复、跨owner、已使用/漂移或配置改变均不清屏障；不会回填旧证据。不要手改SQLite或借付款偏好工具解锁。浏览器未知提示仍只允许只读刷新，真实日常配置与恢复均未启用/执行。
 
 ## 启用前的独立核验
 

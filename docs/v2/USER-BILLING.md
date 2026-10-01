@@ -2,6 +2,8 @@
 
 固定 New API `0aec08fee811ec6136828fda790551b49e410301`，AGPLv3 + NOTICE，独立服务 HTTP 集成，不复制或重写其账号/钱包。原生页面入口与 JWT/refresh/退出契约见 [ACCOUNT-CONTRACT.md](ACCOUNT-CONTRACT.md)。未升级 rc.41，也不使用其新 scoped PAT 接口。
 
+T1.5b的私有 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md) 只恢复批准令牌的Studio绑定或关闭完全不存在的目标，不写Native额度、资金/付款偏好/日志，不重领试用，不释放旧run/held/funding。终止旧handler和稳定持久元数据不代表结算成功或退款；原idempotency key仍409，新发送仍须本人资金授权和所有屏障通过。真实恢复两例Native财务快照不变，合成策略/账户，供应商调用0；不据此宣称生产计费已验收。
+
 ## 当前实现
 
 2026-10-01 增量：[T1 注册试用、T1.2 付费续用、T1.3 独立钱包生命周期](TRIAL.md) 默认关闭，支持本人零钱包由原生一次性零价有限订阅供资；Studio 只限制 4 次发送＋1 次图片，不另造金额余额。真正启用须批准原生计划、cap/期限与 Studio-only 入口，并完成真实渠道验收。每用户模式所有钱包发送都要求本次 `payWithBalance:true`，包括从未领取的成熟账号与关闭试用的账号。剩余可用类别优先 subscription_only；耗尽或已核实过期/退役/关闭时，明确授权才选 wallet_only，旧领取与次数保留。授权发送后即清除，不存浏览器、不自动沿用。领取未知只能通过原生 receipt 恢复；付款偏好写入未知阻断本人所有新生成，GET一致不能自动解锁，避免旧写入晚到。

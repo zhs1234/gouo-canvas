@@ -96,6 +96,8 @@ Studio 会话只保存 New API 的数字 owner ID，不保存密码或复制账�
 
 T1.4 的有限生成权限续用与原生登录导航均为 prepared opt-in 配置。日常栈仍不启用试用、生成或续用；人工核验文件不会自行开放网络。具体原生固定版本、三个私有模型入口、Redis/batch关闭、状态/version/幂等合同及unknown限制见 [TOKEN-RENEWAL.md](TOKEN-RENEWAL.md)。`GOUO_ENABLE_TOKEN_RENEWAL=false` 是示例默认值。未知续用不能借付款偏好恢复工具解锁。
 
+T1.5b私有 `node scripts/reconcile-renewal.mjs inspect|adopt|close-empty` 的完整身份、offline Studio、明确Native重启及私有入口确认见 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)。只支持v2完整批准/proof、同SQLite日志、无Redis/batch、固定单容器私有拓扑和配置不变；真实日常数据未执行。恢复不启动Studio，失败可能Native仍停止，需核对状态；原key永久409，Native资金/token不写，旧run/held/funding不清。可重复真实合同 `GOUO_RECOVERY_TEST_DOCKER=<Docker路径> node tests/stack/renewal-recovery-native.cases.mjs` 只创建随机合成隔离栈，无host发布/供应商调用，不读取用户.env或日常卷。
+
 新增可重复测试：`node tests/stack/token-native.cases.mjs` 验真实固定Native token合同（不验真实部署排他性），`node tests/stack/account-browser-isolation.mjs start` 创建随机prepared账号浏览器栈，`refresh-web <state.json>` 只刷新该栈Studio静态构建，`stop <state.json>` 只清理该栈。真实UI注册/安全证明/密码旋转与Studio显示名称证据见ACCOUNT-CONTRACT；测试账号/额度均合成，没有真实供应商费用。完整CLI操作是验收证据，不声明脚本自动完成用户交互。
 
 `localhost:8080` 只对运行 Compose 的那台机器可达，不是云执行环境到用户浏览器的共享预览地址。只有在环境实际提供受保护的端口预览和用户接管能力时，才能把原生 `/setup`、`/sign-in`、`/security`、`/wallet` 作为远程配置入口；不要假设有 Personal Vault，也不要为交接临时公开管理后台或数据。

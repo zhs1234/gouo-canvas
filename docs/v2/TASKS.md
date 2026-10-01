@@ -4,9 +4,9 @@
 
 P0 环境已验收；用户已批准持续开发，所有工作留在当前 Gouo Canvas 项目并基于 `codex/new-api-v2`，保留已认可的 assistant-ui/Excalidraw、旧草稿/原图/许可证。需要安装系统组件或改安全设置先询问用户。最终产品准备好后，使用多个子智能体模拟真实用户并统计报告问题。
 
-最新T1.5a已完成 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)：消费日志只能证明用量已记录，实扣unconfirmed；旧历史兼容、金额/原图/ID保留、重复/截断/异常记录拒绝金额，无重新扣费/退款/生成。22领域、147API、71浏览器、三阶段整栈与真实Native正常记录合同通过。下一具体任务 **T1.5b**：版本化续用批准快照、只读私有inspection、实际结束旧Native handler后的可审查恢复。旧target缺模型/完整权限/退休证据，不能用现行政策回填并adopt；Native软删除/重复/跨owner/使用证据、CAS/audit失败与原key拒绝均需反例。当前没有unknown续用恢复工具，不借funding工具解锁。
+最新T1.5a/T1.5b已完成 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md) 与 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)：消费日志只是recorded/实扣unconfirmed，旧金额/ID/原图保留；v2批准与退休proof持久后唯一POST，私有连续锁/Native真实进程边界/前后RO持久证据/Studio审计CAS支持adopt或完全absent close-empty，原key仍409。旧v1/缺proof、软删除/重复/跨owner/使用/漂移/配置变化均保守拒，不清旧run/held/funding、不改Native资金。51领域、150API、71浏览器与三阶段整栈通过，真实恢复2例及正常到期/耗尽2例另验，0模型/真实费用。下一具体任务 **T1.6 综合用户验收与问题修复**：隔离真实Native＋明确本地供应商替身，按QA_ACCEPTANCE四角色/28场景独立浏览器实操、保留发现并统计F/N/P通过/失败/门槛/未执行。真实计划和入口仍暂不启用，未授权付费不计为成功；最终整体产品不因局部恢复测试通过而称已完成。
 
-当前 **T1 — 注册试用：每位新用户 4 次聊天＋1 次生图，用完提示充值**。用户确认按发送计聊天、图片另计，批准先实现原生一次性零价有限试用资金与隔离测试，真实配置暂不启用。T1/T1.2/T1.3 已接通次数、原生资金、每次余额授权、严格来源、未知屏障、安全账户桥与停服恢复、独立钱包生命周期；T1.4 接通默认关闭的本人权限查询/明确有限token续用、新binding与持久unknown屏障，真实Native到期/耗尽合同与完整注册/改密浏览器路径已验，prepared边界单独通过。详见 [TRIAL.md](TRIAL.md)、[ACCOUNT-CONTRACT.md](ACCOUNT-CONTRACT.md)、[TOKEN-RENEWAL.md](TOKEN-RENEWAL.md)、[FUNDING-RECOVERY.md](FUNDING-RECOVERY.md)。下一步 **T1.5 原生费用记录证据语义与未知token续用的私有核对恢复**：consume log不能单独证明实扣/双步结算成功，先修状态/历史兼容，再另做停服可审查恢复。真实计划/入口遵从暂不启用决定。New API继续作为唯一账号、模型网关和金额计费权威；不能另造账号系统或钱包，不能用fixture充当真实供应商验收。最终28场景多智能体用户模拟仍待产品必要门槛完成后执行。
+当前 **T1 — 注册试用：每位新用户 4 次聊天＋1 次生图，用完提示充值**。用户确认按发送计聊天、图片另计，批准先实现原生一次性零价有限试用资金与隔离测试，真实配置暂不启用。T1/T1.2/T1.3 已接通次数、原生资金、每次余额授权、严格来源、未知屏障、安全账户桥与停服恢复、独立钱包生命周期；T1.4 接通默认关闭的本人权限查询/明确有限token续用、新binding与持久unknown屏障，真实Native到期/耗尽合同与完整注册/改密浏览器路径已验，prepared边界单独通过；T1.5a/b接通保守记录语义与独立token恢复。详见 [TRIAL.md](TRIAL.md)、[ACCOUNT-CONTRACT.md](ACCOUNT-CONTRACT.md)、[TOKEN-RENEWAL.md](TOKEN-RENEWAL.md)、[FUNDING-RECOVERY.md](FUNDING-RECOVERY.md)。真实计划/入口遵从暂不启用决定。New API继续作为唯一账号、模型网关和金额计费权威；不能另造账号系统或钱包，不能用fixture充当真实供应商验收。下一T1.6综合验收按证据范围统计，不宣称真实付费已就绪。
 
 实施前核对固定版真实 New API 的资金来源/赠额、本人组和有限令牌、预扣及结算路径。现有 `user-token` 在原生 quota<=0 时直接 402；token cap 只限权、不提供资金，不能单靠移除 Studio 检查声称零余额可用。需明确“零充值”与“原生零额度”的实际路径，保证试用真实经过网关、费用仍由 New API 记录。
 

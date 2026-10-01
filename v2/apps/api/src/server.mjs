@@ -14,8 +14,8 @@ import { readFundingAccount } from './funding.mjs'
 import { FundingState } from './funding-state.mjs'
 import { validateAccountUpdate, passthroughAccountUpdate } from './account-update.mjs'
 import { inspectWalletFunding } from './wallet-funding.mjs'
-import { readStudioToken, proveRetired, createReplacement } from './relay-access.mjs'
-import { RelayRenewals, accessVersion } from './relay-renewals.mjs'
+import { readStudioToken, proveRetired, createReplacement, approvedReplacement } from './relay-access.mjs'
+import { RelayRenewals, accessVersion, buildRenewalTarget } from './relay-renewals.mjs'
 
 const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), payWithBalance: z.boolean().optional(), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
 const runBody = z.object({ threadId: z.string().uuid().optional(), runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
@@ -174,10 +174,11 @@ export function createServer(config, overrides = {}) {
       if (payload.data.version !== accessVersion(config, owner, inspected)) throw new StudioError('本人权限已变化，请重新查询后再明确续用', 409)
       if (!['expired', 'exhausted'].includes(inspected.state)) throw new StudioError('仅已知到期或耗尽的有限权限可以续用；不能扩大或启用停用令牌', 409)
       const funds = await renewalFunds(request, context)
-      const target = { name: 'gouo-studio-' + crypto.randomUUID().replaceAll('-', ''), quota: funds.quota,
-        expiredTime: inspected.nativeNow + config.userTokenLifetimeSeconds }
+      const target = buildRenewalTarget(context, owner, inspected, approvedReplacement(context,
+        'gouo-studio-' + crypto.randomUUID().replaceAll('-', ''), funds.quota, inspected.nativeNow + config.userTokenLifetimeSeconds))
       renewals.begin(owner, key, payload.data, inspected.token.id, target); begun = true
-      await proveRetired(context, request.headers.authorization, funds.account, fetcher, inspected)
+      const retired = await proveRetired(context, request.headers.authorization, funds.account, fetcher, inspected)
+      renewals.saveProof(owner, key, retired.retirementProof)
       // No purchase, preference change, old-token PUT or model request.
       const binding = await createReplacement(context, request.headers.authorization, funds.account, fetcher, target)
       const result = { state: 'ready', message: '有限生成权限已续用；没有充值、重新领取试用或发送模型请求' }
