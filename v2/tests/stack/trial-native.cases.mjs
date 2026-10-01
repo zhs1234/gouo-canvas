@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import Fastify from 'fastify'
 import sharp from 'sharp'
 import { createServer } from '../../apps/api/src/server.mjs'
@@ -45,8 +46,17 @@ function compose(...args) {
     child.on('exit', code => code === 0 ? resolvePromise(output) : reject(new Error(output)))
   })
 }
-let nativeOrigin, studio
+let nativeOrigin, studio, studioDatabasePath
 const provider = Fastify(), providerCalls = { chat: 0, image: 0, anonymousRejected: 0 }
+function verifyStoredIntent(modelKind) {
+  const db = new DatabaseSync(studioDatabasePath, { readOnly: true })
+  try {
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM model_submissions').get().n, providerCalls.chat + providerCalls.image)
+    const last = db.prepare('SELECT model_kind,funding_source FROM model_submissions ORDER BY rowid DESC LIMIT 1').get()
+    assert.equal(last.model_kind, modelKind)
+    assert.ok(['trial', 'wallet'].includes(last.funding_source))
+  } finally { db.close() }
+}
 provider.addHook('preHandler', async (req, reply) => {
   if (req.headers.authorization !== 'Bearer fixture-provider-zero-procurement-cost') {
     providerCalls.anonymousRejected++; return reply.code(401).send({ error: 'Local fixture requires its synthetic channel credential' })
@@ -54,6 +64,7 @@ provider.addHook('preHandler', async (req, reply) => {
 })
 provider.post('/v1/chat/completions', req => {
   providerCalls.chat++
+  verifyStoredIntent('chat')
   const wantsImage = JSON.stringify(req.body.messages).includes('native fixture image')
   const hasToolResult = req.body.messages.some(m => m.role === 'tool')
   const message = wantsImage && !hasToolResult
@@ -62,7 +73,7 @@ provider.post('/v1/chat/completions', req => {
   return { id: 'native-fixture-' + providerCalls.chat, object: 'chat.completion', created: 1, model: 'fixture-chat', choices: [{ index: 0, finish_reason: message.tool_calls ? 'tool_calls' : 'stop', message }], usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } }
 })
 const png = await sharp({ create: { width: 12, height: 9, channels: 3, background: '#5a7b9c' } }).png().toBuffer()
-provider.post('/v1/images/generations', () => { providerCalls.image++; return { created: 1, data: [{ b64_json: png.toString('base64') }] } })
+provider.post('/v1/images/generations', () => { providerCalls.image++; verifyStoredIntent('image'); return { created: 1, data: [{ b64_json: png.toString('base64') }] } })
 async function native(path, token, body, method = body === undefined ? 'GET' : 'POST') {
   const response = await fetch(nativeOrigin + path, { method, headers: { Origin: nativeOrigin, ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15000) })
   const result = await response.json()
@@ -110,6 +121,7 @@ try {
   await writeFile(routingPath, JSON.stringify({ sourceCommit: policy.sourceCommit, gatewayOrigin: nativeOrigin, retryTimes: 0, operatorVerified: true, verifiedAt: new Date().toISOString() }))
   const config = loadConfig({ GOUO_STUDIO_MODELS_FILE: resolve('tests/stack/user-models.json'), GOUO_GATEWAY_BASE_URL: nativeOrigin + '/v1', GOUO_BACKEND_DEV_TARGET: nativeOrigin, GOUO_RELAY_CREDENTIAL_MODE: 'user-token', GOUO_RELAY_ROUTING_MODE: 'model', GOUO_USER_TOKEN_QUOTA_CAP: '500000', GOUO_USER_TOKEN_LIFETIME_SECONDS: '3600', GOUO_NORMAL_ROUTING_EVIDENCE_FILE: routingPath, GOUO_ENABLE_TRIAL: 'true', GOUO_TRIAL_POLICY_FILE: policyPath, GOUO_ENABLE_GENERATION: 'true', GOUO_STUDIO_LEDGER_PATH: join(directory, 'studio.sqlite') })
   studio = createServer(config)
+  studioDatabasePath = config.ledgerPath
   const headers = { authorization: 'Bearer ' + token }
   assert.equal((await studio.inject({ url: '/api/studio/trial', headers })).json().data.state, 'eligible')
   const send = async prompt => { const id = crypto.randomUUID(); return studio.inject({ method: 'POST', url: '/api/studio/runs', headers: { ...headers, 'idempotency-key': id }, payload: { runId: id, prompt, model: 'fixture-chat', sessionId: 'native-fixture', conversationId: 'native-fixture' } }) }
@@ -156,7 +168,76 @@ try {
   // A second real purchase is rejected by native MaxPurchasePerUser, not a fixture handler.
   const duplicate = await fetch(nativeOrigin + '/api/subscription/balance/pay', { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ plan_id: policy.planId }) })
   assert.equal((await duplicate.json()).success, false)
-  const evidence = { sourceCommit: policy.sourceCommit, binarySha256: checksum.split(' ')[0], provider: 'local explicit fixture', procurementCost: 0, nativeWalletQuota: finalAccount.quota, nativeUsedQuota: finalAccount.used_quota, nativeTokenRemaining: tokens[0].remain_quota, nativeSubscriptionCount: 1, nativeConsumedQuota: self.all_subscriptions[0].subscription.amount_used, nativeConsumeLogCount: logs.length, nativeLogFunding: 'subscription_only; subscription source; wallet deducted 0', sqlite: stored, providerCalls, trial: summary, realPaidProviderCalls: 0 }
+  // Second ordinary owner: four pure trial sends leave the image entitlement
+  // untouched. A synthetic native voucher then funds explicit paid continuation.
+  await native('/api/user/register', undefined, { username: 'fixture-mixed', password: 'Synthetic_fixture_2026!' })
+  const mixedUser = await login('fixture-mixed'), mixedToken = mixedUser.access_token
+  assert.equal(mixedUser.user.quota, 0)
+  const mixedHeaders = { authorization: 'Bearer ' + mixedToken }
+  const mixedSend = (prompt, payWithBalance = false, id = crypto.randomUUID(), model = 'fixture-chat') => studio.inject({ method: 'POST', url: '/api/studio/runs', headers: { ...mixedHeaders, 'idempotency-key': id }, payload: { runId: id, prompt, model, payWithBalance, sessionId: 'mixed-fixture', conversationId: 'mixed-fixture' } })
+  for (let i = 0; i < 4; i++) { const response = await mixedSend('local fixture pure trial'); assert.equal(response.statusCode, 200, response.body) }
+  const beforeVoucher = (await studio.inject({ url: '/api/studio/trial', headers: mixedHeaders })).json().data
+  assert.deepEqual(beforeVoucher.chat, { limit: 4, remaining: 0, used: 4, held: 0 })
+  assert.deepEqual(beforeVoucher.image, { limit: 1, remaining: 1, used: 0, held: 0 })
+  assert.equal((await mixedSend('local fixture no payment consent')).statusCode, 402)
+  const trialToken = (await native('/api/token/search?keyword=gouo-studio&p=1&page_size=100', mixedToken)).data.items[0]
+  const voucherKey = 'syntheticfixturevoucher000000001', voucherQuota = 10000
+  assert.equal(voucherKey.length, 32)
+  const voucherSeed = `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/data/new-api.db');
+    db.prepare('INSERT INTO redemptions(user_id,key,status,name,quota,created_time,redeemed_time,used_user_id,expired_time) VALUES(?,?,?,?,?,?,?,?,?)').run(${admin.user.id},${JSON.stringify(voucherKey)},1,'Synthetic test voucher; no merchant payment',${voucherQuota},${Math.floor(Date.now() / 1000)},0,0,0);db.close();`
+  await compose('exec', '-T', 'new-api', 'node', '-e', voucherSeed)
+  assert.equal((await native('/api/user/topup', mixedToken, { key: voucherKey })).data, voucherQuota)
+  assert.equal((await native('/api/user/self', mixedToken)).data.quota, voucherQuota)
+  const paidId = crypto.randomUUID(), paid = await mixedSend('native fixture image', true, paidId)
+  assert.equal(paid.statusCode, 200, paid.body)
+  assert.equal(paid.json().data.events.at(-1).type, 'run.completed', paid.body)
+  const beforeReplay = { ...providerCalls }
+  assert.equal((await mixedSend('native fixture image', true, paidId)).body, paid.body)
+  assert.equal((await mixedSend('native fixture image', false, paidId)).statusCode, 409)
+  assert.deepEqual(providerCalls, beforeReplay)
+  assert.equal((await mixedSend('local fixture still needs explicit consent')).statusCode, 402)
+  const paidImageId = crypto.randomUUID(), paidImage = await mixedSend('local fixture paid image', true, paidImageId, 'fixture-image')
+  assert.equal(paidImage.statusCode, 200, paidImage.body)
+  const mixedSummary = (await studio.inject({ url: '/api/studio/trial', headers: mixedHeaders })).json().data
+  assert.deepEqual(mixedSummary.chat, { limit: 4, remaining: 0, used: 4, held: 0 })
+  assert.deepEqual(mixedSummary.image, { limit: 1, remaining: 0, used: 1, held: 0 })
+  let mixedLogs, mixedStored
+  const readMixed = `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/data/new-api.db',{readOnly:true});const owner=${mixedUser.user.id};
+    console.log(JSON.stringify({wallet:db.prepare('SELECT quota FROM users WHERE id=?').get(owner).quota,subscription:db.prepare('SELECT amount_used FROM user_subscriptions WHERE user_id=?').get(owner).amount_used,
+    token:db.prepare('SELECT remain_quota FROM tokens WHERE user_id=? AND name=?').get(owner,'gouo-studio').remain_quota,
+    logs:db.prepare('SELECT COUNT(*) AS n,SUM(quota) AS quota FROM logs WHERE user_id=? AND type=2').get(owner),
+    voucher:db.prepare('SELECT status,used_user_id FROM redemptions WHERE key=?').get(${JSON.stringify(voucherKey)})}));db.close();`
+  for (let i = 0; i < 30; i++) {
+    mixedLogs = (await native('/api/log/self?type=2&p=1&page_size=100', mixedToken)).data.items
+    mixedStored = JSON.parse((await compose('exec', '-T', 'new-api', 'node', '-e', readMixed)).split('\n').find(line => line.startsWith('{')))
+    if (mixedLogs.length === 8 && mixedStored.logs.n === 8 && mixedStored.logs.quota === 1072 && mixedStored.wallet === 9476 && mixedStored.subscription === 548) break
+    await new Promise(resolvePromise => setTimeout(resolvePromise, 200))
+  }
+  const mixedSources = mixedLogs.map(row => ({ ...row, billing: JSON.parse(row.other) }))
+  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'subscription').length, 5)
+  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'wallet').length, 3)
+  assert.ok(mixedSources.every(row => row.billing.billing_preference === (row.billing.billing_source === 'wallet' ? 'wallet_only' : 'subscription_only')))
+  assert.ok(mixedSources.filter(row => row.billing.billing_source === 'subscription').every(row => row.billing.wallet_quota_deducted === 0 && row.billing.subscription_consumed === row.quota && row.billing.subscription_plan_id === policy.planId))
+  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'subscription').reduce((sum, row) => sum + row.quota, 0), 548)
+  assert.equal(mixedSources.filter(row => row.billing.billing_source === 'wallet').reduce((sum, row) => sum + row.quota, 0), 524)
+  const paidRecord = (await studio.inject({ url: '/api/studio/requests/agent/' + paidId, headers: mixedHeaders })).json().data
+  assert.deepEqual(paidRecord.attempts.map(attempt => mixedSources.find(row => row.request_id === attempt.requestId).billing.billing_source), ['wallet', 'subscription', 'wallet'])
+  assert.deepEqual(paidRecord.submissions.map(submission => submission.selectedFundingSource), ['wallet', 'trial', 'wallet'])
+  assert.deepEqual(paid.json().data.fundingSelection, { chat: 'wallet', image: 'trial' })
+  const imageRecord = (await studio.inject({ url: '/api/studio/requests/agent/' + paidImageId, headers: mixedHeaders })).json().data
+  assert.deepEqual(imageRecord.attempts.map(attempt => mixedSources.find(row => row.request_id === attempt.requestId).billing.billing_source), ['wallet'])
+  assert.deepEqual(imageRecord.submissions.map(submission => submission.selectedFundingSource), ['wallet'])
+  assert.equal((await studio.inject({ url: '/api/studio/requests/agent/' + paidId, headers })).statusCode, 404)
+  const mixedAccount = (await native('/api/user/self', mixedToken)).data
+  const mixedTokens = (await native('/api/token/search?keyword=gouo-studio&p=1&page_size=100', mixedToken)).data.items
+  assert.equal(mixedTokens.length, 1); assert.equal(mixedTokens[0].id, trialToken.id); assert.equal(mixedTokens[0].expired_time, trialToken.expired_time)
+  assert.equal(mixedTokens[0].remain_quota, 498928)
+  assert.equal(mixedAccount.quota, 9476); assert.equal(mixedAccount.used_quota, 1072)
+  assert.deepEqual(mixedStored, { wallet: 9476, subscription: 548, token: 498928, logs: { n: 8, quota: 1072 }, voucher: { status: 3, used_user_id: mixedUser.user.id } })
+  assert.equal((await native('/api/user/self', token)).data.quota, 0)
+  assert.equal((await native('/api/subscription/self', token)).data.all_subscriptions[0].subscription.amount_used, 560)
+  assert.deepEqual(providerCalls, { chat: 11, image: 3, anonymousRejected: 1 })
+  const evidence = { sourceCommit: policy.sourceCommit, binarySha256: checksum.split(' ')[0], provider: 'local explicit fixture', procurementCost: 0, nativeWalletQuota: finalAccount.quota, nativeUsedQuota: finalAccount.used_quota, nativeTokenRemaining: tokens[0].remain_quota, nativeSubscriptionCount: 1, nativeConsumedQuota: self.all_subscriptions[0].subscription.amount_used, nativeConsumeLogCount: logs.length, nativeLogFunding: 'subscription_only; subscription source; wallet deducted 0', sqlite: stored, mixedContinuation: { voucherQuota, sqlite: mixedStored, paidRunSources: ['wallet', 'subscription', 'wallet'], paidImageSources: ['wallet'], beforeFetchIntentVerified: true, sameTokenIdAndExpiry: true, paidReplayNoCalls: true, alteredConsentReplayRejected: true, crossOwnerReadRejected: true, trial: mixedSummary }, providerCalls, trial: summary, realPaidProviderCalls: 0 }
   await writeFile(join(directory, 'evidence.json'), JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence))
   console.log('Isolated native trial passed. Evidence: ' + join(directory, 'evidence.json'))

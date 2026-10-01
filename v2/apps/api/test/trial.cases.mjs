@@ -38,9 +38,11 @@ function fixture(options = {}) {
       if (!options.noReceipt) subscriptions.set(owner, { id: owner * 10, user_id: owner, plan_id: 3, amount_total: 10000, amount_used: 0, end_time: Math.floor(Date.now() / 1000) + 3600, status: 'active', allow_wallet_overflow: false, upgrade_group: '', downgrade_group: '' })
       if (options.lostPurchase) throw new Error('fixture lost purchase response')
     } else if (path === '/api/subscription/self/preference') {
-      assert.equal(init.method, 'PUT'); assert.deepEqual(JSON.parse(init.body), { billing_preference: 'subscription_only' })
-      preferences.set(owner, 'subscription_only'); data = { billing_preference: 'subscription_only' }
-      if (options.lostPreference) throw new Error('fixture lost preference response')
+      assert.equal(init.method, 'PUT')
+      const preference = JSON.parse(init.body).billing_preference
+      assert.ok(['subscription_only', 'wallet_only'].includes(preference))
+      preferences.set(owner, preference); data = { billing_preference: preference }
+      if (options.lostPreference || options.failPreference === preference) throw new Error('fixture lost preference response')
     } else if (path === '/api/token/search') data = { items: tokens.has(owner) ? [tokens.get(owner)] : [], total: tokens.has(owner) ? 1 : 0 }
     else if (path === '/api/token/') {
       const token = JSON.parse(init.body)
@@ -54,7 +56,7 @@ function fixture(options = {}) {
   }
   const submit = async (context, kind) => {
     await context.onGatewayRequest?.({ kind })
-    models.push({ owner: context.relayOwnerId, kind })
+    models.push({ owner: context.relayOwnerId, kind, preference: preferences.get(context.relayOwnerId) })
     context.onGatewayResponse({ requestId: 'fixture-' + models.length, status: 200 })
     if (options.failedModel) throw new Error('fixture model outcome unknown')
   }
@@ -66,7 +68,7 @@ function fixture(options = {}) {
   return { accounts, subscriptions, preferences, tokens, calls, models, overrides }
 }
 const headers = (owner, id) => ({ authorization: 'Bearer fixture-user-' + owner, ...(id ? { 'idempotency-key': id } : {}) })
-const send = (app, owner = 7, prompt = 'text', id = crypto.randomUUID(), model = 'chat', url = '/api/studio/runs') => app.inject({ method: 'POST', url, headers: headers(owner, id), payload: { runId: id, prompt, model, sessionId: 's', conversationId: 'c' } })
+const send = (app, owner = 7, prompt = 'text', id = crypto.randomUUID(), model = 'chat', url = '/api/studio/runs', consent) => app.inject({ method: 'POST', url, headers: headers(owner, id), payload: { runId: id, prompt, model, sessionId: 's', conversationId: 'c', ...(consent === undefined ? {} : { payWithBalance: consent }) } })
 const status = async (app, owner = 7) => (await app.inject({ url: '/api/studio/trial', headers: headers(owner) })).json().data
 
 test('trial reads never grant; zero-wallet send gets one native grant and four send benefits, not four model calls', async () => {
@@ -123,7 +125,7 @@ test('unknown model intent holds benefit across restart and reconciliation never
   } finally { await app.close(); rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('ambiguous native purchase/preference are read-recovered from receipt, never re-purchased', async () => {
+test('ambiguous purchase can recover from receipt; ambiguous preference blocks all new sends without retry', async () => {
   for (const options of [{ lostPurchase: true }, { lostPreference: true }, { lostPurchase: true, noReceipt: true }]) {
     const f = fixture(options), app = createServer(config, f.overrides), id = crypto.randomUUID()
     try {
@@ -131,9 +133,10 @@ test('ambiguous native purchase/preference are read-recovered from receipt, neve
       assert.equal((await send(app, 7, 'text', id)).statusCode, 409)
       assert.equal(f.models.length, 0)
       const next = await send(app)
-      assert.equal(next.statusCode, options.noReceipt ? 409 : 200, next.body)
+      const blocked = options.noReceipt || options.lostPreference
+      assert.equal(next.statusCode, blocked ? 409 : 200, next.body)
       assert.equal(f.calls.filter(c => c.path === '/api/subscription/balance/pay').length, 1)
-      assert.equal(f.models.length, options.noReceipt ? 0 : 1)
+      assert.equal(f.models.length, blocked ? 0 : 1)
       if (options.lostPreference) assert.equal(f.calls.filter(c => c.path.endsWith('/preference')).length, 1)
     } finally { await app.close() }
   }
@@ -237,4 +240,113 @@ test('real SDK loop uses two chats and one image while consuming one send and on
   assert.deepEqual(calls, { chat: 2, image: 1 })
   assert.equal((await status(app)).chat.remaining, 3)
   assert.equal((await status(app)).image.remaining, 0)
+})
+
+test('one-send consent pays only exhausted categories and preserves the unused image benefit', async () => {
+  const f = fixture(), app = createServer(config, f.overrides)
+  try {
+    // Consent cannot force a wallet debit while the relevant trial remains.
+    assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 200)
+    for (let i = 0; i < 3; i++) assert.equal((await send(app)).statusCode, 200)
+    assert.ok(f.models.every(m => m.preference === 'subscription_only'))
+    const before = f.calls.length
+    assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 402)
+    assert.ok(f.calls.slice(before).every(c => c.method === 'GET'))
+    f.accounts.get(7).quota = 10000
+    assert.equal((await send(app)).statusCode, 402, '充值不等于付款授权')
+    const id = crypto.randomUUID(), result = await send(app, 7, 'with image', id, 'chat', '/api/studio/runs', true)
+    assert.equal(result.statusCode, 200, result.body)
+    assert.deepEqual(result.json().data.fundingSelection, { chat: 'wallet', image: 'trial' })
+    assert.deepEqual(f.models.slice(-3).map(m => m.preference), ['wallet_only', 'subscription_only', 'wallet_only'])
+    const s = await status(app)
+    assert.deepEqual(s.chat, { limit: 4, remaining: 0, used: 4, held: 0 })
+    assert.deepEqual(s.image, { limit: 1, remaining: 0, used: 1, held: 0 })
+    const record = (await app.inject({ url: '/api/studio/requests/agent/' + id, headers: headers(7) })).json().data
+    assert.deepEqual(record.submissions.map(r => [r.modelKind, r.selectedFundingSource]), [['chat', 'wallet'], ['image', 'trial'], ['chat', 'wallet']])
+    assert.equal((await send(app, 7, 'with image', id, 'chat', '/api/studio/runs', true)).body, result.body)
+    assert.equal((await send(app, 7, 'with image', id)).statusCode, 409)
+    assert.equal((await send(app)).statusCode, 402)
+    const paidImage = await send(app, 7, 'image only', crypto.randomUUID(), 'image', '/api/studio/runs', true)
+    assert.equal(paidImage.statusCode, 200)
+    assert.equal(f.models.at(-1).preference, 'wallet_only')
+    assert.equal(f.calls.filter(c => c.path === '/api/subscription/balance/pay').length, 1)
+    assert.equal(f.calls.filter(c => c.path === '/api/token/').length, 1)
+    assert.equal((await send(app, 8)).statusCode, 200)
+    assert.equal(f.models.at(-1).owner, 8)
+    assert.equal(f.models.at(-1).preference, 'subscription_only')
+  } finally { await app.close() }
+})
+
+test('omitted and false consent preserve earlier idempotency hashes; true is distinct and non-booleans rejected', async () => {
+  const f = fixture(), app = createServer(config, f.overrides), id = crypto.randomUUID()
+  try {
+    const result = await send(app, 7, 'text', id)
+    assert.equal((await send(app, 7, 'text', id, 'chat', '/api/studio/runs', false)).body, result.body)
+    assert.equal((await send(app, 7, 'text', id, 'chat', '/api/studio/runs', true)).statusCode, 409)
+    assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', 'true')).statusCode, 400)
+    const imageId = crypto.randomUUID(), payload = { prompt: 'fixture', model: 'image' }
+    const first = await app.inject({ method: 'POST', url: '/api/studio/images', headers: headers(7, imageId), payload })
+    const replay = await app.inject({ method: 'POST', url: '/api/studio/images', headers: headers(7, imageId), payload: { ...payload, payWithBalance: false } })
+    assert.equal(replay.body, first.body)
+    assert.equal(f.models.length, 2)
+  } finally { await app.close() }
+})
+
+test('unknown wallet preference blocks every new key across restart and even a matching read cannot unlock it', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gouo-paid-unknown-')), f = fixture({ failPreference: 'wallet_only' }), c = { ...config, ledgerPath: join(dir, 'requests.sqlite') }
+  let app = createServer(c, f.overrides)
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await send(app)).statusCode, 200)
+    f.accounts.get(7).quota = 10000
+    const id = crypto.randomUUID()
+    assert.equal((await send(app, 7, 'text', id, 'chat', '/api/studio/runs', true)).statusCode, 502)
+    await app.close(); app = createServer(c, f.overrides)
+    const before = f.calls.length
+    assert.equal((await status(app)).state, 'unavailable')
+    assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 409)
+    assert.equal((await send(app, 7, 'image only', crypto.randomUUID(), 'image')).statusCode, 409)
+    assert.ok(f.calls.slice(before).every(c => c.method === 'GET'))
+    assert.equal(f.models.length, 4)
+    const record = (await app.inject({ url: '/api/studio/requests/agent/' + id, headers: headers(7) })).json().data
+    assert.deepEqual(record.submissions, [])
+    // A late old handler can still write wallet_only after a read. No new send
+    // reaches the gateway, and another owner is unaffected.
+    f.preferences.set(7, 'wallet_only')
+    assert.equal((await send(app, 7, 'image only', crypto.randomUUID(), 'image')).statusCode, 409)
+    assert.equal((await send(app, 8)).statusCode, 200)
+  } finally { await app.close(); rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('paid consent never revives a disabled, expired, exhausted or broadened native token', async () => {
+  for (const tokenChange of [{ status: 2 }, { expired_time: 1 }, { remain_quota: 0 }, { unlimited_quota: true }, { cross_group_retry: true }]) {
+    const f = fixture(), app = createServer(config, f.overrides)
+    try {
+      for (let i = 0; i < 4; i++) assert.equal((await send(app)).statusCode, 200)
+      f.accounts.get(7).quota = 10000
+      Object.assign(f.tokens.get(7), tokenChange)
+      const before = f.calls.length
+      assert.equal((await send(app, 7, 'text', crypto.randomUUID(), 'chat', '/api/studio/runs', true)).statusCode, 403)
+      assert.equal(f.models.length, 4)
+      assert.ok(f.calls.slice(before).every(c => c.method === 'GET'))
+      assert.equal(f.calls.filter(c => c.path === '/api/token/').length, 1)
+    } finally { await app.close() }
+  }
+})
+
+test('ambiguous paid model records source intent and never retries or returns a trial benefit', async () => {
+  const f = fixture(), app = createServer(config, f.overrides)
+  try {
+    for (let i = 0; i < 4; i++) assert.equal((await send(app)).statusCode, 200)
+    f.accounts.get(7).quota = 10000
+    f.overrides.runAgent = async context => { await context.onGatewayRequest({ kind: 'chat', modelId: 'chat' }); throw new Error('fixture ambiguous paid response') }
+    // Overrides are read dynamically by the route.
+    const id = crypto.randomUUID()
+    assert.equal((await send(app, 7, 'text', id, 'chat', '/api/studio/runs', true)).statusCode, 500)
+    assert.equal((await send(app, 7, 'text', id, 'chat', '/api/studio/runs', true)).statusCode, 409)
+    const record = (await app.inject({ url: '/api/studio/requests/agent/' + id, headers: headers(7) })).json().data
+    assert.equal(record.status, 'unknown')
+    assert.equal(record.submissions[0].selectedFundingSource, 'wallet')
+    assert.deepEqual(record.attempts, [])
+    assert.equal((await status(app)).chat.used, 4)
+  } finally { await app.close() }
 })

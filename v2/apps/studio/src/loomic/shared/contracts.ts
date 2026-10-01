@@ -75,6 +75,7 @@ export const runCreateRequestSchema = z.object({
   sessionId: sessionIdSchema,
   conversationId: conversationIdSchema,
   prompt: z.string(),
+  payWithBalance: z.boolean().optional(),
   canvasId: canvasIdSchema.optional(),
   attachments: z.array(imageAttachmentSchema).optional(),
   imageGenerationPreference: imageGenerationPreferenceSchema.optional(),

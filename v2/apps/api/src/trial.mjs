@@ -36,9 +36,13 @@ export class Trial {
     this.db.prepare("UPDATE trial_grants SET subscription_id=?, status='active' WHERE owner=?").run(subscriptionId, owner)
   }
   unknownClaim(owner) { this.db.prepare("UPDATE trial_grants SET status='unknown' WHERE owner=? AND status='claiming'").run(owner) }
-  assertAvailable(owner, benefit) {
+  remaining(owner, benefit) {
+    if (!(benefit in limits)) throw new StudioError('试用类型无效', 500)
     const count = this.db.prepare('SELECT COUNT(*) AS n FROM trial_reservations WHERE owner=? AND benefit=?').get(owner, benefit).n
-    if (count >= limits[benefit]) throw new StudioError(`${benefit === 'chat' ? '聊天' : '生图'}试用次数已用完，请前往 New API 钱包充值；未自动转为收费请求`, 402)
+    return Math.max(0, limits[benefit] - count)
+  }
+  assertAvailable(owner, benefit) {
+    if (this.remaining(owner, benefit) === 0) throw new StudioError(`${benefit === 'chat' ? '聊天' : '生图'}试用次数已用完，请充值后明确勾选本次使用 New API 余额`, 402)
   }
   reserve(owner, requestKind, key, benefit) {
     if (!(benefit in limits)) throw new StudioError('试用类型无效', 500)

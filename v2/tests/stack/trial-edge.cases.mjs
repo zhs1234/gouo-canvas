@@ -68,7 +68,7 @@ function compose(...args) {
   })
 }
 // Raw path requests avoid the URL client's dot-segment normalization.
-function request(path, method = 'GET', headers = {}) {
+function request(path, method = 'GET', headers = {}, body) {
   return new Promise((resolvePromise, reject) => {
     const req = httpRequest({ hostname: '127.0.0.1', port, path, method,
       headers: { Origin: origin, ...headers }, timeout: 10_000 }, response => {
@@ -76,7 +76,7 @@ function request(path, method = 'GET', headers = {}) {
       response.on('end', () => resolvePromise({ status: response.statusCode, body }))
     })
     req.on('timeout', () => req.destroy(new Error('edge request timed out')))
-    req.on('error', reject); req.end()
+    req.on('error', reject); req.end(body)
   })
 }
 try {
@@ -86,7 +86,7 @@ try {
   assert.equal(status.status, 200); assert.equal(JSON.parse(status.body).success, true)
   assert.equal((await request('/api/user/self')).status, 401)
   assert.notEqual((await request('/api/user/auth/refresh', 'POST')).status, 404)
-  assert.notEqual((await request('/api/user/self', 'PUT')).status, 404)
+  assert.equal((await request('/api/user/self', 'DELETE')).status, 401)
   for (const path of ['/sign-in', '/sign-up', '/forgot-password', '/reset', '/otp', '/oauth/github', '/profile', '/security', '/keys', '/wallet', '/usage-logs']) {
     assert.equal((await request(path)).status, 200, path)
   }
@@ -106,6 +106,14 @@ try {
   }
   for (const path of ['/api/user/setting', '/api/subscription/self/preference']) {
     assert.equal((await request(path, 'PUT')).status, 404, path)
+  }
+  const profileWriteAliases = ['/api/user/self/', '/api//user/self', '/api/user/./self', '/api/user/x/../self',
+    '/api/user/%73elf', '/api/user/self%2f', '/api/user/self//', '/api/user/self;language=zh']
+  for (const path of profileWriteAliases) for (const method of ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
+    assert.equal((await request(path, method)).status, 404, method + ' ' + path)
+  }
+  for (const method of ['HEAD', 'POST', 'PUT', 'PATCH', 'OPTIONS']) {
+    assert.equal((await request('/api/user/self', method)).status, 404, method + ' exact self')
   }
   assert.equal((await request('/api/status', 'POST')).status, 404)
   assert.equal((await request('/sign-in', 'POST')).status, 404)
@@ -144,6 +152,13 @@ try {
   }
   const account = JSON.parse((await request('/api/user/self', 'GET', fixtureHeaders)).body)
   assert.equal(account.headers.authorization, fixtureHeaders.Authorization, 'registered native account API retains its authentication')
+  // The echo upstream returns 200 for every request, so a 404 proves these
+  // language/sidebar writes never reached it, rather than failing native auth.
+  for (const body of [{ language: 'zh' }, { sidebar_modules: '{}' }, { username: 'fixture', password: 'fixture' }]) {
+    for (const path of ['/api/user/self', '/api/user/self?language=zh', ...profileWriteAliases]) {
+      assert.equal((await request(path, 'PUT', { ...fixtureHeaders, 'Content-Type': 'application/json' }, JSON.stringify(body))).status, 404, path)
+    }
+  }
   console.log('Explicit Nginx echo contract passed: HTML/static upstream sees no caller credentials or query; native account API still receives its Bearer. This is not live plugin/MFA verification.')
 } catch (error) {
   console.error(await compose('logs', '--no-color', '--tail', '25').catch(() => ''))

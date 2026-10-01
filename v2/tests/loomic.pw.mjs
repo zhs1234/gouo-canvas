@@ -224,6 +224,7 @@ test('native image panel switches verified model parameters, preserves reference
     calls++
     account.billing.balance = 99.56; account.billing.spent = 0.44; account.billing.requestCount = 1
     const payload = route.request().postDataJSON()
+    expect(payload.payWithBalance).toBe(true)
     expect(payload.model).toBe('fixture-image-b')
     expect(payload.quality).toBe('max')
     expect(payload.aspectRatio).toBe('1:1')
@@ -250,6 +251,7 @@ test('native image panel switches verified model parameters, preserves reference
   await page.locator('input[type="file"][multiple]').last().setInputFiles({ name: 'local-reference.png', mimeType: 'image/png', buffer: png })
   await expect(page.locator('img[alt="ref"]')).toHaveCount(1)
   await page.getByPlaceholder('今天我们要创作什么').fill('本地协议 fixture，不调用付费模型')
+  await page.getByRole('checkbox', { name: '本次允许使用本人 New API 余额' }).last().check()
   await page.getByRole('button', { name: '生成图片', exact: true }).click()
   await expect(page.getByPlaceholder('今天我们要创作什么')).toHaveCount(0)
   const scene = await exportScene(page)
@@ -303,4 +305,51 @@ test('switching projects aborts the previous transport so late results cannot en
     expect((await exportScene(page)).elements.filter(e => !e.isDeleted)).toHaveLength(0)
     await expect(page.getByText('本地隔离测试，不调用模型', { exact: true })).toHaveCount(0)
   } finally { release() }
+})
+
+test('Loomic Agent uses balance consent once and omits it on the next send', async ({ page }) => {
+  const account = await mockAccount(page); account.active = true
+  await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { generationEnabled: true, models: [{ id: 'fixture-chat', displayName: '测试聊天', kind: 'chat', accessible: true, provider: 'Fixture' }] } } }))
+  const payloads = []
+  await page.route('**/api/studio/runs/stream', route => {
+    const payload = route.request().postDataJSON(); payloads.push(payload)
+    const base = { runId: payload.runId, timestamp: new Date().toISOString() }
+    return route.fulfill({ contentType: 'text/event-stream', body: [{ ...base, type: 'message.delta', delta: '同意测试回复' + payloads.length }, { ...base, type: 'run.completed' }].map(e => 'data: ' + JSON.stringify(e) + '\n\n').join('') })
+  })
+  await page.goto('./')
+  await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
+  const checkbox = page.getByRole('checkbox', { name: '本次允许使用本人 New API 余额' })
+  await expect(checkbox).not.toBeChecked()
+  for (let i = 1; i <= 3; i++) {
+    if (i === 2) await checkbox.check()
+    await page.getByLabel('输入消息', { exact: true }).fill('同意测试' + i)
+    await page.getByLabel('输入消息', { exact: true }).press('Enter')
+    await expect(page.getByText('同意测试回复' + i, { exact: true })).toBeVisible()
+    await expect(checkbox).not.toBeChecked()
+  }
+  expect(payloads[0]).not.toHaveProperty('payWithBalance')
+  expect(payloads[1].payWithBalance).toBe(true)
+  expect(payloads[2]).not.toHaveProperty('payWithBalance')
+})
+
+test('image client omits false consent and never retries failed paid sends', async ({ page }) => {
+  const account = await mockAccount(page); account.active = true
+  await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { generationEnabled: false, models: [] } } }))
+  const bodies = []
+  await page.route('**/api/studio/images', route => {
+    bodies.push(route.request().postDataJSON())
+    return route.fulfill({ status: 503, json: { success: false, message: 'Explicit fixture failure' } })
+  })
+  await page.goto('./')
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
+  await page.evaluate(async () => {
+    const api = await import('/studio/src/loomic/lib/server-api.ts')
+    for (const value of [undefined, false, true]) {
+      try { await api.generateImageDirect('local:7', 'fixture', { model: 'fixture', ...(value === undefined ? {} : { payWithBalance: value }) }) } catch {}
+    }
+  })
+  expect(bodies).toHaveLength(3)
+  expect(bodies[0]).not.toHaveProperty('payWithBalance')
+  expect(bodies[1]).not.toHaveProperty('payWithBalance')
+  expect(bodies[2].payWithBalance).toBe(true)
 })

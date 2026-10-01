@@ -37,7 +37,7 @@ async function native(config, authorization, path, fetcher, body, method = body 
   return result.data
 }
 
-export async function inspectTrialFunding(config, authorization, account, fetcher) {
+export async function inspectTrialFunding(config, authorization, account, fetcher, { checkPreference = true } = {}) {
   if (!config.trial) return { state: 'unavailable', reason: '注册试用尚未启用' }
   if (!Number.isSafeInteger(account?.id) || account.id < config.trial.minUserId || account.status !== 1) return { state: 'ineligible', reason: '账号不符合本次新用户试用条件' }
   const plans = await native(config, authorization, '/api/subscription/plans', fetcher)
@@ -62,7 +62,7 @@ export async function inspectTrialFunding(config, authorization, account, fetche
   const history = self.all_subscriptions.filter(row => row.subscription.plan_id === config.trial.planId)
   if (history.length > 1) throw new StudioError('原生试用订阅重复，需核对', 503)
   const billingPreference = self.billing_preference
-  if (!['subscription_first', 'subscription_only'].includes(billingPreference)) return { state: 'unavailable', billingPreference, reason: '请到原生订阅页面选择订阅优先或仅订阅扣费，再领取或使用试用' }
+  if (checkPreference && !['subscription_first', 'subscription_only'].includes(billingPreference)) return { state: 'unavailable', billingPreference, reason: '请到原生订阅页面选择订阅优先或仅订阅扣费，再领取或使用试用' }
   if (self.subscriptions.some(row => row.subscription.plan_id !== config.trial.planId && row.subscription.status === 'active' && row.subscription.end_time > Date.now() / 1000)) return { state: 'unavailable', billingPreference, reason: '账号还有其他活跃订阅，无法确认本次试用资金来源，请联系管理员' }
   if (!history.length) {
     if (self.subscriptions.some(row => row.subscription.plan_id === config.trial.planId)) throw new StudioError('原生试用历史与活跃订阅不一致', 502)
@@ -75,8 +75,8 @@ export async function inspectTrialFunding(config, authorization, account, fetche
   const active = self.subscriptions.filter(row => row.subscription.id === sub.id)
   if (active.length !== 1 || Object.entries(sub).some(([key, value]) => active[0].subscription[key] !== value)) throw new StudioError('原生活跃试用资金无法完整核验', 502)
   if (!Number.isSafeInteger(config.userTokenQuotaCap) || config.userTokenQuotaCap <= 0) throw new StudioError('原生试用令牌上限尚未批准', 503)
-  return { state: billingPreference === 'subscription_only' ? 'active' : 'needs-preference', subscriptionId: sub.id, tokenQuota: Math.min(remaining, config.userTokenQuotaCap), billingPreference,
-    ...(billingPreference === 'subscription_first' ? { reason: '试用需选择仅订阅扣费，以避免期限到期后自动转钱包；请通过领取入口确认' } : {}) }
+  return { state: !checkPreference || billingPreference === 'subscription_only' ? 'active' : 'needs-preference', subscriptionId: sub.id, tokenQuota: Math.min(remaining, config.userTokenQuotaCap), billingPreference,
+    ...(checkPreference && billingPreference === 'subscription_first' ? { reason: '试用需选择仅订阅扣费，以避免期限到期后自动转钱包；请通过领取入口确认' } : {}) }
 }
 
 export async function purchaseTrial(config, authorization, fetcher) {

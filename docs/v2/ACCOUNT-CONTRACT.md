@@ -2,6 +2,8 @@
 
 本轮核对固定 SHA `0aec08fee811ec6136828fda790551b49e410301`，不升级上游、不创建账号或重写 IAM。Studio 账号面板优先链接同源 New API 原生 UI，复用其 Turnstile、密码加密、登录验证、MFA、passkey、注册和密码恢复流程。基础密码表单只适用于未启用额外验证的实例；不声称完整实现上游登录流程。
 
+2026-10-01 prepared trial edge 的新增限制：全部公开 PUT `/api/user/self` 暂时拒绝，原生 language/sidebar setting 快照更新可覆盖账号付款偏好，造成试用误扣钱包。资料/安全页面读取仍可用，资料与密码提交须 T1.3 安全适配器；不要把页面可打开等同于修改完整可用。该 override 尚未应用到日常8080，原生日常入口保持原配置，详见 TRIAL.md。
+
 已核对 `web/src/routes/` 与 `web/src/features/auth/hooks/use-auth-redirect.ts`：
 
 | 操作 | 原生路由 |

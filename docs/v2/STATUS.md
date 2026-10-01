@@ -1,5 +1,39 @@
 # 实际交付与验证状态
 
+## T1.2 充值后单次余额授权与严格资金来源（2026-10-01，默认关闭）
+
+在 T1 `7195190` 上继续当前 `codex/registration-trial`，包含合并基线 `abe46c4`。三位 gpt-6.1-sol 子智能体分别负责前端、固定 Native 合同/实际隔离验收和独立安全审查；开发文件与证据留在本项目。没有 main 改动、push、merge 或部署。
+
+三个实际发送入口新增默认未选的「本次允许使用本人 New API 余额」：assistant-ui、Loomic Agent 和独立图片面板。一次发送捕获后清除，账号/会话切换清除，不持久化。服务端仅 true 参与 hash；false/省略兼容旧请求，同 ID 改付款意图409。聊天和图片分别优先剩余试用，耗尽类别只有明确本次授权及本人正原生余额才用钱包；免费图片继续保留。聊天工具循环固定本次聊天来源，不会占到最后一次后转付费；付费调用不占试用次数。
+
+每个真实 fetch 前核验资金，并选择/确认严格 subscription_only 或 wallet_only。Native 固定源码确认：请求开始时从账号缓存读取 setting，再把所选 funding 对象留在该调用中完成结算/退款，不在结算时重新读取全局偏好；因此单 API/同 owner 串行的混合 wallet→trial→wallet 可行。偏好依然是账号全局状态，不能让其它内部消费者并行改变。新增 `model_submissions` 持久化调用前类别/模型/来源意图，响应 `fundingSelection` 只表示选择，不假称已扣费；实际消费以 Native request_id 日志为准。
+
+新增 `funding_writes` 是非货币安全屏障：写前 pending，单次 PUT 后读确认才 confirmed；未知写/确认失败/重启 pending 均 unknown，阻止本人所有新 ID/类别的生成。即使 GET 一致也不解锁，旧超时处理器仍可能晚到。旧 ledger 首次升级保守导入 unknown claim 或没有响应证据的 unknown run；可能包括旧纯模型失败，明确列为保守阻断。建表/导入/恢复已同事务，初始化失败释放进程锁。当前没有对外解锁或自动解锁，后续操作员恢复须先证明旧写已结束。未知模型继续同 ID 禁重试，不退款。
+
+源码审查发现原生 PUT `/api/user/self` 的 language/sidebar 全 setting 快照能覆盖付款偏好；prepared edge 拒绝全部公开该 PUT，包含 query/规范化/编码别名。资料/密码提交暂待安全适配，读取保留。该 prepared override 没有应用到日常8080。现有有限本人token不会因充值自动续额/续期；计划禁用/变更也会保守阻断当前付费路径，独立钱包生命周期仍待后续合同。
+
+本阶段实际命令与结果：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run check` | 类型检查、**14/14**领域/探测、**102/102**API、生产构建通过（10.97秒）；既有chunk大小警告，无新增依赖/锁文件变更。日志 `.local/paid-continuation-check.log` |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **56/56**（1.6分钟），新一次同意/键盘/退出隔离/三入口省略false与无重试，以及完整旧聊天/画布/恢复回归。日志 `.local/paid-continuation-browser.log` |
+| 独立 `funding-state.cases.mjs` | **7/7**，含PUT前持久化、写/确认异常、restart、晚到写/read不解锁、双户隔离、strict值与迁移事务失败重试 |
+| `node tests/stack/trial-native.cases.mjs` | **两次完整退出0**。真实固定 Native＋当前Studio＋明确本机模型替身，14次真实Native relay/0真实供应商费用；最终 `.local/native-trial-2H4N1n/evidence.json` |
+| `node tests/stack/trial-edge.cases.mjs` | **退出0**，真实Nginx＋固定Native空库和明确echo契约，公开PUT self及变体不达上游，旧拒绝/凭据剥离/内部401继续通过 |
+| `npm run test:stack` | **退出0**，固定真实Native未初始化安全边界、personal契约替身2/2、fresh普通用户契约替身1/1。日志 `.local/paid-continuation-stack.log`；仅清理本次随机资源 |
+| prepared Compose `config --quiet` /脚本 `node --check`/`git diff --check` | 通过；不是启用/部署 |
+
+真实隔离 Native 结果：第一个钱包0用户原T1六条subscription日志560quota不变；第二用户四次纯聊天后image仍1，第五次未授权402。仅本次Native SQLite seed明确合成兑换码，再通过真实 `/api/user/topup`兑换10000quota；随后付费chat→免费image→付费summary实际日志来源为wallet→subscription→wallet，后续付费image为wallet。第二用户八笔消费1072，其中订阅548、钱包524，最终钱包9476、有限token498928，原token ID/有效期不变。Native HTTP与SQLite余额/订阅/token/日志/兑换码归属一致。每次provider收到请求即只读检查Studio意图已持久化；重放不增加调用、改同意409、跨户404。wallet日志缺失wallet_quota_deducted，未误当0，以实际钱包减少和真实账单核验。
+
+保留本轮失败及修复：旧试用单测首次23/24，是原断言允许未知偏好GET恢复；按新安全合同改成409后通过，再新增5项集成反例16/16。独立审查发现首升级CREATE之后/seed之前崩溃会跳过导入，改同事务并增加中断回滚测试。前端一次误在根运行typecheck得到无script，回到v2通过；未改根package。新Native付费验收首次即通过，补调用前意图证据后第二次完整通过。没有删除失败测试或放宽资金/令牌条件。
+
+主 `gouo-v2` 三容器仍healthy，只发布127.0.0.1:8080；Studio health200，真实Native setup仍未初始化(status/root_init=false)，生成及试用默认关闭。没有真实账号、余额、渠道、合规或安全设置改动。隔离资金/价格/兑换码是合成测试数据，供应商是本机替身，不能当作商户支付、真实渠道质量、成本上界或完整账户修改验收。
+
+下一任务 **T1.3**：安全资料/密码适配、未知偏好人工核对恢复和独立钱包生命周期；真实计划/入口按用户决定暂不启用。完整产品与最终28场景多智能体用户模拟尚未完成，QA_ACCEPTANCE仍是待执行计划。下文T1“付费续用未实现”和历史验证数字保留为当时状态，以本节为准。
+
+---
+
 ## T1 原生试用资金与四聊一图（2026-10-01，默认关闭）
 
 用户确认 4 次聊天按用户发送计，有限工具循环仍占一次；生图工具另占 1 次图片。批准实现 New API 原生一次性零价有限试用计划与隔离测试，真实金额/期限/入口暂不启用。功能分支 `codex/registration-trial` 由 `codex/local-environment-p0` 派生，包含 `codex/new-api-v2` 的合并基线 `abe46c4`。无 main 改动、push、merge 或部署。

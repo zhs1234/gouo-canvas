@@ -192,3 +192,38 @@ test('existing project selection inserts saved asset without creating a project'
   await expect(page).toHaveURL(new RegExp(`canvas-lab\\?project=${projectId}&asset=${assetId}`))
   expect(creates).toBe(0); expect(state.generated()).toBe(0)
 })
+
+test('balance consent is omitted by default, captured once and cleared on logout', async ({ page }) => {
+  const { threads } = await setup(page)
+  const payloads = []
+  await page.route('**/api/studio/runs/stream', route => {
+    const payload = route.request().postDataJSON()
+    payloads.push(payload)
+    const events = [{ type: 'message.delta', delta: '回复' + payloads.length }, { type: 'run.completed' }]
+    threads[0].runs.push({ runId: payload.runId, prompt: payload.prompt, status: 'completed', events })
+    return route.fulfill({ contentType: 'text/event-stream', body: events.map(e => 'data: ' + JSON.stringify({ ...e, runId: payload.runId }) + '\n\n').join('') })
+  })
+  await page.goto('./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+  const checkbox = page.getByRole('checkbox', { name: '本次允许使用本人 New API 余额' })
+  await expect(checkbox).not.toBeChecked()
+  for (let i = 1; i <= 3; i++) {
+    if (i === 2) { await checkbox.focus(); await page.keyboard.press('Space'); await expect(checkbox).toBeChecked() }
+    await page.getByLabel('消息', { exact: true }).fill('发送' + i)
+    await page.getByLabel('消息', { exact: true }).press('Enter')
+    await expect(page.getByText('回复' + i, { exact: true })).toBeVisible()
+    await expect(checkbox).not.toBeChecked()
+  }
+  expect(payloads[0]).not.toHaveProperty('payWithBalance')
+  expect(payloads[1].payWithBalance).toBe(true)
+  expect(payloads[2]).not.toHaveProperty('payWithBalance')
+  await checkbox.check()
+  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  await page.getByLabel('用户名', { exact: true }).fill('studio-user')
+  await page.getByLabel('密码', { exact: true }).fill('test-password')
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await page.getByRole('button', { name: '关闭账号', exact: true }).click()
+  await expect(checkbox).not.toBeChecked()
+  expect(payloads).toHaveLength(3)
+})

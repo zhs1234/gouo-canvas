@@ -1,5 +1,6 @@
 // 来源 assistant-ui f008537，MIT；保留官方布局，Studio 适配见 UI-STARTER.md。
 "use client";
+import type { ReactNode } from 'react';
 
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
@@ -126,10 +127,11 @@ export type ThreadProps = {
   disabled?: boolean;
   onStop?: () => void;
   onSubmit?: () => void;
+  composerFooter?: ReactNode;
 };
 
 const EMPTY_COMPONENTS: ThreadComponents = {};
-const StudioControls = createContext<{ disabled?: boolean; onStop?: () => void; onSubmit?: () => void }>({});
+const StudioControls = createContext<{ disabled?: boolean; onStop?: () => void; onSubmit?: () => void; composerFooter?: ReactNode }>({});
 
 const ThreadComponentsContext =
   createContext<ThreadComponents>(EMPTY_COMPONENTS);
@@ -170,12 +172,12 @@ const ThreadHistorySkeleton: FC = () => (
 
 export const Thread: FC<ThreadProps> = ({
   components = EMPTY_COMPONENTS,
-  autoFocus = true, disabled, onStop, onSubmit,
+  autoFocus = true, disabled, onStop, onSubmit, composerFooter,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
   return (
-    <StudioControls.Provider value={{ disabled, onStop, onSubmit }}><ThreadComponentsContext.Provider value={components}>
+    <StudioControls.Provider value={{ disabled, onStop, onSubmit, composerFooter }}><ThreadComponentsContext.Provider value={components}>
       <ThreadRoot isEmpty={isEmpty} autoFocus={autoFocus} />
     </ThreadComponentsContext.Provider></StudioControls.Provider>
   );
@@ -435,6 +437,7 @@ const Composer: FC<{ autoFocus: boolean }> = ({ autoFocus }) => {
             aria-label="消息"
           />
           <ComposerAction />
+          {controls.composerFooter}
         </div>
     </ComposerPrimitive.Root>
   );

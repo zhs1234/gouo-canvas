@@ -1,5 +1,6 @@
 "use client";
 
+import { BalanceConsent, useBalanceConsent } from "../../../BalanceConsent";
 import { ImageUp, Lock, Zap } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -43,6 +44,7 @@ export function ImageGeneratorPanel({
   canvasScrollZoom,
   onClose,
 }: ImageGeneratorPanelProps) {
+  const balanceConsent = useBalanceConsent(accessToken + ":" + elementId);
   const [prompt, setPrompt] = useState(data.prompt);
   const [model, setModel] = useState(data.model);
   const [aspectRatio, setAspectRatio] = useState(data.aspectRatio);
@@ -159,6 +161,7 @@ export function ImageGeneratorPanel({
     if (!prompt.trim() || loading) return;
     if (currentModel?.accessible !== true) { setError("尚未配置并验证可用图片模型"); return; }
 
+    const payWithBalance = balanceConsent.consume();
     // Cancel any previous in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -178,7 +181,7 @@ export function ImageGeneratorPanel({
       const result = await generateImageDirect(
         accessTokenRef.current,
         prompt.trim(),
-        { model, ...(aspectRatio ? { aspectRatio } : {}), ...(quality ? { quality } : {}), inputImages: refImages.map(image => image.dataUrl) }, controller.signal,
+        { model, ...(payWithBalance ? { payWithBalance: true } : {}), ...(aspectRatio ? { aspectRatio } : {}), ...(quality ? { quality } : {}), inputImages: refImages.map(image => image.dataUrl) }, controller.signal,
       );
 
       // Check if this generation was cancelled while awaiting
@@ -237,6 +240,7 @@ export function ImageGeneratorPanel({
     }
   }, [
     prompt,
+    balanceConsent.consume,
     loading,
     model,
     aspectRatio,
@@ -280,6 +284,8 @@ export function ImageGeneratorPanel({
           {error}
         </div>
       )}
+
+      <BalanceConsent checked={balanceConsent.checked} change={balanceConsent.change} disabled={loading} />
 
       {/* Bottom toolbar */}
       <div className="mt-1 flex flex-wrap gap-1 items-center justify-between">

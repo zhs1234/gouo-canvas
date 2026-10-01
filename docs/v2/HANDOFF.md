@@ -1,6 +1,6 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
-> 2026-10-01 最新交接优先于下文历史：PR #3 已合并，基线 `abe46c4`；本机环境提交 `1545e25`、`40338ea`，当前功能分支 `codex/registration-trial` 从该 V2 基线派生，没有从 main 开发。用户已批准持续开发和 4 次发送＋1 次生图试用；默认关闭的原生资金/非货币次数/UI/prepared edge 已接入，真实计划/入口未启用，详细进度见 STATUS 与 TRIAL。下一项 T1.2 是充值后明确付费续用，然后真实批准验收；最终安排多智能体用户模拟及问题统计。下文 draft PR、待合并、旧分支和旧下一步是历史记录。
+> 2026-10-01 最新交接优先于下文历史：PR #3 已合并，基线 `abe46c4`；本机环境提交 `1545e25`、`40338ea`，当前功能分支 `codex/registration-trial` 从该 V2 基线派生，没有从 main 开发。T1 提交 `7195190`，T1.2 默认关闭的一次发送余额授权、逐调用来源与未知偏好屏障已接通，固定真实 Native＋本地供应商替身已验钱包→订阅→钱包及逐笔落盘。真实计划/入口未启用，详细进度见 STATUS 与 TRIAL。下一项 T1.3 为安全资料/密码适配、未知偏好人工恢复及独立钱包生命周期；最终安排多智能体用户模拟及问题统计。下文 draft PR、待合并、旧分支和旧下一步是历史记录。
 
 > 最新用户要求：用户继续授权账号管理、计费、新普通用户注册后可用性收尾，优先级 CI→fresh 普通用户闭环→原生账号→计费异常对账→移动恢复→最终 CI。简明计划见 TASKS.md，固定契约见 ACCOUNT-CONTRACT.md，每用户模式与真实执行阻塞见 USER-BILLING.md。真实配置默认关闭，未设赠额/售价/支付，父负责最终合并。
 
@@ -27,7 +27,7 @@
 
 ```sh
 git fetch origin
-git switch codex/qa-relay-owner-idempotency
+git switch codex/registration-trial
 docker compose --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --build --wait
 ```
 

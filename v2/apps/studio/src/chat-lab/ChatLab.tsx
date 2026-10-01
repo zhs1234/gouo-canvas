@@ -6,6 +6,7 @@ import { useAuth } from '../loomic/lib/auth-context'
 import { fetchCatalog } from '../loomic/lib/gateway'
 import { request } from '../api'
 import Account from '../Account'
+import { BalanceConsent, useBalanceConsent } from '../BalanceConsent'
 import { TrialPanel } from '../TrialPanel'
 import { useTrial } from '../trial'
 import { BillingPanel } from '../loomic/components/billing-panel'
@@ -36,18 +37,19 @@ function StudioShell({ list, toolbar, footer, children }: { list?: ReactNode; to
 function LabRuntime({ model, imageModel, thread, reload }: { model: string; imageModel?: string; thread: SavedThread; reload: () => void }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const consent = useBalanceConsent(String(user?.id) + ":" + thread.id)
   const lifetime = useRef(new AbortController())
   useEffect(() => { lifetime.current = new AbortController(); return () => lifetime.current.abort() }, [])
   const [needsRefresh, setNeedsRefresh] = useState(false)
   const finish = useCallback((completed: boolean) => { if (completed) reload(); else { setNeedsRefresh(true); void queryClient.invalidateQueries({ queryKey: ['trial', user?.id] }) } }, [reload, queryClient, user?.id])
-  const adapter = useMemo(() => studioAdapter(model, imageModel, thread.id, () => lifetime.current.signal, finish), [model, imageModel, thread.id, finish])
+  const adapter = useMemo(() => studioAdapter(model, imageModel, thread.id, () => lifetime.current.signal, finish, consent.consume), [model, imageModel, thread.id, finish, consent.consume])
   const initialMessages = useMemo(() => restoreMessages(thread), [thread])
   const runtime = useLocalRuntime(adapter, { initialMessages })
   const [stopped, setStopped] = useState(false)
   const unknown = thread.runs.some(run => run.status === 'unknown')
   const unresolved = thread.runs.some(run => run.status === 'running' || run.status === 'unknown')
   return <AssistantRuntimeProvider runtime={runtime}><div className="flex h-full flex-col">
-    <div className="flex-1 min-h-0"><Thread disabled={!model || unresolved || needsRefresh} onSubmit={() => setStopped(false)} onStop={() => setStopped(true)} components={{ ToolFallback: ({ toolName, result }) => <details open className="rounded-lg border p-3 text-sm"><summary>{toolName === 'generate_image' ? '图片生成工具' : toolName}</summary>{result ? String(result) : '结果待确认'}</details> }} /></div>
+    <div className="flex-1 min-h-0"><Thread composerFooter={<BalanceConsent checked={consent.checked} change={consent.change} disabled={!model || unresolved || needsRefresh} />} disabled={!model || unresolved || needsRefresh} onSubmit={() => setStopped(false)} onStop={() => setStopped(true)} components={{ ToolFallback: ({ toolName, result }) => <details open className="rounded-lg border p-3 text-sm"><summary>{toolName === 'generate_image' ? '图片生成工具' : toolName}</summary>{result ? String(result) : '结果待确认'}</details> }} /></div>
     {stopped && <p role="status" className="studio-chat-notice">已停止接收，保留部分内容。供应商任务和费用可能继续，请查看账号记录。</p>}
     {(unresolved || needsRefresh) && <div className="studio-chat-notice"><p>{unknown ? '服务中断后任务结果未知，无法自动恢复。可新建会话继续；原任务费用仍需核对，刷新仅查询。' : '任务记录或费用待刷新确认；刷新仅查询，不会重新生成。'}</p><Button variant="outline" onClick={reload}>刷新任务记录</Button></div>}
   </div></AssistantRuntimeProvider>

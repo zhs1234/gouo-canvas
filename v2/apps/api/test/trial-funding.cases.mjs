@@ -49,6 +49,16 @@ test('wallet preferences and other active funding never silently charge a differ
   for (const preference of ['wallet_first', 'wallet_only']) assert.equal((await inspectTrialFunding(config, 'Bearer fixture', account, fixture([sub], preference).fetcher)).state, 'unavailable')
   assert.equal((await inspectTrialFunding(config, 'Bearer fixture', account, fixture([sub, { ...sub, id: 6, plan_id: 4 }]).fetcher)).state, 'unavailable')
 })
+test('facts-only inspection permits four valid preferences without selecting or widening trial funds', async () => {
+  for (const preference of ['subscription_first', 'wallet_first', 'subscription_only', 'wallet_only']) {
+    const f = fixture([sub], preference)
+    assert.deepEqual(await inspectTrialFunding(config, 'Bearer fixture', account, f.fetcher, { checkPreference: false }), { state: 'active', subscriptionId: 5, tokenQuota: 2000, billingPreference: preference })
+    assert.ok(f.calls.every(call => call.method === 'GET'))
+  }
+  for (const s of [{ ...sub, user_id: 11 }, { ...sub, allow_wallet_overflow: true }]) await assert.rejects(inspectTrialFunding(config, 'Bearer fixture', account, fixture([s], 'wallet_only').fetcher, { checkPreference: false }))
+  assert.equal((await inspectTrialFunding(config, 'Bearer fixture', account, fixture([{ ...sub, end_time: 1 }], 'wallet_only').fetcher, { checkPreference: false })).state, 'expired')
+  await assert.rejects(inspectTrialFunding(config, 'Bearer fixture', account, fixture([sub], 'invalid').fetcher, { checkPreference: false }))
+})
 test('purchase performs exactly one native operation; ambiguous and rejected outcomes never retry', async () => {
   for (const outcome of ['success', 'network', 'denied']) {
     const calls = []

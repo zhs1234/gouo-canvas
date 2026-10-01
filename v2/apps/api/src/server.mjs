@@ -9,14 +9,16 @@ import { runAgent, runImage } from './agent.mjs'
 import { userModels, userRelay } from './user-relay.mjs'
 import { billingSummary, settledUsage } from './billing.mjs'
 import { Trial } from './trial.mjs'
-import { inspectTrialFunding, purchaseTrial, selectTrialFunding } from './trial-funding.mjs'
+import { inspectTrialFunding, purchaseTrial } from './trial-funding.mjs'
+import { readFundingAccount } from './funding.mjs'
+import { FundingState } from './funding-state.mjs'
 
-const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
+const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), payWithBalance: z.boolean().optional(), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
 const runBody = z.object({ threadId: z.string().uuid().optional(), runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
   sessionId: z.string().max(100), conversationId: z.string().max(100), canvasId: z.string().max(100).optional(),
   attachments: z.array(z.object({ url: z.string().max(12 * 1024 * 1024), mimeType: z.string(), assetId: z.string(), source: z.enum(['upload', 'canvas', 'canvas-ref']), name: z.string().optional() })).max(4).optional(),
   imageGenerationPreference: z.object({ mode: z.enum(['auto', 'manual']), models: z.array(z.string()).max(1) }).optional(),
-  videoGenerationPreference: z.unknown().optional(), mentions: z.array(z.unknown()).max(20).optional(),
+  videoGenerationPreference: z.unknown().optional(), mentions: z.array(z.unknown()).max(20).optional(), payWithBalance: z.boolean().optional(),
   history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(8000).optional(), contentBlocks: z.array(z.unknown()).max(100).nullable().optional() }).passthrough()).max(12).optional(),
   canvasContext: z.array(z.record(z.unknown())).max(80).optional(),
 }).strict()
@@ -24,10 +26,13 @@ export function createServer(config, overrides = {}) {
   const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, requestTimeout: 150_000 })
   const fetcher = overrides.fetch ?? fetch
   const ledger = new Ledger(config.ledgerPath)
-  let trial
-  try { trial = new Trial(ledger.db, config.trial) } catch (error) { ledger.close(); throw error }
-  const history = new History(ledger.db)
-  const projects = new Projects(ledger.db, history)
+  let trial, history, fundingState, projects
+  try {
+    trial = new Trial(ledger.db, config.trial)
+    history = new History(ledger.db)
+    fundingState = new FundingState(ledger.db)
+    projects = new Projects(ledger.db, history)
+  } catch (error) { ledger.close(); throw error }
   const busy = new Set()
   app.addHook('onClose', async () => ledger.close())
   app.setErrorHandler((error, _request, reply) => reply.code(error.status ?? error.statusCode ?? 500).send({ success: false, message: error instanceof StudioError ? error.message : error.validation ? '请求格式无效' : '创作服务请求失败' }))
@@ -60,35 +65,29 @@ export function createServer(config, overrides = {}) {
   app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(request.studioConfig ?? config, request.headers.authorization, request.studioAccount, fetcher) }))
   app.get('/api/studio/trial', async request => {
     if (!config.trial) return { success: true, data: trial.summary(request.studioUser, 'disabled', '注册试用尚未开放，请联系管理员') }
-    const funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+    if (fundingState.blocked(request.studioUser)) return { success: true, data: { ...trial.summary(request.studioUser, 'unavailable', '账号付款偏好写入结果待核对，已暂停生成；刷新不会重试写入，请联系管理员'), pendingReconciliation: true } }
+    const funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher, { checkPreference: false })
     const grant = trial.grant(request.studioUser)
     if (grant && grant.plan_id !== config.trial.planId) throw new StudioError('试用计划已变化，原领取记录不能重置，请联系管理员', 503)
     const pendingClaim = grant && (grant.status !== 'active' || funding.state === 'eligible')
-    const state = pendingClaim ? 'pending' : funding.state === 'needs-preference' ? 'unavailable' : funding.state
+    const state = pendingClaim ? 'pending' : funding.state
     const summary = trial.summary(request.studioUser, state, funding.reason ?? (pendingClaim ? '原生领取记录待核对，刷新仅查询；不会自动重复领取' : funding.state === 'eligible' ? '发送第一条消息时开通 4 次聊天和 1 次生图试用' : '一次发送计作一次聊天，生图工具另占一次生图；未知结果保留次数'))
-    if (summary.state === 'exhausted') summary.message = '试用次数已用完，请前往 New API 钱包充值；不会自动转为收费请求'
+    if (summary.state === 'exhausted') summary.message = '试用次数已用完，请前往 New API 钱包充值，并勾选本次允许使用本人余额；每次发送需重新授权'
     if (pendingClaim) { summary.chat.remaining = 0; summary.image.remaining = 0 }
     return { success: true, data: summary }
   })
-  async function ensureTrial(request) {
+  async function inspectFunding(request) {
     const owner = request.studioUser
     const grant = trial.grant(owner)
     if (grant && grant.plan_id !== config.trial.planId) throw new StudioError('试用计划已变化，原领取记录不能重置，请联系管理员', 409)
-    let funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+    const funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher, { checkPreference: false })
     if (grant?.subscription_id && funding.subscriptionId && grant.subscription_id !== funding.subscriptionId) throw new StudioError('原生试用领取证据变化，未修改扣费偏好或重新领取', 409)
+    return funding
+  }
+  async function ensureTrial(request) {
+    const owner = request.studioUser
+    let funding = await inspectFunding(request)
     if (funding.state === 'active') { trial.activate(owner, funding.subscriptionId); return funding }
-    if (funding.state === 'needs-preference') {
-      // Native receipt establishes that the purchase already succeeded. This
-      // explicit send may select subscription-only after a read; no re-purchase.
-      if (!trial.grant(owner)) trial.beginClaim(owner)
-      try {
-        await selectTrialFunding(config, request.headers.authorization, fetcher)
-        funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
-        if (funding.state !== 'active') throw new StudioError('试用扣费偏好待确认，未发出模型请求', 502)
-        trial.activate(owner, funding.subscriptionId)
-        return funding
-      } catch (error) { trial.unknownClaim(owner); throw error }
-    }
     if (funding.state !== 'eligible') throw new StudioError(funding.reason ?? '试用资金不可用，请前往 New API 原生页面核对', 402)
     // Persist purchase intent before the native, non-idempotent HTTP operation.
     // An ambiguous result is recovered only from the native receipt, never by
@@ -96,10 +95,7 @@ export function createServer(config, overrides = {}) {
     if (!trial.beginClaim(owner)) throw new StudioError('试用领取结果待确认，请核对原生订阅记录；未自动重复领取', 409)
     try {
       await purchaseTrial(config, request.headers.authorization, fetcher)
-      // A free send must never silently fall through to a wallet charge if
-      // its subscription expires between validation and native pre-consumption.
-      await selectTrialFunding(config, request.headers.authorization, fetcher)
-      funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+      funding = await inspectFunding(request)
       if (funding.state !== 'active') throw new StudioError('试用资金领取结果待确认，未发出模型请求', 502)
       trial.activate(owner, funding.subscriptionId)
       return funding
@@ -158,6 +154,8 @@ export function createServer(config, overrides = {}) {
     const key = request.headers['idempotency-key']
     if (typeof key !== 'string' || !/^[\w-]{8,100}$/.test(key)) throw new StudioError('缺少有效请求标识', 400)
     const owner = request.studioUser
+    // Preserve hashes for sends created before balance consent was introduced.
+    if (payload.payWithBalance !== true) delete payload.payWithBalance
     const begun = ledger.begin(owner, kind, key, payload, busy.has(owner))
     if (begun.conflict) throw new StudioError('同一请求标识不能修改参数', 409)
     if (begun.blocked) throw new StudioError('该请求正在处理或结果待确认，不能重复提交；请检查网关记录', 409)
@@ -170,6 +168,7 @@ export function createServer(config, overrides = {}) {
     busy.add(owner)
     let transportStarted = false, externalStarted = false
     try {
+      fundingState.assertReady(owner)
       let context = config
       const introductory = Boolean(config.trial && owner >= config.trial.minUserId)
       if (config.relayCredentialMode === 'user-token') {
@@ -177,24 +176,60 @@ export function createServer(config, overrides = {}) {
         context = await userModels(config, request.headers.authorization, request.studioAccount, fetcher)
       }
       const benefit = validate(context)
-      if (introductory) trial.assertAvailable(owner, benefit)
+      const fundingSelection = {}
+      const choose = modelKind => {
+        if (!['chat', 'image'].includes(modelKind)) throw new StudioError('模型请求类型无效', 500)
+        if (!fundingSelection[modelKind]) {
+          if (trial.remaining(owner, modelKind) > 0) fundingSelection[modelKind] = 'trial'
+          else if (payload.payWithBalance === true) fundingSelection[modelKind] = 'wallet'
+          else trial.assertAvailable(owner, modelKind)
+        }
+        return fundingSelection[modelKind]
+      }
+      let funding
+      if (introductory) {
+        const selected = choose(benefit)
+        if (selected === 'wallet') {
+          const facts = await inspectFunding(request)
+          if (!['active', 'expired'].includes(facts.state) || trial.grant(owner)?.status !== 'active') throw new StudioError('试用领取记录待核对，未转为余额付款', 409)
+          const account = await readFundingAccount(config, request.headers.authorization, owner, fetcher)
+          if (account.group !== request.studioAccount.group) throw new StudioError('账号分组已变化，请刷新模型权限后重新发送', 409)
+          if (account.quota <= 0) throw new StudioError('本人 New API 余额不足，请充值后重新授权本次发送', 402)
+          request.studioAccount = account
+        }
+      }
       externalStarted = true
-      const funding = introductory ? await ensureTrial(request) : undefined
+      if (introductory && fundingSelection[benefit] === 'trial') funding = await ensureTrial(request)
       if (config.relayCredentialMode === 'user-token') context = await userRelay(context, request.headers.authorization, request.studioAccount, fetcher, funding)
       if (payload.threadId) history.begin(owner, payload)
       transport?.start()
       transportStarted = Boolean(transport)
       const requests = []
-      const result = await action({ ...context, ...(introductory ? { onGatewayRequest: async info => {
-        const current = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
-        if (current.state !== 'active') throw new StudioError(current.reason ?? '试用资金状态变化，未发送模型请求', 402)
-        trial.reserve(owner, kind, key, info.kind)
-      } } : {}), ...((transport || payload.threadId) ? { onEvent: event => {
+      const result = await action({ ...context, onGatewayRequest: async info => {
+        fundingState.assertReady(owner)
+        let selected = 'account'
+        if (introductory) {
+          selected = choose(info.kind)
+          if (selected === 'trial') {
+            const current = await ensureTrial(request)
+            if (current.state !== 'active') throw new StudioError(current.reason ?? '试用资金状态变化，未发送模型请求', 402)
+          } else {
+            const current = await readFundingAccount(config, request.headers.authorization, owner, fetcher)
+            if (current.group !== request.studioAccount.group) throw new StudioError('账号分组已变化，未继续发送模型请求', 409)
+            if (current.quota <= 0) throw new StudioError('本人 New API 余额不足，未继续发送模型请求', 402)
+          }
+          await fundingState.select(config, request.headers.authorization, owner, selected === 'trial' ? 'subscription_only' : 'wallet_only', fetcher)
+          if (selected === 'trial') trial.reserve(owner, kind, key, info.kind)
+        }
+        // Persist before fetch: no response or request ID still leaves intent.
+        ledger.submit(owner, kind, key, info, selected)
+      }, ...((transport || payload.threadId) ? { onEvent: event => {
         if (payload.threadId) history.event(owner, key, event)
         transport?.event(event)
       } } : {}), onGatewayResponse: info => { ledger.gateway(owner, kind, key, info); requests.push(info) } })
       const usage = await settledUsage(config, request.headers.authorization, requests, fetcher)
       if (usage) result.usage = usage
+      if (introductory) result.fundingSelection = fundingSelection
       // 会话终态与幂等结果同时提交，避免恢复时看到不一致的完成状态。
       ledger.db.exec('BEGIN')
       try {

@@ -35,6 +35,7 @@ import {
   MessageMentionPicker,
   type MessageMentionPickerItem,
 } from "./canvas-image-picker";
+import { BalanceConsent, useBalanceConsent } from "../../BalanceConsent";
 import { ChatInput } from "./chat-input";
 import { ChatMessage } from "./chat-message";
 import { ChatSkills } from "./chat-skills";
@@ -107,6 +108,8 @@ export function ChatSidebar({
     initialSessionId,
     onSessionChange,
   });
+
+  const balanceConsent = useBalanceConsent(accessToken + ":" + activeSessionId);
 
   // ── Stream event handler (extracted hook, shared between send & reconnect) ──
   const { applyStreamEvent } = useChatStream(updateSessionMessages);
@@ -332,6 +335,7 @@ export function ChatSidebar({
     ) => {
       const currentSessionId = activeSessionIdRef.current;
       if (streaming || !currentSessionId) return;
+      const payWithBalance = balanceConsent.consume();
 
       // Merge explicitly-attached images with auto-sensed canvas selection images
       let currentAttachments = attachmentsOverride ?? readyAttachments;
@@ -547,6 +551,7 @@ export function ChatSidebar({
               sessionId: currentSessionId,
               conversationId: canvasId,
               prompt: text,
+              ...(payWithBalance ? { payWithBalance: true } : {}),
               canvasId,
               accessToken: accessTokenRef.current,
               ...(currentAttachments.length > 0
@@ -612,6 +617,7 @@ export function ChatSidebar({
     },
     [
       streaming,
+      balanceConsent.consume,
       canvasId,
       applyStreamEvent,
       updateSessionMessages,
@@ -825,6 +831,7 @@ export function ChatSidebar({
             onClose={() => setAtQuery(null)}
           />
         )}
+        <BalanceConsent checked={balanceConsent.checked} change={balanceConsent.change} disabled={streaming || sessionsLoading || messagesLoading || !activeSessionId} />
         <ChatInput
           ref={chatInputRef}
           onSend={handleSend}

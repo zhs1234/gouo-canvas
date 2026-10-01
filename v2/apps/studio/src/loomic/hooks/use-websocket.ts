@@ -47,12 +47,13 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
         const model = payload.model ?? models[0]?.id
         if (!model) throw new Error('尚未配置可用的对话模型，请先接通 New API 对话渠道')
         if (!models.some(m => m.id === model)) throw new Error('所选对话模型当前不可用，请重新选择 Agent 模型')
-        const { accessToken: _discard, ...safePayload } = payload
+        const { accessToken: _discard, payWithBalance, ...safePayload } = payload
         submitted = true
         const result = await requestStream('/api/studio/runs/stream', {
           method: 'POST', signal: controller.signal,
           headers: { 'Idempotency-Key': runId },
           body: JSON.stringify({ ...safePayload, model, runId,
+            ...(payWithBalance === true ? { payWithBalance: true } : {}),
             history: messages.slice(-12).filter(m => m.role === 'assistant' || m.content !== payload.prompt),
             canvasContext: canvas.canvas.content.elements.filter(e => !e.isDeleted).slice(0, 80).map(e => ({ id: e.id, type: e.type, text: e.text, x: e.x, y: e.y, width: e.width, height: e.height })),
           }),

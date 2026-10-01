@@ -40,16 +40,18 @@ export function restoreMessages(thread: SavedThread): ThreadMessageLike[] {
   })
 }
 // 线程上下文由服务端按 New API owner 读取，不上传客户端拼接的历史。
-export function studioAdapter(model: string, imageModel: string | undefined, threadId: string, getLifetime: () => AbortSignal, finish: (completed: boolean) => void): ChatModelAdapter {
+export function studioAdapter(model: string, imageModel: string | undefined, threadId: string, getLifetime: () => AbortSignal, finish: (completed: boolean) => void, consumeBalanceConsent: () => boolean = () => false): ChatModelAdapter {
   return { async *run({ messages, abortSignal }) {
     if (!model) throw new Error('请先配置可用的聊天模型')
     const lifetime = getLifetime()
     const runId = crypto.randomUUID()
+    const payWithBalance = consumeBalanceConsent()
     let completed = false
     try {
       const response = await requestStream('/api/studio/runs/stream', {
         method: 'POST', signal: AbortSignal.any([abortSignal, lifetime]), headers: { 'Idempotency-Key': runId },
         body: JSON.stringify({ runId, model, threadId,
+          ...(payWithBalance ? { payWithBalance: true } : {}),
           prompt: messages[messages.length - 1].content.filter(p => p.type === 'text').map(p => p.text).join('\n'),
           sessionId: threadId, conversationId: threadId,
           ...(imageModel ? { imageGenerationPreference: { mode: 'manual', models: [imageModel] } } : {}),

@@ -73,10 +73,11 @@ export async function fetchModels() {
 export async function fetchImageModels(): Promise<{ models: ImageModelInfo[] }> { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'image') } }
 export async function fetchVideoModels(): Promise<{ models: VideoModelInfo[] }> { return { models: (await fetchCatalog()).models.filter(m => m.kind === 'video') } }
 export async function fetchWorkspaceSkills(_owner: string) { return { skills: [] as Array<{ id: string; name: string; slug: string; description: string; enabled: boolean }> } }
-export async function generateImageDirect(_owner: string, prompt: string, options?: { model?: string; aspectRatio?: string; quality?: string; inputImages?: string[] }, signal?: AbortSignal) {
+export async function generateImageDirect(_owner: string, prompt: string, options?: { model?: string; aspectRatio?: string; quality?: string; inputImages?: string[]; payWithBalance?: boolean }, signal?: AbortSignal) {
+  const { payWithBalance, ...imageOptions } = options ?? {}
   let usage: StudioUsage | undefined
   try {
-    const result = await request<GenerateImageResponse & { usage?: StudioUsage }>('/api/studio/images', { method: 'POST', signal, headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ prompt, ...options }) })
+    const result = await request<GenerateImageResponse & { usage?: StudioUsage }>('/api/studio/images', { method: 'POST', signal, headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ prompt, ...imageOptions, ...(payWithBalance === true ? { payWithBalance: true } : {}) }) })
     usage = result.usage
     return result
   } finally { billingChanged(_owner, usage) }
