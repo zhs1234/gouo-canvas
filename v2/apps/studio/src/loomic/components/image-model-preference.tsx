@@ -157,6 +157,7 @@ export function ImageModelPreferencePopover({
               <button
                 key={m.id}
                 type="button"
+                disabled={m.accessible !== true}
                 onClick={() => currentToggleModel(m.id)}
                 className={`group flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors ${
                   selected ? "bg-accent/10 hover:bg-accent/15" : "hover:bg-muted"
@@ -175,7 +176,7 @@ export function ImageModelPreferencePopover({
                     {m.accessible !== true && (
                       <span className="inline-flex items-center gap-0.5 rounded px-1 py-px text-[9px] font-semibold uppercase leading-tight tracking-wider bg-muted text-muted-foreground">
                         <Lock className="h-2.5 w-2.5" />
-                        {m.minTier ?? "PRO"}
+                        不可用
                       </span>
                     )}
                   </span>

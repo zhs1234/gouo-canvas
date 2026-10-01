@@ -1,5 +1,7 @@
 # New API 原生账号入口与固定协议
 
+> 2026-10-01 T1.10 补验：全新隔离真实 Native UI 走注册/登录→Studio 本人显示名→原生 security proof/改密→旧会话拒绝/当前 Cookie 恢复。第一次 CLI browser 在提交边界关闭，确认真实改密后才发第二个明确不同意图（非重放）；第二 verifyPOST/selfPUT 各一次200，同当前 context 完整刷新 refresh/self200。旧第二 context 和额外登录遭原生429，仍partial，未改限流或反复登录。RO auth_version3、旧三会话 password_changed 撤销、当前一活跃，0模型/资金。实际报告和限制见 QA_ACCEPTANCE_REPORT 顶部；不能用只读 metadata 替代未直接观察的浏览器401。
+
 > 2026-10-01 T1.9增量：所有Studio页共享账户菜单/设置，私有 `PUT /api/studio/profile` 只允许本人显示名称，复用既有严格Native桥/只读确认，不改账号或资金权威。退出前真实保存、不reload；sameowner面板与单tab非秘密意图保护未知结果；登录/退出晚响应epoch核验。实际新随机固定Native、UI/整栈结果和限制见 [ACCOUNT-SETTINGS.md](ACCOUNT-SETTINGS.md)、STATUS顶部。prepared原精确selfPUT仍转Studio资料/密码proof白名单，未解封Nativesetting写。
 
 核对固定 SHA `0aec08fee811ec6136828fda790551b49e410301`，不升级上游或重写 IAM。日常实例未创建账号；隔离 Native 测试使用独立合成账号。Studio 账号面板优先链接同源 New API 原生 UI，复用其 Turnstile、密码加密、登录验证、MFA、passkey、注册和密码恢复流程。基础密码表单只适用于未启用额外验证的实例；不声称完整实现上游登录流程。

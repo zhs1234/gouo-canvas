@@ -40,20 +40,19 @@ export function AgentModelSelector({ compact }: { compact?: boolean } = {}) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Fetch available models
+  // Reopening the picker reads current permissions, retaining an unavailable
+  // explicit choice rather than turning it into an automatic replacement.
   useEffect(() => {
+    let active = true;
     fetchModels()
       .then((data) => {
+        if (!active) return;
         setModels(data.models);
         setLoaded(true);
       })
-      .catch(() => {});
-  }, []);
-
-  // Remove obsolete image selections only after the chat catalog has loaded.
-  useEffect(() => {
-    if (loaded && model && !models.some((m) => m.id === model)) setModel(null);
-  }, [loaded, model, models, setModel]);
+      .catch(() => { if (active) { setModels([]); setLoaded(true); } });
+    return () => { active = false; };
+  }, [open]);
 
   // Close on outside click
   useEffect(() => {
@@ -84,7 +83,8 @@ export function AgentModelSelector({ compact }: { compact?: boolean } = {}) {
 
   const isActive = model !== null;
   const selectedModel = models.find((m) => m.id === model);
-  const displayLabel = selectedModel ? selectedModel.name : "Agent";
+  const unavailable = loaded && model !== null && !selectedModel;
+  const displayLabel = selectedModel ? selectedModel.name : unavailable ? "所选模型不可用" : "Agent";
 
   // Auto-positioning popover (above or below based on available space)
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
@@ -152,6 +152,7 @@ export function AgentModelSelector({ compact }: { compact?: boolean } = {}) {
             <div className="mb-2 px-2 text-xs font-medium text-muted-foreground">
               Agent Model
             </div>
+            {unavailable && <p role="status" className="px-2 pb-2 text-xs">所选对话模型当前不可用，请重新选择；不会自动改用其他模型。</p>}
             {/* Auto option */}
             <button
               type="button"

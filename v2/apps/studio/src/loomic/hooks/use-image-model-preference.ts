@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { useAuth } from "../lib/auth-context";
 import type { ImageGenerationPreference } from "@loomic/shared";
 
 const STORAGE_KEY = "loomic:image-model-preference";
@@ -22,15 +23,18 @@ function emitChange() {
 // Cache parsed result — useSyncExternalStore requires stable references
 let cachedRaw: string | null = null;
 let cachedPreference: ImageModelPreference = defaultPreference;
+let cachedKey: string | undefined;
 
-function getSnapshot(): ImageModelPreference {
+function getSnapshot(key: string): ImageModelPreference {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw !== cachedRaw) {
-      cachedRaw = raw;
-      cachedPreference = raw
+    const raw = localStorage.getItem(key);
+    if (raw !== cachedRaw || key !== cachedKey) {
+      const next = raw
         ? normalizePreference(JSON.parse(raw) as Partial<ImageModelPreference> & { model?: string })
         : defaultPreference;
+      cachedKey = key;
+      cachedRaw = raw;
+      cachedPreference = next;
     }
     return cachedPreference;
   } catch {
@@ -67,12 +71,15 @@ function normalizePreference(
 }
 
 export function useImageModelPreference() {
-  const preference = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const { user } = useAuth();
+  const key = `${STORAGE_KEY}:local:${user?.id ?? 'guest'}`;
+  const snapshot = useCallback(() => getSnapshot(key), [key]);
+  const preference = useSyncExternalStore(subscribe, snapshot, getServerSnapshot);
 
   const setPreference = useCallback((next: ImageModelPreference) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(key, JSON.stringify(next));
     emitChange();
-  }, []);
+  }, [key]);
 
   const setMode = useCallback(
     (mode: "auto" | "manual") => {

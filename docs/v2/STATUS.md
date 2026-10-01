@@ -1,5 +1,32 @@
 # 实际交付与验证状态
 
+## T1.10 模型选择失权保护与原生安全子项（2026-10-01）
+
+基于 T1.9 `602a2d1`，继续在 `codex/registration-trial` 和当前项目内开发。三位 gpt-6.1-sol 子智能体分别实现与独立复核、只读路径审查和真实浏览器操作。本轮修正 Q23–Q25：本人明确选择 B 后，即使 A 仍可用，也不因目录失权、倒序或同 SPA 页面往返改成 A；Loomic 偏好按 owner 分键；不可用图片候选禁止新选并显示“不可用”。累计去重 **25 项修正，P1 10 项/P2 15 项，未证实 P0**。具体行为、证据范围和现存限制见 [MODEL-SELECTION.md](MODEL-SELECTION.md) 与 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。
+
+ChatLab 新增“刷新可用模型”只读入口，读取中/失败/已选模型失权均禁止新发送。原地刷新保留输入、历史、原图和原请求 runtime；失权清本次余额同意，恢复同 ID 不自动恢复同意或发送。选择只在本人 QueryClient 内存保存，只对 `chat-lab-selection` 关闭五分钟回收；完整 document reload 重新建立初次默认，未新增未发送输入跨路由持久化。Loomic 保留明确失权 ID，transport fresh 权限核验仍在 POST 前拒绝；本人显式 Auto 保留。旧无归属 localStorage 值不迁入任何账号也不删除；新增 scoped 图片 JSON 缓存先解析再一次提交，损坏值重复读取也不返回另一 owner 的对象。没有新增跨标签页 preference 实时同步合同。
+
+新 opt-in `start-selection` 隔离验收提供明确标记的 A/B 本地聊天/图片替身；`model-permission` 只允许该随机 fixture 的两个 B 模型和 enabled/blocked，事务中保持 users/tokens/subscriptions/preconsume/logs 哈希不变。普通环境、主 A 模型、未知状态三个负例均在 Docker mutation 前拒绝，control 文件不变。此前首次辅助命令的错误表名在 UPDATE 前失败，事务回滚；修正为固定上游实际表名后再验，原失败保留。这个工具不适用于日常或生产权限。
+
+真实固定 Native 两模型环境 `57675`：先复现旧版 B 经项目库往返 fresh 目录变 A；该基线同时卸载组件，不能单独证明仍挂载的刷新竞态。新主选择 bundle 同页刷新分别证明聊天/图片失权不换 A、输入保留、清同意并禁发，本人重选恢复；随后不刷新旧目录，只点击一次发送，实际 Studio POST403、仍 B、不重放。根只读持久证据确认 provider/model logs/token/subscription/grant/reservation/submission/funding/renewal 均 0，仅一个空 thread，run/request 为 0。主选择真实 UI 验证后新增的损坏缓存和 GC 修复由最终 F 回归验证，没有重新登录 Native 重做原步骤。
+
+真实固定 Native 安全环境 `57659`：注册、登录、Studio 单次显示名修改和两次不同的合成密码意图实际操作。第一次提交附近 CLI browser 关闭，不重放；独立旧 context refresh401，旧密码拒绝、新密码接受。确认第一次改密后执行第二个明确不同的新意图，verifyPOST200/selfPUT200 各一次；同一当前 context 完整 reload 后 refresh200/self200 并恢复身份。第二旧 context 和额外最终登录收到429后停止；这两项不冒称401或最终旧/新密码配对已验。RO metadata 显示 auth_version3、旧 version1 一条/version2 两条 password_changed revoked、current3 active1；quota/used/request_count0。**B7 仍 partial**，未直接观测的会话不能靠元数据或新登录代替，见 [ACCOUNT-CONTRACT.md](ACCOUNT-CONTRACT.md)。
+
+| 最终实际命令 | 结果及范围 |
+| --- | --- |
+| `npm run check` | **exit0，51领域/157API、类型检查、build13.62秒**；保留既有第三方 chunk 警告。`.local/t110-check-final.log` |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **143/143，3.9分钟，exit0**。包含 partial 失权/pending/恢复/倒序、390px、owner absent/corrupt、虚拟时钟跨五分钟 GC 反例。`.local/t110-e2e-final.log` |
+| `npm run test:stack` | **exit0**：真实固定 Native 未初始化边界，personal 明确契约替身2/2（11.6秒），fresh user-token 明确契约替身1/1（4.1秒）；自身随机资源自动清理。`.local/t110-stack-final.log` |
+| fixture 管理反例 / `git diff --check` | 三个无授权范围的变更在 mutation 前拒绝；diff 检查 exit0。`.local/t110-permission-negative.json` |
+
+过程证据保留：首定向23例22通过/1测试按钮名称错误，修正后3/3；首次完整141例83通过/58失败，首控件缺失后5174 connection refused、监听已终止，根因未确定。显式管理自身 dev session 后141/141；新增损坏缓存反例后142/142；GC baseline1失败（实际 A）→fixed1通过，最后143/143。未删除授权/保存/资金断言，不把 CLI 关闭或监听终止计入产品问题数。完整 stack 与最终 source 一致，不等于真实付费模型或支付验收。
+
+两套新随机 Native/Studio 环境、卷与本轮 CLI sessions 已清理，报告/截图留存 `.local/t110-{security,selection}-report.json`、`.local/t110-evidence-summary.json`、`output/playwright/t110-*`；5174/3001 自身 dev listener 也已停止。旧 QA `53238/58438`、unknown/held、资金和旧模型请求未操作。
+
+日常只重构建 web 并 `up -d --wait --no-deps web`，exit0；`stack:status` 为 edge/studio/newApi ready，accountInitialized/generationEnabled false，三服务 healthy。Native ID `fcf367b723ca…`、StartedAt `2026-10-01T04:26:19.489050028Z`、binary SHA256 `a5fd598cc77e26ab2709305049fdd5fbbff722111be79f0ad89a493c3e094529` 与 Studio API ID 全部前后一致；setup/root_init false，实际 generation/trial/tokenRenewal false。证据 `.local/t110-preview-{before,after}.json`（最终13:42:32 UTC）；根随后在已有内置浏览器 guest 页完整 reload，确认最终刷新入口与共享侧栏可见，截图 `output/playwright/t110-main-chat.jpg`，没有主实例身份/业务提交。没有日常 Native/API 重启、上游 pin/安全设置/系统安装/依赖或锁变化、真实费用、push/merge/main 或生产部署。
+
+原28核心场景保持 **16通过/12partial/0未执行**，F16/12/0、N13/12/0、P0/0/13，真实商户支付未验；本轮限定 D5/B7 子项不增加整项计数。G1/G2 与真实计划/入口暂不启用决定继续有效。下一 **T1.11 双用户完整地址隔离验收**：在新随机 Native 环境，以同浏览器换户及独立 profiles 双向核验完整 thread/project/asset 地址与真实 owner API 拒绝；保留原图与 unknown，不以地址栏401代替已登录异户拒绝，发现确定问题再修正。整体成熟产品目标仍持续推进。
+
 ## T1.9 全页面账号菜单、设置与安全退出（2026-10-01）
 
 基于 T1.8 `e0b205d`，仍在 `codex/registration-trial`，当前项目内由三位gpt-6.1-sol子智能体与根协调。聊天、官方画布、项目库和原Loomic共用底部账户菜单及设置分栏，参考实际ChatGPT已登录/访客截图。Loomic原本地保存保留，顶部账号也开同一面板；设置不导航，使用已有BaseUI语义/焦点/手机抽屉与同owner keepMounted。资料/余额/试用/有限权限复用现有组件和本人Query，不复制未实现订阅或另造IAM/钱包。设计、接口、标签页边界见 [ACCOUNT-SETTINGS.md](ACCOUNT-SETTINGS.md)。

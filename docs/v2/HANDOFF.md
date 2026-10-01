@@ -1,5 +1,7 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
+> 2026-10-01 T1.10 最新：基于602a2d1，仍在codex/registration-trial和当前项目。ChatLab/Loomic明确模型失权不静默换默认；原地fresh目录保输入、清本次余额同意、禁发，本人重选恢复，owner偏好与损坏JSON缓存隔离，只对本人选择内存关闭五分钟GC。真实固定Native新随机环境验证旧版B→A与修复、旧目录唯一POST403/0provider；后续cache/GC增量由最终F回归验证。安全UI第二个不同改密意图当前context reload200恢复，旧context/额外登录429停止，B7仍partial。check51/157/build13.62秒、最终143/143浏览器3.9分钟和三阶段stack exit0；失败过程、范围与清理见STATUS顶部和QA_ACCEPTANCE_REPORT。累计25项修正（10P1/15P2），原28仍16/12/0，P/支付未验。仅更新日常web，Native/API ID/启动不变、主Native未初始化、真实generation/trial/renewal关闭；新随机资源与自身浏览器/dev已清理。模型选择合同见MODEL-SELECTION.md。下一T1.11新隔离双用户完整thread/project/asset地址与owner API矩阵，不动旧unknown/held/资金，不启用G1/G2或真实配置；后面下一T1.10均是历史。
+
 > 2026-10-01 T1.9最新：共享底部菜单/设置已接入全Studio工作页，资料/余额/试用/权限/安全分栏沿实际ChatGPT参考。sameowner keepMounted和标签页非秘密profile意图保护，严格私有profile接口，不改prepared边界；退出先真实保存、成功不reload、late登录/退出epoch防护，原生链接newtab。真实固定Native新profile与既有安全合同exit0、0模型/费用，非空token未验。三位独立访客实操确认原地账号/键盘/手机与原图导出，新增视觉/顶部遮挡/矮视口问题已修，最终命令/复验见STATUS顶部，不把临时CSS预览当部署成功。原28仍16/12/0，G1/G2未启用、主Native未初始化/真实开关关闭。下一T1.10隔离剩余F/N子项，保持真实资金/安全/供应商未启用。账户边界见ACCOUNT-SETTINGS.md；后面下一T1.9是历史。
 
 > 2026-10-01 T1.8 最新：默认聊天和全页面固定侧栏已实施，实际内置浏览器未登录/Edge已登录 ChatGPT 首页、账号菜单及设置均已查看截图。旧 id/session/query/hash 可恢复，导航/返回等待真实保存，失败留页可导出；显式删除和 owner 强制卸载的草稿安全已修，窄编辑器素材库按钮补验。最终回归以 STATUS 顶部为准，过程失败保留；原28仍16/12/0。日常只更新web，Native/API不重启、真实开关仍关闭。布局/路由/恢复边界见 WORKSPACE-NAVIGATION.md。用户进一步要求几乎所有页面及账号管理参考 ChatGPT，下一 T1.9 共享底部账号菜单与设置，保持 New API 唯一身份/金额；T1.8 当前旧账号弹层尚未统一，不能当成T1.9完成。后面旧默认画布/正在实施T1.8均是历史。
