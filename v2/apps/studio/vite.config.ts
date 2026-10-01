@@ -47,6 +47,8 @@ export default defineConfig(({ mode }) => {
   const target = env.GOUO_BACKEND_DEV_TARGET || 'http://127.0.0.1:3000'
   return {
     plugins: [react(), tailwindcss(), excalidrawAssets()], base: '/studio/', envDir: root,
+    // V2 使用 Tailwind 的 Vite 插件，禁止向上加载旧前端的 PostCSS 配置。
+    css: { postcss: { plugins: [] } },
     resolve: { alias: {
       '@loomic/shared': fileURLToPath(new URL('./src/loomic/shared/index.ts', import.meta.url)),
       '@': fileURLToPath(new URL('./src/loomic', import.meta.url)),

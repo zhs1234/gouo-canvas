@@ -22,11 +22,11 @@ const events = body => [{ type: 'run.started', runId: body.runId }, { type: 'mes
 
 test('history is New API owner scoped; completed run survives restart and replay never appends messages', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'gouo-history-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
   const path = join(dir, 'ledger.sqlite')
   let calls = 0
   const runAgent = async (_config, _model, body) => { calls++; return { events: events(body) } }
   let app = createServer(config(path), { fetch: auth, runAgent })
+  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }) })
   const id = await thread(app)
   const otherId = await thread(app, { authorization: 'Bearer other' })
   assert.equal((await get(app, 'threads')).json().data.items.length, 1)
@@ -37,7 +37,6 @@ test('history is New API owner scoped; completed run survives restart and replay
   assert.equal((await get(app, 'runs/' + body.runId, 'other')).statusCode, 404)
   await app.close()
   app = createServer(config(path), { fetch: auth, runAgent })
-  t.after(() => app.close())
   const run = (await get(app, 'runs/' + body.runId)).json().data
   assert.equal(run.status, 'completed')
   assert.equal(run.events[1].delta, 'saved answer')
@@ -82,7 +81,6 @@ test('history stores partial progress while running; busy ID stays reusable and 
 
 test('restart marks interrupted history unknown and cannot repeat its original request', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'gouo-history-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
   const path = join(dir, 'ledger.sqlite')
   let calls = 0
   const runAgent = async (context, _model, body) => {
@@ -91,6 +89,7 @@ test('restart marks interrupted history unknown and cannot repeat its original r
     throw new Error('fixture lost response')
   }
   let app = createServer(config(path), { fetch: auth, runAgent })
+  t.after(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }) })
   const id = await thread(app)
   const body = payload(id)
   assert.equal((await send(app, body)).statusCode, 500)
@@ -100,7 +99,6 @@ test('restart marks interrupted history unknown and cannot repeat its original r
   db.exec("UPDATE studio_runs SET status='running'; UPDATE requests SET status='running'")
   db.close()
   app = createServer(config(path), { fetch: auth, runAgent })
-  t.after(() => app.close())
   const run = (await get(app, 'runs/' + body.runId)).json().data
   assert.equal(run.status, 'unknown')
   assert.equal(run.events[0].delta, 'saved answer')

@@ -1,5 +1,35 @@
 # 实际交付与验证状态
 
+## Windows 本机 P0 环境准备（2026-10-01）
+
+从已经合并 PR #3 的 `abe46c4` 接手，干净工作树派生 `codex/local-environment-p0`；本轮没有切回旧 QA 分支、改 main、推送或部署。团队通读 V2 全部 19 份文档及根/中英旧产品/旧服务文档，并与实际路由和配置核对；旧“待合并”、Go 新业务位置和早期云项目边界按最新实现理解。当前为 Loomic 默认画布、assistant-ui 正式聊天、官方 Excalidraw 私有项目、Fastify/SQLite 和固定 New API rc.40；完整云库生命周期、Worker、订阅与生产门禁仍未完成。
+
+- 本机 Node **24.15.0** / npm **11.12.1**，Git **2.54.0.windows.1**；已有 Go **1.26.5** 不参与 V2 构建。只执行 V2 setup/npm ci，安装 876 包、审计 881 包，根/V2 锁文件未变。已有 `.env` 保留，核对生成关闭、无 relay 值，未读取或录入真实密钥。
+- 安装锁定 Playwright **1.63.0** 的 Chromium **1243 / 153.0.8010.12**。WSL **2.7.10.0**、虚拟化已就绪；官方 Docker Desktop **4.93.0** 安装器通过 SHA-256 与 Docker Inc. Authenticode，当前用户安装成功，WSL 数据根在 D 盘。正确用户路径已启动，Linux Engine **29.8.1**、Compose **5.5.1** 实际可用；没有自动接受协议、加入未知证书或关闭 TLS。
+- 干净 V2 构建首次误读根旧 PostCSS 配置并失败；Vite 增加内联空 PostCSS，保留已有 Tailwind 4 Vite 插件，独立构建恢复。API 首次 **61/63**，两项历史 SQLite 测试先删目录后关闭服务触发 Windows EPERM；调整 teardown 顺序，定向 **5/5**、全量 **63/63**。保留全部授权/重启/幂等断言。
+- 整栈脚本的 Windows `spawn('npx')` 可复现 ENOENT；改为 Node 直接调用现有 Playwright CLI 公开导出，版本/语法检查成功，参数与随机隔离/清理范围不变。
+- 完整浏览器前三轮分别 **49/50、48/50、49/50**，保留失败：裁剪在图片仍为占位符时执行、角手柄边缘命中不稳；Stop 提示先渲染而历史未写完；裁剪成功后重开又过早匹配旧自动保存提示。测试等待实际像素渲染、中心手柄 cursor、模式退出、本次裁剪只读落盘，以及流式终态写入完成。画布单文件 **9/9**，最终完整串行 **50/50**；生产交互/保存逻辑与原图、尺寸、恢复、隔离断言未变。落盘观察器曾有一轮括号语法错误，修正后实际运行通过；失败/成功 trace 在本机忽略的 `.reports/crop-debug/`。
+
+| 本机实际命令 | 结果 |
+| --- | --- |
+| `node v2/scripts/setup.mjs` | 成功，按现有锁文件 npm ci |
+| `npx playwright install chromium` | 成功 |
+| `npm run check` | 类型、14 领域/探测、63 API、生产构建全部通过 |
+| `npm run test:e2e -- --workers=1 --reporter=line` | 最终 **50/50** |
+| `npm ls --all` | 依赖树有效 |
+| `npm audit` / `npm audit --omit=dev` | 均 **0 vulnerabilities** |
+| `node scripts/check-model-config.mjs` | 非秘密目录全部 pending/disabled，通过；未连接模型 |
+| Docker 主栈/隔离 fixture+users `compose config --quiet` | 均通过 |
+| `npm run test:stack` | 三阶段通过：真实固定 New API 未初始化安全边界；personal 契约替身 **2/2**；fresh 普通用户契约替身 **1/1**。仅回收本次随机测试资源 |
+| 主 Compose `up --build --wait` / `node scripts/stack-status.mjs` | 三服务健康并保留运行；edge/studio/newApi ready，accountInitialized=false、generationEnabled=false |
+| `git diff --check` | 通过 |
+
+本机 Git 作者身份未配置，普通 `git commit` 首次被拒绝；本轮使用只对命令生效的 `Codex <codex@local.invalid>` 临时身份提交，没有代填用户姓名/邮箱。
+
+本机入口 **http://localhost:8080/studio/** 已启动，主服务仅回环发布，New API/Studio 使用各自新的命名卷；测试 fixture 未接入这个日常栈。安装路径、D 盘数据位置、日常启动/停止及热更新限制见 [LOCAL_ENVIRONMENT.md](LOCAL_ENVIRONMENT.md)。真实模型调用 **0**，未初始化真实账号、创建 token/渠道、设赠额/价格/支付；本轮环境准备不替代真实 New API 已初始化账号/供应商费用验收。下一任务：**B2 本机真实账号、普通用户路由与模型/费用验收收尾**，先由用户在原生界面安全录入，采购成本及付费测试需单独授权；B3 后续安排。
+
+---
+
 ## 新普通用户、原生账号和计费收尾（2026-09-30）
 
 先修复旧 UI CI：`569449c67eba4ea01b04af81df6e7dec518c0bdc` 的 push `36748136445`、PR `36748146849` 均 success。随后按用户新增要求完成默认关闭的每用户模式，未放开共享管理员 owner 限制，未升级 New API。

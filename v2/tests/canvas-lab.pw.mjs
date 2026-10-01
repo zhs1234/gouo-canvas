@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import sharp from 'sharp'
 
 async function openLab(page) {
   await page.route('**/api/**', route => route.fulfill({ status: 401, json: { success: false } }))
@@ -210,18 +211,33 @@ test('native image crop preserves original file data through export and reopen',
   const image = live(before)[0]
   await page.getByText('更多操作', { exact: true }).click()
   const center = await point(page, image.x + image.width / 2, image.y + image.height / 2)
+  // addFiles 可先显示占位符；必须等画布实际解码并绘出素材，原生裁剪才能使用图片缓存。
+  const sourcePixel = [...await sharp(Buffer.from(before.files[image.fileId].dataURL.split(',')[1], 'base64')).resize(1, 1).removeAlpha().raw().toBuffer()]
+  await expect.poll(async () => [...await sharp(await page.screenshot({ clip: { ...center, width: 1, height: 1 } })).removeAlpha().raw().toBuffer()]).toEqual(sourcePixel)
   await page.mouse.click(center.x, center.y)
   // 等待 SDK 选中图片后点击原生裁剪控件，避免按键先于选择状态生效。
   await page.getByRole('button', { name: 'Crop image', exact: true }).click()
   await expect(page.locator('.excalidraw .HintViewer')).toContainText('finish cropping')
-  await drag(page, await point(page, image.x + image.width + 4, image.y + image.height + 4), await point(page, image.x + image.width - 40, image.y + image.height - 20))
-  await page.keyboard.press('Enter')
+  const corner = await point(page, image.x + image.width, image.y + image.height)
+  await page.mouse.move(corner.x, corner.y)
+  await expect(page.locator('.excalidraw .interactive')).toHaveCSS('cursor', 'nwse-resize')
+  await drag(page, corner, await point(page, image.x + image.width - 40, image.y + image.height - 20))
+  await page.locator('.excalidraw').press('Enter')
+  await expect(page.locator('.excalidraw .HintViewer')).not.toContainText('finish cropping')
   const cropped = JSON.parse(await exported(page))
   expect(live(cropped)[0].crop).toBeTruthy()
   expect(live(cropped)[0].width).toBeLessThan(image.width)
   expect(cropped.files).toEqual(before.files)
   await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
+  // 状态可能仍是上一次自动保存的提示；只读确认本次裁剪已提交，再模拟重开。
+  await expect.poll(() => page.evaluate(async id => {
+    const db = await new Promise((resolve, reject) => { const request = indexedDB.open('gouo-canvas-lab-v1'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    try {
+      const raw = await new Promise((resolve, reject) => { const request = db.transaction('documents', 'readonly').objectStore('documents').get('local:guest:active'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+      return raw ? JSON.parse(raw).elements.find(element => element.id === id)?.crop : null
+    } finally { db.close() }
+  }, image.id)).toEqual(live(cropped)[0].crop)
   await page.reload()
   await page.getByText('更多操作', { exact: true }).click()
   await expect(page.getByRole('button', { name: '插入测试素材', exact: true })).toBeEnabled()

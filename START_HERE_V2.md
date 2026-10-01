@@ -14,6 +14,8 @@
 
 ## 启动
 
+Windows 本机环境的工具版本、安装位置、检查与启动说明见 [LOCAL_ENVIRONMENT.md](docs/v2/LOCAL_ENVIRONMENT.md)。2026-10-01 接手起点已包含 PR #3 合并；本轮真实命令结果以 STATUS.md 顶部为准，后文旧交接的“待合并”属于历史记录。
+
 选择 `zhs1234/gouo-canvas` 的 **v2** 分支，或从其派生的任务分支。工作树应包含本文件。
 
 ```sh

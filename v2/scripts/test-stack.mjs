@@ -2,7 +2,10 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
 import assert from 'node:assert/strict'
+
+const playwright = createRequire(import.meta.url).resolve('@playwright/test/cli')
 
 // 只管理本次创建的随机 Compose 项目，绝不接管已有实例或读取用户 .env。
 // 每阶段回收该项目自动命名的构建镜像；不清理全局缓存、用户镜像或历史卷。
@@ -58,13 +61,13 @@ try {
   console.log('Phase 2: explicit in-memory New API contract double, not real account/provider verification')
   await compose('build', ...buildArgs)
   await compose('up', '-d', '--wait', '--wait-timeout', '180')
-  await run('npx', ['playwright', 'test', '--config', 'tests/stack/playwright.config.mjs'])
+  await run(process.execPath, [playwright, 'test', '--config', 'tests/stack/playwright.config.mjs'])
   await compose('down', '-v', '--remove-orphans')
   userMode = true
   environment.GOUO_STACK_PHASE = 'users'
   console.log('Phase 3: fresh ordinary users, explicit zero balance and fixture-only funding, native per-user token contract')
   await compose('up', '-d', '--wait', '--wait-timeout', '180')
-  await run('npx', ['playwright', 'test', '--config', 'tests/stack/playwright.config.mjs'])
+  await run(process.execPath, [playwright, 'test', '--config', 'tests/stack/playwright.config.mjs'])
   console.log('Stack checks passed; no persistent credentials or paid calls were created')
 } catch (error) {
   // 此随机栈只含公开 fixture 或未初始化服务，输出诊断不涉及用户配置。
