@@ -1,5 +1,13 @@
 # 系统打通：实际进度
 
+## Agent 供应商完成证据校验（2026-10-02）
+
+固定Native源码的OpenAI stream helper会在上游不完整响应之后发送传输DONE；DONE不是模型完成证据。`agent.mjs`复用ChatOpenAI实际聚合结果的handleLLMEnd，不另造SSE解析器；每次模型调用必须有stop/tool_calls，最终调用必须stop。缺少或非法终止原因标为真实run.failed，保留已有文本/工具原PNG；费用recorded/unconfirmed，已外发试用占用仍held，未做释放/退款。未完成规划在图片工具和后续gateway fetch之前拦截，maxRetries仍0。
+
+新增`apps/api/test/stream-terminal.cases.mjs`实际 **11/11** exit0，root独立复验0.775秒。正例覆盖batch/SSE及tool_calls→stop；反例覆盖无finish/DONE、length/content_filter/超长值、未知规划零图/零后续chat、未知总结原PNG保留。GET和精确原key replay返回已保存失败终态，不新模型或Native写；修改参数仍409。Ledger completed仅代表已保存终态，不把run.failed称生成成功。全部为实际SDK＋本地HTTP的F合同；未以供应商真实 paid 输出或仅DONE代替N/P验收。
+
+本增量未操作Native服务、历史资金/unknown/held或固定pin。接下来在本轮新随机Native加载代码后验收受控原响应丢失，完整T1.12/B3仍未完成。
+
 ## T1.12 离线接收修复，Native恢复仍在验收（2026-10-02）
 
 验收设施已实现：opt-in `tests/stack/browser-offline-native.cases.mjs`限定同工作区`.local`、新随机loopback/固定binary/普通合成账号/明确本地供应商，拒绝覆盖报告、日常8080及旧QA端口、外部卷或公开provider。每条真实生成仅发送一次，供应商受控等待后继续原请求；图片对比可见/持久/供应商原PNG hash。恢复前后读取Native资金安全投影、Studio全表及provider hash；CDP观察仅保存类型/ID/时序，不落正文或凭据。严格429即停、仅记录安全Retry-After，不自动重试。`--resume-completed`只接受已有真实断网和终态证据的同实例报告，另开profile只读恢复；原blocked报告保持hash不变，成功也标`continuousEndToEndPassed=false`。

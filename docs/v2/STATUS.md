@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## Agent 模型完成标记校验（2026-10-02）
+
+系统分支发现固定Native可能在供应商意外EOF后仍转发DONE。Agent现在通过现有SDK回调检查每一次实际调用的finish_reason：仅stop/tool_calls可继续，最终必须stop；缺失、length、content_filter或非法值保留已收内容和原图，记录真实run.failed、费用待确认，不自动再调用模型。未完成规划不能进入图片工具。11项新增SDK/本地HTTP合同测试实际11/11 exit0，含batch/SSE、正常工具链、未知规划/总结、原图保留、原ID GET和精确重放零新增模型/资金写。它们是F合同，固定Native的未知响应实测仍待完成。详见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。
+
 ## T1.12 离线接收修复，实际Native恢复待限流窗口（2026-10-02）
 
 系统分支共享事件流读取新增实际offline取消本机接收；已收内容保留、监听器清理、不取消供应商或自动重发。类型检查、57领域（新增6项）、5流式浏览器与build12.02秒均exit0；专属Vite5187未操作日常服务。新随机固定Native+本地零采购供应商实际单次文本发送已证明前段可见、navigatorfalse+原stream ERR_ABORTED、后台同run完整持久化，恢复GET200仍为原run；后续auth refresh429让UI恢复断言失败，严格记blocked-rate-limit，不记T1.12通过。原失败报告与合成Native用量均保留，等待自然CT窗口后仅GET恢复，不重发原请求。详情和命令见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。完整T1.12图片/未知/失败读验收未完成，下一仍T1.12；SYS-R2与B3-I实现并行进行。
