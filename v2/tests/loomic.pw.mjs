@@ -47,6 +47,28 @@ test('Loomic canvas imports, saves, reloads and exports without a cloud account'
   expect(errors).toEqual([])
 })
 
+test('Loomic menu opens the official canvas without matching its legacy canvas alias', async ({ page }) => {
+  await localOnly(page)
+  await page.locator('input[type="file"]').first().setInputFiles({ name: 'route-fixture.png', mimeType: 'image/png', buffer: png })
+  await saveDraft(page)
+  const before = await exportScene(page)
+  await page.getByRole('button', { name: '菜单', exact: true }).click()
+  await page.getByRole('menuitem', { name: '官方画布对照（保留旧草稿）', exact: true }).click()
+  await expect(page).toHaveURL(/\/studio\/canvas-lab$/)
+  await page.getByText('更多操作', { exact: true }).click()
+  await expect(page.getByRole('button', { name: '查看旧草稿（只读）', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: '查看旧草稿（只读）', exact: true }).click()
+  const importCopy = page.getByRole('button', { name: /^导入副本：/ }).first()
+  await expect(importCopy).toBeVisible()
+  await importCopy.click()
+  await expect(page.getByRole('status')).toContainText('完整原始草稿快照已保留')
+  const waiting = page.waitForEvent('download')
+  await page.getByRole('button', { name: '导出文档副本', exact: true }).click()
+  const after = JSON.parse(await readFile(await (await waiting).path(), 'utf8'))
+  expect(after.elements.filter(e => !e.isDeleted).map(e => e.id)).toEqual(before.elements.filter(e => !e.isDeleted).map(e => e.id))
+  expect(after.files).toEqual(before.files)
+})
+
 test('image-only channels stay in image preferences and cannot submit an Agent request', async ({ page }) => {
   await mockAccount(page)
   await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: {

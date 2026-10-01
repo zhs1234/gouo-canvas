@@ -51,9 +51,26 @@ test('official canvas lab imports document copies, retains original payload and 
   expect(live(restored)).toHaveLength(1)
   expect(restored.files).toEqual(original.files)
   await page.getByLabel('导入文档副本', { exact: true }).setInputFiles({ name: 'fabric.json', mimeType: 'application/json', buffer: Buffer.from('{"version":"7","objects":[]}') })
-  await expect(page.getByRole('status')).toContainText('不支持直接导入 Fabric')
+  await expect(page.getByRole('alert')).toContainText('不支持直接导入 Fabric')
   expect(live(JSON.parse(await exported(page)))).toHaveLength(1)
   expect(await exported(page, '下载原始导入文件')).toBe(raw)
+})
+
+test('local canvas navigation refuses a failed draft save and keeps the current image exportable', async ({ page }) => {
+  await openLab(page)
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.put = function () { throw new DOMException('fixture quota full', 'QuotaExceededError') }
+  })
+  await page.getByRole('button', { name: '插入测试素材', exact: true }).click()
+  await page.getByRole('link', { name: '返回创作画布', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('保存失败')
+  await expect(page).toHaveURL(/\/studio\/canvas-lab$/)
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented
+  })).toBe(true)
+  const scene = JSON.parse(await exported(page))
+  expect(live(scene)).toHaveLength(1)
+  expect(Object.keys(scene.files)).toHaveLength(1)
 })
 
 test('official tools draw text and shapes with native undo and redo', async ({ page }) => {
@@ -150,7 +167,11 @@ test('legacy lookup does not create absent databases and missing image files can
   const before = JSON.parse(await exported(page))
   const broken = { ...before, files: {} }
   await page.getByLabel('导入文档副本', { exact: true }).setInputFiles({ name: 'missing.excalidraw', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken)) })
-  await expect(page.getByRole('status')).toContainText('缺少内嵌图片')
+  await expect(page.getByRole('alert')).toContainText('缺少内嵌图片')
+  // Later draft saves must not erase the reason the import was refused.
+  await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('已保存')
+  await expect(page.getByRole('alert')).toContainText('缺少内嵌图片')
   const after = JSON.parse(await exported(page))
   expect(live(after)).toEqual(live(before))
   expect(after.files).toEqual(before.files)

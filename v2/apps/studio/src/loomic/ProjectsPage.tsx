@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './lib/auth-context'
 import { listDrafts, type LocalProjectSummary } from './lib/local-drafts'
 import { ProjectList } from './components/project-list'
@@ -11,6 +11,7 @@ export default function ProjectsPage() {
   return <ProjectsContent key={`${loading}:${user?.id ?? 'guest'}`} />
 }
 function ProjectsContent() {
+  const navigate = useNavigate()
   const { user, loading } = useAuth()
   const [projects, setProjects] = useState<LocalProjectSummary[]>([])
   const [error, setError] = useState('')
@@ -45,7 +46,7 @@ function ProjectsContent() {
     {user && <section aria-label="Studio 项目" className="mb-10 rounded-xl border p-5">
       <h2 className="mb-3 font-semibold">Studio 项目 · 账号私有</h2>
       <p className="mb-3 text-sm text-muted-foreground">官方 Excalidraw 编辑器；本机 Loomic 草稿仍保留在下方。</p>
-      <button disabled={busy} onClick={() => { setBusy(true); setStudioError(''); void createProject(undefined, actions.current.signal).then(project => { if (actions.current.signal.aborted) return; window.location.assign(`/studio/canvas-lab?project=${encodeURIComponent(project.id)}`) }).catch(error => setStudioError(error.message)).finally(() => setBusy(false)) }}>新建 Studio 项目</button>
+      <button disabled={busy} onClick={() => { setBusy(true); setStudioError(''); void createProject(undefined, actions.current.signal).then(project => { if (actions.current.signal.aborted) return; navigate(`/canvas-lab?project=${encodeURIComponent(project.id)}`) }).catch(error => setStudioError(error.message)).finally(() => setBusy(false)) }}>新建 Studio 项目</button>
       {studioError && <p role="alert">{studioError}</p>}
       <ul>{studioProjects.map(project => <li key={project.id} className="my-3 flex gap-4"><Link to={`/canvas-lab?project=${encodeURIComponent(project.id)}`}>{project.title}</Link><button disabled={busy} onClick={() => {
         const title = window.prompt('项目名称', project.title)?.trim()

@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button, Notice, Panel } from '@gouo/ui'
 import { currentUser, login, logout, request } from './api'
+import { useAuth } from './loomic/lib/auth-context'
+import AuthRecovery from './AuthRecovery'
 export default function Account() {
   const client = useQueryClient()
-  const session = useQuery({ queryKey: ['session'], queryFn: ({ signal }) => currentUser(signal) })
+  const auth = useAuth()
+  const session = { data: auth.user, isPending: auth.loading, error: auth.error }
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [displayName, setDisplayName] = useState('')
@@ -52,7 +55,7 @@ export default function Account() {
     finally { setBusy(false) }
   }
   return <Panel title="New API 账号">
-    {session.isPending ? <p>正在检查后端会话…</p> : session.data ? <>
+    {session.error ? <AuthRecovery error={session.error} loading={session.isPending} retry={auth.retryIdentity} /> : session.isPending ? <p>正在检查后端会话…</p> : session.data ? <>
       <p>当前账号：{session.data.display_name || session.data.username}</p>
       <form onSubmit={updateName} className="stack">
         <label>显示名称<input value={displayName} onChange={event => setDisplayName(event.target.value)} aria-describedby="profile-name-help" disabled={busy || profileUncertain} /></label>
@@ -72,7 +75,6 @@ export default function Account() {
         <Button type="submit" disabled={busy}>{busy ? '处理中…' : '登录'}</Button>
       </form>
       </details>
-      {session.error && <Notice>{session.error.message}。请检查后端和 v2/.env。</Notice>}
     </>}
     <nav aria-label="New API 账号服务" className="mt-4 flex flex-col gap-2">
       <a href="/profile">账号资料</a>

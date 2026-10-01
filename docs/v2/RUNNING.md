@@ -2,6 +2,20 @@
 
 New API 是账号、渠道、价格、余额和消费日志的唯一权威；Studio API 负责画布业务、模型能力验证、有限智能体循环和请求去重；Studio SQLite 另存账号私有会话、项目和原始素材；浏览器负责编辑及本地草稿。服务和数据库不合并，不引入第二套账号系统。
 
+2026-10-01 本机实际环境为 Windows、Node24.15/npm11.12 和 Docker Desktop；日常三个服务已 healthy，generation/trial/renewal 保持关闭，账号未初始化。最新四角色隔离实操与问题修复见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)，共享来源限流启用门槛见 [NATIVE_RATE_LIMIT_GATE.md](NATIVE_RATE_LIMIT_GATE.md)。隔离 fixture 的真实注册和零钱包网关验证不表示日常实例已配置或真实供应商已验。
+
+Windows 的默认 npm 缓存／日志目录在本环境不可写，曾出现 `Exit handler never called`。从仓库根在 PowerShell 使用项目内缓存；这些目录已被忽略，不修改锁文件或根 legacy 依赖：
+
+```powershell
+$env:npm_config_cache = Join-Path (Get-Location) 'v2/.local/npm-cache'
+$env:npm_config_logs_dir = Join-Path (Get-Location) 'v2/.local/npm-logs'
+node v2/scripts/setup.mjs
+Set-Location v2
+npm run check
+```
+
+后续同一个 PowerShell 终端的 npm/npx 命令继承以上目录；新终端需重新设置。使用另一个当前目录时应改用该项目的绝对路径，避免意外把缓存指向别处。
+
 ## 从干净环境启动
 
 需要 Docker Engine 与 Docker Compose v2.24+（隔离测试使用 `!reset`），以及构建时访问 npm、官方 GitHub 发布资产和公开基础镜像。New API 固定 `v1.0.0-rc.40`，amd64/arm64 发布二进制按官方 SHA-256 校验；不依赖任何 `/workspace/...` 环境 helper，不构建旧 `server/`。
@@ -42,7 +56,7 @@ GOUO_STACK_URL=http://localhost:8080 npm run stack:status
 
 ## 用户安全初始化（本任务没有代做）
 
-1. 在本机访问 `/setup`，由用户自行输入管理员密码、审阅并选择 New API 原生设置。项目脚本不会创建账号、接受条款、设置密码或生成 token。
+1. 在本机访问 `/setup`，由用户自行输入管理员密码、审阅并选择 New API 原生设置。日常启动脚本不会创建账号、接受条款、设置密码或生成 token。显式隔离 Native 测试与 T1.6 fixture 验收脚本仅在自身随机测试卷初始化公开合成数据，不能用于日常实例。
 2. 用户在 New API 原生渠道页面配置两个独立上游渠道：Feng 的 `gpt-6.1-sol` 聊天 key 与 `gpt-image-2` 图片 key。供应商密钥只保留在 New API；按供应商文档确认基址与协议，不根据名称宣称能力已验证。
 3. 优先按 [MODEL_SETUP.md](MODEL_SETUP.md) 配置普通账号模型路由，核验固定版本测试实例 RetryTimes=0，准备非秘密人工核验记录。用户在 New API 管理并限制测试账号统一 relay token 的模型、额度和期限。它必须属于用于画布登录的账号；当前个人 relay 模式只允许该 owner 生成，不是多租户凭据分配。模型价格及第三方真实成本分别核实，原生价格不自动等于上游采购成本。
 4. 由用户安全编辑 `v2/deploy/runtime/relay-key`（只放统一基础 token，无渠道后缀）和 `models.json`（普通路由从 `v2/config/loomic.models.normal.example.json` 复制）；文件不提交。密钥文件设置仅必要读取权限，容器 Studio 用户为 UID 1000，确保其能够读取，不用全局可写权限。不得在聊天、命令参数或构建参数中提供 key。
@@ -50,7 +64,7 @@ GOUO_STACK_URL=http://localhost:8080 npm run stack:status
 6. 模型 JSON 使用准确模型 ID；普通 model 路由不得填 channelId，由 New API 按模型选择渠道。既有 pinned 模式保留，其渠道后缀要求管理员 token，不为后缀提升日常账号权限。聊天设置已验证的 toolCalling/maxChatCalls/maxTokens，图片仅启用实际验证过的 operations/quality/size。未验证继续 pending/disabled，不能为了出现菜单而伪标 live-verified。
 7. 用 `--env-file v2/deploy/.env` 重建/重启配置对应的服务。账号登录、余额及日志全部来自同一个 New API，不另建余额库。
 
-当前获准真实测试总预算是人民币 5 元，**尚无凭据、未执行付费测试**。待安全输入和价格/额度上界确认后逐步验证：普通聊天、单次图片、两次聊天加一次图片的工具循环；每步核对实际费用，未知结果停止不重试。不能默认此序列一定低于 5 元。
+历史阶段曾有人民币 5 元的模型测试预算；它不自动授权本阶段或新实例的付费调用。当前用户批准先实现与隔离测试，真实试用配置暂不启用，T1.6 真实供应商调用和采购支出0。新的真实验收需要明确目标、凭据安全录入、价格／总成本上界及付费授权，再逐步验证普通聊天、单次图片与工具循环；每步核对原生记录，未知结果不重试，不假定工具序列必然在预算内。
 
 ## 开发与部署边界
 

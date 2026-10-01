@@ -251,7 +251,9 @@ export function createServer(config, overrides = {}) {
   })
   app.get('/api/studio/threads', async request => {
     const offset = pageOffset(request)
-    const rows = history.list(request.studioUser, offset)
+    const search = z.string().trim().max(100).optional().safeParse(request.query.search)
+    if (!search.success) throw new StudioError('会话搜索词无效，最多 100 个字符', 400)
+    const rows = history.list(request.studioUser, offset, search.data ?? '')
     return { success: true, data: { items: rows.slice(0, 50), nextOffset: rows.length > 50 ? offset + 50 : null } }
   })
   app.post('/api/studio/threads', async request => {

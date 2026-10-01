@@ -21,8 +21,10 @@ export class History {
     db.prepare("UPDATE studio_runs SET status='unknown', updated_at=? WHERE status='running'").run(new Date().toISOString())
   }
   thread(row) { return { id: row.id, title: row.title, createdAt: row.created_at, updatedAt: row.updated_at } }
-  list(owner, offset = 0) {
-    return this.db.prepare('SELECT * FROM studio_threads WHERE owner=? ORDER BY updated_at DESC, id DESC LIMIT 51 OFFSET ?').all(owner, offset).map(row => this.thread(row))
+  list(owner, offset = 0, search = '') {
+    const pattern = '%' + search.replace(/[\\%_]/g, character => '\\' + character) + '%'
+    return (search ? this.db.prepare("SELECT * FROM studio_threads WHERE owner=? AND title LIKE ? ESCAPE '\\' ORDER BY updated_at DESC, id DESC LIMIT 51 OFFSET ?").all(owner, pattern, offset)
+      : this.db.prepare('SELECT * FROM studio_threads WHERE owner=? ORDER BY updated_at DESC, id DESC LIMIT 51 OFFSET ?').all(owner, offset)).map(row => this.thread(row))
   }
   create(owner, title) {
     const now = new Date().toISOString()

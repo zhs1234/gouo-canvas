@@ -1,5 +1,5 @@
 import type { ChatModelAdapter, ChatModelRunResult, ThreadMessageLike } from '@assistant-ui/react'
-import { requestStream } from '../api'
+import { ApiError, requestStream } from '../api'
 import { readEventStream } from '../event-stream'
 
 export type StudioEvent = { runId: string; type: string; delta?: string; toolCallId?: string; toolName?: string; outputSummary?: string; artifacts?: { type: string; url: string }[]; error?: { message: string }; usage?: unknown }
@@ -7,6 +7,17 @@ export type GeneratedImageReference = { runId: string; toolCallId: string; artif
 export type SavedRun = { runId: string; prompt: string; status: 'running' | 'completed' | 'failed' | 'unknown'; events: StudioEvent[]; usage?: unknown }
 export type SavedThread = { id: string; title: string; updatedAt: string; nextOffset?: number | null; runs: SavedRun[] }
 type Parts = NonNullable<ChatModelRunResult['content']>
+export type PublicFailure = { message: string; walletSuggested: boolean }
+function publicFailure(message: string, status?: number): PublicFailure {
+  const safeMessage = message.trim().slice(0, 500) || '任务结果待确认，请核对原生记录'
+  return { message: safeMessage, walletSuggested: status === 402 || /试用|次数.*用完|余额不足|充值|钱包/.test(safeMessage) }
+}
+export function readPublicFailure(value: unknown): PublicFailure | undefined {
+  if (!value || typeof value !== 'object') return
+  const failure = value as Partial<PublicFailure>
+  if (typeof failure.message !== 'string' || !failure.message || failure.message.length > 500 || typeof failure.walletSuggested !== 'boolean') return
+  return { message: failure.message, walletSuggested: failure.walletSuggested }
+}
 export function appendEvent(content: Parts, event: StudioEvent): Parts {
   if (event.type === 'message.delta') {
     const last = content.at(-1)
@@ -34,9 +45,12 @@ export function generatedImages(events: StudioEvent[], runId: string): Generated
 export function restoreMessages(thread: SavedThread): ThreadMessageLike[] {
   return thread.runs.flatMap(run => {
     const content = run.events.reduce(appendEvent, [] as Parts)
+    const failed = [...run.events].reverse().find(event => event.type === 'run.failed')
+    const failure = failed ? publicFailure(failed.error?.message || '任务失败或结果待确认，请核对原生记录')
+      : run.status !== 'completed' ? publicFailure(run.status === 'running' ? '任务仍在处理，刷新只查询原任务。' : '任务结果待确认，请核对原生记录。') : undefined
     return [ { id: `${run.runId}-user`, role: 'user' as const, content: [{ type: 'text' as const, text: run.prompt }] },
       { id: run.runId, role: 'assistant' as const, content: content.length ? content : [{ type: 'text' as const, text: '尚未收到回复，任务结果待确认。' }],
-        status: run.status === 'completed' ? { type: 'complete' as const, reason: 'stop' as const } : { type: 'incomplete' as const, reason: 'error' as const }, metadata: { custom: { runId: run.runId, usage: run.usage, generatedImages: generatedImages(run.events, run.runId) } } } ]
+        status: run.status === 'completed' ? { type: 'complete' as const, reason: 'stop' as const } : { type: 'incomplete' as const, reason: 'error' as const }, metadata: { custom: { runId: run.runId, usage: run.usage, generatedImages: generatedImages(run.events, run.runId), ...(failure ? { publicFailure: failure } : {}) } } } ]
   })
 }
 // 线程上下文由服务端按 New API owner 读取，不上传客户端拼接的历史。
@@ -47,6 +61,10 @@ export function studioAdapter(model: string, imageModel: string | undefined, thr
     const runId = crypto.randomUUID()
     const payWithBalance = consumeBalanceConsent()
     let completed = false
+    let content: Parts = []
+    const toolEvents: StudioEvent[] = []
+    let usage: unknown
+    let failure: PublicFailure | undefined
     try {
       const response = await requestStream('/api/studio/runs/stream', {
         method: 'POST', signal: AbortSignal.any([abortSignal, lifetime]), headers: { 'Idempotency-Key': runId },
@@ -57,19 +75,27 @@ export function studioAdapter(model: string, imageModel: string | undefined, thr
           ...(imageModel ? { imageGenerationPreference: { mode: 'manual', models: [imageModel] } } : {}),
         }),
       })
-      let content: Parts = []
-      const toolEvents: StudioEvent[] = []
       for await (const raw of readEventStream(response)) {
         lifetime.throwIfAborted()
         const event = raw as StudioEvent
         if (event.runId !== runId) throw new Error('收到不匹配的任务事件')
         content = appendEvent(content, event)
         if (event.type === 'tool.completed') toolEvents.push(event)
-        if (event.type === 'run.failed') throw new Error(event.error?.message || '任务失败，费用请查看账号记录')
+        if (event.usage !== undefined) usage = event.usage
+        if (event.type === 'run.failed') { failure = publicFailure(event.error?.message || '任务失败，费用请查看账号记录'); throw new Error(failure.message) }
         completed ||= event.type === 'run.completed'
-        yield { content, metadata: { custom: { runId, usage: event.usage, generatedImages: generatedImages(toolEvents, runId) } } }
+        yield { content, metadata: { custom: { runId, usage, generatedImages: generatedImages(toolEvents, runId) } } }
       }
       if (!completed) throw new Error('连接中断，结果与费用待确认；不会自动重试')
+    } catch (error) {
+      // Never replace partial replies or completed tools, and never publish raw
+      // transport/parser exceptions. Server envelopes/events are public errors.
+      if (!lifetime.aborted) {
+        failure ??= error instanceof ApiError ? publicFailure(error.message, error.status)
+          : publicFailure(abortSignal.aborted ? '已停止接收，任务结果与费用仍待确认。' : '连接中断，任务结果与费用待确认。')
+        yield { content, metadata: { custom: { runId, usage, generatedImages: generatedImages(toolEvents, runId), publicFailure: failure } } }
+      }
+      throw error
     } finally { if (!lifetime.aborted) finish(completed) }
   } }
 }

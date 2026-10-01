@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider, useLocalRuntime } from '@assistant-ui/react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../loomic/lib/auth-context'
@@ -22,14 +22,13 @@ import { Separator } from '../chat-starter/components/ui/separator'
 import { MessagesSquare, PlusIcon, SearchIcon, MoonIcon, SunIcon, FolderIcon, PanelsTopLeftIcon, UserIcon } from 'lucide-react'
 import '../chat-starter/theme.css'
 import './chat-lab.css'
-function StudioThreadList({ threads, id, create, select, loading }: { threads: SavedThread[]; id: string; create: () => void; select: (id: string) => void; loading: boolean }) {
-  const [search, setSearch] = useState('')
+function StudioThreadList({ threads, id, create, select, loading, search, setSearch, searching }: { threads: SavedThread[]; id: string; create: () => void; select: (id: string) => void; loading: boolean; search: string; setSearch: (value: string) => void; searching: boolean }) {
   const sidebar = useSidebar()
   return <nav aria-label="会话列表" className="flex flex-col gap-0.5">
     <Button variant="ghost" className="h-8 justify-start gap-2 rounded-md px-2.5 text-sm font-normal" disabled={loading} onClick={() => { create(); sidebar.setOpenMobile(false) }} aria-label="＋ 新会话"><PlusIcon />新会话</Button>
-    {threads.length > 0 && <div className="relative px-0.5 py-1"><SearchIcon className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" /><Input aria-label="搜索会话" placeholder="搜索会话" value={search} onChange={e => setSearch(e.target.value)} className="h-8 ps-8 text-sm" /></div>}
+    <div className="relative px-0.5 py-1"><SearchIcon className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" /><Input aria-label="搜索会话" placeholder="搜索全部会话标题" maxLength={100} value={search} onChange={e => setSearch(e.target.value)} className="h-8 ps-8 text-sm" /></div>
     <div className="text-muted-foreground px-2.5 pt-3 pb-1 text-xs">会话</div>
-    {threads.filter(t => t.title.toLowerCase().includes(search.toLowerCase())).map(t => <SidebarMenuButton key={t.id} aria-current={t.id === id ? 'page' : undefined} isActive={t.id === id} onClick={() => { select(t.id); sidebar.setOpenMobile(false) }}><span>{t.title}</span></SidebarMenuButton>)}
+    {searching ? <p role="status" className="px-2.5 text-sm">正在查询会话…</p> : threads.length === 0 && search.trim() ? <p role="status" className="px-2.5 text-sm">未找到匹配的会话标题</p> : threads.map(t => <SidebarMenuButton key={t.id} aria-current={t.id === id ? 'page' : undefined} isActive={t.id === id} onClick={() => { select(t.id); sidebar.setOpenMobile(false) }}><span>{t.title}</span></SidebarMenuButton>)}
   </nav>
 }
 function StudioShell({ list, toolbar, footer, children }: { list?: ReactNode; toolbar: ReactNode; footer: ReactNode; children: ReactNode }) {
@@ -60,36 +59,30 @@ function OwnedThreads({ model, imageModel, toolbar, footer }: { model: string; i
   const queryClient = useQueryClient()
   const [params, setParams] = useSearchParams()
   const id = params.get('thread') || ''
-  const [threads, setThreads] = useState<SavedThread[]>([])
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300); return () => window.clearTimeout(timer) }, [search])
   const [detail, setDetail] = useState<SavedThread | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [revision, revise] = useState(0)
-  const [nextList, setNextList] = useState<number | null>(null)
   const [offset, setOffset] = useState(0)
   const reload = useCallback(() => { revise(n => n + 1); void queryClient.invalidateQueries({ queryKey: ['trial', user?.id] }) }, [queryClient, user?.id])
   useEffect(() => setOffset(0), [id])
   const active = useRef(true)
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
+  const list = useInfiniteQuery({ queryKey: ['threads', user?.id, debouncedSearch, id, revision], initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) => request<{items: SavedThread[]; nextOffset: number | null}>(`/api/studio/threads${pageParam || debouncedSearch ? '?' + new URLSearchParams({ ...(pageParam ? { offset: String(pageParam) } : {}), ...(debouncedSearch ? { search: debouncedSearch } : {}) }) : ''}`, { signal }),
+    getNextPageParam: page => page.nextOffset ?? undefined, retry: false })
+  const searching = search.trim() !== debouncedSearch || list.isPending
+  const threads = list.data?.pages.flatMap(page => page.items).filter((thread, index, all) => all.findIndex(item => item.id === thread.id) === index) ?? []
   useEffect(() => {
     const abort = new AbortController()
     setError('')
-    request<{items: SavedThread[]; nextOffset: number | null}>('/api/studio/threads', { signal: abort.signal }).then(value => { if (!abort.signal.aborted) { setThreads(value.items); setNextList(value.nextOffset) } }).catch(e => { if (!abort.signal.aborted) setError(e.message) })
-    return () => abort.abort()
-  }, [id, revision])
-  useEffect(() => {
-    const abort = new AbortController()
     setDetail(null)
     if (id) request<SavedThread>(`/api/studio/threads/${encodeURIComponent(id)}?offset=${offset}`, { signal: abort.signal }).then(value => { if (!abort.signal.aborted) setDetail(value) }).catch(e => { if (!abort.signal.aborted) setError(e.message) })
     return () => abort.abort()
   }, [id, revision, offset])
-  async function moreThreads() {
-    if (nextList === null) return
-    try {
-      const page = await request<{items: SavedThread[]; nextOffset: number | null}>(`/api/studio/threads?offset=${nextList}`)
-      if (active.current) { setThreads(old => [...old, ...page.items.filter(t => !old.some(x => x.id === t.id))]); setNextList(page.nextOffset) }
-    } catch (e) { if (active.current) setError((e as Error).message) }
-  }
   async function create() {
     if (loading) return
     setLoading(true)
@@ -99,7 +92,7 @@ function OwnedThreads({ model, imageModel, toolbar, footer }: { model: string; i
     } catch (e) { if (active.current) setError((e as Error).message) }
     finally { if (active.current) setLoading(false) }
   }
-  return <StudioShell toolbar={toolbar} footer={footer} list={<><StudioThreadList threads={threads} id={id} create={() => void create()} select={id => setParams({ thread: id })} loading={loading} />{nextList !== null && <Button variant="ghost" onClick={moreThreads}>更多会话</Button>}</>}>
+  return <StudioShell toolbar={toolbar} footer={footer} list={<><StudioThreadList threads={threads} id={id} create={() => void create()} select={id => setParams({ thread: id })} loading={loading} search={search} setSearch={setSearch} searching={searching} />{list.error && <p role="alert">会话查询失败：{list.error.message}</p>}{list.hasNextPage && !searching && <Button variant="ghost" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>更多会话</Button>}</>}>
     {error ? <p role="alert" className="studio-chat-notice">{error}</p> : detail && detail.id === id ? <section className="flex h-full flex-col">
       {(offset > 0 || detail.nextOffset != null) && <div className="flex gap-2 px-4 py-2">{offset > 0 && <Button variant="ghost" onClick={() => setOffset(0)}>返回最新记录</Button>}{detail.nextOffset != null && <Button variant="ghost" onClick={() => setOffset(detail.nextOffset!)}>查看更早记录</Button>}</div>}
       <div className="flex-1 min-h-0"><LabRuntime key={`${id}:${revision}:${offset}`} thread={detail} model={offset ? '' : model} imageModel={imageModel} reload={reload} /></div>
@@ -107,11 +100,11 @@ function OwnedThreads({ model, imageModel, toolbar, footer }: { model: string; i
   </StudioShell>
 }
 export default function ChatLab() {
-  const { user } = useAuth()
+  const { user, loading, blocked } = useAuth()
   useTrial(user?.id)
   const [accountOpen, setAccountOpen] = useState(false)
   const billing = useQuery({ queryKey: ['billing', user?.id], queryFn: ({ signal }) => fetchBilling(signal), enabled: Boolean(user) && accountOpen, retry: false })
-  const catalog = useQuery({ queryKey: ['chat-lab-models', user?.id ?? 'guest'], queryFn: fetchCatalog })
+  const catalog = useQuery({ queryKey: ['chat-lab-models', user?.id ?? 'guest'], queryFn: fetchCatalog, enabled: !loading && !blocked, retry: false })
   const chats = catalog.data?.models.filter(m => m.kind === 'chat' && m.accessible) || []
   const [selected, select] = useState('')
   const model = chats.find(m => m.id === selected)?.id || chats[0]?.id || ''

@@ -1,5 +1,25 @@
 # 实际交付与验证状态
 
+## T1.6 四角色实际使用、八项修复与完整回归（2026-10-01）
+
+基于 `0350f75`，仍在 `codex/registration-trial`，全部工作在当前项目。三位 gpt-6.1-sol 子智能体与主任务按新用户、回访聊天、电商画布、双账号异常四角色，通过各自真实浏览器 profile 使用独立随机 Native＋Studio＋web＋明确本地 provider 环境；不是仅源码审查。完整统计、原失败与同数据复验、证据分级和剩余门项见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。真实供应商／支付未执行，采购支出0；不将本阶段称为成熟产品已完成。
+
+原28场景最终按已执行F/N核心范围统计：**16通过、11partial、1未执行**（A7），不把未验P或补充子项计成功。A3/3/1，B5/2/0，C7/0/0，D1/6/0。17个唯一实际模型提交发送键、provider23到达（20chat/3image，1response-lost），Native22消费日志/本人request_count合22、日志与累计用量quota1728；chat13used/3held、image3used，资金偏好unknown1。完整账单不靠Native请求计数或日志推断；B上游丢响应的一次没有consume日志。
+
+去重后修正8个产品问题：P1跨标签退出后的旧私有界面、等待refresh期间身份竞态、草稿拒写后内部导航；P2非JSON429假访客、导入缺图错误消失、通用生成失败隐藏原因与原生充值入口、官方画布路径误判、搜索只匹配已加载50会话。JWT仍只在内存，跨标签只广播静态失效信号；身份恢复只查身份、业务不自动重放。保存失败留页且可导出，原图、旧库、未知字段与许可证保留；搜索是本人范围服务器绑定查询、字面通配符、100字符/300ms debounce/取消旧查询，不另造状态引擎。
+
+实际最终命令：`npm run check` exit0（**51/51领域、151/151 API**、类型与build11.71s，既有第三方chunk警告）；`npm run test:e2e -- --workers=1 --reporter=line` **87/87，2.2分钟，exit0**。`npm run test:stack` exit0：真实固定Native未初始化安全边界、personal明确fixture2/2、fresh user-token明确fixture1/1，自动清理自己的随机资源。stack在Q8增量前运行，搜索增量后完整API/PW/build另验，未重复冒称新版stack。定向8个historyAPI和搜索1PW也通过。日志 `.local/t1-6-{check,e2e,stack}-final.log`；过程失败和修复说明保留在报告，无删除测试或重复unknown。
+
+新增可选、持久、随机隔离验收脚本 `v2/tests/stack/user-acceptance-environment*.mjs`。合成零钱包新用户实际经过固定 Native 网关和一次性原生试用资金；兑换码经真实原生UI兑入，仅是测试资金；故障包装只丢弃实际一次成功Native写响应，不重交。分页seed是明示未调用模型的56/60记录、离线连续锁事务并验证保护表hash；需全角色静默，不能当成实际生成。state管理限制`.local`、随机项目、固定来源/hash、loopback非8080；不读用户.env、不触碰日常卷。
+
+共享CT **20/IP/1200s** 在多人实操中触发429，新恢复gate保守等待；没有改安全参数或重启Native绕过。独立固定源码复核纠正早期归纳：`/api/log/self`先注册，吃GA360/180；之后附加CT只影响`/api/log/token`。Studio每次userRelay取key1次吃共享CT，工具循环不会多取key。实际启用门槛、精确代理信任与本人key桶候选及批准/回滚要求见 [NATIVE_RATE_LIMIT_GATE.md](NATIVE_RATE_LIMIT_GATE.md)，本文准备未实施安全方案。
+
+新增未解决G2实际资金门项：owner6日志/userused36，但sub/tokenused56；唯一HTTP500 NativeID对应本人预扣record21仍consumed20。Native有退款SQLite锁错误，但SysLog不带requestID，不能断言这个请求的根因或已结算/已退款；安全RO证据 `.local/t16-g2-evidence.json`，见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)。Studio运行failed是已存错误，trial.unknown是保守权益占用，状态分列；同key不再模型，held与资金不改。D6自然窗口后实际UI验证重启仍拒新ID、provider/count不变；B5上游丢响应已验但浏览器断网子项未验，B7只撤销指定额外会话已验、密码旋转子项未验。
+
+日常仅重构建Studio/web并`up --wait --no-deps studio-api web` exit0；三服务healthy、仅127.0.0.1:8080发布。Native ID与StartedAt前后一致（原04:26:19Z），setup.status/root_init仍false，实际loadConfig generation/trial/tokenRenewalPolicy全关闭，容器Nginx模板hash与默认文件一致；`.local/t1-6-preview-evidence.json`。没有系统安装、依赖/锁变化、legacy/main改动、push/merge、生产部署、日常试用/资金/安全配置写入。
+
+下一具体任务 **T1.7 隔离剩余场景与启用门槛核验**：优先准备G2原生失败预扣/退款最小可复现和可审查修正方案，补未验F/N UI与G1多用户限流方案；用户批准确切安全diff、固定pin变化和真实商业配置/成本上界后再独立做P与真实支付。真实配置暂不启用决定继续有效，不能手改原生资金/释放held/重发旧key或自动升级pin绕过门槛；整体成熟产品目标继续。
+
 ## T1.5b 未知有限权限续用的私有核对（2026-10-01）
 
 基于T1.5a `9ca25f97a2aa427cc3261412c165fec68601401a`，仍在 `codex/registration-trial`。三位gpt-6.1-sol子智能体分别实现API不可变批准/proof、只读恢复helper与反例、真实固定Native恢复合同，另做交叉只读审查。没有依赖或锁文件变化，没有上游/legacy/main改动、push/merge、生产部署、真实资金/安全配置或付费模型操作。

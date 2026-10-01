@@ -7,7 +7,7 @@ const assetId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const dataURL = 'data:image/png;base64,' + (await sharp({ create: { width: 160, height: 100, channels: 4, background: '#55aadd' } }).png().toBuffer()).toString('base64')
 async function fixture(page) {
   const account = await mockAccount(page); account.active = true
-  const state = { conflict: false, failSave: false, rejectAsset: false, reads: 0, writes: [], project: { id: projectId, title: '持久项目', revision: 1, document: { elements: [], appState: {}, files: {} }, createdAt: '2026-09-30T00:00:00Z', updatedAt: '2026-09-30T00:00:00Z' } }
+  const state = { account, conflict: false, failSave: false, rejectAsset: false, reads: 0, writes: [], project: { id: projectId, title: '持久项目', revision: 1, document: { elements: [], appState: {}, files: {} }, createdAt: '2026-09-30T00:00:00Z', updatedAt: '2026-09-30T00:00:00Z' } }
   await page.route('**/api/studio/projects**', route => {
     const request = route.request(), path = new URL(request.url()).pathname
     expect(request.headers().authorization).toBe(`Bearer ${account.token}`)
@@ -114,6 +114,42 @@ test('Studio project library opens and renames with revision; local project sect
   await expect(page.getByRole('link', { name: '新的项目名', exact: true })).toBeVisible()
   expect(state.writes[0]).toEqual({ expectedRevision: 1, title: '新的项目名' })
   await expect(page.getByText('画布保存在当前浏览器', { exact: false })).toBeVisible()
+})
+
+test('internal project navigation saves pending edits and preserves the in-memory account', async ({ page }) => {
+  const state = await fixture(page)
+  await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
+  await expect(page.getByRole('button', { name: '保存 Studio 项目', exact: true })).toBeEnabled()
+  await page.evaluate(() => { window.navigationWitness = 'same-document' })
+  const refreshes = state.account.refreshes
+  await drawRectangle(page)
+  await page.getByRole('link', { name: '项目库', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Studio 项目', exact: true })).toBeVisible()
+  expect(live(state.project.document).map(e => e.type).sort()).toEqual(['image', 'rectangle'])
+  expect(await page.evaluate(() => window.navigationWitness)).toBe('same-document')
+  expect(state.account.refreshes).toBe(refreshes)
+  await page.getByRole('button', { name: '新建 Studio 项目', exact: true }).click()
+  await expect(page.getByRole('button', { name: '保存 Studio 项目', exact: true })).toBeEnabled()
+  expect(await page.evaluate(() => window.navigationWitness)).toBe('same-document')
+  expect(state.account.refreshes).toBe(refreshes)
+  expect(live(await exported(page)).map(e => e.type).sort()).toEqual(['image', 'rectangle'])
+})
+
+test('failed save during internal navigation retains the editor and never replays the write', async ({ page }) => {
+  const state = await fixture(page)
+  await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
+  await expect(page.getByRole('status')).toContainText('已保存到 Studio')
+  state.failSave = true
+  await drawRectangle(page)
+  await page.getByRole('link', { name: '项目库', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('保存服务暂不可用')
+  await expect(page).toHaveURL(new RegExp(`project=${projectId}`))
+  const writes = state.writes.length
+  page.once('dialog', dialog => dialog.dismiss())
+  await page.getByRole('link', { name: '项目库', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`project=${projectId}`))
+  expect(state.writes).toHaveLength(writes)
+  expect(live(await exported(page, '下载本机备份')).map(e => e.type).sort()).toEqual(['image', 'rectangle'])
 })
 
 test('native crop in server project retains original asset bytes through save and reopen', async ({ page }) => {

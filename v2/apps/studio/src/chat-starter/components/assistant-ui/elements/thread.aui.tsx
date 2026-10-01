@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 
 import { usageEvidence } from "../../../../loomic/lib/billing";
+import { readPublicFailure } from "../../../../chat-lab/adapter";
 import { File } from "./file";
 import { ThreadFollowupSuggestions } from "./follow-up-suggestions.aui";
 import { GeneratedImage as Image } from "../../../../chat-lab/GeneratedImage";
@@ -537,10 +538,13 @@ const ComposerAction: FC = () => {
 };
 
 const MessageError: FC = () => {
+  const failure = readPublicFailure(useAuiState(state => state.message.metadata.custom.publicFailure));
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
+        {failure && <p>{failure.message}</p>}
         <p>请求失败或中断；请检查任务结果与账号费用，不会自动重试。</p>
+        {failure?.walletSuggested && <p><a href="/wallet">前往原生钱包充值</a></p>}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );

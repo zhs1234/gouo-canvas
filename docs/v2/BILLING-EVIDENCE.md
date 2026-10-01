@@ -22,3 +22,15 @@ New API 继续独立负责账号、钱包、订阅资金、模型令牌、预扣
 若未来需要 `settled` 状态，必须先取得固定Native按精确request_id暴露的资金来源与token提交成功凭据及失败边界，并验并发、预扣和退款。不使用钱包前后差额、日志次数、延时或单次一致GET代替。跨用户并发、其它充值与异步退款会混入余额变化；当前不编造缺失凭据。
 
 真实注册试用仍默认关闭，未知有限权限续用恢复另列T1.5b；详细命令、实际数量、提交与未执行门槛见 [STATUS.md](STATUS.md)。
+
+## T1.6 实际丢响应后的原生预扣门项 G2
+
+四角色隔离实操使用真实固定Native＋明确本地供应商，不是日常卷或真实付费测试。owner6第三次聊天在供应商实际接收后socket丢响应，Native返回HTTP500，唯一requestID `202610010953095354276208268d9d6fP8hDe5W`。随后新的独立第四次聊天完成；本人三个正常consume日志各12，user.used_quota36/request_count3，钱包0；但subscription5 amount_used56、本人token5 used56/remain499944。第四次正常日志也记录subscription_pre_consumed20/post_delta−8/subscription_used56，差额并非只有UI显示。
+
+私有只读核对该HTTP500对应的本人预扣record21：request_id匹配、user_id6、user_subscription_id5、pre_consumed20、status=consumed、created_at=updated_at1790848389。本次读时该记录未标refunded，与20差额相符。原生tail2000行经脱敏类别筛选有两条refund-error包含SQLite lock，但没有requestID；无法把这两条错误严格归因该请求。保留安全 `.local/t16-g2-evidence.json`，没有导出rawlogs、key、完整数据库或凭据。
+
+固定源码 [controller/relay.go](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/controller/relay.go#L144)、[relay/request_billing.go](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/relay/request_billing.go#L71) 在失败defer调用Refund；[service/billing_session.go](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/service/billing_session.go#L85) 先标内存refunded，再gopool异步依次处理资金/token，失败只SysLog，不能更新已返回HTTP。订阅Refund最多尝试3次，见 [funding_source.go](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/service/funding_source.go#L121)。[model/subscription.go](https://github.com/QuantumNous/new-api/blob/0aec08fee811ec6136828fda790551b49e410301/model/subscription.go#L1402) 的退款交易内调用另开交易的PostConsumeUserSubscriptionDelta，是需要隔离重现的SQLite锁风险线索，尚未证明就是此次根因。
+
+当前已证实“失败请求的持久预扣20仍为consumed”，**未证明真实采购、成功结算、退款完成或特定退款错误的请求级根因**。稳定GET、等待、无consume日志、HTTP500、用户累计用量均不能代替原生资金/token退款的原子提交凭据。Studio历史failed和requests.completed只表明错误已存；trial reservation unknown/held继续保留，同键只读重放不再模型，新的独立请求也不清旧占用。
+
+T1.7需在新随机隔离环境准备最小可复现失败退款、原生前后持久记录/token/sub两步证据和审查方案，定位事务与请求日志关联，再按明确维护批准处理。不能用Studio另造退款账本、手工改原生金额、释放held、重交失败模型或静默升级固定pin修饰结果；日常注册试用和生成保持关闭。详见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。

@@ -51,6 +51,56 @@ test('assistant-ui error is visible without retry', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('不会自动重试')
   expect(calls).toBe(1)
 })
+
+test('trial exhaustion keeps the specific public reason and native wallet link live and after history restoration', async ({ page }) => {
+  const { threads } = await setup(page)
+  let calls = 0
+  const message = '试用生图次数已用完，请前往 New API 钱包充值并明确授权新请求'
+  await page.route('**/api/studio/runs/stream', route => {
+    calls++
+    const payload = route.request().postDataJSON()
+    const events = [{ type: 'message.delta', delta: '已保留的前置聊天回复' }, { type: 'run.failed', error: { code: 'gateway_failed', message } }]
+    threads[0].runs.push({ runId: payload.runId, prompt: payload.prompt, status: 'unknown', events })
+    return route.fulfill({ contentType: 'text/event-stream', body: events.map(event => `data: ${JSON.stringify({ ...event, runId: payload.runId })}\n\n`).join('') })
+  })
+  await page.goto('./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+  await page.getByLabel('消息', { exact: true }).fill('再次生图')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(page.getByText(message, { exact: true })).toBeVisible()
+  await expect(page.getByText('已保留的前置聊天回复', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '前往原生钱包充值', exact: true })).toHaveAttribute('href', '/wallet')
+  await expect(page.getByRole('button', { name: '发送', exact: true })).toBeDisabled()
+  await page.reload()
+  await expect(page.getByText(message, { exact: true })).toBeVisible()
+  await expect(page.getByText('已保留的前置聊天回复', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '前往原生钱包充值', exact: true })).toHaveAttribute('href', '/wallet')
+  expect(calls).toBe(1)
+})
+
+test('HTTP quota errors expose their safe reason, and failure after a completed tool retains its image in restored history', async ({ page }) => {
+  const { threads } = await setup(page)
+  let calls = 0
+  const message = '账号余额不足，请前往原生钱包充值'
+  await page.route('**/api/studio/runs/stream', route => { calls++; return route.fulfill({ status: 402, json: { success: false, message } }) })
+  await page.goto('./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+  await page.getByLabel('消息', { exact: true }).fill('余额不足的明确请求')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(page.getByText(message, { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '前往原生钱包充值', exact: true })).toHaveAttribute('href', '/wallet')
+  expect(calls).toBe(1)
+  threads[0].runs = [{ runId: 'tool-then-failed', prompt: '保留已完成的图片', status: 'unknown', events: [
+    { type: 'message.delta', delta: '图片前的部分回复' },
+    { type: 'tool.started', toolName: 'generate_image', toolCallId: 'finished-image-tool' },
+    { type: 'tool.completed', toolCallId: 'finished-image-tool', outputSummary: '图片已完成', artifacts: [{ type: 'image', url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6ZQAAAABJRU5ErkJggg==' }] },
+    { type: 'run.failed', error: { message: '总结连接中断，任务结果待确认' } },
+  ] }]
+  await page.reload()
+  await expect(page.getByText('总结连接中断，任务结果待确认', { exact: true })).toBeVisible()
+  await expect(page.getByText('图片前的部分回复', { exact: true })).toBeVisible()
+  await expect(page.getByAltText('生成图片')).toBeVisible()
+  await expect(page.getByRole('button', { name: '发送', exact: true })).toBeDisabled()
+  expect(calls).toBe(1)
+})
 test('Stop only stops reception with an explicit billing caveat', async ({ page }) => {
   await setup(page)
   await page.route('**/api/studio/runs/stream', async route => { await new Promise(r => setTimeout(r, 3000)); await route.abort().catch(() => {}) })

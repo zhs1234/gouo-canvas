@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Excalidraw, convertToExcalidrawElements, serializeAsJSON } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { FileId } from '@excalidraw/excalidraw/element/types'
@@ -14,6 +15,8 @@ function download(raw: string, name: string) {
 }
 // A processed source remains processed after deletion, independent of SDK serialization.
 export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: string; projectId: string; assetId: string | null }) {
+  const navigate = useNavigate()
+  const navigating = useRef(false)
   const [project, setProject] = useState<StudioProject>()
   const [initial, setInitial] = useState<RestoredDataState>()
   const [status, setStatus] = useState('正在读取 Studio 项目')
@@ -69,6 +72,27 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
     }).catch(() => { if (alive.current) { stopped.current = true; setBlocked(true); setStatus('本机备份失败，自动保存已暂停，请立即导出文档') } })
     return queue.current
   }
+  const leave = async (event: MouseEvent<HTMLAnchorElement>, path: string) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    if (navigating.current) return
+    navigating.current = true
+    try {
+      clearTimeout(timer.current)
+      if (pending.current && pending.current !== lastSaved.current) {
+        // Client routing does not trigger beforeunload: finish the pending save first.
+        if (stopped.current) {
+          if (!window.confirm('此项目有未保存到服务器的修改。离开前将保留本机恢复副本，建议先导出文档备份。确定离开？')) return
+          await retainRecovery(pending.current)
+        } else {
+          await save(serialize())
+          if (stopped.current || (pending.current && pending.current !== lastSaved.current)) return
+        }
+      }
+      navigate(path)
+    } catch { setStatus('本机恢复副本保存失败，请先导出文档备份再离开') }
+    finally { navigating.current = false }
+  }
   useEffect(() => {
     alive.current = true
     const requestController = new AbortController()
@@ -114,11 +138,11 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
     }
   }, [])
   return <main className="gouo-canvas-lab">
-    <header className="canvas-project-bar"><a href="/studio/projects">项目库</a><div className="canvas-project-title"><strong>{project?.title ?? 'Studio 项目'}</strong><span>Excalidraw · 私有项目</span></div>
+    <header className="canvas-project-bar"><Link to="/projects" onClick={event => { void leave(event, '/projects') }}>项目库</Link><div className="canvas-project-title"><strong>{project?.title ?? 'Studio 项目'}</strong><span>Excalidraw · 私有项目</span></div>
       <button disabled={!ready || blocked} onClick={() => void save(serialize())}>保存 Studio 项目</button>
       <button disabled={!ready} onClick={() => { const raw = serialize(); if (raw) download(raw, `${project?.title ?? 'studio'}.excalidraw`) }}>导出文档备份</button>
       <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
-      <a href="/studio/">返回创作画布</a>
+      <Link to="/" onClick={event => { void leave(event, '/') }}>返回创作画布</Link>
       <button onClick={() => void (async () => {
         // Local export must not wait for an in-flight or unresponsive remote save.
         const current = pending.current

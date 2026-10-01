@@ -1,5 +1,9 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
+> 2026-10-01 T1.6 最新：基于0350f75，在codex/registration-trial完成四角色独立浏览器实操和八项产品修复，当前准确28场景统计及F/N/P边界见QA_ACCEPTANCE_REPORT.md；保留原失败证据与实际同数据复验。51领域、151API、87浏览器/2.2分钟及三阶段stack通过（stack先于Q8搜索增量，增量后完整API/PW/build另验）。JWT仅内存、跨标签静态失效与epoch竞态防护、429明确手动恢复、草稿保存后导航、持续导入错误/实际失败原因/原生钱包、正确官方路径及本人服务端标题搜索均完成。合成零钱包实际Native试用闭环与原图/旧库保留，不等于真实供应商/支付，采购0。真实CT共享IP20/1200造成部分门项等待，未调整；logself实际吃GA而非CT，纠正源码归纳，启用决策见NATIVE_RATE_LIMIT_GATE.md。日常只更新web/Studio，Native原ID/启动时间不变、setup仍false、generation/trial/renewal全false、默认edge；无push/merge/部署或锁变化。下一T1.7补隔离剩余场景与启用门槛，整体产品仍未完成。下文旧“最终28未执行”是历史基线，以本报告当前实际部分执行为准。
+
+> T1.6最终补充：28核心F/N范围16通过、11partial、1未执行，所有P未验；provider23实际到达/Native22消费日志/3个held分列。自然窗口后B历史搜索/Stop/新线程与指定会话撤销、D6重启新ID屏障复验完成，未验补充子项仍partial。G2新增真实Native预扣门项：owner6日志和userused36、sub/token56，唯一失败NativeID预扣20仍consumed；退款SysLog有SQLite锁但缺requestID关联，不认定根因/结算/退款。history.failed与trial.unknown是不同状态，安全证据及调查门槛见BILLING-EVIDENCE。下一T1.7优先准备G2最小重现/可审查方案，保持旧held/资金/模型key不动，不静默升级pin。
+
 > 2026-10-01 T1.5b最新：基于9ca25f9，在codex/registration-trial完成v2不可变续用批准快照、Native退休proof先持久后唯一POST，以及私有inspect/adopt/close-empty。连续锁下实际结束旧Native进程、前后RO完整持久证据、重核配置和Studio审计/binding/CAS事务；原key409，旧run/held/funding/资金/次数不动。51领域、150API、71浏览器、三阶段整栈通过；真实固定Native恢复两例与正常到期/耗尽两例另验，0模型/真实费用。旧v1/缺proof/软删除/重复/消费/漂移仍拒，部分组模型子集暂保守拒；失败可能Native仍停止，CLI不启动Studio。详见STATUS/TOKEN-RECOVERY。日常真实配置保持关闭、恢复未对日常卷执行。下一T1.6四角色28场景综合浏览器验收与问题修复，F/N/P分别统计；最终用户模拟尚未执行，整体目标继续，以下旧下一项均按历史读取。
 
 > 2026-10-01 T1.5a最新：T1.4已提交 `cc498a0`；本轮修复consume日志被误称settled的问题，完整唯一本人日志只表示recorded/实扣unconfirmed，旧settled/pending历史和重放只读兼容，金额/ID/旧库保留。22领域、147API、71浏览器、三阶段整栈通过；真实固定Native正常DTO/SQLite快照与16次本地替身relay另验，0真实采购。下一项T1.5b未知token续用私有停服恢复，当前旧target不足adopt、工具尚未实现；真实日常配置仍关闭、最终28场景四角色模拟未执行。详情见STATUS/BILLING-EVIDENCE/TOKEN-RENEWAL，以下旧下一项顺序按历史读取。

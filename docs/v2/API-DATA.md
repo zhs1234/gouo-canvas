@@ -10,13 +10,15 @@
 
 | 方法与路径 | 用途 |
 | --- | --- |
-| GET /api/studio/threads | 当前账号会话分页列表 |
+| GET /api/studio/threads | 当前账号会话分页列表；可选 offset 与 search 标题搜索 |
 | POST /api/studio/threads | 创建会话，标题最多 100 字符 |
 | GET /api/studio/threads/:id | 当前账号会话与已保存运行/消息/费用状态 |
 | GET /api/studio/runs/:id | 只读运行状态与事件，不触发模型调用 |
 | POST /api/studio/runs/stream | 可选 threadId；归属校验后执行，服务端读取该会话上下文 |
 
 未知/他人资源返回 404，列表及详情分页最多 50 项。持久化运行状态为 running/completed/failed/unknown；进程重启不恢复执行，未完成变 unknown。停止接收不是供应商取消。带 threadId 的请求不使用客户端历史，同 ID 重放沿用原请求指纹，不随新历史变化；busy 前拒绝不创建假消息。未带 threadId 的既有画布协议保留兼容。
+
+T1.6 标题搜索：`GET /api/studio/threads?search=<标题子串>&offset=0` 仅搜索认证本人全部会话，trim后最多100字符；空搜索保持原顺序与分页。`%`、`_`、反斜杠按字面匹配，SQL绑定参数，不接受客户端owner；非法/重复搜索参数400，匿名401。每页50项、额外一项判断nextOffset，搜索分页与原分页隔离；读取不创建会话或调用模型。UI输入300ms去抖，取消旧query，未加载历史也可直接命中。
 
 2026-10-01 T1.5a 实际费用DTO：完整唯一Native本人type2日志匹配为 `usage.state=recorded`；尚无完整记录为pending；二者 `settlementState=unconfirmed`，不等于资金/token均成功。quota/cost/requestCount/requestIds保留，旧settled在对外读取及重放兼容recorded，不重写旧金额或再次生成。balance是当前原生钱包；spent是累计used_quota折算，recentCalls.cost是日志折算，不是请求级扣款回执。见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)。
 

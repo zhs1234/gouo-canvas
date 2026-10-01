@@ -2,6 +2,10 @@
 
 ## 最新用户要求（2026-10-01，本机环境复核后）
 
+T1.6已实施四角色真实浏览器的限定验收与8项修复；28场景当前通过/partial/未执行和原失败、同数据复验见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)，不再把原计划当成“全部尚未执行”，也不把本阶段称为整体成熟产品完成。51领域、151API、87浏览器与三阶段stack通过，真实采购0；stack先于Q8搜索增量，增量由完整API/PW/build验。身份恢复/跨标签/竞态、草稿失败导航、导入错误、生成原因和钱包入口、官方画布路径及本人服务端搜索已修。当前新下一具体任务 **T1.7 隔离剩余场景与启用门槛核验**。先补报告剩余F/N子项；公开限流/可信代理/原生key桶需要确切方案审批，候选与未变默认值见 [NATIVE_RATE_LIMIT_GATE.md](NATIVE_RATE_LIMIT_GATE.md)。真实计划/入口暂不启用决定保留，付费供应商和商户支付另需授权；以下T1.5b“下一T1.6”是历史记录。
+
+最终核心F/N计数16通过/11partial/1未执行，P全未验。T1.7优先核对新增G2：唯一实际失败NativeID的预扣20仍consumed、token/sub56与consume/userused36不一致；锁退款错误缺requestID关联，不能断言请求根因/已结算或自行补退款。准备新随机环境最小重现、原生原子资金/token证据及可审查修正方案，详细当前证据见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)；旧held/资金不改、模型不重发、固定pin不暗换，再补其余隔离UI子项。
+
 P0 环境已验收；用户已批准持续开发，所有工作留在当前 Gouo Canvas 项目并基于 `codex/new-api-v2`，保留已认可的 assistant-ui/Excalidraw、旧草稿/原图/许可证。需要安装系统组件或改安全设置先询问用户。最终产品准备好后，使用多个子智能体模拟真实用户并统计报告问题。
 
 最新T1.5a/T1.5b已完成 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md) 与 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)：消费日志只是recorded/实扣unconfirmed，旧金额/ID/原图保留；v2批准与退休proof持久后唯一POST，私有连续锁/Native真实进程边界/前后RO持久证据/Studio审计CAS支持adopt或完全absent close-empty，原key仍409。旧v1/缺proof、软删除/重复/跨owner/使用/漂移/配置变化均保守拒，不清旧run/held/funding、不改Native资金。51领域、150API、71浏览器与三阶段整栈通过，真实恢复2例及正常到期/耗尽2例另验，0模型/真实费用。下一具体任务 **T1.6 综合用户验收与问题修复**：隔离真实Native＋明确本地供应商替身，按QA_ACCEPTANCE四角色/28场景独立浏览器实操、保留发现并统计F/N/P通过/失败/门槛/未执行。真实计划和入口仍暂不启用，未授权付费不计为成功；最终整体产品不因局部恢复测试通过而称已完成。
