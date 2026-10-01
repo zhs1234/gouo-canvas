@@ -23,6 +23,21 @@ Docker 使用 [官方 Windows 安装器](https://docs.docker.com/desktop/setup/i
 
 ## 启动和检查
 
+若 npm 默认缓存或日志目录不可写，在 `v2` 使用项目内被忽略的目录；本轮已实际验证以下命令成功，不需要改全局 npm 配置、锁文件或 TLS 设置：
+
+```powershell
+Set-Location v2
+New-Item -ItemType Directory -Path .local/npm-cache,.local/npm-logs -Force | Out-Null
+npm ci --cache .local/npm-cache --logs-dir .local/npm-logs --no-fund
+# 后续命令在本终端沿用相同目录。
+$env:npm_config_cache = Join-Path (Get-Location) '.local/npm-cache'
+$env:npm_config_logs_dir = Join-Path (Get-Location) '.local/npm-logs'
+npm run check
+npm run dev
+```
+
+当前热更新 Vite `127.0.0.1:5174` 和 Studio `127.0.0.1:3001` 可独立启动，但默认 `.env` 的 New API 目标 3000 并未由 Compose 公开。完整真实集成继续使用 `localhost:8080`；热更新进程启动成功不代表它已经连接账号/网关。新增开发端口或安全设置须按用户要求先确认。
+
 先从桌面启动 Docker Desktop。若旧入口无法打开，使用实际当前用户安装路径：
 
 ```powershell

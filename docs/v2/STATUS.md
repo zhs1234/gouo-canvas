@@ -1,5 +1,19 @@
 # 实际交付与验证状态
 
+## 当前项目内缓存与真实服务复核（2026-10-01，暂不改功能）
+
+用户重新提供环境交接并要求先准备环境。本机实际仍在 `codex/local-environment-p0`，包含 `abe46c4` 和上一轮环境提交 `1545e25`，工作树起初干净；`codex/new-api-v2` 指向 `abe46c4`，没有从 main 开发。与交接描述不同，当前 Docker 已安装且真实 8080 三服务仍运行，因此本轮没有安装系统组件、改安全设置或替换服务。并行只读复核指定 gpt-6.1-sol，所有命令、缓存和开发日志留在当前项目。
+
+- 新建并验证 `v2/.local/npm-cache`、`v2/.local/npm-logs` 可写，`npm ci --cache .local/npm-cache --logs-dir .local/npm-logs --no-fund` 成功：876 包/881 审计包、0 漏洞，没有再出现 Exit handler never called，根/V2 锁文件未变。已有 `.env` 保留，生成关闭、无 relay 值。
+- 使用命令级 npm_config_cache/npm_config_logs_dir 跑 `npm run check`：类型、14/14 领域/探测、63/63 API、生产构建通过；完整日志在忽略的 `.local/environment-recheck.log`。只有既有 chunk 大小警告。本轮不重新引用上一轮 50/50 为本轮新浏览器结果，也未运行 fixture 整栈。
+- `npm run dev` 实际启动 Vite 7.3.6 与 Studio，保留运行；`127.0.0.1:5174/studio/`、`/studio/chat`、`127.0.0.1:3001/api/studio/health` 与 Vite 代理健康接口均 200。默认热更新账号目标 3000 尚未公开，完整账号/网关集成使用已有 `localhost:8080`，不将独立进程启动当作已认证集成。
+- Docker Desktop 4.93.0、Engine 29.8.1、Compose 5.5.1、WSL 2.7.10.0；docker-desktop WSL2 正在运行。主 Compose 三服务 healthy，仅 `127.0.0.1:8080` 发布。真实 New API 容器 `/usr/local/bin/new-api` SHA-256=`a5fd598cc77e26ab2709305049fdd5fbbff722111be79f0ad89a493c3e094529`，与固定 rc.40 官方资产一致，不是 fixture。
+- 真实 HTTP：`/api/setup` 200 且 status/root_init=false，edge/Studio health 200；匿名 `/api/user/self`、Studio projects 为 401，浏览器 `/v1/models` 为 404。stack-status 报 edge/studio/newApi ready，accountInitialized=false、generationEnabled=false。未初始化账号、录入渠道/token或调用付费模型；真实登录/注册/结算仍未验收。
+
+本轮仅更新 STATUS、LOCAL_ENVIRONMENT 与 TASKS。下一任务 **T1 注册试用 4 次聊天＋1 次生图** 已记录，功能未改；当前零/负原生余额路径在 Studio/token 获取前返回 402，次数与真实原生资金来源需接通后单独验收，不能由替身或前端计数证明。
+
+---
+
 ## Windows 本机 P0 环境准备（2026-10-01）
 
 从已经合并 PR #3 的 `abe46c4` 接手，干净工作树派生 `codex/local-environment-p0`；本轮没有切回旧 QA 分支、改 main、推送或部署。团队通读 V2 全部 19 份文档及根/中英旧产品/旧服务文档，并与实际路由和配置核对；旧“待合并”、Go 新业务位置和早期云项目边界按最新实现理解。当前为 Loomic 默认画布、assistant-ui 正式聊天、官方 Excalidraw 私有项目、Fastify/SQLite 和固定 New API rc.40；完整云库生命周期、Worker、订阅与生产门禁仍未完成。
