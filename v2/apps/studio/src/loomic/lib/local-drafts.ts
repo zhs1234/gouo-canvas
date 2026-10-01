@@ -10,6 +10,22 @@ export type Draft = {
 }
 const pending = new Map<string, Promise<unknown>>()
 const deleted = new Set<string>()
+const recoveredScenes = new Map<string, CanvasDetail['content']>()
+export function hasRecoveredDraft(owner: string, id: string) { return recoveredScenes.has(draftKey(owner, id)) }
+export function retainDraftScene(owner: string, id: string, content: CanvasDetail['content']) {
+  const key = draftKey(owner, id)
+  if (deleted.has(key)) return
+  const snapshot = structuredClone(content)
+  recoveredScenes.set(key, snapshot)
+  void changeDraft(owner, id, draft => { draft.canvas.content = snapshot }).catch(() => undefined)
+}
+const deletionListeners = new Map<string, Set<() => void>>()
+export function subscribeDraftDeletion(owner: string, id: string, listener: () => void) {
+  const key = draftKey(owner, id)
+  const listeners = deletionListeners.get(key) ?? new Set<() => void>()
+  listeners.add(listener); deletionListeners.set(key, listeners)
+  return () => { listeners.delete(listener); if (!listeners.size) deletionListeners.delete(key) }
+}
 const prefix = 'gouo:loomic:v1:'
 export function draftKey(owner: string, canvasId: string) {
   if (!/^local:(guest|[1-9]\d*)$/.test(owner) || !/^[\w-]{1,80}$/.test(canvasId)) throw new Error('本地草稿标识无效')
@@ -18,11 +34,13 @@ export function draftKey(owner: string, canvasId: string) {
 export async function readDraft(owner: string, canvasId: string): Promise<Draft> {
   const key = draftKey(owner, canvasId)
   if (deleted.has(key)) throw new Error('画布已删除')
-  await pending.get(key)
-  return (await get<Draft>(key)) ?? {
+  await pending.get(key)?.catch(error => { if (!recoveredScenes.has(key)) throw error })
+  const draft = (await get<Draft>(key)) ?? {
     canvas: { id: canvasId, projectId: canvasId, name: '未命名创作', content: { elements: [], appState: {}, files: {} } },
     sessions: [], messages: {},
   }
+  const recovered = recoveredScenes.get(key)
+  return recovered ? { ...draft, canvas: { ...draft.canvas, content: structuredClone(recovered) } } : draft
 }
 export async function changeDraft(owner: string, canvasId: string, change: (draft: Draft) => void) {
   const key = draftKey(owner, canvasId)
@@ -35,6 +53,8 @@ export async function changeDraft(owner: string, canvasId: string, change: (draf
     change(draft)
     draft.updatedAt = new Date().toISOString()
     await set(key, draft)
+    const recovered = recoveredScenes.get(key)
+    if (recovered && JSON.stringify(recovered) === JSON.stringify(draft.canvas.content)) recoveredScenes.delete(key)
     window.dispatchEvent(new CustomEvent('gouo:draft-saved', { detail: { owner, canvasId } }))
     return draft
   })
@@ -55,6 +75,9 @@ export async function deleteDraft(owner: string, id: string) {
   deleted.add(key)
   await pending.get(key)?.catch(() => undefined)
   try { await del(key) } catch (error) { deleted.delete(key); throw error }
+  recoveredScenes.delete(key)
+  // Notify only subscribers to this exact owner/draft after deletion commits.
+  for (const listener of deletionListeners.get(key) ?? []) listener()
 }
 const sessionCanvas = new Map<string, string>()
 export function rememberSessions(owner: string, canvasId: string, sessions: ChatSessionSummary[]) {

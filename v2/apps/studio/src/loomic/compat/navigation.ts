@@ -1,8 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams as useRouterSearchParams } from 'react-router-dom'
 function pathForStudio(path: string) {
-  if (/^\/canvas(?=[?#]|$)/.test(path)) return path.replace('/canvas', '/')
-  if (path === '/home' || path === '/projects') return '/projects'
+  if (path === '/home') return '/chat'
   return path
 }
 export function useRouter() {

@@ -29,7 +29,7 @@ async function openStream(page) {
       }), { headers: { 'Content-Type': 'text/event-stream' } })
     }
   })
-  await page.goto('./')
+  await page.goto('./canvas')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')

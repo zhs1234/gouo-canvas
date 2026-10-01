@@ -23,7 +23,7 @@ async function setup(page, entry) {
   return { account, counts: () => ({ reads, writes, generations }) }
 }
 
-for (const entry of ['./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', './']) {
+for (const entry of ['./chat?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', './canvas']) {
   test(`one explicit renewal clears prior consent without generation in ${entry}`, async ({ page }) => {
     const f = await setup(page, entry)
     const consent = page.getByRole('checkbox', { name: '本次允许使用本人 New API 余额' })
@@ -71,6 +71,7 @@ test('display name update sends only Unicode name, then confirms same owner; unk
     }
     return route.fulfill({ json: { success: true, data: { id: owner, username: 'studio-user', display_name: displayName } } })
   })
+  await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   const input = page.getByLabel('显示名称', { exact: true })
   await input.fill('😀'.repeat(21)); await page.getByRole('button', { name: '更新显示名称' }).click()
@@ -94,7 +95,8 @@ test('display name update sends only Unicode name, then confirms same owner; unk
   await page.getByLabel('用户名', { exact: true }).fill('fixture-other')
   await page.getByLabel('密码', { exact: true }).fill('fixture-password')
   await page.getByRole('button', { name: '登录', exact: true }).click()
-  await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
+  // Successful inline login keeps this dialog open; wait for the new owner.
+  await expect(page.getByText('当前账号：另一个用户')).toBeVisible()
   await expect(input).toHaveValue('')
   await expect(input).toBeEnabled()
   await expect(page.getByText('当前账号：另一个用户')).toBeVisible()

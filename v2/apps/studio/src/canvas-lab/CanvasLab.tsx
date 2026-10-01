@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Excalidraw, CaptureUpdateAction, convertToExcalidrawElements, exportToBlob, serializeAsJSON } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { FileId } from '@excalidraw/excalidraw/element/types'
@@ -7,8 +7,9 @@ import { createStore, get, set, setMany } from 'idb-keyval'
 import '@excalidraw/excalidraw/index.css'
 import './canvas-lab.css'
 import { useAuth } from '../loomic/lib/auth-context'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ServerCanvasEditor } from './ServerCanvasEditor'
+import { useWorkspaceLeaveGuard } from '../workspace/WorkspaceNavigationProvider'
 import { decodeDocument, readLegacyDrafts, type LegacyDraft } from './documents'
 
 // 独立数据库，不读取或改写正式画布与会话草稿。
@@ -36,8 +37,6 @@ export default function CanvasLab() {
   return <CanvasLabEditor key={owner} owner={owner} />
 }
 function CanvasLabEditor({ owner }: { owner: string }) {
-  const navigate = useNavigate()
-  const navigating = useRef(false)
   const storageKey = (name: string) => `${owner}:${name}`
   const [legacyDrafts, setLegacyDrafts] = useState<Array<{ key: string; draft: LegacyDraft }>>([])
   const [initial, setInitial] = useState<RestoredDataState>()
@@ -63,16 +62,10 @@ function CanvasLabEditor({ owner }: { owner: string }) {
       return true
     }).catch(() => { if (alive.current) setStatus('保存失败，请立即导出文档备份'); return false })
   }
-  const leave = async (event: MouseEvent<HTMLAnchorElement>) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    event.preventDefault()
-    if (navigating.current) return
-    navigating.current = true
-    try {
-      clearTimeout(timer.current)
-      if (await save() && !pending.current) navigate('/')
-    } finally { navigating.current = false }
-  }
+  useWorkspaceLeaveGuard(async () => {
+    clearTimeout(timer.current)
+    return await save() && !pending.current
+  })
   useEffect(() => {
     alive.current = true
     const warnUnsaved = (event: BeforeUnloadEvent) => {
@@ -133,7 +126,7 @@ function CanvasLabEditor({ owner }: { owner: string }) {
   }
   return <main className="gouo-canvas-lab">
     <header className="canvas-project-bar">
-      <Link to="/" onClick={event => { void leave(event) }}>返回创作画布</Link>
+      <Link to="/">返回聊天</Link>
       <div className="canvas-project-title"><strong>Excalidraw</strong><span>本机独立副本 · 不调用模型</span></div>
       <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
       <label>导入文档副本<input aria-label="导入文档副本" type="file" accept=".excalidraw,application/json" disabled={!ready} onChange={event => { void importCopy(event.target.files?.[0]); event.target.value = '' }} /></label>
@@ -161,7 +154,7 @@ function CanvasLabEditor({ owner }: { owner: string }) {
     {failure && <p>请保留浏览器数据。此页面不会自动清空损坏的草稿。</p>}
     {initial && <section className="gouo-canvas-lab-editor" aria-label="官方画布">
       <Excalidraw key={revision} initialData={initial} langCode="zh-CN" excalidrawAPI={value => { api.current = value }} onChange={(elements, state, files) => {
-        if (state.isLoading || !api.current || importing.current) return
+        if (!alive.current || state.isLoading || !api.current || importing.current) return
         if (!hydrated.current) {
           if (elements.filter(element => !element.isDeleted).length < initial.elements.filter(element => !element.isDeleted).length) return
           hydrated.current = true

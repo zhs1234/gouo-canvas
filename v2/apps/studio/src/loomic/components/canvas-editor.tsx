@@ -4,15 +4,17 @@ import "@excalidraw/excalidraw/index.css";
 
 import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, memo } from "react";
 
 import type { WebSocketHandle } from "../hooks/use-websocket";
 import { saveCanvas, uploadThumbnail } from "../lib/server-api";
+import { subscribeDraftDeletion, retainDraftScene, hasRecoveredDraft } from "../lib/local-drafts";
 import { VideoCanvasElement } from "./canvas/video-canvas-element";
 import { isVideoUrl } from "../lib/canvas-elements";
 import { CanvasToolMenu } from "./canvas-tool-menu";
 import { normalizeCanvasElements } from "../lib/canvas-normalize";
 import { ErrorBoundary } from "./error-boundary";
+import { useWorkspaceLeaveGuard } from "../../workspace/WorkspaceNavigationProvider";
 
 const Excalidraw = dynamic(
   () => import("@excalidraw/excalidraw").then((mod) => mod.Excalidraw),
@@ -93,6 +95,24 @@ export function CanvasEditor({
   const loadedApiRef = useRef<any>(null);
   const onApiReadyRef = useRef(onApiReady); onApiReadyRef.current = onApiReady;
   const [ready, setReady] = useState(false);
+  const [saveError, setSaveError] = useState(() => hasRecoveredDraft(accessToken, canvasId));
+  const recoveredOnMount = useRef(hasRecoveredDraft(accessToken, canvasId));
+  const savingRef = useRef<Promise<void> | null>(null);
+  const aliveRef = useRef(true);
+  useLayoutEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
+  const deletedDraftRef = useRef(false);
+  useLayoutEffect(() => {
+    deletedDraftRef.current = false;
+    return subscribeDraftDeletion(accessToken, canvasId, () => {
+      deletedDraftRef.current = true;
+      pendingSaveRef.current = null;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
+    });
+  }, [accessToken, canvasId]);
 
   // Guard: prevent auto-save until Excalidraw has fully hydrated with initial data.
   // Without this, a page reload can fire onChange with empty elements before
@@ -100,14 +120,45 @@ export function CanvasEditor({
   const hydratedRef = useRef(false);
   const initialElementCountRef = useRef(initialContent.elements.filter((e) => !e.isDeleted).length);
 
-  // Track pending save payload so we can flush on tab close / unmount
+  // Preserve the latest scene until its IndexedDB write succeeds.
   const pendingSaveRef = useRef<{
     elements: Record<string, unknown>[];
     appState: Record<string, unknown>;
     files: Record<string, Record<string, unknown>>;
   } | null>(null);
 
-  const lastContentRef = useRef<CanvasEditorProps['initialContent'] | null>(null);
+  const savePending = useCallback(async () => {
+    if (deletedDraftRef.current) return;
+    if (savingRef.current) await savingRef.current;
+    const content = pendingSaveRef.current;
+    if (!content) return;
+    const task = saveCanvas(accessToken, canvasId, content).then(() => {
+      if (pendingSaveRef.current === content) pendingSaveRef.current = null;
+      setSaveError(false);
+    }).catch(error => {
+      setSaveError(true);
+      window.dispatchEvent(new Event("gouo:draft-save-failed"));
+      throw error;
+    });
+    savingRef.current = task;
+    try { await task; } finally { if (savingRef.current === task) savingRef.current = null; }
+  }, [accessToken, canvasId]);
+  const flushForNavigation = useCallback(async () => {
+    if (deletedDraftRef.current) return true;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
+    try {
+      // Save one newer snapshot if editing changes during the first write.
+      // Continuing edits keep the page open instead of an unbounded flush loop.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await savePending();
+        if (!pendingSaveRef.current && !savingRef.current) return true;
+      }
+      setSaveError(true);
+      return false;
+    } catch { return false; }
+  }, [savePending]);
+  useWorkspaceLeaveGuard(flushForNavigation);
 
   const handleExcalidrawApi = useCallback(
     (api: any) => {
@@ -122,7 +173,7 @@ export function CanvasEditor({
       // Skip auto-save until Excalidraw has fully hydrated with initial data.
       // During initialization, onChange may fire with empty/partial elements
       // which would wipe the persisted canvas via FULL REPLACE.
-      if (!loadedApiRef.current || appState.isLoading) return;
+      if (!aliveRef.current || deletedDraftRef.current || !loadedApiRef.current || appState.isLoading) return;
       if (!hydratedRef.current) {
         if (elements.filter((el: any) => !el.isDeleted).length < initialElementCountRef.current) return;
         hydratedRef.current = true;
@@ -139,13 +190,10 @@ export function CanvasEditor({
       const content = { elements: elements.filter((el: any) => !el.isDeleted) as Record<string, unknown>[],
         appState: { viewBackgroundColor: appState.viewBackgroundColor, gridModeEnabled: appState.gridModeEnabled,
           scrollX: appState.scrollX, scrollY: appState.scrollY, zoom: appState.zoom }, files };
-      lastContentRef.current = content;
       pendingSaveRef.current = content;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        saveCanvas(accessTokenRef.current, canvasId, content).then(() => {
-          if (pendingSaveRef.current === content) pendingSaveRef.current = null;
-        }).catch(() => window.dispatchEvent(new Event("gouo:draft-save-failed")));
+        void savePending().catch(() => undefined);
       }, SAVE_DEBOUNCE_MS);
 
       // --- 2. Debounced thumbnail (runs much less frequently than save) ---
@@ -217,52 +265,25 @@ export function CanvasEditor({
         }
       }
     },
-    [canvasId, projectId, excalidrawApi],
+    [canvasId, projectId, excalidrawApi, savePending],
   );
 
-  // Preserve the final scene independently of SDK cleanup order.
-  const buildSavePayload = useCallback(() => hydratedRef.current ? lastContentRef.current : null, []);
-
-  // Keep buildSavePayload accessible without stale closures
-  const buildSavePayloadRef = useRef(buildSavePayload);
-  buildSavePayloadRef.current = buildSavePayload;
-
-  // Flush pending save on page close (beforeunload) and component unmount
   useEffect(() => {
-    const flushBeforeUnload = () => {
-      if (!pendingSaveRef.current) return;
-
-      // Build the real payload since pendingSaveRef may hold a placeholder
-      const payload = buildSavePayloadRef.current();
-      if (!payload) return;
-
-      void saveCanvas(accessTokenRef.current, canvasIdRef.current, payload).catch(() => {
-        window.dispatchEvent(new Event("gouo:draft-save-failed"));
-      });
-      pendingSaveRef.current = null;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!pendingSaveRef.current && !savingRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
     };
-
-    window.addEventListener("beforeunload", flushBeforeUnload);
-
+    window.addEventListener("beforeunload", warnBeforeUnload);
     return () => {
-      window.removeEventListener("beforeunload", flushBeforeUnload);
-
-      // Cancel pending debounce timers
+      window.removeEventListener("beforeunload", warnBeforeUnload);
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
-
-      // Flush pending save on component unmount (e.g. SPA navigation)
-      if (pendingSaveRef.current) {
-        const payload = buildSavePayloadRef.current();
-        if (payload) {
-          saveCanvas(accessTokenRef.current, canvasIdRef.current, payload).catch(
-            console.error,
-          );
-        }
-        pendingSaveRef.current = null;
+      if (!deletedDraftRef.current && pendingSaveRef.current) {
+        retainDraftScene(accessToken, canvasId, pendingSaveRef.current);
       }
     };
-  }, []);
+  }, [accessToken, canvasId]);
 
   // Render custom embeddable content for video elements on canvas.
   // Excalidraw calls this for every embeddable element; we intercept video URLs
@@ -293,6 +314,11 @@ export function CanvasEditor({
       onError={(err) => console.error("[canvas-editor] render crashed:", err)}
     >
       <div className="h-full w-full relative">
+        {saveError && <div role="alert" className="absolute top-3 left-1/2 -translate-x-1/2 z-50 rounded bg-red-50 p-3 text-red-800">
+          {recoveredOnMount.current && <p>已恢复此账号在当前页面进程内保留的画布副本，尚未保存；关闭浏览器后不保证恢复。</p>}
+          画布尚未保存，已留在当前页面。请重试保存或从菜单导出画布文件。
+          <button type="button" onClick={() => { void flushForNavigation(); }} className="ml-3 underline">重试保存</button>
+        </div>}
         <Excalidraw
           theme={resolvedTheme === "dark" ? "dark" : "light"}
           langCode="zh-CN"

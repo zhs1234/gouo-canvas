@@ -1,5 +1,19 @@
 # 实际交付与验证状态
 
+## T1.8 默认聊天、共享侧栏与安全画布出口（2026-10-01）
+
+基于 T1.7 `c1fc0cf`，仍在 `codex/registration-trial`。按用户实际报告修复画布缺少互通出口：默认 `/studio/` 进入完整 assistant-ui 聊天，聊天、官方画布、项目库与原 Loomic 工作台共用固定侧栏；手机用原 Sidebar Sheet。实际在内置浏览器查看未登录 chatgpt.com，并在用户现有 Edge 查看已登录首页、账户菜单与设置页，截图及具体路线见 [WORKSPACE-NAVIGATION.md](WORKSPACE-NAVIGATION.md)。原图、旧草稿、未知字段、编辑器与许可证保留，没有另造账号/钱包/画布引擎。
+
+共享 Router guard 覆盖站内 Link、search/hash 变更和浏览器返回。导航前等真实本地/私有保存成功；失败停留且可导出，私有 409/丢响应不盲目 PATCH 重试。Loomic 修复显式删除后被保存闸困住、SDK 卸载空回调覆盖场景，以及 owner 强制卸载的待存内容丢失；最新内容快照绑定原 owner/id，异步旧结果不能跨户。IndexedDB 拒写时的内存恢复副本仅当前进程保留，不保证刷新/关闭持久化。旧根画布 id/session 与 editor/board alias 转 `/canvas`，会话切换保留未知 query/hash 且只移除已处理 prompt。
+
+补充独立实操：子智能体在真实本机 8080 做 996px 桌面与 390px 手机聊天→画布→项目库→聊天往返，未触碰主实例账号初始化/模型/资金。发现窄容器素材库按钮被顶部间距裁切，改为编辑器容器查询缩小间距，新增真实 bounding box、点击打开及无横向溢出反例。原用户出口问题和五项补充问题去重为 Q10–Q15；严重度与证据见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。这批导航自动用例不增加原 28 场景的计数，仍 **16通过/12partial/0未执行**，真实采购0。
+
+最终 `npm run check` exit0：51领域/151API、类型与build13.45秒；`npm run test:e2e -- --workers=1 --reporter=line` **116/116通过、3.3分钟、exit0**。日志 `.local/t18-check-final.log`、`.local/t18-e2e-final.log`；`git diff --check` exit0。此前完整115例109通过/6失败的日志保留为 `.local/t18-e2e-109-pass-6-fail.log`。六项是旧坐标、重复项目库链接、owner8 billing mock误401，以及账号面板与移动抽屉的测试同步；保留原业务/保存/授权断言，仅修正实际交互定位和 fixture。定向8项7通过/1重复点击失败，随后显示名测试单项通过；不会把这些过程失败称为全部通过。
+
+日常仅重构建 web 并 `up -d --wait --no-deps web`，Native/API 不重建或重启；exit0、三服务healthy，Native/API前后 ID、启动时间、二进制完全一致；关闭开关证据见 `.local/t18-preview-{before,after}.json`。仍未初始化 Native、真实 generation/trial/renewal 关闭；没有付费、系统安装、锁变化、main/push/merge或生产部署。
+
+下一 **T1.9 全页面共享账号菜单与设置** 已授权：参考实际 ChatGPT 的底部身份菜单及设置分栏；直接在当前工作页打开，复用 New API 账户/余额/试用/有限权限，避免关闭面板解除未知写入闸，并先保存再退出。当前 T1.8 仍保留旧分页面账号入口，T1.9尚未接线，不冒称已完成。
+
 ## T1.7 原生退款候选、剩余试用子项与权限提示（2026-10-01）
 
 基于 `8f51853`，仍在 `codex/registration-trial`。为G2准备固定Native `0aec08fee811ec6136828fda790551b49e410301` 的独立可审查补丁，退款预扣记录与订阅金额改用同一数据库事务；默认上游pin和日常二进制未变。补丁SHA256 `f17e8c2cd9a603ed8bd2024a006d1fd2fa74deff44251665c201fe979c2da9e5`，源码及许可证保留；具体代码、重现、证据边界和启用条件见 [NATIVE_REFUND_TRANSACTION_GATE.md](NATIVE_REFUND_TRANSACTION_GATE.md)。候选仅在新随机隔离环境使用，没有修复旧验收卷资金或释放旧held。

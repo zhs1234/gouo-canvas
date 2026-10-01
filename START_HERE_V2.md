@@ -6,6 +6,10 @@
 
 2026-09-30 选择：[Loomic](https://github.com/fancyboi999/Loomic) 原生无限画布与智能体前端，固定提交 `bdb47a5adf900b48615af0bd914336e3770021b5`，替换 Fabric starter；账号/网关使用 [New API](https://github.com/QuantumNous/new-api) `v1.0.0-rc.40`。这是新的开发阶段，没有数据迁移；云项目/素材库暂不接入。本地项目、画布和聊天先保存在浏览器。具体复用范围与边界见 `docs/v2/LOOMIC.md`。
 
+## 最新入口决策（2026-10-01）
+
+用户要求默认聊天、所有工作区有固定侧栏入口，整体页面与账号管理参考ChatGPT。当前 `/studio/` 默认进入已经认可的完整assistant-ui聊天；聊天、画布、项目库和原Loomic工作台共用侧栏。原工作台移到明确 `/studio/canvas`，旧root的id/session、editor/board及完整query/hash兼容保留；没有覆盖旧草稿或原图。站内返回和浏览器POP均等待真实保存，失败留页可导出。实际ChatGPT参考、地址、保存与恢复边界见 [WORKSPACE-NAVIGATION.md](docs/v2/WORKSPACE-NAVIGATION.md)，真实最终验证见STATUS顶部。以下旧“默认画布”描述按历史读取。
+
 ## 最新增量（2026-09-30）
 
 用户批准第三阶段持久项目与原始素材：assistant-ui 图片可打开/插入官方 Excalidraw 私有项目，项目库与 revision 保存/冲突恢复已接入；原默认画布与旧草稿保留。普通模型路由及用户安全配置见 MODEL_SETUP.md；新显式 gpt-6.1-sol 对话首先读 [HANDOFF.md](docs/v2/HANDOFF.md)。此前“云项目暂缓”是历史边界，本轮持久项目授权优先。

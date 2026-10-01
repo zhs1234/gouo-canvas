@@ -40,8 +40,8 @@ function ProjectsContent() {
     }).catch(e => setError(e.message))
     return () => { disposed = true; urls.forEach(URL.revokeObjectURL) }
   }, [loading, user?.id])
-  return <div className="h-dvh overflow-y-auto bg-background"><div className="mx-auto max-w-7xl px-6 py-6 sm:px-10">
-    <div className="mb-12 flex items-center justify-between"><Link to="/" aria-label="返回画布" className="flex items-center gap-2 text-sm font-semibold"><LoomicLogo className="h-6 w-6" />GOUO Studio</Link><p className="text-xs text-muted-foreground">当前浏览器 · {user?.display_name || user?.username || '访客'}</p></div>
+  return <div className="h-full min-h-0 overflow-y-auto bg-background"><div className="mx-auto max-w-7xl px-6 py-6 sm:px-10">
+    <div className="mb-12 flex items-center justify-between"><Link to="/canvas" aria-label="返回画布" className="flex items-center gap-2 text-sm font-semibold"><LoomicLogo className="h-6 w-6" />GOUO Studio</Link><p className="text-xs text-muted-foreground">当前浏览器 · {user?.display_name || user?.username || '访客'}</p></div>
     <p className="mb-6 text-sm text-muted-foreground">整理你的创意与素材。画布保存在当前浏览器，导出后可以备份。</p>
     {user && <section aria-label="Studio 项目" className="mb-10 rounded-xl border p-5">
       <h2 className="mb-3 font-semibold">Studio 项目 · 账号私有</h2>

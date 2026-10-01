@@ -9,7 +9,7 @@ const png = await sharp({ create: { width: 48, height: 32, channels: 3, backgrou
 async function localOnly(page) {
   await page.route('**/api/user/auth/refresh', route => route.fulfill({ status: 401, json: { success: false, message: '未登录' } }))
   await page.route('**/api/studio/models', route => route.fulfill({ json: { success: true, data: { generationEnabled: false, models: [] } } }))
-  await page.goto('./')
+  await page.goto('./canvas')
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
   await expect(page.getByText('Loading scene…', { exact: true })).toHaveCount(0)
 }
@@ -79,7 +79,7 @@ test('image-only channels stay in image preferences and cannot submit an Agent r
     calls++
     return route.abort()
   })
-  await page.goto('./')
+  await page.goto('./canvas')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
@@ -103,7 +103,10 @@ test('image-only channels stay in image preferences and cannot submit an Agent r
 test('local project list reopens drafts and new projects start with an empty canvas', async ({ page }) => {
   await localOnly(page)
   await page.getByRole('button', { name: '矩形 (R)', exact: true }).click()
-  await page.mouse.move(200,200); await page.mouse.down(); await page.mouse.move(420,350); await page.mouse.up()
+  const drawingArea = await page.locator('.excalidraw .interactive').boundingBox()
+  expect(drawingArea).not.toBeNull()
+  await page.mouse.move(drawingArea.x + 120, drawingArea.y + 220); await page.mouse.down()
+  await page.mouse.move(drawingArea.x + 280, drawingArea.y + 350); await page.mouse.up()
   await saveDraft(page)
   await page.getByRole('button', { name: '菜单', exact: true }).click()
   await page.getByRole('menuitem', { name: '项目库', exact: true }).click()
@@ -183,7 +186,7 @@ test('fixture agent results enter the canvas and persist; requests contain only 
       { ...base, type: 'run.completed', usage: { state: 'settled', currency: 'CNY', cost: 0.25, requestCount: 3 } },
     ].map(event => `data: ${JSON.stringify(event)}\n\n`).join('') })
   })
-  await page.goto('./')
+  await page.goto('./canvas')
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('loomic:agent-model'))).toBeNull()
   await page.getByRole('button', { name: 'Agent', exact: true }).click()
@@ -254,7 +257,7 @@ test('native image panel switches verified model parameters, preserves reference
     expect(payload.inputImages[0]).toMatch(/^data:image\/png;base64,/)
     return route.fulfill({ json: { success: true, data: { url: 'data:image/png;base64,' + png.toString('base64'), mimeType: 'image/png', width: 48, height: 32, usage: { state: 'settled', currency: 'CNY', cost: 0.44, requestCount: 1 } } } })
   })
-  await page.goto('./')
+  await page.goto('./canvas')
   await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
   await page.getByLabel('用户名', { exact: true }).fill('studio-user')
   await page.getByLabel('密码', { exact: true }).fill('test-password')
@@ -302,7 +305,7 @@ test('switching projects aborts the previous transport so late results cannot en
     ].map(event => `data: ${JSON.stringify(event)}\n\n`).join('') }).catch(() => {}) // The browser aborts this explicit delayed fixture.
   })
   try {
-    await page.goto('./')
+    await page.goto('./canvas')
     await page.getByRole('button', { name: 'New API 账号', exact: true }).click()
     await page.getByLabel('用户名', { exact: true }).fill('studio-user')
     await page.getByLabel('密码', { exact: true }).fill('test-password')
@@ -338,7 +341,7 @@ test('Loomic Agent uses balance consent once and omits it on the next send', asy
     const base = { runId: payload.runId, timestamp: new Date().toISOString() }
     return route.fulfill({ contentType: 'text/event-stream', body: [{ ...base, type: 'message.delta', delta: '同意测试回复' + payloads.length }, { ...base, type: 'run.completed' }].map(e => 'data: ' + JSON.stringify(e) + '\n\n').join('') })
   })
-  await page.goto('./')
+  await page.goto('./canvas')
   await expect(page.getByRole('button', { name: '本地保存', exact: true })).toBeEnabled()
   const checkbox = page.getByRole('checkbox', { name: '本次允许使用本人 New API 余额' })
   await expect(checkbox).not.toBeChecked()
@@ -362,7 +365,7 @@ test('image client omits false consent and never retries failed paid sends', asy
     bodies.push(route.request().postDataJSON())
     return route.fulfill({ status: 503, json: { success: false, message: 'Explicit fixture failure' } })
   })
-  await page.goto('./')
+  await page.goto('./canvas')
   await expect(page.getByRole('button', { name: 'New API 账号', exact: true })).toContainText('测试用户')
   await page.evaluate(async () => {
     const api = await import('/studio/src/loomic/lib/server-api.ts')

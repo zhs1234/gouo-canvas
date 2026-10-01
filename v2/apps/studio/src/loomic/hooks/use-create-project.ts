@@ -17,7 +17,7 @@ export function useCreateProject() {
     try {
       const id = crypto.randomUUID()
       await changeDraft(`local:${user?.id ?? 'guest'}`, id, draft => { draft.canvas.name = '未命名创作' })
-      navigate(`/?id=${id}`)
+      navigate(`/canvas?id=${id}`)
     } catch { toast.error('无法新建本地画布') }
     finally { setCreating(false) }
   }

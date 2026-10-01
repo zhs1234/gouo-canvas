@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider, useLocalRuntime } from '@assistant-ui/react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../loomic/lib/auth-context'
 import { fetchCatalog } from '../loomic/lib/gateway'
 import { request } from '../api'
@@ -14,12 +14,11 @@ import { BillingPanel } from '../loomic/components/billing-panel'
 import { fetchBilling } from '../loomic/lib/billing'
 import { restoreMessages, studioAdapter, type SavedThread } from './adapter'
 import { Thread } from '../chat-starter/components/assistant-ui/elements/thread.aui'
-import { ThreadListSidebar } from '../chat-starter/components/assistant-ui/elements/threadlist-sidebar.aui'
-import { SidebarInset, SidebarProvider, SidebarTrigger, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../chat-starter/components/ui/sidebar'
+import { WorkspaceShell as StudioShell } from '../workspace/WorkspaceShell'
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '../chat-starter/components/ui/sidebar'
 import { Button } from '../chat-starter/components/ui/button'
 import { Input } from '../chat-starter/components/ui/input'
-import { Separator } from '../chat-starter/components/ui/separator'
-import { MessagesSquare, PlusIcon, SearchIcon, MoonIcon, SunIcon, FolderIcon, PanelsTopLeftIcon, UserIcon } from 'lucide-react'
+import { PlusIcon, SearchIcon, MoonIcon, SunIcon, UserIcon } from 'lucide-react'
 import '../chat-starter/theme.css'
 import './chat-lab.css'
 function StudioThreadList({ threads, id, create, select, loading, search, setSearch, searching }: { threads: SavedThread[]; id: string; create: () => void; select: (id: string) => void; loading: boolean; search: string; setSearch: (value: string) => void; searching: boolean }) {
@@ -30,9 +29,6 @@ function StudioThreadList({ threads, id, create, select, loading, search, setSea
     <div className="text-muted-foreground px-2.5 pt-3 pb-1 text-xs">会话</div>
     {searching ? <p role="status" className="px-2.5 text-sm">正在查询会话…</p> : threads.length === 0 && search.trim() ? <p role="status" className="px-2.5 text-sm">未找到匹配的会话标题</p> : threads.map(t => <SidebarMenuButton key={t.id} aria-current={t.id === id ? 'page' : undefined} isActive={t.id === id} onClick={() => { select(t.id); sidebar.setOpenMobile(false) }}><span>{t.title}</span></SidebarMenuButton>)}
   </nav>
-}
-function StudioShell({ list, toolbar, footer, notice, children }: { list?: ReactNode; toolbar: ReactNode; footer: ReactNode; notice?: ReactNode; children: ReactNode }) {
-  return <SidebarProvider className="chat-starter"><div className="flex h-dvh w-full pr-0.5"><ThreadListSidebar footer={footer}>{list}</ThreadListSidebar><SidebarInset className="min-w-0"><header className="flex h-16 shrink-0 items-center gap-2 border-b px-4"><SidebarTrigger aria-label="切换侧栏" /><Separator orientation="vertical" className="mr-2 h-4" />{toolbar}</header>{notice}<div className="flex-1 min-h-0 overflow-hidden">{children}</div></SidebarInset></div></SidebarProvider>
 }
 function LabRuntime({ model, imageModel, thread, reload }: { model: string; imageModel?: string; thread: SavedThread; reload: () => void }) {
   const { user } = useAuth()
@@ -118,7 +114,7 @@ export default function ChatLab() {
   const modelNotice = user && unavailableMessage ? <p role={catalog.error ? 'alert' : 'status'} className="studio-chat-notice">{unavailableMessage}</p> : undefined
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
   const toolbar = <><span className="hidden text-sm text-muted-foreground md:block">Gouo Canvas</span><span className="hidden text-muted-foreground md:block">/</span><select className="min-w-0 max-w-48 bg-transparent text-sm outline-none" aria-label="聊天模型" value={model} onChange={e => select(e.target.value)}><option value="" disabled>选择聊天模型</option>{chats.map(m => <option key={m.id} value={m.id}>{m.displayName}</option>)}</select><div className="ml-auto"><Button variant="ghost" size="icon" aria-label="切换主题" onClick={() => { document.documentElement.classList.toggle('dark', !dark); setDark(!dark) }}>{dark ? <SunIcon /> : <MoonIcon />}</Button></div></>
-  const footer = <SidebarMenu><SidebarMenuItem><SidebarMenuButton render={<Link to="/projects" />}><FolderIcon /><span>项目库</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/canvas-lab" />}><PanelsTopLeftIcon /><span>官方画布</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/" />}><MessagesSquare /><span>Loomic 工作台</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton size="lg" onClick={() => setAccountOpen(v => !v)} aria-label="New API 账号"><div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 items-center justify-center rounded-lg"><UserIcon className="size-4" /></div><div className="flex flex-col text-left"><span className="font-semibold">{user?.display_name || user?.username || '登录账号'}</span><span className="text-xs text-muted-foreground">账号与费用</span></div></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
+  const footer = <SidebarMenu><SidebarMenuItem><SidebarMenuButton size="lg" onClick={() => setAccountOpen(v => !v)} aria-label="New API 账号"><div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 items-center justify-center rounded-lg"><UserIcon className="size-4" /></div><div className="flex flex-col text-left"><span className="font-semibold">{user?.display_name || user?.username || '登录账号'}</span><span className="text-xs text-muted-foreground">账号与费用</span></div></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
   return <>
     {user ? <OwnedThreads key={user.id} model={model} imageModel={imageModel} toolbar={toolbar} footer={footer} notice={modelNotice} /> : <StudioShell toolbar={toolbar} footer={footer}><div className="flex h-full items-center justify-center"><div className="px-6"><h1 className="mb-4 text-2xl font-medium">今天有什么可以帮你？</h1><p className="mb-6 text-sm text-muted-foreground">请连接 New API 账号。</p><Button onClick={() => setAccountOpen(true)}>登录账号</Button></div></div></StudioShell>}
     {accountOpen && <div className="account-overlay" onClick={() => setAccountOpen(false)}><section className="account-dialog" aria-label="账号与费用" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}><button className="account-close" aria-label="关闭账号" onClick={() => setAccountOpen(false)}>✕</button><Account />{user && <><TrialPanel userId={user.id} /><GenerationAccessPanel key={user.id} userId={user.id} /><BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} /></>}</section></div>}

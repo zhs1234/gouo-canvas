@@ -1,0 +1,4 @@
+.workspace-shell { height: 100dvh; min-height: 0; }
+.workspace-navigation { flex: 0 0 auto; padding-bottom: 12px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.workspace-content { position: relative; }
+.workspace-content > .gouo-canvas-lab { height: 100%; min-height: 0; }

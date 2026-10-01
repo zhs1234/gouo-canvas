@@ -1,12 +1,13 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
+import { useLocation } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState, Suspense } from "react";
 
 import type { ImageArtifact, VideoArtifact } from "@loomic/shared";
 import type { CanvasImageItem } from "./components/canvas-image-picker";
 import type { CanvasSelectedElement } from "./components/canvas-editor";
-function LoadingScreen() { return <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">正在打开创作空间…</div> }
+function LoadingScreen() { return <div className="flex h-full min-h-0 items-center justify-center bg-background text-sm text-muted-foreground">正在打开创作空间…</div> }
 import { useAuth } from "./lib/auth-context";
 import { useWebSocket } from "./hooks/use-websocket";
 import { CanvasEditor } from "./components/canvas-editor";
@@ -24,6 +25,9 @@ import { useToast } from "./components/toast";
 
 function CanvasPageContent() {
   const searchParams = useSearchParams();
+  const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const canvasId = searchParams.get("id") || "draft";
   const initialSessionId = searchParams.get("session") ?? undefined;
   const { user, loading: authLoading, signOut } = useAuth();
@@ -124,7 +128,11 @@ function CanvasPageContent() {
     (sessionId: string) => {
       if (!canvasId) return;
       // Update URL: set session param, remove prompt param to prevent re-send on refresh
-      routerRef.current.replace(`/canvas?id=${canvasId}&session=${sessionId}`);
+      const nextParams = new URLSearchParams(locationRef.current.search);
+      nextParams.set("id", canvasId);
+      nextParams.set("session", sessionId);
+      nextParams.delete("prompt");
+      routerRef.current.replace(`/canvas?${nextParams.toString()}${locationRef.current.hash}`);
     },
     [canvasId],
   );
@@ -216,7 +224,7 @@ function CanvasPageContent() {
 
   if (!canvasId) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex h-full min-h-0 items-center justify-center">
         <p className="text-sm text-muted-foreground">No canvas ID specified.</p>
       </div>
     );
@@ -228,7 +236,7 @@ function CanvasPageContent() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex h-full min-h-0 items-center justify-center">
         <p className="text-sm text-destructive">{error}</p>
       </div>
     );
@@ -238,7 +246,7 @@ function CanvasPageContent() {
   if (!canvasData || !accessToken) return null;
 
   return (
-    <div className="flex h-dvh w-screen overflow-hidden">
+    <div className="relative flex h-full min-h-0 min-w-0 w-full overflow-hidden">
       {/* Top-left navigation bar */}
       <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5">
         <CanvasLogoMenu

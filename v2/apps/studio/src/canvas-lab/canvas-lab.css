@@ -1,4 +1,4 @@
-.gouo-canvas-lab { height: 100dvh; display: flex; flex-direction: column; background: white; color: #202124; }
+.gouo-canvas-lab { height: 100%; min-height: 0; display: flex; flex-direction: column; background: white; color: #202124; }
  .canvas-project-bar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid #efedf4; font-size: 13px; min-height: 64px; flex-wrap: wrap; }
 .canvas-project-bar > a { color: #6965db; text-decoration: none; }
 .canvas-project-title { display: flex; flex-direction: column; gap: 3px; margin-right: auto; min-width: 0; }
@@ -18,7 +18,11 @@
 .canvas-more-panel input { max-width: 100%; margin-top: 6px; }
 .canvas-more-panel a { color: #6965db; padding: 7px 11px; }
 @media (max-width: 600px) { .canvas-project-bar { gap: 8px; padding: 10px 12px; } .canvas-project-title { flex: 1; } .canvas-project-bar > button { font-size: 12px; } }
-.gouo-canvas-lab-editor { flex: 1; min-height: 0; position: relative; }
+.gouo-canvas-lab-editor { flex: 1; min-height: 0; position: relative; container-type: inline-size; }
+/* The shared sidebar narrows the editor before the SDK's mobile breakpoint. */
+@container (max-width: 800px) {
+  .gouo-canvas-lab .excalidraw .App-menu_top { grid-gap: .75rem; }
+}
 /* 只在对照页恢复被 Loomic 全局样式隐藏的官方控件。 */
 .gouo-canvas-lab .excalidraw .App-menu_top__left,
 .gouo-canvas-lab .excalidraw .layer-ui__wrapper__top-right,

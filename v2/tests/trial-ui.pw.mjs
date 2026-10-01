@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { mockAccount } from './account-fixture.mjs'
 
-for (const entry of ['./chat', './']) {
+for (const entry of ['./chat', './canvas']) {
   test(`trial panel queries only and preserves native billing in ${entry}`, async ({ page }) => {
     const account = await mockAccount(page)
     account.active = true

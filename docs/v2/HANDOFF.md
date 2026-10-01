@@ -1,5 +1,7 @@
 # 第三阶段交接：新对话使用 gpt-6.1-sol
 
+> 2026-10-01 T1.8 最新：默认聊天和全页面固定侧栏已实施，实际内置浏览器未登录/Edge已登录 ChatGPT 首页、账号菜单及设置均已查看截图。旧 id/session/query/hash 可恢复，导航/返回等待真实保存，失败留页可导出；显式删除和 owner 强制卸载的草稿安全已修，窄编辑器素材库按钮补验。最终回归以 STATUS 顶部为准，过程失败保留；原28仍16/12/0。日常只更新web，Native/API不重启、真实开关仍关闭。布局/路由/恢复边界见 WORKSPACE-NAVIGATION.md。用户进一步要求几乎所有页面及账号管理参考 ChatGPT，下一 T1.9 共享底部账号菜单与设置，保持 New API 唯一身份/金额；T1.8 当前旧账号弹层尚未统一，不能当成T1.9完成。后面旧默认画布/正在实施T1.8均是历史。
+
 > 2026-10-01 T1.7最新：基于8f51853，退款独立候选同一补丁SHA f17e8c…在SQLite/MySQL/Postgres各6/6通过，完整上游model包SQLite退出0；真实Native本地供应商失败预扣基线持久consumed20，最终候选在线396ms refunded/sub0/token0。仅随机隔离，默认pin/日常二进制/旧资金和held未改，全部临时退款栈已清理；不证明两步异步退款所有故障原子性。门项和可审查源码见NATIVE_REFUND_TRANSACTION_GATE.md。A7四子态及D5组无模型子态补验，Q9权限空态提示修正，原28当前16通过/12partial/0未执行，P未验。51领域、151API、93浏览器/2.7分钟通过；首轮两个失败及证据边界保留。日常只更新web，Native启动不变、setup false、真实generation/trial/renewal全关闭，没有push/merge/部署。
 
 > 用户最新优先级 **T1.8**：画布没有明确出口是致命交互问题；要求实际打开chatgpt.com截图、布局参考ChatGPT、默认聊天、主要入口固定侧栏。当前正在实现共同assistant-ui外壳和安全导航，保留旧Loomic/官方Excalidraw、原图和旧草稿；真实保存失败须留页可导出。上面93浏览器结果是导航改动前，需独立验证新布局。后面的旧“默认画布”与“下一T1.7”只按历史读取。

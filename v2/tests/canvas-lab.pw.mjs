@@ -62,7 +62,7 @@ test('local canvas navigation refuses a failed draft save and keeps the current 
     IDBObjectStore.prototype.put = function () { throw new DOMException('fixture quota full', 'QuotaExceededError') }
   })
   await page.getByRole('button', { name: '插入测试素材', exact: true }).click()
-  await page.getByRole('link', { name: '返回创作画布', exact: true }).click()
+  await page.getByRole('link', { name: '返回聊天', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('保存失败')
   await expect(page).toHaveURL(/\/studio\/canvas-lab$/)
   expect(await page.evaluate(() => {

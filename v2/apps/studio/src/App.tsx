@@ -1,10 +1,12 @@
 import { lazy, Suspense } from 'react'
-import { Route, Routes, Navigate, useSearchParams } from 'react-router-dom'
+import { Route, Routes, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { ThemeProvider } from 'next-themes'
 import { AuthProvider, useAuth } from './loomic/lib/auth-context'
 import { ToastProvider } from './loomic/components/toast'
 import CanvasPage from './loomic/CanvasPage'
 import ProjectsPage from './loomic/ProjectsPage'
+import { WorkspaceShell } from './workspace/WorkspaceShell'
+import { WorkspaceNavigationProvider } from './workspace/WorkspaceNavigationProvider'
 const ChatLab = lazy(() => import('./chat-lab/ChatLab'))
 const CanvasLab = lazy(() => import('./canvas-lab/CanvasLab'))
 function CanvasWorkspace() {
@@ -13,15 +15,24 @@ function CanvasWorkspace() {
   // Dispose pending transports as well as the editor when the workspace changes.
   return <CanvasPage key={`${user?.id ?? 'guest'}:${params.get('id') || 'draft'}`} />
 }
+function LegacyRedirect({ path }: { path: string }) {
+  const { search, hash } = useLocation()
+  return <Navigate to={{ pathname: path, search, hash }} replace />
+}
+function DefaultWorkspace() {
+  const [params] = useSearchParams()
+  return params.has('id') || params.has('session') ? <LegacyRedirect path="/canvas" /> : <Suspense fallback={<p>正在打开聊天…</p>}><ChatLab /></Suspense>
+}
 export default function App() {
-  return <ThemeProvider attribute="class" defaultTheme="light" enableSystem><AuthProvider><ToastProvider><Routes>
-    <Route path="/" element={<CanvasWorkspace />} />
+  return <ThemeProvider attribute="class" defaultTheme="light" enableSystem><AuthProvider><ToastProvider><WorkspaceNavigationProvider><Routes>
+    <Route path="/" element={<DefaultWorkspace />} />
     <Route path="/chat" element={<Suspense fallback={<p>正在打开聊天…</p>}><ChatLab /></Suspense>} />
-    <Route path="/chat-lab" element={<Navigate to="/chat" replace />} />
-    <Route path="/canvas-lab" element={<Suspense fallback={<p>正在打开画布对照…</p>}><CanvasLab /></Suspense>} />
-    <Route path="/projects" element={<ProjectsPage />} />
-    <Route path="/editor" element={<Navigate to="/" replace />} />
-    <Route path="/board" element={<Navigate to="/" replace />} />
+    <Route path="/chat-lab" element={<LegacyRedirect path="/chat" />} />
+    <Route path="/canvas" element={<WorkspaceShell title="Loomic 工作台"><CanvasWorkspace /></WorkspaceShell>} />
+    <Route path="/canvas-lab" element={<WorkspaceShell title="画布"><Suspense fallback={<p>正在打开画布…</p>}><CanvasLab /></Suspense></WorkspaceShell>} />
+    <Route path="/projects" element={<WorkspaceShell title="项目库"><ProjectsPage /></WorkspaceShell>} />
+    <Route path="/editor" element={<LegacyRedirect path="/canvas" />} />
+    <Route path="/board" element={<LegacyRedirect path="/canvas" />} />
     <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes></ToastProvider></AuthProvider></ThemeProvider>
+  </Routes></WorkspaceNavigationProvider></ToastProvider></AuthProvider></ThemeProvider>
 }

@@ -1,5 +1,6 @@
 // 来源 assistant-ui f008537，MIT；保留官方布局，Studio 适配见 UI-STARTER.md。
 import type * as React from "react";
+import { Link } from 'react-router-dom';
 import { MessagesSquare } from "lucide-react";
 import { GitHubIcon } from "../../icons/github";
 import {
@@ -26,8 +27,8 @@ export function ThreadListSidebar({
               <SidebarMenuButton
                 size="lg"
                 render={
-                  <a
-                    href="/studio/chat"
+                  <Link
+                    to="/chat"
                   />
                 }
               >
