@@ -1,5 +1,34 @@
 # 实际交付与验证状态
 
+## T1 原生试用资金与四聊一图（2026-10-01，默认关闭）
+
+用户确认 4 次聊天按用户发送计，有限工具循环仍占一次；生图工具另占 1 次图片。批准实现 New API 原生一次性零价有限试用计划与隔离测试，真实金额/期限/入口暂不启用。功能分支 `codex/registration-trial` 由 `codex/local-environment-p0` 派生，包含 `codex/new-api-v2` 的合并基线 `abe46c4`。无 main 改动、push、merge 或部署。
+
+新增 `trial-funding.mjs` 严格核验本人原生计划/订阅，零钱包可使用原生有限订阅，而不是删除 402 后借共享 admin 令牌。领取及 subscription_only 偏好变更保存意图；未知只读 receipt 恢复、不重新购买。新增 `trial.mjs` 保存非货币 4/1 次数，每次真正模型提交前记录意图；同发送内聊天工具循环复用聊天权益、图片另计；重放/并发/重启/跨户/原生 receipt 缺失及实例/计划变化保持保护。New API 仍负责全部资金和账单。Ledger 新持久进程独占锁阻止第二实例误伤 running。
+
+现有聊天和画布账号弹窗新增本人 TrialPanel，保留完整 assistant-ui、Excalidraw、原图、旧草稿、账号原生入口与金额 BillingPanel。新增 prepared Studio-only Nginx/Compose，固定账户 method/path 白名单、禁止公开 relay/未知插件/偏好写入，UI/static 不传调用者凭据或 query；**未应用到日常 8080 服务**。金额/期限政策示例都是不能直接启用的占位值，真实 `.env` 未改。
+
+本阶段实际命令：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run check` | 类型、14/14 领域探测、82/82 API及生产构建通过；后续审查新增3项恢复/轮换反例并修正配置字段，最终重跑见下续记 |
+| `npm run test:api`（恢复与轮换修复后） | **85/85**，含8资金合同、11试用路径、3真实子进程锁测试及全部旧断言 |
+| `npm run test:e2e` | **53/53**，含3新试用UI测试；聊天、画布、移动、旧草稿副本、原图裁剪/重开与恢复回归通过 |
+| `node tests/stack/trial-edge.cases.mjs` | 退出0：实际隔离 Nginx＋固定 Native空库账户HTML/JS/CSS、外部路径拒绝、内部匿名模型路由401；另一个明确echo契约验证凭据/query剥离 |
+| `npm run test:stack` | 退出0：真实固定Native未初始化安全边界，personal契约替身2/2，fresh普通用户契约替身1/1；仅清理本次随机测试资源 |
+| 最终 `npm run check`（恢复/轮换与入口政策字段后） | **类型、14/14、85/85、生产构建均通过**，构建11.04秒；完整本机日志 `.local/trial-check.log`，只有既有chunk大小警告 |
+| prepared Compose `config --quiet` / `git diff --check` | 均通过；不是启用或部署 |
+| `node tests/stack/trial-native.cases.mjs` | **退出0**：真实固定Native＋当前Studio＋本地模型替身。普通用户wallet0；唯一原生订阅500000合成quota消耗560；token499440；六笔日志、used_quota及Native SQLite一致；4次发送计4chat/1image，第5次402，第二次原生购买失败。真实供应商调用0/采购0 |
+
+一次新图片校验测试初次7/8：预期400但既有StudioError实际422；修正断言而不放宽校验，最终通过。Ledger独占修复初次65/66：旧测试在同持久库同时建两个服务；改成不同owner依次关闭/重开，保留全部原隔离/重放断言，66/66通过，再接入试用增量。上述失败不隐去。
+
+Native新增试验初次失败记录：restart随机端口重分配导致旧地址ECONNREFUSED，修正为重查composeport；根新增relayIngress必填后临时policy被Zod拒绝，补明确测试字段；SDK content为数组、供应商替身仅识别字符串未触发生图，修正替身识别后验证首发送2chat＋1image。随后补本人usedquota/token、只读SQLite落盘poll和每条日志资金归属断言完整通过。最终证据 `.local/native-trial-3un3gM/evidence.json`，六条日志都为subscription/only、钱包扣除0、本人plan/subscription；临时容器全清理，日常主栈不变。
+
+真实供应商调用 **0**。单位/SDK/浏览器使用明确fixture；新增实际Native验收使用合成价格/资金/账号和仅本机模型替身，证明固定原生资金与预扣结算实现，不代表真实私人渠道已live-verified。合规true/v1只seed在本次测试SQLite，不代接受现实声明，不改变日常实例。MFA/商户充值/动态插件仍不是真实验收结果。试用用完提示原生充值，**充值后明确付费续用仍未实现**；完整政策、资金成本上界和真实启用门槛见 [TRIAL.md](TRIAL.md)。下一项 T1.2；最终多智能体用户模拟计划见 [QA_ACCEPTANCE.md](QA_ACCEPTANCE.md)，尚未将计划当作产品整体验收通过。
+
+---
+
 ## 当前项目内缓存与真实服务复核（2026-10-01，暂不改功能）
 
 用户重新提供环境交接并要求先准备环境。本机实际仍在 `codex/local-environment-p0`，包含 `abe46c4` 和上一轮环境提交 `1545e25`，工作树起初干净；`codex/new-api-v2` 指向 `abe46c4`，没有从 main 开发。与交接描述不同，当前 Docker 已安装且真实 8080 三服务仍运行，因此本轮没有安装系统组件、改安全设置或替换服务。并行只读复核指定 gpt-6.1-sol，所有命令、缓存和开发日志留在当前项目。

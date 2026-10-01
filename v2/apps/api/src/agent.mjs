@@ -58,6 +58,7 @@ export async function runAgent(config, chatModel, payload) {
       throw chatFailure
     }
     let response
+    await config.onGatewayRequest?.({ kind: 'chat', modelId: chatModel.id })
     try {
       response = await fetch(url, init)
     } catch (error) {

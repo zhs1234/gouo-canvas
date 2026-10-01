@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { validateNormalRouting } from './relay.mjs'
+import { trialPolicySchema } from './trial-funding.mjs'
 
 const model = z.object({
   id: z.string().min(1).max(100), displayName: z.string().min(1).max(100),
@@ -48,12 +49,18 @@ export function loadConfig(env = process.env) {
   const relayOwnerId = env.GOUO_RELAY_OWNER_ID ? Number(env.GOUO_RELAY_OWNER_ID) : undefined
   if (relayOwnerId !== undefined && (!Number.isSafeInteger(relayOwnerId) || relayOwnerId <= 0)) throw new Error('网关令牌所属账号 ID 无效')
   if (env.GOUO_ENABLE_GENERATION === 'true' && relayKey && relayOwnerId === undefined) throw new Error('启用个人 relay 生成前必须配置 GOUO_RELAY_OWNER_ID 为令牌所属账号 ID')
+  let trial
+  if (env.GOUO_ENABLE_TRIAL === 'true') {
+    if (relayCredentialMode !== 'user-token' || relayRoutingMode !== 'model' || !env.GOUO_TRIAL_POLICY_FILE) throw new Error('注册试用需要每用户普通模型路由与批准的 GOUO_TRIAL_POLICY_FILE')
+    trial = trialPolicySchema.parse(JSON.parse(readFileSync(env.GOUO_TRIAL_POLICY_FILE, 'utf8')))
+    if (trial.gatewayOrigin !== gateway.origin || trial.sourceCommit !== normalRoutingEvidence.sourceCommit) throw new Error('注册试用必须绑定已核验的同一固定版本 New API 网关')
+  }
   return {
     models, gateway: gateway.toString().replace(/\/$/, ''),
     authOrigin: env.GOUO_BACKEND_DEV_TARGET || gateway.origin,
     relayKey,
     relayRoutingMode, normalRoutingEvidence,
-    relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds,
+    relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds, trial,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }

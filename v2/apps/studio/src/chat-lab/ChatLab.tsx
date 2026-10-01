@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AssistantRuntimeProvider, useLocalRuntime } from '@assistant-ui/react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../loomic/lib/auth-context'
 import { fetchCatalog } from '../loomic/lib/gateway'
 import { request } from '../api'
 import Account from '../Account'
+import { TrialPanel } from '../TrialPanel'
+import { useTrial } from '../trial'
 import { BillingPanel } from '../loomic/components/billing-panel'
 import { fetchBilling } from '../loomic/lib/billing'
 import { restoreMessages, studioAdapter, type SavedThread } from './adapter'
@@ -32,10 +34,12 @@ function StudioShell({ list, toolbar, footer, children }: { list?: ReactNode; to
   return <SidebarProvider className="chat-starter"><div className="flex h-dvh w-full pr-0.5"><ThreadListSidebar footer={footer}>{list}</ThreadListSidebar><SidebarInset className="min-w-0"><header className="flex h-16 shrink-0 items-center gap-2 border-b px-4"><SidebarTrigger aria-label="切换侧栏" /><Separator orientation="vertical" className="mr-2 h-4" />{toolbar}</header><div className="flex-1 min-h-0 overflow-hidden">{children}</div></SidebarInset></div></SidebarProvider>
 }
 function LabRuntime({ model, imageModel, thread, reload }: { model: string; imageModel?: string; thread: SavedThread; reload: () => void }) {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
   const lifetime = useRef(new AbortController())
   useEffect(() => { lifetime.current = new AbortController(); return () => lifetime.current.abort() }, [])
   const [needsRefresh, setNeedsRefresh] = useState(false)
-  const finish = useCallback((completed: boolean) => { if (completed) reload(); else setNeedsRefresh(true) }, [reload])
+  const finish = useCallback((completed: boolean) => { if (completed) reload(); else { setNeedsRefresh(true); void queryClient.invalidateQueries({ queryKey: ['trial', user?.id] }) } }, [reload, queryClient, user?.id])
   const adapter = useMemo(() => studioAdapter(model, imageModel, thread.id, () => lifetime.current.signal, finish), [model, imageModel, thread.id, finish])
   const initialMessages = useMemo(() => restoreMessages(thread), [thread])
   const runtime = useLocalRuntime(adapter, { initialMessages })
@@ -49,6 +53,8 @@ function LabRuntime({ model, imageModel, thread, reload }: { model: string; imag
   </div></AssistantRuntimeProvider>
 }
 function OwnedThreads({ model, imageModel, toolbar, footer }: { model: string; imageModel?: string; toolbar: ReactNode; footer: ReactNode }) {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [params, setParams] = useSearchParams()
   const id = params.get('thread') || ''
   const [threads, setThreads] = useState<SavedThread[]>([])
@@ -58,7 +64,7 @@ function OwnedThreads({ model, imageModel, toolbar, footer }: { model: string; i
   const [revision, revise] = useState(0)
   const [nextList, setNextList] = useState<number | null>(null)
   const [offset, setOffset] = useState(0)
-  const reload = useCallback(() => revise(n => n + 1), [])
+  const reload = useCallback(() => { revise(n => n + 1); void queryClient.invalidateQueries({ queryKey: ['trial', user?.id] }) }, [queryClient, user?.id])
   useEffect(() => setOffset(0), [id])
   const active = useRef(true)
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
@@ -99,6 +105,7 @@ function OwnedThreads({ model, imageModel, toolbar, footer }: { model: string; i
 }
 export default function ChatLab() {
   const { user } = useAuth()
+  useTrial(user?.id)
   const [accountOpen, setAccountOpen] = useState(false)
   const billing = useQuery({ queryKey: ['billing', user?.id], queryFn: ({ signal }) => fetchBilling(signal), enabled: Boolean(user) && accountOpen, retry: false })
   const catalog = useQuery({ queryKey: ['chat-lab-models', user?.id ?? 'guest'], queryFn: fetchCatalog })
@@ -111,7 +118,7 @@ export default function ChatLab() {
   const footer = <SidebarMenu><SidebarMenuItem><SidebarMenuButton render={<Link to="/projects" />}><FolderIcon /><span>项目库</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/canvas-lab" />}><PanelsTopLeftIcon /><span>官方画布</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton render={<Link to="/" />}><MessagesSquare /><span>Loomic 工作台</span></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton size="lg" onClick={() => setAccountOpen(v => !v)} aria-label="New API 账号"><div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 items-center justify-center rounded-lg"><UserIcon className="size-4" /></div><div className="flex flex-col text-left"><span className="font-semibold">{user?.display_name || user?.username || '登录账号'}</span><span className="text-xs text-muted-foreground">账号与费用</span></div></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
   return <>
     {user ? <OwnedThreads key={user.id} model={model} imageModel={imageModel} toolbar={toolbar} footer={footer} /> : <StudioShell toolbar={toolbar} footer={footer}><div className="flex h-full items-center justify-center"><div className="px-6"><h1 className="mb-4 text-2xl font-medium">今天有什么可以帮你？</h1><p className="mb-6 text-sm text-muted-foreground">请连接 New API 账号。</p><Button onClick={() => setAccountOpen(true)}>登录账号</Button></div></div></StudioShell>}
-    {accountOpen && <div className="account-overlay" onClick={() => setAccountOpen(false)}><section className="account-dialog" aria-label="账号与费用" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}><button className="account-close" aria-label="关闭账号" onClick={() => setAccountOpen(false)}>✕</button><Account />{user && <BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} />}</section></div>}
+    {accountOpen && <div className="account-overlay" onClick={() => setAccountOpen(false)}><section className="account-dialog" aria-label="账号与费用" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}><button className="account-close" aria-label="关闭账号" onClick={() => setAccountOpen(false)}>✕</button><Account />{user && <><TrialPanel userId={user.id} /><BillingPanel data={billing.data} error={billing.error} loading={billing.isFetching} refresh={() => { void billing.refetch() }} /></>}</section></div>}
     {catalog.error && <p role="alert" className="studio-chat-notice">模型目录加载失败</p>}
   </>
 }

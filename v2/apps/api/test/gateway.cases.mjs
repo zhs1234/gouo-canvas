@@ -121,18 +121,22 @@ test('idempotent image replay is owner scoped and changed parameters conflict', 
   const c = { ...config(), ledgerPath: join(directory, 'requests.sqlite') }
   let calls = 0
   const overrides = { fetch: authFetch, generateImage: async () => { calls++; return { url: 'fixture-owner-result-' + calls, width: 32, height: 24 } } }
-  const app = createServer(c, overrides)
-  const other = createServer({ ...c, relayOwnerId: 8 }, overrides)
+  let app = createServer(c, overrides)
+  let other
   const make = (server = app, h = headers, prompt = 'test') => server.inject({ method: 'POST', url: '/api/studio/images', headers: h, payload: { prompt, model: 'image' } })
   try {
     const first = await make(); assert.equal(first.statusCode, 200)
     assert.deepEqual((await make()).json(), first.json()); assert.equal(calls, 1)
     assert.equal((await make(app, headers, 'changed')).statusCode, 409); assert.equal(calls, 1)
+    await app.close(); app = undefined
+    other = createServer({ ...c, relayOwnerId: 8 }, overrides)
     const second = await make(other, { ...headers, authorization: 'Bearer fixture-user-8' })
     assert.equal(second.statusCode, 200); assert.equal(calls, 2)
     assert.notEqual(second.json().data.url, first.json().data.url)
+    await other.close(); other = undefined
+    app = createServer(c, overrides)
     assert.deepEqual((await make()).json(), first.json()); assert.equal(calls, 2)
-  } finally { await app.close(); await other.close(); rmSync(directory, { recursive: true, force: true }) }
+  } finally { await app?.close(); await other?.close(); rmSync(directory, { recursive: true, force: true }) }
 })
 
 test('ambiguous gateway failure stays blocked across a service restart', async () => {

@@ -1,0 +1,13 @@
+# Prepared opt-in only; do not apply to a running stack without separate approval.
+# Compose paths resolve against deploy/compose.yml. New API has no host port.
+services:
+  new-api:
+    ports: !reset []
+  studio-api:
+    ports: !reset []
+    environment:
+      GOUO_ENABLE_TRIAL: ${GOUO_ENABLE_TRIAL:-false}
+      GOUO_TRIAL_POLICY_FILE: ${GOUO_TRIAL_POLICY_FILE:-}
+  web:
+    volumes:
+      - ./nginx.studio-only.conf:/etc/nginx/templates/default.conf.template:ro

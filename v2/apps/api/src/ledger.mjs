@@ -5,16 +5,29 @@ import { createHash } from 'node:crypto'
 export class Ledger {
   constructor(path) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-    this.db = new DatabaseSync(path)
-    this.db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS requests (
-      owner INTEGER NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, hash TEXT NOT NULL,
-      status TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL, PRIMARY KEY(owner,kind,key))`)
-    this.db.exec(`CREATE TABLE IF NOT EXISTS gateway_attempts (
-      owner INTEGER NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, attempt INTEGER NOT NULL,
-      request_id TEXT, status INTEGER NOT NULL, PRIMARY KEY(owner,kind,key,attempt))`)
-    // This synchronous integration has no durable worker. A crash cannot safely
-    // establish whether a paid call finished; keep it blocked, never resubmit it.
-    this.db.exec("UPDATE requests SET status='unknown' WHERE status='running'")
+    try {
+      if (path !== ':memory:') {
+        // This API is single-process: acquire ownership before crash recovery.
+        // SQLite releases the lock even when the owning process crashes.
+        this.processLock = new DatabaseSync(`${path}.process-lock`)
+        try { this.processLock.exec('PRAGMA busy_timeout=0; BEGIN EXCLUSIVE') }
+        catch (cause) { throw new Error('Studio ledger is already owned by another API process', { cause }) }
+      }
+      this.db = new DatabaseSync(path)
+      this.db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS requests (
+        owner INTEGER NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, hash TEXT NOT NULL,
+        status TEXT NOT NULL, result TEXT, created_at TEXT NOT NULL, PRIMARY KEY(owner,kind,key))`)
+      this.db.exec(`CREATE TABLE IF NOT EXISTS gateway_attempts (
+        owner INTEGER NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, attempt INTEGER NOT NULL,
+        request_id TEXT, status INTEGER NOT NULL, PRIMARY KEY(owner,kind,key,attempt))`)
+      // This synchronous integration has no durable worker. A crash cannot safely
+      // establish whether a paid call finished; keep it blocked, never resubmit it.
+      this.db.exec("UPDATE requests SET status='unknown' WHERE status='running'")
+    } catch (error) {
+      try { this.db?.close() }
+      finally { this.processLock?.close() }
+      throw error
+    }
   }
   begin(owner, kind, key, payload, busy = false) {
     const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
@@ -48,5 +61,8 @@ export class Ledger {
     if (!row) return null
     return { status: row.status, attempts: this.db.prepare('SELECT attempt, request_id AS requestId, status FROM gateway_attempts WHERE owner=? AND kind=? AND key=? ORDER BY attempt').all(owner, kind, key) }
   }
-  close() { this.db.close() }
+  close() {
+    try { this.db.close() }
+    finally { this.processLock?.close() }
+  }
 }

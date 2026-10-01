@@ -31,6 +31,7 @@ export async function generateImage(config, model, payload, fetcher = fetch) {
   } else { headers['Content-Type'] = 'application/json'; body = JSON.stringify(common) }
   // No retry or fallback: a timeout may already have consumed model quota.
   let response
+  await config.onGatewayRequest?.({ kind: 'image', modelId: model.id })
   try {
     response = await fetcher(`${config.gateway}/images/${operation === 'edit' ? 'edits' : 'generations'}`, {
       method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(120_000),

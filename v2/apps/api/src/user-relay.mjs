@@ -26,8 +26,9 @@ export async function userModels(config, authorization, account, fetcher) {
   return { ...config, models: config.models.map(model => ({ ...model, enabled: model.enabled && models.includes(model.upstreamModelId), ...(!models.includes(model.upstreamModelId) && model.enabled ? { availabilityReason: '当前账号分组没有此模型权限，请联系管理员' } : {}) })) }
 }
 
-export async function userRelay(config, authorization, account, fetcher) {
-  if (!Number.isSafeInteger(account.quota) || account.quota <= 0) throw new StudioError('账号余额不足，请在原生钱包查看额度或联系管理员', 402)
+export async function userRelay(config, authorization, account, fetcher, trialFunding) {
+  const fundedByTrial = trialFunding?.state === 'active' && Number.isSafeInteger(trialFunding.tokenQuota) && trialFunding.tokenQuota > 0
+  if (!fundedByTrial && (!Number.isSafeInteger(account.quota) || account.quota <= 0)) throw new StudioError('账号余额不足，请在原生钱包查看额度或联系管理员', 402)
   const allowed = config.models.filter(model => model.enabled && model.verification === 'live-verified' && model.kind !== 'video').map(model => model.upstreamModelId)
   if (!allowed.length) throw new StudioError('当前账号分组没有可用模型，请联系管理员', 403)
   const find = async () => {
@@ -42,7 +43,7 @@ export async function userRelay(config, authorization, account, fetcher) {
     // Explicit operator opt-in supplies this cap/lifetime; it grants no funds.
     // A failed/ambiguous creation is never automatically repeated.
     await native(config, authorization, '/api/token/', fetcher, {
-      name: tokenName, remain_quota: Math.min(account.quota, config.userTokenQuotaCap), unlimited_quota: false,
+      name: tokenName, remain_quota: Math.min(fundedByTrial ? trialFunding.tokenQuota : account.quota, config.userTokenQuotaCap), unlimited_quota: false,
       expired_time: Math.floor(Date.now() / 1000) + config.userTokenLifetimeSeconds,
       model_limits_enabled: true, model_limits: [...new Set(allowed)].join(','), group: '', cross_group_retry: false,
     })

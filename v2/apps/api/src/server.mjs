@@ -8,6 +8,8 @@ import { generateImage, StudioError } from './images.mjs'
 import { runAgent, runImage } from './agent.mjs'
 import { userModels, userRelay } from './user-relay.mjs'
 import { billingSummary, settledUsage } from './billing.mjs'
+import { Trial } from './trial.mjs'
+import { inspectTrialFunding, purchaseTrial, selectTrialFunding } from './trial-funding.mjs'
 
 const imageBody = z.object({ prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(), quality: z.string().max(40).optional(), aspectRatio: z.string().max(20).optional(), inputImages: z.array(z.string().max(12 * 1024 * 1024)).max(4).default([]) }).strict()
 const runBody = z.object({ threadId: z.string().uuid().optional(), runId: z.string().uuid(), prompt: z.string().trim().min(1).max(8000), model: z.string().max(100).optional(),
@@ -22,6 +24,8 @@ export function createServer(config, overrides = {}) {
   const app = Fastify({ logger: false, bodyLimit: 20 * 1024 * 1024, requestTimeout: 150_000 })
   const fetcher = overrides.fetch ?? fetch
   const ledger = new Ledger(config.ledgerPath)
+  let trial
+  try { trial = new Trial(ledger.db, config.trial) } catch (error) { ledger.close(); throw error }
   const history = new History(ledger.db)
   const projects = new Projects(ledger.db, history)
   const busy = new Set()
@@ -54,6 +58,53 @@ export function createServer(config, overrides = {}) {
     request.studioAccount = body.data
   })
   app.get('/api/studio/billing', async request => ({ success: true, data: await billingSummary(request.studioConfig ?? config, request.headers.authorization, request.studioAccount, fetcher) }))
+  app.get('/api/studio/trial', async request => {
+    if (!config.trial) return { success: true, data: trial.summary(request.studioUser, 'disabled', '注册试用尚未开放，请联系管理员') }
+    const funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+    const grant = trial.grant(request.studioUser)
+    if (grant && grant.plan_id !== config.trial.planId) throw new StudioError('试用计划已变化，原领取记录不能重置，请联系管理员', 503)
+    const pendingClaim = grant && (grant.status !== 'active' || funding.state === 'eligible')
+    const state = pendingClaim ? 'pending' : funding.state === 'needs-preference' ? 'unavailable' : funding.state
+    const summary = trial.summary(request.studioUser, state, funding.reason ?? (pendingClaim ? '原生领取记录待核对，刷新仅查询；不会自动重复领取' : funding.state === 'eligible' ? '发送第一条消息时开通 4 次聊天和 1 次生图试用' : '一次发送计作一次聊天，生图工具另占一次生图；未知结果保留次数'))
+    if (summary.state === 'exhausted') summary.message = '试用次数已用完，请前往 New API 钱包充值；不会自动转为收费请求'
+    if (pendingClaim) { summary.chat.remaining = 0; summary.image.remaining = 0 }
+    return { success: true, data: summary }
+  })
+  async function ensureTrial(request) {
+    const owner = request.studioUser
+    const grant = trial.grant(owner)
+    if (grant && grant.plan_id !== config.trial.planId) throw new StudioError('试用计划已变化，原领取记录不能重置，请联系管理员', 409)
+    let funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+    if (grant?.subscription_id && funding.subscriptionId && grant.subscription_id !== funding.subscriptionId) throw new StudioError('原生试用领取证据变化，未修改扣费偏好或重新领取', 409)
+    if (funding.state === 'active') { trial.activate(owner, funding.subscriptionId); return funding }
+    if (funding.state === 'needs-preference') {
+      // Native receipt establishes that the purchase already succeeded. This
+      // explicit send may select subscription-only after a read; no re-purchase.
+      if (!trial.grant(owner)) trial.beginClaim(owner)
+      try {
+        await selectTrialFunding(config, request.headers.authorization, fetcher)
+        funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+        if (funding.state !== 'active') throw new StudioError('试用扣费偏好待确认，未发出模型请求', 502)
+        trial.activate(owner, funding.subscriptionId)
+        return funding
+      } catch (error) { trial.unknownClaim(owner); throw error }
+    }
+    if (funding.state !== 'eligible') throw new StudioError(funding.reason ?? '试用资金不可用，请前往 New API 原生页面核对', 402)
+    // Persist purchase intent before the native, non-idempotent HTTP operation.
+    // An ambiguous result is recovered only from the native receipt, never by
+    // purchasing again, even after a restart or with a different run ID.
+    if (!trial.beginClaim(owner)) throw new StudioError('试用领取结果待确认，请核对原生订阅记录；未自动重复领取', 409)
+    try {
+      await purchaseTrial(config, request.headers.authorization, fetcher)
+      // A free send must never silently fall through to a wallet charge if
+      // its subscription expires between validation and native pre-consumption.
+      await selectTrialFunding(config, request.headers.authorization, fetcher)
+      funding = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+      if (funding.state !== 'active') throw new StudioError('试用资金领取结果待确认，未发出模型请求', 502)
+      trial.activate(owner, funding.subscriptionId)
+      return funding
+    } catch (error) { trial.unknownClaim(owner); throw error }
+  }
   app.get('/api/studio/requests/:kind/:id', async request => {
     if (!['image', 'agent'].includes(request.params.kind) || !/^[\w-]{8,100}$/.test(request.params.id)) throw new StudioError('请求标识无效', 400)
     const record = ledger.detail(request.studioUser, request.params.kind, request.params.id)
@@ -120,18 +171,25 @@ export function createServer(config, overrides = {}) {
     let transportStarted = false, externalStarted = false
     try {
       let context = config
+      const introductory = Boolean(config.trial && owner >= config.trial.minUserId)
       if (config.relayCredentialMode === 'user-token') {
-        if (!Number.isSafeInteger(request.studioAccount.quota) || request.studioAccount.quota <= 0) throw new StudioError('账号余额不足，请在原生钱包查看额度或联系管理员', 402)
+        if (!introductory && (!Number.isSafeInteger(request.studioAccount.quota) || request.studioAccount.quota <= 0)) throw new StudioError('账号余额不足，请在原生钱包查看额度或联系管理员', 402)
         context = await userModels(config, request.headers.authorization, request.studioAccount, fetcher)
       }
-      validate(context)
+      const benefit = validate(context)
+      if (introductory) trial.assertAvailable(owner, benefit)
       externalStarted = true
-      if (config.relayCredentialMode === 'user-token') context = await userRelay(context, request.headers.authorization, request.studioAccount, fetcher)
+      const funding = introductory ? await ensureTrial(request) : undefined
+      if (config.relayCredentialMode === 'user-token') context = await userRelay(context, request.headers.authorization, request.studioAccount, fetcher, funding)
       if (payload.threadId) history.begin(owner, payload)
       transport?.start()
       transportStarted = Boolean(transport)
       const requests = []
-      const result = await action({ ...context, ...((transport || payload.threadId) ? { onEvent: event => {
+      const result = await action({ ...context, ...(introductory ? { onGatewayRequest: async info => {
+        const current = await inspectTrialFunding(config, request.headers.authorization, request.studioAccount, fetcher)
+        if (current.state !== 'active') throw new StudioError(current.reason ?? '试用资金状态变化，未发送模型请求', 402)
+        trial.reserve(owner, kind, key, info.kind)
+      } } : {}), ...((transport || payload.threadId) ? { onEvent: event => {
         if (payload.threadId) history.event(owner, key, event)
         transport?.event(event)
       } } : {}), onGatewayResponse: info => { ledger.gateway(owner, kind, key, info); requests.push(info) } })
@@ -141,12 +199,14 @@ export function createServer(config, overrides = {}) {
       ledger.db.exec('BEGIN')
       try {
         ledger.complete(owner, kind, key, result)
+        if (introductory) trial.finish(owner, kind, key, !result.events || result.events.some(event => event.type === 'run.completed'))
         if (payload.threadId) history.finish(owner, key, result)
         ledger.db.exec('COMMIT')
       } catch (error) { ledger.db.exec('ROLLBACK'); throw error }
       transport?.finish(result)
       return { success: true, data: result }
     } catch (error) {
+      trial.finish(owner, kind, key, false)
       if (externalStarted) ledger.unknown(owner, kind, key)
       else ledger.releaseUnstarted(owner, kind, key)
       if (payload.threadId) history.unknown(owner, key)
@@ -164,7 +224,7 @@ export function createServer(config, overrides = {}) {
     const parsed = imageBody.safeParse(request.body)
     if (!parsed.success) throw new StudioError('图片请求格式无效', 400)
     let model
-    return execute(request, 'image', parsed.data, context => (overrides.generateImage ?? generateImage)(context, model, parsed.data), undefined, context => { model = selectModel(parsed.data.model, 'image', context) })
+    return execute(request, 'image', parsed.data, context => (overrides.generateImage ?? generateImage)(context, model, parsed.data), undefined, context => { model = selectModel(parsed.data.model, 'image', context); return 'image' })
   })
   async function handleRun(request, reply, streaming = false) {
     const parsed = runBody.safeParse(request.body)
@@ -181,6 +241,7 @@ export function createServer(config, overrides = {}) {
       if (selected?.kind === 'image' && parsed.data.imageGenerationPreference?.models?.some(id => id !== selected.id)) throw new StudioError('两处图片模型选择不一致，请选择同一个模型')
       imageOnly = selected?.kind === 'image' || (!selected && !context.models.some(m => m.kind === 'chat' && isAvailable(context, m)))
       model = selectModel(imageOnly ? selected?.id ?? parsed.data.imageGenerationPreference?.models?.[0] : parsed.data.model, imageOnly ? 'image' : 'chat', context)
+      return imageOnly ? 'image' : 'chat'
     }
     // 两种传输共用去重范围；终态必须在保存完整结果后才发送。
     let transport
