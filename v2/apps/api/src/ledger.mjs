@@ -70,6 +70,20 @@ export class Ledger {
     return { status: row.status, attempts: this.db.prepare('SELECT attempt, request_id AS requestId, status FROM gateway_attempts WHERE owner=? AND kind=? AND key=? ORDER BY attempt').all(owner, kind, key),
       submissions: this.db.prepare('SELECT attempt,model_kind AS modelKind,model_id AS modelId,funding_source AS selectedFundingSource,created_at AS createdAt FROM model_submissions WHERE owner=? AND kind=? AND key=? ORDER BY attempt').all(owner, kind, key) }
   }
+  recovery(owner, kind, key) {
+    // One image can contain 40 MiB of base64. Bound JSON before transferring it
+    // into JS, leaving room for the bounded agent's text and public metadata.
+    const limit = 48 * 1024 * 1024
+    const row = this.db.prepare(`SELECT status,created_at AS createdAt,
+      length(CAST(result AS BLOB)) AS resultBytes,
+      CASE WHEN status='completed' AND length(CAST(result AS BLOB))<=? THEN result END AS result
+      FROM requests WHERE owner=? AND kind=? AND key=?`).get(limit, owner, kind, key)
+    if (!row) return null
+    if (!['running', 'unknown', 'completed'].includes(row.status)) throw new Error('Invalid saved request state')
+    if (row.status !== 'completed') return { status: row.status, createdAt: row.createdAt }
+    if (row.resultBytes === null || row.resultBytes > limit) throw new Error('Invalid saved request result size')
+    return { status: row.status, createdAt: row.createdAt, result: JSON.parse(row.result) }
+  }
   close() {
     try { this.db.close() }
     finally { this.processLock?.close() }

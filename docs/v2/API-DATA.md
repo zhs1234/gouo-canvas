@@ -1,5 +1,13 @@
 # API 与数据契约（设计，不表示接口已经实现）
 
+## SYS-R1 已实现的原请求只读恢复（2026-10-02）
+
+`GET /api/studio/requests/:kind/:id/result`支持`kind=agent|image`、8–100字符原Studio幂等ID。使用New API本人身份，按owner/kind/key读取既有Ledger；匿名401，异户/不存在404，非法参数400（超过Fastify参数长度由框架先拒414）。返回`{success:true,data:{kind,requestId,status,createdAt,result?}}`，`requestId`是Studio幂等ID，`result.usage.requestIds`才是Native请求ID。
+
+running/unknown只返回状态，不返回终态结果、不推断失败/取消。completed返回经过公开字段白名单的原事件或图片，即使事件最后为run.failed也保持真实失败：Ledger completed表示已经保存终态，不代表模型成功。费用仅归一化已有`recorded/pending + settlementState:unconfirmed`；fundingSelection只是trial/wallet选源意图，不是实扣凭据。新GET除身份校验外不查询Native账单/模型/token、不调用供应商、不修改SQLite或释放held。
+
+读取JSON上限48MiB；单图base64保持40MiB边界。未知状态、坏JSON/时间、非法结果形状/超限均脱敏502，原数据不变。响应`private,no-store`。旧`GET /api/studio/requests/:kind/:id`仍做费用核对；`GET /api/studio/runs/:id`仍只读已有会话历史。此新增接口覆盖无threadId的Loomic和独立生图已保存结果；前端接线与持久Worker尚未由SYS-R1完成。
+
 公共 TypeScript 入口 `v2/packages/contracts/src/index.ts`。服务端 HTTP 边界必须做自己的运行时校验与鉴权，不能把前端校验当安全机制。计划中的业务 API 成功 `{ success: true, data }`；失败 `{ success: false, error: { code, message, requestId } }`，禁止把上游密钥、完整错误响应或内部 URL 返给用户。已接入的 New API 账号接口使用上游 `{ success, message, data }` envelope，由 v2/apps/studio/src/api.ts 处理。
 
 2026-09-30 范围：云 Project/Asset 路由和表暂缓，下列数据设计是历史规划。实际业务服务已选定 v2/apps/api，经 New API /api/user/self 验证身份；公开模型目录和认证 /images、/runs 使用 `{success,message,data}` envelope，具体运行契约见 LOOMIC.md。下列 /jobs、订阅与数据库设计尚未实现，不直接套用旧 Session 或执行旧迁移。

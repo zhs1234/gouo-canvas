@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## SYS-R1 统一只读原请求结果（2026-10-02）
+
+独立`codex/system-integration`基于计划提交`f4b5792`，新增`GET /api/studio/requests/:kind/:id/result`，支持无threadId agent与直接image，按真实Native owner读取原Ledger终态。running/unknown不伪造失败/取消，不释放held；completed保存的run.failed和recorded/unconfirmed费用真实保留。公开白名单不含token/provider/channel/submissions，48MiB存储上限、40MiB单图编码边界，损坏数据脱敏502且原行不变。旧费用GET和historyGET未改；前端接线/Worker尚未实现。详见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md) / [API-DATA.md](API-DATA.md)。
+
+本worktree`npm run check`实际exit0：51领域、166API、类型、build11.05秒；最终schema/时间边界后`npm run test:api`再166/166 exit0（2.94秒）。定向68/68、最终新9/9及node语法/diff检查通过。首轮8/9仅Fastify101字符参数先414，保留准确负例修正后通过。日志在`.local/system-r1-{check,api-final}.log`。没有真实供应商/资金/日常服务操作，未push/merge/main/部署。新随机Native本地供应商环境已准备，T1.12尚未执行；不把准备/旧146浏览器记为新通过。下一 **T1.12** 实际浏览器离线/只读恢复，再 **SYS-R2/B3**。
+
 ## 系统打通全面计划与独立分工（2026-10-02）
 
 用户要求先全面计划、再逐步实现，并与“规划并逐页优化 ChatGPT UI”并行避免冲突。已完成三个独立子智能体的实现审计，计划见 [SYSTEM-INTEGRATION-PLAN.md](SYSTEM-INTEGRATION-PLAN.md)，本线程逐阶段结果见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。系统分支为 `codex/system-integration`，独立worktree基于`6e8c4c8`；原`codex/registration-trial`未切换。UI chat负责布局与呈现，系统负责API、恢复、持久任务及运行验收，交叉ChatLab文件暂由UI chat处理。

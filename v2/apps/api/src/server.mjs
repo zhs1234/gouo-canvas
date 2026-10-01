@@ -27,6 +27,30 @@ const runBody = z.object({ threadId: z.string().uuid().optional(), runId: z.stri
   history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(8000).optional(), contentBlocks: z.array(z.unknown()).max(100).nullable().optional() }).passthrough()).max(12).optional(),
   canvasContext: z.array(z.record(z.unknown())).max(80).optional(),
 }).strict()
+// Recovery exposes only fields produced by this adapter, never arbitrary saved
+// metadata. Zod's object projection strips unknown fields at every nested level.
+const savedUsage = z.object({ state: z.enum(['settled', 'recorded', 'pending']), settlementState: z.literal('unconfirmed').optional(),
+  requestCount: z.number().int().nonnegative().safe(), requestIds: z.array(z.string().regex(/^[\w-]{1,64}$/)).max(100),
+  currency: z.literal('CNY'), quota: z.number().int().nonnegative().safe().optional(), cost: z.number().finite().nonnegative().optional() })
+const savedImage = z.object({ url: z.string().max(40 * 1024 * 1024 + 64).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/)
+    .refine(value => value.length - value.indexOf(',') - 1 <= 40 * 1024 * 1024),
+  prompt: z.string().max(8000).optional(), mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']).optional(),
+  width: z.number().int().positive().safe().optional(), height: z.number().int().positive().safe().optional() })
+const eventBase = { runId: z.string().max(100).optional(), timestamp: z.string().datetime().optional() }
+const savedEvent = z.discriminatedUnion('type', [
+  z.object({ ...eventBase, type: z.literal('run.started'), sessionId: z.string().max(100).optional(), conversationId: z.string().max(100).optional() }),
+  z.object({ ...eventBase, type: z.literal('message.delta'), messageId: z.string().max(100).optional(), delta: z.string() }),
+  z.object({ ...eventBase, type: z.literal('tool.started'), toolCallId: z.string().max(200), toolName: z.literal('generate_image'),
+    input: z.object({ prompt: z.string().max(8000), model: z.string().max(100) }).optional() }),
+  z.object({ ...eventBase, type: z.literal('tool.completed'), toolCallId: z.string().max(200), toolName: z.literal('generate_image').optional(),
+    outputSummary: z.string().optional(), artifacts: z.array(savedImage.extend({ type: z.literal('image') })).max(1).optional() }),
+  z.object({ ...eventBase, type: z.literal('run.completed'), usage: savedUsage.optional() }),
+  z.object({ ...eventBase, type: z.literal('run.failed'), error: z.object({ code: z.string().max(100), message: z.string() }).optional(), usage: savedUsage.optional() }),
+])
+// This is the user's selected source, not proof of consumption or settlement.
+const savedFunding = z.object({ chat: z.enum(['trial', 'wallet']).optional(), image: z.enum(['trial', 'wallet']).optional() })
+const savedResults = { image: savedImage.extend({ usage: savedUsage.optional(), fundingSelection: savedFunding.optional() }),
+  agent: z.object({ events: z.array(savedEvent), usage: savedUsage.optional(), fundingSelection: savedFunding.optional() }) }
 export function createServer(config, overrides = {}) {
   config = { ...config, accountInstanceId: config.accountInstanceId ?? config.trial?.instanceId }
   if (config.trial && config.accountInstanceId !== config.trial.instanceId) throw new Error('试用政策属于另一 New API 实例，不能混用账号实例标识')
@@ -228,6 +252,21 @@ export function createServer(config, overrides = {}) {
     if (!record) throw new StudioError('请求不存在', 404)
     const usage = await recordedUsage(config, request.headers.authorization, record.attempts, fetcher)
     return { success: true, data: { ...record, usage: usage ?? { state: 'pending', settlementState: 'unconfirmed', requestCount: 0, requestIds: [], currency: 'CNY' } } }
+  })
+  app.get('/api/studio/requests/:kind/:id/result', async (request, reply) => {
+    const { kind, id } = request.params
+    if (!['image', 'agent'].includes(kind) || !/^[\w-]{8,100}$/.test(id)) throw new StudioError('请求标识无效', 400)
+    reply.header('Cache-Control', 'private, no-store')
+    let record
+    try {
+      record = ledger.recovery(request.studioUser, kind, id)
+      if (record) {
+        z.string().datetime().parse(record.createdAt)
+        if (record.status === 'completed') record.result = normalizeResultUsage(savedResults[kind].parse(record.result))
+      }
+    } catch { throw new StudioError('已保存的请求结果无法安全读取，请联系管理员核对；未重新生成', 502) }
+    if (!record) throw new StudioError('请求不存在', 404)
+    return { success: true, data: { kind, requestId: id, ...record } }
   })
   function pageOffset(request) {
     const parsed = z.coerce.number().int().min(0).max(1000000).safeParse(request.query.offset ?? 0)
