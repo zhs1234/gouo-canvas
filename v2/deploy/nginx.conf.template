@@ -13,6 +13,7 @@ map "$unsafe_method:$same_origin" $reject_origin {
   "1:0" 1;
 }
 server {
+  absolute_redirect off;
   listen 8080;
   server_name _;
   server_tokens off;
@@ -22,9 +23,9 @@ server {
   add_header X-Content-Type-Options nosniff always;
   add_header Referrer-Policy same-origin always;
   if ($reject_origin) { return 403; }
-  location = / { return 302 /studio/; }
+  location = / { return 302 /studio/$is_args$args; }
   location = /healthz { default_type application/json; return 200 '{"success":true,"service":"gouo-edge"}'; }
-  location = /studio { return 301 /studio/; }
+  location = /studio { return 301 /studio/$is_args$args; }
   location /studio/ {
     root /usr/share/nginx/html;
     try_files $uri $uri/ /studio/index.html;

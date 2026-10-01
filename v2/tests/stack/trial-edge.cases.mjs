@@ -103,6 +103,11 @@ try {
   const studioRedirect = await request('/studio')
   assert.equal(studioRedirect.status, 301); assert.equal(studioRedirect.headers.location, '/studio/')
   assert.equal((await request('/')).headers.location, '/studio/')
+  for (const prefix of ['/studio', '/']) {
+    const suffix = '?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&extra=a%2Fb%20%26%20%E4%B8%AD%E6%96%87'
+    const redirected = await request(prefix + suffix)
+    assert.equal(redirected.headers.location, '/studio/' + suffix, 'relative redirects preserve the exact encoded query')
+  }
   const status = await request('/api/status')
   assert.equal(status.status, 200); assert.equal(JSON.parse(status.body).success, true)
   assert.equal((await request('/api/user/self')).status, 401)

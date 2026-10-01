@@ -76,6 +76,26 @@ test('server asset insertion persists bytes and processed marker; delete plus re
   expect(state.project.document.processedSourceIds).toEqual([assetId])
   for (let index = 1; index < state.writes.length; index++) expect(state.writes[index].expectedRevision).toBe(state.writes[index-1].expectedRevision + 1)
 })
+test('reopening an already saved project does not write a revision; a real edit still saves', async ({ page }) => {
+  const state = await fixture(page)
+  await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
+  await expect(page.getByRole('status')).toContainText('已保存到 Studio 项目')
+  const saved = structuredClone(state.project), writes = state.writes.length
+  await page.reload()
+  await expect(page.getByRole('button', { name: '保存 Studio 项目', exact: true })).toBeEnabled()
+  // Observe past the actual 500ms debounce: opening must not manufacture a write.
+  await page.waitForTimeout(900)
+  expect(state.writes).toHaveLength(writes)
+  expect(state.project).toEqual(saved)
+  expect(live(await exported(page))).toHaveLength(1)
+  await page.getByRole('button', { name: '保存 Studio 项目', exact: true }).click()
+  expect(state.writes).toHaveLength(writes)
+  await drawRectangle(page)
+  await expect.poll(() => state.writes.length).toBe(writes + 1)
+  expect(live(state.project.document).map(element => element.type).sort()).toEqual(['image', 'rectangle'])
+  expect(state.project.document.files[assetId].dataURL).toBe(dataURL)
+  expect(state.project.revision).toBe(saved.revision + 1)
+})
 test('revision conflict pauses writes and recovery export retains unsaved image', async ({ page }) => {
   const state = await fixture(page); state.conflict = true
   await page.goto(`./canvas-lab?project=${projectId}&asset=${assetId}`)
@@ -88,8 +108,10 @@ test('revision conflict pauses writes and recovery export retains unsaved image'
   await page.goto(`./canvas-lab?project=${projectId}`)
   await expect(page.getByRole('button', { name: '保存 Studio 项目', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: '保存 Studio 项目', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('已保存到 Studio')
+  await expect(page.getByRole('status')).toContainText('Studio 项目已打开')
   expect(live(await exported(page, '下载本机备份'))).toHaveLength(1)
+  expect(state.writes).toHaveLength(1)
+  expect(state.project.document.elements).toHaveLength(0)
 })
 test('foreign asset and foreign project fail without writes; anonymous server route requires login', async ({ page }) => {
   const state = await fixture(page); state.rejectAsset = true

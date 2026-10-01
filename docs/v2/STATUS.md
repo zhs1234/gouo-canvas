@@ -1,5 +1,37 @@
 # 实际交付与验证状态
 
+## T1.11 双账号完整地址隔离与画布只读重开（2026-10-01）
+
+基于 T1.10 `f7a0fe5`，仍在 `codex/registration-trial` 和当前项目。三位 gpt-6.1-sol 子智能体分别执行独立双 profile UI、同浏览器换户与 Native HTTP 合同、故障反例和独立证据复核。新随机 `55075` 运行真实固定 Native `0aec08fee811ec6136828fda790551b49e410301` / binary SHA256 `a5fd598cc77e26ab2709305049fdd5fbbff722111be79f0ad89a493c3e094529`，本地供应商和两个普通账号均明确合成，真实采购0。各账号仅一次用户发送，准备阶段合4chat/2image、Native6消费日志；不能将初始采样到准备完成之间的合法生成变化说成数据不变。
+
+修正 **Q26/P2**：原真实双户画布 GET revision2，单纯重开无编辑也 PATCH 为3；首次 SDK hydration 建立已读序列化基线，no-op 不新写或虚报保存，新 source 插入和真实编辑仍保存。原图、CAS、拒写暂停、旧恢复副本与 unknown 屏障保留。修正 **Q27/P2**：bare `/studio?thread=...` 丢 query；两份 Nginx 模板保留查询，默认模板也使用相对重定向，避免外部随机端口被改成内部8080。修正 **Q28/P2**：近期用量缺调用时间，无法在界面核对相同金额的不同本人记录；复用Native时间展示日期/秒/本机时区，非法值不崩溃或伪造时间，费用仍实扣待核对。未改账户/令牌/网关白名单或安全参数。合同和重现见 [OWNER-ISOLATION.md](OWNER-ISOLATION.md)，累计 **28 项修正，P1 10/P2 18，未证实 P0**。
+
+真实 Native 双独立 profile 最终 **8/8**：双向 thread、project、project+asset、本人project+异户asset 完整地址，均实际已登录异户404；不把访客/429/丢 query 空页计为拒绝。首轮最后一项429后保留浏览器，等待自然 CT 窗口，到期仅一次本人手动恢复200，随后本人project200/异户asset404完成补验。最终双方重开本人项目 revision3、观察1.8秒0PATCH；真实导出各1image/1file，原PNG hashes `d2079bda…150e9ca`、`e8425167…030e762` 与准备阶段一致。实际 slashless301→200保留thread、编码extra和hash并恢复本人消息/图片。`prepared→after-dual` 根只读确认Native完整四表及users安全投影、Studio十一张表和provider对象全部精确不变。报告 `.local/t111-dual-profile-report.json` 与 `.local/t111-protected-{prepared,after-dual}.json`；双profile已关闭。
+
+F 晚响应反例用真实界面 A退出→B登录，移除指定旧GET的AbortSignal后释放晚到的A成功响应，DOM MutationObserver检查消息/项目/原图无闪现；B异户404与本人内容恢复、0新增业务写入。它是明确故障注入，不能代替实际网络断开或Native旧会话撤销。新 opt-in HTTP 工具只接受固定二进制、新随机loopback实例和`.local`合成清单，JWT仅Node内存；已有报告防误重跑，429/非法DTO/丢响应即停，不自动重试。缺隔离确认、日常8080、管理员身份三个负例均在live binary/HTTP前拒绝，未产生报告。
+
+同一真实浏览器完成A普通登录/本人thread与原图项目→正常保存并列出A命名本机草稿→共享真实logout200→B普通登录，4/4异户完整地址404且保持B，无A原图/画布；B不列出或自动打开A本机草稿。B本人会话/项目revision3/原图hash恢复，试用3聊0图、费用查询200。Native日志展示ID1/2/3是固定版按页重编，根以B run三个真实request IDs只读映射owner3的consume DB6/7/8，排除A；没有仅用相同余额/计数推归属。报告 `.local/t111-same-browser-report.json`、`.local/t111-billing-owner-proof.json`。
+
+Q28后另一同浏览器只读补验完成：A原生登录→共享设置展开三条真实近期记录，显示本机GMT+8 22:07:10；真实logout200→B原生登录→同设置展开三条22:10:31，A时间完全不在DTO/DOM。两户id/model/createdAt/cost/inputTokens/outputTokens六元组均精确匹配根Native requestID归属及实际公开汇率/额度单位建立的RO预期，ISO datetime也匹配，不伪造DTO没有的requestId。共两login/两logout200，无429/重试/业务写/模型；报告 `.local/t111-same-billing-report.json` 和A/B-expanded截图。根最终`after-billing`仍与prepared/before-http全部保护哈希/provider不变，真实Native/API保持原实例；D1核心范围因此通过，不把消费记录升级为钱包实扣回执。
+
+单次真实Native HTTP矩阵 **52请求，24×200/28×404，双向通过**，实际binary checksum和普通role/status验证；thread/run/project/asset前后DTO hash、本人既有素材/项目幂等ID/revision不变。三种异户asset引用、重复物化和foreign thread生成均拒绝；两个DELETE404仅不支持路由。根`before-http→after-http`与`prepared→after-http`比较Native完整tokens/subscription/preconsume/logs及users安全投影、Studio十一表/provider全部不变。另两条被拒newID在requests/run/reservations/submissions/gateway_attempts全owner查询共十个0，证明拒绝在持久副作用之前。证据 `.local/t111-owner-native-report.json`、`.local/t111-final-negative-proof.json`、`.local/t111-runtime-after.json`；Native/API ID和StartedAt保持，正常认证元数据变化不混入资金不变主张。
+
+| 最终实际命令 | 结果与范围 |
+| --- | --- |
+| `npm run check` | **exit0，51领域/157API、类型检查、build12.42秒**；既有第三方chunk警告。`.local/t111-check-complete.log` |
+| `npm run test:e2e -- --workers=1 --reporter=line` | **146/146，4.2分钟，exit0**；含晚响应/换户/费用时间及非法时间、画布重开/no-op/真实编辑和既有资金/保存授权反例。`.local/t111-e2e-complete.log` |
+| `node tests/stack/trial-edge.cases.mjs` | **exit0**；真实隔离Native/Nginx未初始化边界、token/key/alternate路径及保查询相对重定向；明确echo合同单列，无模型/账户创建。`.local/t111-edge-final.log` |
+| `npm run test:stack` | **exit0**：真实固定Native未初始化和默认Nginx相对Location；personal明确契约替身2/2（12.6秒）、fresh user-token明确替身1/1（4.6秒），重开完整project DTO不变。`.local/t111-stack-complete-final.log` |
+| opt-in负例 / `node --check` / `git diff --check` | 三项范围护栏实际拒绝；语法与diff检查exit0。`.local/t111-negative-guards.json` |
+
+过程失败保留：reopen基线实际writes1→2失败；定向14例初13/1为旧纯读状态断言，修正后14/14；完整初145/1为同类视觉断言，单例复验后146/146。首normalstack真实暴露internal8080 redirect，修复后阶段1通过；阶段3旧“已保存”断言失败，第一次修正误用不完整exact文字再次失败，改为实际status包含文字并强化完整DTO不变，三阶段通过。Q28旧组件新时间断言实际失败，finally恢复新组件后2/2（13.7秒）；最终check/146/stack都在时间增量之后重新通过。没有删除初次插图保存、费用、归属或恢复断言；测试定位错误不计新增产品问题。
+
+日常仅build web与`up -d --wait --no-deps web` exit0，`stack:status`三服务ready；Native ID `fcf367b723ca…`/StartedAt `2026-10-01T04:26:19.489050028Z`/binary及Studio API ID前后一致，setup/root_init false，generation/trial/tokenRenewal false。证据 `.local/t111-preview-{before,after}.json`（最终15:34:53 UTC）；已有内置浏览器guest在最终构建完整reload确认聊天/共享侧栏/刷新入口，截图`output/playwright/t111-main-chat.png`，无主实例身份/业务提交。
+
+新随机55075自身容器/卷/网络已按显式验收工具清理，state.stopped true，Docker相同project标签容器/卷/网络均无残留；所有本轮专属CLI session已关闭。两次自身dev session有意终止Vite以让监督器清理API，5174/3001/55075均无监听；原失败与最终日志、截图/导出/RO报告保留在忽略目录，没有清理其它任务/旧QA服务或用户数据。`.local/t111-cleanup.log`留停止记录；Native/API运行前后证据在停止前捕获，不把已停止的测试地址当作用户预览。
+
+D1/D2完整核心范围通过，原28为 **18通过/10partial/0未执行**，F18/10/0、N15/10/0、P0/0/13，真实商户支付仍未验；统计层重叠不能相加。旧QA `53238/58438`、unknown/held和资金未操作；没有日常与旧QA Native/API重启、上游pin/安全/系统/依赖或锁更改、真实付费、push/merge/main或生产部署。真实计划/入口继续暂不启用，G1/G2及剩余F/N/P门项不由限定隔离测试代替。下一 **T1.12 浏览器断网/重连与未知请求屏障**：新随机环境实际客户端离线/只读恢复，不重放、不退款、不释放held，再补D6对应故障子项。
+
 ## T1.10 模型选择失权保护与原生安全子项（2026-10-01）
 
 基于 T1.9 `602a2d1`，继续在 `codex/registration-trial` 和当前项目内开发。三位 gpt-6.1-sol 子智能体分别实现与独立复核、只读路径审查和真实浏览器操作。本轮修正 Q23–Q25：本人明确选择 B 后，即使 A 仍可用，也不因目录失权、倒序或同 SPA 页面往返改成 A；Loomic 偏好按 owner 分键；不可用图片候选禁止新选并显示“不可用”。累计去重 **25 项修正，P1 10 项/P2 15 项，未证实 P0**。具体行为、证据范围和现存限制见 [MODEL-SELECTION.md](MODEL-SELECTION.md) 与 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)。

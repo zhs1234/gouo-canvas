@@ -1,4 +1,24 @@
-# T1.6–T1.10 四角色实操、问题修复与回归
+# T1.6–T1.11 四角色实操、问题修复与回归
+
+## T1.11 双账号完整地址隔离与费用记录（2026-10-01）
+
+当前项目 `codex/registration-trial` 基于 `f7a0fe5`；三位 gpt-6.1-sol 子智能体独立操作与复核，新随机55075真实固定Native/Studio，两个普通合成账号各仅准备一次用户发送、本地供应商成本0。准备完成后4chat/2image，Native6消费日志，Studio2run/2request/2asset/2project；后续读取、换户、地址与接口负例不新增生成。日常Native/API身份及业务数据、旧QA53238/58438、原unknown/held和资金未操作；日常仅更新web和guest只读验收，真实供应商/商户支付0。
+
+| ID | 严重度 | 实际发现、修正和复验 |
+| --- | --- | --- |
+| Q26 | P2 | 双真实账号已存画布仅重开，GET revision2后无编辑PATCH为3；首次SDK hydration建立已读基线、no-op不写/不虚报保存，实际source插入及真实编辑仍CAS保存。原版F reopen writes1→2失败，新F真实编辑/恢复/原图与N双方rev3/1800ms无PATCH、导出PNG hash不变通过 |
+| Q27 | P2 | bare `/studio?thread=...` 重定向丢参数；普通stack另发现外部端口被写成内部8080。两份Nginx保留query，默认相对Location。实际N slashless301→200保留thread/extra/hash并恢复原会话；normal/prepared真实边界反例通过，未修改鉴权/安全参数 |
+| Q28 | P2 | 近期费用记录缺调用时间，相同模型/金额无法UI唯一核对本人记录。复用Native Unix秒展示中文日期/秒/本机时区，无效值明确不可用；金额仍recorded/unconfirmed。旧组件实际F时间断言失败，新两项换户/晚响应/五种非法值通过；不伪造日期/账单或扩大金额接口 |
+
+累计去重 **28项修正（P1 10/P2 18，未证实P0）**。Q28不是已发生跨户费用泄漏；它是实际发现的核对能力缺口。更完整合同见 [OWNER-ISOLATION.md](OWNER-ISOLATION.md)，命令、过程失败和原图hash见STATUS顶部。
+
+D2核心范围已通过：两独立profile双向8/8完整thread/project/project+asset/本人project+异户asset地址实际404、本人身份不变/无内容原图；最后一项先429，保留profile自然窗口后一次本人恢复200才取得真正asset404。单次52HTTP真实普通Native JWT和binary核验，双向directthread/run/project/asset、异户PATCH/三种asset引用/重复物化/foreignthread生成均拒绝，本人DTO/幂等ID/revision不变；24×200/28×404不是52个生成或全部负例。两条DELETE404只表示不支持路由。被拒新ID跨全owner五表各0；根Native完整四表与users安全投影、Studio十一表/provider对象准备完成到HTTP最终精确不变。正常login的last_login/session元数据不在资金不变主张中。
+
+D1核心范围通过：同一浏览器A正常保存/列出命名本机草稿→共享logout200→B原生login；4/4异户地址拒绝，B不列出/自动打开A本机草稿，B会话/私有项目rev3/不同原PNG/试用3聊0图恢复。B本人run三个Native requestIDs只读映射owner3消费DB6/7/8、排除A；界面费用日志ID1/2/3是Native按页展示重编。两户费用数值相同，首UI未展开记录，原限定步骤保留。Q28后实际同浏览器再次A登录/展开22:07:10→logout200→B登录/展开22:10:31，六元组id/model/createdAt/cost/input/output与相应本人RO记录精确匹配，B排除A的Unix/ISO/可见时间。两次登录/两次真实logout200，无429/自动重试；最终after-billing根全保护哈希/provider仍等prepared，无新模型/权益/资金变化。F不同owner时间与晚响应不替代该N展示步骤，二者分别通过；用量折算仍不是钱包实扣回执。
+
+当前原28 **18通过/10partial/0未执行**；A3/4/0、B5/2/0、C7/0/0、D3/4/0，F18/10/0、N15/10/0、P0/0/13。F/N重叠不能相加。B5浏览器断网、B7剩余旧会话、A6/A7剩余权益与钱包生命周期、D4unknown重放、D5其它token/订阅失效、D6续用unknown与素材故障、D7混合逐笔资金链及G1/G2/真实启用门项保留。下方T1.10及更早计数都是阶段历史。
+
+最终包含Q28的check51/157/build12.42秒、146/146浏览器4.2分钟和三阶段stack exit0（personal2/2 12.6秒、fresh1/1 4.6秒）；prepared edge独立exit0。主要报告 `.local/t111-{dual-profile,same-browser,same-billing,owner-native}-report.json`、`.local/t111-protected-{prepared,after-dual,after-same,before-http,after-http,after-billing}.json`、`.local/t111-final-negative-proof.json` 与 `output/playwright/t111-*`。旧组件baseline、定位错误及真实失败全部保留，不删除保存/授权/资金断言，也不把本轮叫作成熟产品已完成。下一T1.12浏览器断网/只读重连恢复与unknown屏障。
 
 ## T1.10 模型失权与原生安全子项（2026-10-01）
 
@@ -59,7 +79,7 @@ B7 限定新子项：真实 Native UI 注册/登录，Studio profile 唯一显�
 
 基于 T1.6 提交 `8f51853`，继续在当前项目和 `codex/registration-trial`。三位 gpt-6.1-sol 子智能体分别负责 Native 源码与事务回归、真实 Native 失败预扣对照、剩余账号状态的实际浏览器补验。旧 QA 53238 的请求、原图、unknown/held 与资金证据保持原样；新 UI 环境为独立随机卷的 `http://127.0.0.1:58438`，profile `t17-ui`，owner 2。真实供应商、商户支付和采购仍为 0。
 
-原 28 场景的**当前** F/N 核心范围统计如下。A7 从未执行变为 partial；没有增加整项通过数，未验补充条件和所有 P 门槛仍保留。
+T1.7当时原28场景的F/N核心范围统计如下，当前结果以本文T1.11顶部为准。A7从未执行变为partial；当时没有增加整项通过数，未验补充条件和所有P门槛保留。
 
 | 角色 | 核心范围通过 | partial | 未执行 | 计划 |
 | --- | ---: | ---: | ---: | ---: |

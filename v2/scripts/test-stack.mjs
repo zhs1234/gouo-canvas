@@ -44,6 +44,11 @@ try {
   await compose('build', ...buildArgs)
   await compose('up', '-d', '--wait', '--wait-timeout', '180')
   assert.equal((await request('/')).status, 302)
+  for (const prefix of ['/studio', '/']) {
+    const query = '?thread=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&extra=a%2Fb%20%26%20%E4%B8%AD%E6%96%87'
+    const redirected = await request(prefix + query)
+    assert.equal(redirected.headers.get('location'), '/studio/' + query)
+  }
   assert.equal((await request('/studio/')).status, 200)
   assert.equal((await request('/api/studio/health')).status, 200)
   const setup = await (await request('/api/setup')).json()

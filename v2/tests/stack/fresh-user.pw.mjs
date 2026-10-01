@@ -47,11 +47,14 @@ test('fresh ordinary accounts with zero quota, own model/token/charges and canva
   await expect(page).toHaveURL(/canvas-lab/)
   await expect(page.getByText('已保存到 Studio 项目', { exact: true })).toBeVisible()
   const canvasURL = page.url()
-  await page.reload()
-  await expect(page.getByText('已保存到 Studio 项目', { exact: true })).toBeVisible()
   const projectId = new URL(canvasURL).searchParams.get('project')
   expect(projectId).toBeTruthy()
+  const saved = (await (await request.get('/api/studio/projects/' + projectId, { headers })).json()).data
+  await page.reload()
+  await expect(page.getByRole('status')).toContainText('Studio 项目已打开')
+  await page.waitForTimeout(1200)
   const project = (await (await request.get('/api/studio/projects/' + projectId, { headers })).json()).data
+  expect(project).toEqual(saved)
   expect(project.document.elements.filter(e => e.type === 'image' && !e.isDeleted)).toHaveLength(1)
   await register('fresh-other')
   const other = (await (await request.post('/api/user/login', { headers: native, data: { username: 'fresh-other', password: 'test-password' } })).json()).data

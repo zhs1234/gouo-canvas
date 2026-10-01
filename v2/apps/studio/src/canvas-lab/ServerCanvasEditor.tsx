@@ -26,6 +26,7 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
   const processed = useRef<string[]>([])
   const revision = useRef(0)
   const lastSaved = useRef<string | undefined>(undefined)
+  const insertedSource = useRef(false)
   const hydrated = useRef(false)
   const queue = useRef(Promise.resolve())
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -51,7 +52,10 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
         await retainRecovery(raw)
         return
       }
-      if (raw === lastSaved.current) return
+      if (raw === lastSaved.current) {
+        if (pending.current === raw) pending.current = undefined
+        return
+      }
       try {
         setStatus('正在保存到 Studio 项目；请等待保存确认')
         const { elements, appState, files, processedSourceIds } = JSON.parse(raw) as StudioDocument
@@ -123,6 +127,7 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
           document.elements = [...document.elements, element]
           document.files = { ...document.files, [asset.id]: { id: asset.id, assetId: asset.id, dataURL: asset.dataURL, mimeType: asset.mimeType, created: Date.now() } }
           processed.current.push(asset.id)
+          insertedSource.current = true
         }
         const { scene } = await decodeDocument(JSON.stringify(document))
         if (cancelled) return
@@ -159,13 +164,17 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
     </header>
     {initial && <section className="gouo-canvas-lab-editor" aria-label="官方画布"><Excalidraw initialData={initial} langCode="zh-CN" excalidrawAPI={value => { api.current = value }} onChange={(elements, state, files) => {
       if (!alive.current || state.isLoading || !api.current) return
-      if (!hydrated.current) {
+      const opening = !hydrated.current
+      if (opening) {
         if (elements.filter(element => !element.isDeleted).length < initial.elements.filter(element => !element.isDeleted).length) return
         hydrated.current = true; setReady(true)
         openingContent.current = JSON.stringify({ elements, files })
       }
       if (JSON.stringify({ elements, files }) !== openingContent.current) edited.current = true
       pending.current = JSON.stringify({ ...JSON.parse(serializeAsJSON(elements, state, files, 'local')), processedSourceIds: processed.current })
+      // Hydrating an existing server document is a read, not a new revision.
+      // A newly inserted source still needs its first save, even without edits.
+      if (opening && !insertedSource.current) lastSaved.current = pending.current
       if (!stopped.current && pending.current !== lastSaved.current) setStatus('有修改尚未保存到 Studio 项目')
       clearTimeout(timer.current); timer.current = setTimeout(() => void save(), 500)
     }} /></section>}
