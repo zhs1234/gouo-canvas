@@ -8,6 +8,8 @@
 
 ## 最新入口决策（2026-10-01）
 
+2026-10-02 UI增量：用户要求先完整规划、再逐页按ChatGPT基准改善布局。计划与逐页证据见 [UI-REDESIGN-PLAN.md](docs/v2/UI-REDESIGN-PLAN.md) / [UI-REDESIGN-STATUS.md](docs/v2/UI-REDESIGN-STATUS.md)。首页改为直接输入、首次明确发送才创建会话；项目库、五分类设置和两种画布共用中性样式。系统链路任务使用独立 `codex/system-integration` 工作树；双方分支尚待单独整合，不能把UI验收当作系统或真实收费验收。
+
 用户要求默认聊天、所有工作区有固定侧栏入口，整体页面与账号管理参考ChatGPT。当前 `/studio/` 默认进入已经认可的完整assistant-ui聊天；聊天、画布、项目库和原Loomic工作台共用侧栏。原工作台移到明确 `/studio/canvas`，旧root的id/session、editor/board及完整query/hash兼容保留；没有覆盖旧草稿或原图。站内返回和浏览器POP均等待真实保存，失败留页可导出。实际ChatGPT参考、地址、保存与恢复边界见 [WORKSPACE-NAVIGATION.md](docs/v2/WORKSPACE-NAVIGATION.md)，真实最终验证见STATUS顶部。以下旧“默认画布”描述按历史读取。
 
 ## 最新增量（2026-09-30）

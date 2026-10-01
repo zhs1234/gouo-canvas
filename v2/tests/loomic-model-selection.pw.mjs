@@ -52,7 +52,7 @@ test('Loomic retains an explicit unavailable Agent and rejects before any model 
 
 test('Loomic image preferences cannot newly select an inaccessible model', async ({ page }) => {
   const fixture = await setup(page); fixture.block()
-  await page.getByTitle('Image model', { exact: true }).click()
+  await page.getByTitle('图片模型偏好', { exact: true }).click()
   await expect(page.getByRole('button', { name: /^图片 B/ })).toBeDisabled()
   await expect(page.getByRole('button', { name: '图片 A', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: '图片 A', exact: true }).click()
@@ -69,7 +69,7 @@ for (const corrupted of [false, true]) test(`Loomic choices stay with their owne
   if (corrupted) await page.evaluate(() => localStorage.setItem('loomic:image-model-preference:local:8', '{invalid'))
   await page.getByRole('button', { name: 'Agent', exact: true }).click()
   await page.getByRole('button', { name: '聊天 B', exact: true }).click()
-  await page.getByTitle('Image model', { exact: true }).click()
+  await page.getByTitle('图片模型偏好', { exact: true }).click()
   await expect(page.getByRole('button', { name: 'Auto', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '图片 B', exact: true }).click()
   await page.keyboard.press('Escape')
@@ -87,7 +87,7 @@ for (const corrupted of [false, true]) test(`Loomic choices stay with their owne
   await expect(page.getByText('当前账号：另一账号', { exact: true })).toBeVisible()
   await closeAccount(page)
   await expect(page.getByRole('button', { name: 'Agent', exact: true })).toBeVisible()
-  await page.getByTitle('Image model', { exact: true }).click()
+  await page.getByTitle('图片模型偏好', { exact: true }).click()
   await expect(page.getByRole('button', { name: 'Auto', exact: true })).toBeVisible()
   const stored = await page.evaluate(() => ({ old: localStorage.getItem('loomic:agent-model'), own: localStorage.getItem('loomic:agent-model:local:7'), other: localStorage.getItem('loomic:agent-model:local:8'), ownImage: JSON.parse(localStorage.getItem('loomic:image-model-preference:local:7')), otherImage: localStorage.getItem('loomic:image-model-preference:local:8') }))
   expect(stored).toEqual({ old: 'chat-b', own: 'chat-b', other: null, ownImage: { mode: 'manual', models: ['image-b'] }, otherImage: corrupted ? '{invalid' : null })

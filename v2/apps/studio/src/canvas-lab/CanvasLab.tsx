@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTheme } from 'next-themes'
 import { Excalidraw, CaptureUpdateAction, convertToExcalidrawElements, exportToBlob, serializeAsJSON } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { FileId } from '@excalidraw/excalidraw/element/types'
@@ -37,6 +38,7 @@ export default function CanvasLab() {
   return <CanvasLabEditor key={owner} owner={owner} />
 }
 function CanvasLabEditor({ owner }: { owner: string }) {
+  const { resolvedTheme } = useTheme()
   const storageKey = (name: string) => `${owner}:${name}`
   const [legacyDrafts, setLegacyDrafts] = useState<Array<{ key: string; draft: LegacyDraft }>>([])
   const [initial, setInitial] = useState<RestoredDataState>()
@@ -127,10 +129,10 @@ function CanvasLabEditor({ owner }: { owner: string }) {
   return <main className="gouo-canvas-lab">
     <header className="canvas-project-bar">
       <Link to="/">返回聊天</Link>
-      <div className="canvas-project-title"><strong>Excalidraw</strong><span>本机独立副本 · 不调用模型</span></div>
+      <div className="canvas-project-title"><strong>本机画布</strong><span>保存在当前浏览器</span></div>
       <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
       <label>导入文档副本<input aria-label="导入文档副本" type="file" accept=".excalidraw,application/json" disabled={!ready} onChange={event => { void importCopy(event.target.files?.[0]); event.target.value = '' }} /></label>
-      <button disabled={!ready} onClick={() => void save()}>保存对照草稿</button>
+      <button disabled={!ready} onClick={() => void save()}>保存本机画布</button>
       <button disabled={!ready} onClick={() => {
         if (api.current) download(serializeAsJSON(api.current.getSceneElements(), api.current.getAppState(), api.current.getFiles(), 'local'), 'gouo-lab.excalidraw')
       }}>导出文档副本</button>
@@ -145,7 +147,7 @@ function CanvasLabEditor({ owner }: { owner: string }) {
         } catch { setStatus('PNG 导出失败，请先导出文档备份') }
       })()}>导出 PNG 副本</button>
       <button disabled={!ready} onClick={() => void readLegacyDrafts(owner).then(rows => { setLegacyDrafts(rows); setStatus(rows.length ? '仅列出当前账号或访客范围的旧草稿，点击导入副本' : '当前范围没有旧 Loomic 草稿') }).catch(error => setStatus(error.message))}>查看旧草稿（只读）</button>
-      <button disabled={!ready} onClick={insertFixture}>插入测试素材</button>
+      <div className="canvas-demo"><p>开发演示 · 不调用模型</p><button disabled={!ready} onClick={insertFixture}>插入测试素材</button></div>
       </div></details>
       <output role="status">{status}</output>
     </header>
@@ -153,7 +155,7 @@ function CanvasLabEditor({ owner }: { owner: string }) {
     {legacyDrafts.length > 0 && <aside aria-label="旧 Loomic 草稿副本">{legacyDrafts.map(({ key, draft }) => <button key={key} disabled={!ready} onClick={() => void importCopy(new File([JSON.stringify(draft)], `${draft.canvas.name}.json`, { type: 'application/json' }), draft)}>导入副本：{draft.canvas.name}</button>)}<p>仅导入画布；聊天与缩略图保留在独立数据库的原始快照，原项目不变。</p></aside>}
     {failure && <p>请保留浏览器数据。此页面不会自动清空损坏的草稿。</p>}
     {initial && <section className="gouo-canvas-lab-editor" aria-label="官方画布">
-      <Excalidraw key={revision} initialData={initial} langCode="zh-CN" excalidrawAPI={value => { api.current = value }} onChange={(elements, state, files) => {
+      <Excalidraw key={revision} theme={resolvedTheme === 'dark' ? 'dark' : 'light'} initialData={initial} langCode="zh-CN" excalidrawAPI={value => { api.current = value }} onChange={(elements, state, files) => {
         if (!alive.current || state.isLoading || !api.current || importing.current) return
         if (!hydrated.current) {
           if (elements.filter(element => !element.isDeleted).length < initial.elements.filter(element => !element.isDeleted).length) return

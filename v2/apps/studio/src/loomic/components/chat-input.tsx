@@ -188,15 +188,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const { selectionImageCount, selectionShapeCount, hasSelection } = selectionSummary;
 
   return (
-    <div className="px-2 pb-2">
+    <div className="px-3 pb-3">
       <div
-        className="flex min-h-[120px] flex-col justify-between gap-2 rounded-xl border-[0.5px] border-border bg-card p-2 transition-[border] focus-within:border-border"
+        className="flex min-h-[128px] min-w-0 flex-col justify-between gap-2 rounded-[24px] border border-border bg-muted/50 p-3 transition-colors focus-within:border-foreground/30"
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
         {hasSelection && (
-          <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground bg-muted/50 rounded-lg">
-            <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center gap-2 rounded-xl bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               {selectionImageCount > 0 && (
                 <span className="flex items-center gap-1">
                   <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -204,7 +204,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                     <circle cx="8.5" cy="8.5" r="1.5" />
                     <path d="m21 15-5-5L5 21" />
                   </svg>
-                  {selectionImageCount} {selectionImageCount === 1 ? "image" : "images"}
+                  {selectionImageCount} 张图片
                 </span>
               )}
               {selectionImageCount > 0 && selectionShapeCount > 0 && (
@@ -215,10 +215,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                   <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                     <rect x="3" y="3" width="18" height="18" rx="2" />
                   </svg>
-                  {selectionShapeCount} {selectionShapeCount === 1 ? "shape" : "shapes"}
+                  {selectionShapeCount} 个图形
                 </span>
               )}
-              <span className="text-[10px] text-muted-foreground/60">selected on canvas</span>
+              <span>已在画布选中</span>
             </div>
           </div>
         )}
@@ -236,8 +236,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 key={`${mention.mentionType}:${mention.id}`}
                 type="button"
                 onClick={() => onRemoveMention(mention)}
-                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-muted/80"
-                title="Remove mention"
+                className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground transition-colors hover:bg-muted"
+                title="移除引用"
+                aria-label={`移除引用：${mention.label}`}
               >
                 <span className="text-muted-foreground">@</span>
                 <span className="max-w-[180px] truncate">
@@ -264,14 +265,14 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="描述你的想法，或输入 @ 引用画布素材"
+          placeholder="描述创作需求，或输入 @ 引用画布素材"
           aria-label="输入消息"
           rows={1}
           style={{ scrollbarWidth: "none" }}
-          className="min-h-[48px] max-h-60 resize-none bg-transparent px-1 text-sm leading-[1.8] text-foreground placeholder:text-muted-foreground focus:outline-none [&::-webkit-scrollbar]:hidden"
+          className="min-h-[48px] max-h-60 min-w-0 resize-none bg-transparent px-1 py-1 text-[15px] leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none [&::-webkit-scrollbar]:hidden"
         />
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1 [&>button]:min-w-0 [&>button]:h-9 [&>button>span]:min-w-0 [&>button>span]:truncate [&>button>svg]:shrink-0">
             {onAddFiles && (
               <>
                 <input
@@ -285,8 +286,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40"
                   title="添加参考图"
+                  aria-label="添加参考图"
                 >
                   <svg
                     className="h-[14px] w-[14px]"
@@ -306,11 +308,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                 ref={modelBtnRef}
                 type="button"
                 onClick={() => setModelPopoverOpen((prev) => !prev)}
-                title="Image model"
-                className={`flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] transition-colors ${
+                title="图片模型偏好"
+                aria-label="图片模型偏好"
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 ${
                   preference.mode === "manual" || videoPreference.mode === "manual"
-                    ? "border-accent bg-accent/20 text-accent-foreground"
-                    : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "border-foreground/25 bg-background text-foreground"
+                    : "border-transparent text-muted-foreground hover:bg-background hover:text-foreground"
                 }`}
               >
                 <svg className="h-[14px] w-[14px]" viewBox="0 0 24 24" fill="currentColor">
@@ -328,7 +331,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             onClick={handleSubmit}
             aria-label="发送消息"
             disabled={disabled || !hasContent || isUploading}
-            className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/80 active:bg-primary/90 disabled:opacity-20 disabled:cursor-not-allowed"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/80 active:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <svg
               className="h-[14px] w-[14px]"

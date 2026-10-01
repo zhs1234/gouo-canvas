@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTheme } from 'next-themes'
 import { Link } from 'react-router-dom'
 import { Excalidraw, convertToExcalidrawElements, serializeAsJSON } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
@@ -16,6 +17,7 @@ function download(raw: string, name: string) {
 }
 // A processed source remains processed after deletion, independent of SDK serialization.
 export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: string; projectId: string; assetId: string | null }) {
+  const { resolvedTheme } = useTheme()
   const [project, setProject] = useState<StudioProject>()
   const [initial, setInitial] = useState<RestoredDataState>()
   const [status, setStatus] = useState('正在读取 Studio 项目')
@@ -142,7 +144,7 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
     }
   }, [])
   return <main className="gouo-canvas-lab">
-    <header className="canvas-project-bar"><Link to="/projects">项目库</Link><div className="canvas-project-title"><strong>{project?.title ?? 'Studio 项目'}</strong><span>Excalidraw · 私有项目</span></div>
+    <header className="canvas-project-bar"><Link to="/projects">项目库</Link><div className="canvas-project-title"><strong>{project?.title ?? 'Studio 项目'}</strong><span>账号私有项目</span></div>
       <button disabled={!ready || blocked} onClick={() => void save(serialize())}>保存 Studio 项目</button>
       <button disabled={!ready} onClick={() => { const raw = serialize(); if (raw) download(raw, `${project?.title ?? 'studio'}.excalidraw`) }}>导出文档备份</button>
       <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
@@ -162,7 +164,7 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
       {blocked && <button onClick={() => window.location.reload()}>重新加载服务器版本</button>}
       <output role={blocked ? 'alert' : 'status'}>{status}</output>
     </header>
-    {initial && <section className="gouo-canvas-lab-editor" aria-label="官方画布"><Excalidraw initialData={initial} langCode="zh-CN" excalidrawAPI={value => { api.current = value }} onChange={(elements, state, files) => {
+    {initial && <section className="gouo-canvas-lab-editor" aria-label="官方画布"><Excalidraw theme={resolvedTheme === 'dark' ? 'dark' : 'light'} initialData={initial} langCode="zh-CN" excalidrawAPI={value => { api.current = value }} onChange={(elements, state, files) => {
       if (!alive.current || state.isLoading || !api.current) return
       const opening = !hydrated.current
       if (opening) {

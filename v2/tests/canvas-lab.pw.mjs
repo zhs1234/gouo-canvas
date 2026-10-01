@@ -27,7 +27,7 @@ test('official canvas lab preserves isolated image files, deduplicates artifacts
   const before = JSON.parse(await exported(page))
   expect(live(before)).toHaveLength(1)
   expect(Object.keys(before.files)).toHaveLength(1)
-  await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
+  await page.getByRole('button', { name: '保存本机画布', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
   await page.reload()
   await page.getByText('更多操作', { exact: true }).click()
@@ -169,7 +169,7 @@ test('legacy lookup does not create absent databases and missing image files can
   await page.getByLabel('导入文档副本', { exact: true }).setInputFiles({ name: 'missing.excalidraw', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken)) })
   await expect(page.getByRole('alert')).toContainText('缺少内嵌图片')
   // Later draft saves must not erase the reason the import was refused.
-  await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
+  await page.getByRole('button', { name: '保存本机画布', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
   await expect(page.getByRole('alert')).toContainText('缺少内嵌图片')
   const after = JSON.parse(await exported(page))
@@ -212,7 +212,7 @@ test('native image selection resize rotation delete and undo retain image bytes'
   const restored = JSON.parse(await exported(page))
   expect(live(restored)).toHaveLength(1)
   expect(restored.files).toEqual(initial.files)
-  await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
+  await page.getByRole('button', { name: '保存本机画布', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
   await page.reload()
   await page.getByText('更多操作', { exact: true }).click()
@@ -249,7 +249,7 @@ test('native image crop preserves original file data through export and reopen',
   expect(live(cropped)[0].crop).toBeTruthy()
   expect(live(cropped)[0].width).toBeLessThan(image.width)
   expect(cropped.files).toEqual(before.files)
-  await page.getByRole('button', { name: '保存对照草稿', exact: true }).click()
+  await page.getByRole('button', { name: '保存本机画布', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('已保存')
   // 状态可能仍是上一次自动保存的提示；只读确认本次裁剪已提交，再模拟重开。
   await expect.poll(() => page.evaluate(async id => {

@@ -210,8 +210,8 @@ export function SessionSelector({
                       <span className="truncate flex-1">{s.title}</span>
                       <button
                         type="button"
-                        aria-label={`Delete ${s.title}`}
-                        className="hidden group-hover:flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-destructive transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                        aria-label={`删除对话 ${s.title}`}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:text-destructive transition-colors outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                         onClick={(e) => {
                           e.stopPropagation();
                           setConfirmingId(s.id);
@@ -233,7 +233,8 @@ export function SessionSelector({
         type="button"
         onClick={onNewChat}
         className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-        title="New Chat"
+        title="新对话"
+        aria-label="新对话"
       >
         <NewChatIcon className="h-5 w-5" />
       </button>
