@@ -27,8 +27,8 @@ export function useBalanceConsent(scope: string) {
 
 export function BalanceConsent({ checked, change, disabled }: { checked: boolean; change: (allowed: boolean) => void; disabled?: boolean }) {
   const help = useId()
-  return <div className="px-2 py-1 text-xs">
+  return <div className="balance-consent px-2 py-1 text-xs">
     <label className="flex items-center gap-2"><input type="checkbox" checked={checked} onChange={event => change(event.target.checked)} disabled={disabled} aria-describedby={help} />本次允许使用本人 New API 余额</label>
-    <p id={help} className="text-muted-foreground mt-1">优先使用剩余试用，耗尽的类别使用余额。仅限本次发送；聊天最多调用 3 次聊天模型，图片工具另计。实际费用以 New API 用量记录为准。</p>
+    <details className="balance-consent-help"><summary>试用与计费说明</summary><p id={help} className="text-muted-foreground mt-1">优先使用剩余试用，耗尽的类别使用余额。仅限本次发送；聊天最多调用 3 次聊天模型，图片工具另计。实际费用以 New API 用量记录为准。</p></details>
   </div>
 }

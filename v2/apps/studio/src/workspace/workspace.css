@@ -1,4 +1,36 @@
 .workspace-shell { height: 100dvh; min-height: 0; }
-.workspace-navigation { flex: 0 0 auto; padding-bottom: 12px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.workspace-navigation { flex: 0 0 auto; padding-bottom: 12px; margin-bottom: 8px; }
 .workspace-content { position: relative; }
 .workspace-content > .gouo-canvas-lab { height: 100%; min-height: 0; }
+.workspace-shell .aui-sidebar-header { margin-bottom: 0; border: 0; padding: 8px; }
+.workspace-shell .aui-sidebar-header [data-slot="sidebar-menu-button"] { height: 40px; }
+.workspace-shell .aui-sidebar-header-icon-wrapper { background: transparent; color: var(--foreground); }
+.workspace-shell .aui-sidebar-header-icon { width: 21px; height: 21px; }
+.workspace-shell .aui-sidebar-header-title { font-size: 16px; font-weight: 600; letter-spacing: -.3px; }
+.workspace-shell .aui-sidebar-footer { border: 0; padding: 8px; }
+.workspace-shell .aui-sidebar-content { scrollbar-width: thin; }
+.workspace-shell [data-slot="sidebar-menu-button"] { min-height: 36px; border-radius: 8px; font-size: 14px; }
+.workspace-shell [data-slot="sidebar-menu-button"][data-active="true"] { font-weight: 500; }
+.workspace-header { background: var(--background); color: var(--foreground); }
+.workspace-header select { padding: 7px 4px; border-radius: 8px; text-overflow: ellipsis; }
+.workspace-header select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.workspace-skip-link { position: fixed; top: 8px; left: 8px; transform: translateY(-150%); z-index: 100; padding: 10px 16px; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); }
+.workspace-skip-link:focus { transform: translateY(0); }
+.workspace-shell button:focus-visible, .workspace-shell a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (max-width: 600px) { .workspace-header { gap: 4px; padding-inline: 12px; }.workspace-header select { max-width: 42vw; } }
+@media (prefers-reduced-motion: reduce) { .workspace-shell *, .workspace-shell *::before, .workspace-shell *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+.balance-consent { color: var(--foreground); line-height: 1.6; }
+.balance-consent label { min-height: 28px; cursor: pointer; }
+.balance-consent input { accent-color: var(--primary); width: 14px; height: 14px; flex-shrink: 0; }
+.balance-consent-help { color: var(--muted-foreground); margin-top: 2px; }
+.balance-consent-help summary { width: fit-content; cursor: pointer; padding-block: 3px; }
+.balance-consent-help p { max-width: 42rem; }
+.loomic-canvas-surface { container: loomic-canvas / inline-size; }
+.loomic-canvas-surface[data-assistant-open="false"] { --loomic-chat-toggle-space: 84px; }
+.loomic-project-heading { max-width: calc(100% - var(--loomic-toolbar-reserve, 280px) - var(--loomic-chat-toggle-space, 0px)); }
+.loomic-project-heading > :first-child { flex-shrink: 0; }
+.loomic-project-heading > :last-child { min-width: 0; max-width: 100%; }
+@container loomic-canvas (max-width: 620px) {
+  .loomic-account-trigger { display: none; }
+  .loomic-project-heading { --loomic-toolbar-reserve: 140px; }
+}

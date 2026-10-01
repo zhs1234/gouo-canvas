@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useBreakpoint } from "../hooks/use-breakpoint";
 import type {
@@ -199,14 +199,33 @@ export function ChatSidebar({
   // ── Sidebar resize ──
   const SIDEBAR_MIN = 300;
   const SIDEBAR_MAX = 600;
+  const CANVAS_MIN = 320;
   const SIDEBAR_KEYBOARD_STEP = 20;
   const [sidebarWidth, setSidebarWidth] = useState(400);
+  const [sidebarMax, setSidebarMax] = useState(SIDEBAR_MAX);
+  const desktopPanel = useRef<HTMLDivElement>(null);
+  const widthLimit = useRef(SIDEBAR_MAX);
   const isResizing = useRef(false);
 
   const clampWidth = useCallback(
-    (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)),
+    (w: number) => Math.min(widthLimit.current, Math.max(Math.min(SIDEBAR_MIN, widthLimit.current), w)),
     [],
   );
+
+  useLayoutEffect(() => {
+    const workspace = desktopPanel.current?.parentElement;
+    if (!open || isOverlay || !workspace) return;
+    const fitWorkspace = () => {
+      const maximum = Math.min(SIDEBAR_MAX, Math.max(0, Math.floor(workspace.getBoundingClientRect().width) - CANVAS_MIN));
+      widthLimit.current = maximum;
+      setSidebarMax(maximum);
+      setSidebarWidth(clampWidth);
+    };
+    fitWorkspace();
+    const observer = new ResizeObserver(fitWorkspace);
+    observer.observe(workspace);
+    return () => observer.disconnect();
+  }, [open, isOverlay, clampWidth]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -767,7 +786,7 @@ export function ChatSidebar({
       <div className="flex min-h-[48px] items-center justify-between pl-4 pr-2">
         <div className="flex items-center gap-1 min-w-0">
           <h2 className="text-sm font-semibold text-foreground shrink-0">
-            Loomic Agent
+            创作助手
           </h2>
           {!sessionsLoading && (
             <SessionSelector
@@ -783,7 +802,8 @@ export function ChatSidebar({
           type="button"
           onClick={onToggle}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
-          title="Collapse panel"
+          title="收起创作助手"
+          aria-label="收起创作助手"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
             <path
@@ -913,7 +933,8 @@ export function ChatSidebar({
   // ── Desktop: inline side-by-side with resize handle ──
   return (
     <div
-      className="flex h-full shrink-0"
+      ref={desktopPanel}
+      className="loomic-agent-panel flex h-full min-w-0 shrink-0"
       style={{ width: sidebarWidth }}
       {...eventIsolationProps}
     >
@@ -921,12 +942,12 @@ export function ChatSidebar({
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize chat panel"
+        aria-label="调整助手面板宽度"
         aria-valuenow={sidebarWidth}
-        aria-valuemin={SIDEBAR_MIN}
-        aria-valuemax={SIDEBAR_MAX}
+        aria-valuemin={Math.min(SIDEBAR_MIN, sidebarMax)}
+        aria-valuemax={sidebarMax}
         tabIndex={0}
-        className="w-2 shrink-0 cursor-col-resize bg-gradient-to-r from-transparent via-border to-transparent shadow-[1px_0_10px_rgba(15,23,42,0.06)] transition-all hover:via-muted-foreground/40 hover:shadow-[1px_0_14px_rgba(15,23,42,0.1)] active:via-muted-foreground/60 active:shadow-[1px_0_16px_rgba(15,23,42,0.14)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="w-1 shrink-0 cursor-col-resize border-l border-border transition-colors hover:bg-muted-foreground/30 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
         onKeyDown={handleResizeKeyDown}

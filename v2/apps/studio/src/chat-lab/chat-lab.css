@@ -4,3 +4,10 @@
 .chat-starter .lab-generated-image figcaption > div, .chat-starter .lab-generated-image figcaption > p { flex-basis: 100%; }
 .chat-starter .lab-generated-image figcaption button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
 .chat-starter .lab-generated-image figcaption a { text-decoration: underline; }
+.chat-starter .aui-thread-root { --composer-radius: 24px !important; --composer-bg: var(--muted) !important; }
+.chat-starter .aui-thread-welcome-root { text-align: center; margin-bottom: 28px; }
+.chat-starter .aui-thread-welcome-message-inner { font-size: 28px; font-weight: 500; }
+.chat-starter .aui-composer-input { min-height: 48px; padding: 10px 12px; }
+.chat-starter .aui-composer-send, .chat-starter .aui-composer-cancel { width: 34px; height: 34px; margin: 0 4px 2px 0; }
+.chat-starter .lab-generated-image figcaption button:hover { background: var(--muted); }
+@media (max-width: 600px) { .chat-starter .aui-thread-welcome-message-inner { font-size: 24px; }.studio-chat-notice { padding-inline: 16px; } }

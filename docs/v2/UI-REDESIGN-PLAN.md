@@ -1,6 +1,6 @@
 # ChatGPT 基准 UI 改版计划
 
-2026-10-02。用户授权：先做全面计划，再逐步、逐页修改 Gouo V2；与聊天 `01a0f99e-18cb-7ce0-8194-369837c947aa`（规划并打通整个系统）并行，避免冲突。起点 `6e8c4c8`，工作目录和 `codex/registration-trial` 共用；不切分支、不暂存或提交其它任务文件。
+2026-10-02。用户授权：先做全面计划，再逐步、逐页修改 Gouo V2；与聊天 `01a0f99e-18cb-7ce0-8194-369837c947aa`（规划并打通整个系统）并行，避免冲突。起点 `6e8c4c8`，UI 使用当前工作目录和 `codex/registration-trial`；不切分支、不暂存或提交其它任务文件。
 
 ## 目标与依据
 
@@ -40,7 +40,7 @@
 
 系统任务负责 API、adapter/transport、断网/恢复、资金/授权/幂等与部署运行合同。本任务不改 `apps/api`、`packages/contracts`、`chat-lab/adapter.ts`、`api.ts`、auth-context、trial、导航保存 guard、Native、安全配置或资金数据库。
 
-`ChatLab.tsx`、画布逻辑、Account.tsx 可能是交叉文件：纯呈现修改必须先核对另一任务最新状态；涉及首次发送/断网/恢复的逻辑待明确协调后实施。双方无需改同一块代码。共享 `STATUS.md`/`TASKS.md` 更新采用读取最新内容后追加独立任务段，不覆盖对方记录。专属计划和状态文件可以先独立提交。
+用户批准直接协调分工后，系统任务已从同一起点创建独立工作树 `C:/Users/56161/.codex/worktrees/system-integration/gouo-canvas` / `codex/system-integration`。双方已明确：`ChatLab.tsx`、`WorkspaceAccountProvider.tsx` 和画布的本轮呈现由 UI 任务负责；首页首次发送与同会话刷新保留内容也由 UI 任务完成，系统任务保持 API/adapter/认证/导航守卫责任。系统任务不占用 UI 的 5186 端口，不修改当前目录。以后整合两个分支须单独核对，不能默认合并或部署。共享 `STATUS.md`/`TASKS.md` 更新读取最新内容后新增独立任务段，不覆盖对方记录。
 
 检查共享 worktree 的实时 `git status` 与另一聊天状态；只按本任务文件清单暂存。其它任务新增文件/变更/提交均保留。测试采用专属前端端口、配置和输出目录，避免复用/停止对方的服务；不运行付费模型或修改日常 Native/API。
 

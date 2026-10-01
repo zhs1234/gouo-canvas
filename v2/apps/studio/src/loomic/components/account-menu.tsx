@@ -31,6 +31,6 @@ export function AccountMenu({ owner, canvasId, api }: { owner: string; canvasId:
     <button type="button" onClick={save} disabled={!api || saving} title="保存到当前浏览器" className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-card/95 px-3 text-xs text-muted-foreground shadow-sm hover:bg-muted disabled:opacity-50">
       {saved ? <Check className="h-3.5 w-3.5" /> : <HardDrive className="h-3.5 w-3.5" />}{saving ? '正在保存…' : '本地保存'}
     </button>
-    <button type="button" aria-label="打开账号设置" onClick={() => openAccount()} className="flex h-9 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs shadow-sm hover:bg-muted"><UserRound className="h-4 w-4" />{user?.display_name || user?.username || '登录'}</button>
+    <button type="button" aria-label="打开账号设置" onClick={() => openAccount()} className="loomic-account-trigger hidden h-9 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs hover:bg-muted md:flex"><UserRound className="h-4 w-4" /><span className="max-w-24 truncate">{user?.display_name || user?.username || '登录'}</span></button>
   </div>
 }

@@ -28,13 +28,14 @@ test('fresh ordinary accounts with zero quota, own model/token/charges and canva
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page.getByText('当前账号：新普通测试用户', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '关闭账号窗口', exact: true }).click()
-  await page.getByRole('button', { name: '新会话', exact: true }).click()
-  await expect(page).toHaveURL(/thread=/)
+  await page.getByRole('button', { name: '＋ 新会话', exact: true }).click()
+  await expect(page).toHaveURL(/\/studio\/chat$/)
   const sent = page.waitForRequest(r => r.url().endsWith('/api/studio/runs/stream') && r.method() === 'POST')
   await page.getByRole('textbox', { name: '消息', exact: true }).fill('生成图片，测试新用户自己的账单')
   await page.getByRole('checkbox', { name: '本次允许使用本人 New API 余额', exact: true }).check()
   await page.getByRole('button', { name: '发送', exact: true }).click()
   const run = await sent
+  await expect(page).toHaveURL(/thread=/)
   await expect(page.getByText('协议替身已完成图片，未调用真实供应商。', { exact: true })).toBeVisible()
   const billing = (await (await request.get('/api/studio/billing', { headers })).json()).data
   expect(billing).toMatchObject({ balance: 0.7, spent: 0.3, requestCount: 3 })

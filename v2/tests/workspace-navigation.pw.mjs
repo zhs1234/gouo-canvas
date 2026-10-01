@@ -36,7 +36,7 @@ for (const path of ['', 'editor', 'board']) test(`legacy ${path || 'root'} canva
   const state = await fixture(page)
   const suffix = '?id=legacy-fixture&session=session-fixture&extra=a%2Fb#kept-fragment'
   await page.goto(`./${path}${suffix}`)
-  await expect(page.getByTitle('New Chat', { exact: true })).toBeVisible()
+  await expect(page.getByTitle('新对话', { exact: true })).toBeVisible()
   await expect(page).toHaveURL(url => url.pathname === '/studio/canvas' && url.searchParams.get('id') === 'legacy-fixture' && url.searchParams.get('extra') === 'a/b' && Boolean(url.searchParams.get('session')) && url.hash === '#kept-fragment')
   await expect(nav(page)).toBeVisible()
   expect(state.writes).toBe(0)
@@ -47,11 +47,11 @@ test('Loomic initial and new session preserve unknown parameters and hash while 
   const canvasId = 'fixture-encoded'
   const params = new URLSearchParams({ id: canvasId, session: 'missing-legacy-session', extra: 'a/b & 中文', prompt: '' })
   await page.goto(`./?${params}#session-fragment`)
-  await expect(page.getByTitle('New Chat', { exact: true })).toBeVisible()
+  await expect(page.getByTitle('新对话', { exact: true })).toBeVisible()
   const preserved = url => url.pathname === '/studio/canvas' && url.searchParams.get('id') === canvasId && url.searchParams.get('extra') === 'a/b & 中文' && !url.searchParams.has('prompt') && url.hash === '#session-fragment'
   await expect(page).toHaveURL(url => preserved(url) && url.searchParams.get('session') !== 'missing-legacy-session')
   const firstSession = new URL(page.url()).searchParams.get('session')
-  await page.getByTitle('New Chat', { exact: true }).click()
+  await page.getByTitle('新对话', { exact: true }).click()
   await expect(page).toHaveURL(url => preserved(url) && Boolean(url.searchParams.get('session')) && url.searchParams.get('session') !== firstSession)
   expect(state.writes).toBe(0)
 })

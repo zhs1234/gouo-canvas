@@ -246,24 +246,13 @@ function CanvasPageContent() {
   if (!canvasData || !accessToken) return null;
 
   return (
-    <div className="relative flex h-full min-h-0 min-w-0 w-full overflow-hidden">
-      {/* Top-left navigation bar */}
-      <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5">
-        <CanvasLogoMenu
-          accessToken={accessToken}
-          projectId={canvasData.projectId}
-          canvasId={canvasData.id}
-          excalidrawApi={excalidrawApi}
-        />
-        <EditableProjectName
-          accessToken={accessToken}
-          projectId={canvasData.projectId}
-          key={accessToken + canvasData.id}
-          initialName={projectName}
-        />
-      </div>
+    <div className="loomic-workspace relative flex h-full min-h-0 min-w-0 w-full overflow-hidden">
       {/* Canvas always takes full width; on mobile/tablet, ChatSidebar overlays instead of side-by-side */}
-      <div className="flex-1 relative min-w-0 overflow-hidden">
+      <div data-assistant-open={chatOpen} className="loomic-canvas-surface flex-1 relative min-w-0 overflow-hidden">
+        <div className="loomic-project-heading absolute top-3 left-3 z-20 flex min-w-0 items-center gap-1.5">
+          <CanvasLogoMenu accessToken={accessToken} projectId={canvasData.projectId} canvasId={canvasData.id} excalidrawApi={excalidrawApi} />
+          <EditableProjectName accessToken={accessToken} projectId={canvasData.projectId} key={accessToken + canvasData.id} initialName={projectName} />
+        </div>
         {/* Local save and New API account controls */}
         <div className={`absolute top-3 z-20 ${chatOpen ? 'right-3' : 'right-24'}`}>
           <AccountMenu owner={accessToken} canvasId={canvasData.id} api={excalidrawApi} />

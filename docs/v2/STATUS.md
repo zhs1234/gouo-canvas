@@ -35,6 +35,19 @@ T1.12文本自然限流窗口后只读补验实际passed：同runId原结果恢�
 本次原工作区`npm run check`实际exit0：51领域、157API、类型和build13.74秒；未新复验历史146浏览器/Native/P。独立worktree`npm ci`实际exit0：876包、881审计、0漏洞，锁文件未改。审计确认现有私有项目/原图和默认聊天已实现，B3仍缺Worker和持久授权来源；Loomic无threadId及独立生图缺只读原请求查询，默认聊天失败刷新隐藏已有内容已交接UI负责人。恢复合同保持模型unknown原key/held与资金/续用unknown全owner屏障的区别。
 
 没有模型调用、日常Native/API或旧资金/unknown/held操作、push/merge/main或部署。下一具体实现 **SYS-R1**，统一agent/image原请求只读恢复；后续 **T1.12** 实际浏览器断网，再按计划实施B3和运营验收。全面计划不等于完成系统。
+## U0–U7 ChatGPT基准UI改版（2026-10-02）
+
+本轮按用户“先全面计划、再逐页修改”完成公共壳、首页/会话、五分类账号设置、项目库、官方本机/私有画布和Loomic外围。先独立提交计划 `9834f06`，逐页决策、过程失败和最终证据见 [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md) / [UI-REDESIGN-STATUS.md](UI-REDESIGN-STATUS.md)。保留Gouo品牌、原assistant-ui/Excalidraw/Loomic；没有新增依赖、改API/adapter/资金/认证/导航守卫或替换编辑器。
+
+首页从标题/新建按钮变为实际居中输入区，第一次明确发送才一次创建会话并委托原adapter；创建丢响应保输入并禁止重复POST，fresh重新核对原聊天/图片选择，不自动换模型。创建到URL之间保同runtime；同thread只读刷新失败保已收文本、原图下载和草稿，成功snapshot才同步；换thread/owner仍销毁旧界面。余额同意默认未勾、逐请求消费与unknown屏障保留，费用说明折叠可读。
+
+公共壳与输入区统一中性主题和键盘焦点；next-themes同步官方画布/Loomic。项目库统一两种存储范围，读取中/失败不称空库；Base UI重命名支持焦点、取消/同名零PATCH、409保原名称。官方工具条/更多菜单更清晰，测试素材标记开发演示；暗色失败文字可读，完整原图和CAS保存机制保留。Loomic标题限于画布容器，窄容器隐藏重复账号入口；助手最大宽度按容器保留320px画布，1024px调到上限也不裁掉保存。
+
+最终 `npm run check` **exit0：51领域/157API、类型检查、build12.17秒**，`npx playwright test --config playwright.ui.config.ts --workers=1 --reporter=line` **173/173，4.7分钟，exit0**。新增16个首页/首次发送/刷新/owner场景及11个UI场景，保留原146用例；实际下载原图字节比较、重复Enter、失权不换模型、late create/catalog/读取换户、零编辑重开零PATCH、暗色503保备份、短屏菜单/设置和旧地址/保存guard均覆盖。三个测试文件语法与diff检查exit0。最新日志为 `v2/output/ui-{check-final,e2e-complete}.log`；最终截图22张保留于 `v2/output/ui-redesign/final/`，改前来源与并排核验记录见专属状态。早期开发中/等待竞态/5186退出的失败均保留，不拿旧绿灯替代本轮结果。
+
+并行边界：用户批准直接协调，系统任务在独立 `codex/system-integration` 工作树处理API/结果读取/离线/持久任务；本UI留在 `codex/registration-trial`，没有切换或写其工作树。系统已说明会在自己的分支接入本UI提交并解决chat-sidebar交叉修改，本轮不提前宣称整合已通过。浏览器仅启动自有5186前端，业务数据是明确fixture，未重启或初始化日常Native/API、未调用付费模型；`tests/stack/fresh-user.pw.mjs`只同步新首页首次发送后的thread时序，本轮未重复Docker整栈。
+
+下一任务 **UI-I1 — 系统分支接入后复核页面合同与stack路径**。真实渠道、邮件/安全/资金配置、商业和生产门槛继续遵从下文各自证据，不由UI局部完成覆盖。
 
 ## T1.11 双账号完整地址隔离与画布只读重开（2026-10-01）
 
