@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit -p apps/studio/tsconfig.json",
     "test": "tsc -p packages/contracts/tsconfig.json && node --test tests/contracts-cases.mjs tests/probe-cases.mjs tests/recovery.cases.mjs tests/renewal-recovery.cases.mjs tests/renewal-host.cases.mjs tests/event-stream-offline.cases.mjs tests/backup-restore.cases.mjs && node --experimental-strip-types --test tests/loomic-recovery.cases.mjs tests/image-job-recovery.cases.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:isolated": "playwright test --config playwright.isolated.config.ts",
     "test:offline-fixture": "node --test tests/stack/browser-offline-fixture.cases.mjs",
     "check": "npm run typecheck && npm test && npm run test:api && npm run build",
     "test:api": "npm test --workspace @gouo/studio-api",
