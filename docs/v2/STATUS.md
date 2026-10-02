@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## 图片任务公开能力开关（2026-10-02）
+
+模型目录增加imageJobsEnabled，只有生成/job开关与本人可用图片模型同时批准才true，旧目录缺字段视false。默认off不变，已有任务恢复不依赖目录开关；不得POST失败后换同步接口。两项参数化/脱敏合同通过，全API **205/205 exit0**。这是前端202接线的真实能力依据，没有在日常启用job、改渠道或发送模型。
+
 ## B3.3 图片解码前私有暂存（2026-10-02）
 
 image job在有界读取JSON/base64之后、首次Sharp metadata之前，同Ledger事务保存原bytes/hash与output_received。重启或finalize仅本地完整验证、核验原图asset后完成；无新模型/Native写，原图hash恒定。raw不公开，坏raw保私有/原key/held，存储失败保待本地保存状态；原响应未完整收到或暂存未提交仍unknown。新增4任务＋4输出合同，rootAPI **203/203，8.08秒exit0**，包含pre-Sharp hook内真实child kill→本地恢复→provider1。阶段agentcheck71领域/203API/type/build10.87秒通过时前端R2b仍在实现，因此不代替最终整合检查。完整独立Worker/持久授权及Native202任务尚待；详见 [B3-JOBS.md](B3-JOBS.md)。

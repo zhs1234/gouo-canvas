@@ -1,5 +1,9 @@
 # 系统打通：实际进度
 
+## B3 前端接线的真实目录能力（2026-10-02）
+
+`config.mjs catalog`公开imageJobsEnabled boolean，只由enableImageJobs、generationEnabled与本人可用image模型共同决定；仅配置job开关而未批准生成/组路由/有限token/图片能力不得宣称可执行。两项新`image-job-catalog.cases.mjs`参数化/秘密白名单合同 **2/2 exit0**；root完整API **205/205 exit0**，`.local/system-image-job-catalog-api.log`。未修改任何实际实例开关或调用模型。客户端旧缺字段按false，受理后须持久执行方式/原ID、恢复使用job GET，不能受目录失权或初POST错误驱动自动同步重发。下一SYS-R2b冻结后接202图片占位。
+
 ## B3.3 pre-Sharp原bytes暂存及本地恢复（2026-10-02）
 
 API六文件实现image_job_staging BLOB/hash、output_received状态与owner/global容量、有界HTTP JSON实际48MiB读、规范40MiB encoded/30MiB原bytes与awaited hook。事务提交在第一次Sharp输出metadata之前；不保存完整供应商body/headers/URL或凭据、不增加binary/URL-only下载入口。GET不公开raw；本地hash/唯一模型提交/原摘要核验后复用Sharp完整decode与asset保存，exact bytes/hash核验成功才同事务删除暂存。旧funding/renewal unknown和历史held不变。
