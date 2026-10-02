@@ -1,6 +1,6 @@
-# B3 持久图片任务：授权与恢复方案
+# B3 持久图片任务：现状、授权与恢复
 
-2026-10-02，系统分支已实现并合同验证B3-I及B3.3的图片解码前暂存。默认关闭，同API进程内存授权执行；尚未接入前端或完成Native202任务实测。独立Worker与持久后台授权仍未完成，以下分别区分当前合同与后续方案。
+2026-10-02，系统分支已实现 B3-I、B3.3 图片解码前暂存和 Loomic 前端 202 图片任务模式，并通过新普通 owner 11 的连续真实 Native UI 验收。产品配置默认关闭；本次随机隔离合成实例明确开启，在同 API 进程内存授权下执行。独立 Worker、持久后台授权和跨进程无人值守续跑仍未完成，以下分别记录已验证行为与后续门项。
 
 ## 当前 B3-I 接口
 
@@ -20,11 +20,38 @@
 
 执行阶段只在真实POST创建令牌/购买试用和PUT资金偏好前建立Native写标记；token-key的只读POST及搜索故障不伪装成未知写。标记仅由原helper的完整receipt/token/readback成功清除，响应丢失或崩溃不自动解锁。
 
-实际22项任务＋4项输出F合同覆盖匿名/异户、参数/批准漂移、重复/并发、取消/授权/关闭开关、SQLite原子回滚、密钥不落盘、child-process kill（含pre-Sharp hook）、原图本地恢复及真实写未知和只读失败对照。root最新API203/203 exit0，阶段命令见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。没有真实付费调用或独立队列依赖。
+历史实现阶段的 22 项任务＋4 项输出 F 合同覆盖匿名/异户、参数/批准漂移、重复/并发、取消/授权/关闭开关、SQLite 原子回滚、密钥不落盘、child-process kill（含 pre-Sharp hook）、原图本地恢复及真实写未知和只读失败对照。该阶段 API 203/203 exit 0，阶段命令见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)；前端与 Native 最新证据见下一节。这些测试未调用真实付费供应商，也未引入独立队列依赖。
 
-## 先交付的 B3-I
+## 前端与 Native 最新验收
 
-采用现有SQLite和同一API进程中的runner，先实现一张图片任务。浏览器明确POST一次、收到202后仅读取任务；关页不取消该次授权。账号Bearer与本人relay key只在该次任务的API内存中，不写job/outbox/日志/磁盘，不借管理员token。数据库保存任务及结果，重启不重复付费调用。
+Loomic 图片占位已经接入 `POST /api/studio/image-jobs` 的 202 任务路径。批准的目录明确返回 `imageJobsEnabled=true` 时，先将 `executionMode=job`、原 UUID（`jobId=requestId`）、本人 owner、不可变参数保存至同 owner/canvas 的 IndexedDB；实际 transaction complete 后才调用原 POST。202 是受理回执，随后只 GET 原 ID。重新打开占位或恢复在线也只读原 ID，不做定时轮询、不改为同步生成、不自动重发或重新授权。读取 completed 后用已验证原 bytes 自动替换占位，保存 job/owner/asset 关联；本地读取或插入失败时保留原编号和已有结果。
+
+本次 B3-N2 使用恢复后的随机隔离实例 `http://127.0.0.1:60169`，固定 Native 源码 `0aec08fee811ec6136828fda790551b49e410301`，新普通 owner 11、独立异户 owner 7，以及明确本地零采购供应商。真实原生 RSA 登录与 Cookie 恢复后的认证 self GET 验证普通身份；账号 Bearer 仅用于内存中的实际调用。私有报告 `v2/.local/native-image-jobs-ui-continuous-report.json` 的 `state=passed`，命令耗时 9.17 秒。
+
+| 实际连续阶段 | 通过的证据 |
+| --- | --- |
+| 保存后唯一发送 | 同浏览器观察序号 IDB commit 1 → 原 fetch 2，原参数 hash 一致；本人 UI 只有一次 POST，HTTP 202/accepted，Idempotency-Key 为同原 UUID。 |
+| 关页前后台已提交 | 本地图片 HTTP 响应被同实例控制明确暂停；数据库为原 job `submission_started`、image trial `reserved`、job reservation `held`，供应商 image 1/chat 0，无已保存 asset。 |
+| 关页后完成原任务 | 关闭原 page 后仍为同一 API 进程（所有观察 `processStartTicks=739`）；仅放行已受理的原本地图片请求，原 job 变 completed、原 asset 保存、两个原 reservation 变 used。供应商仍 image 1/chat 0。 |
+| 新 tab 与失败 GET | 同浏览器新 tab 通过 HttpOnly Cookie 恢复同普通 owner、同 canvas 和原持久 mode/UUID/参数；真实离线 GET 原 job 得到 `net::ERR_INTERNET_DISCONNECTED`，原占位与 UUID 保留，没有虚构图片。 |
+| 在线恢复与导出 | 恢复在线后 GET 同原 ID 得到 completed，原 PNG 自动插入一次；实际下载的 Excalidraw 文件和完整 reload 都保持一张同 hash 原图。本人 UI 原 job GET 共 3 次，包含离线失败；无隐藏轮询或额外生成。 |
+| 只读与隔离 | 恢复阶段业务写入 0、同步 fallback 0；Native 资金/使用数据、Studio 数据及供应商计数 hash 不变。原 owner asset GET 200，异户 owner 7 的原 job/asset GET 404，匿名 GET 401；独立授权检查同样不改变这些数据。 |
+
+原 job 为 `0d41a72d-f701-4fef-a442-f7be465b14f7`，私有 asset 为 `1f3ee8ad-f439-43b3-ba89-532843a357ae`；保存、UI GET、下载和 reload 核对的原 PNG SHA-256 均为 `796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3`。正常完成会自动插图并关闭浮层，本次“下载”证据是包含原 PNG 的真实画布文件导出，没有声称点击只在保留占位时出现的“下载原图”链接。Cookie 会话恢复所需的原生认证请求与“业务写入 0”分别记录。
+
+最新工具 F 检查为新图片关页 runner 11 项＋旧断网 24 项＋旧图片 Native runner 5 项，40/40 passed，root 命令耗时 1.540 秒；三个测试/fixture 文件语法检查通过。命令从 `v2` 执行：
+
+```sh
+node --test tests/stack/browser-image-jobs-native-fixture.cases.mjs tests/stack/browser-offline-fixture.cases.mjs tests/stack/image-jobs-native-fixture.cases.mjs
+```
+
+实际连续入口为 `v2/tests/stack/browser-image-jobs-native.cases.mjs`，只允许本工作区私有 `.local` 中明确 prepared 的随机合成 state、普通本人/异户身份和新报告，并校验实际 Native binary、全部本地 channel、运行中供应商的同实例控制版本和生成前零原请求。`--validate-only` 不操作 Native、浏览器或模型；实际运行遇 429 立即停止，不重置桶、不换参数/IP、不自动等待重试。首次实际运行因只读 `/proc/1/stat` 尾换行解析失败，在浏览器/HTTP/模型调用之前停止；旧 `native-image-jobs-ui-report.json` 保留。修复共用解析器及负例后才使用仍无已受理任务的同 fresh owner 和新报告执行上述连续验收。
+
+这里 **F** 是显式本地供应商与工具合同，**N** 是固定真实 Native、真实 UI、合成普通账号及资金流程；**P 未执行**，真实付费供应商调用 0、采购成本 0。同 API 进程的连续验收不代表后台授权已持久化、独立 Worker 已交付、重启后可无人值守再外发，或费用已确认结算。
+
+## 已交付的 B3-I 范围
+
+采用现有 SQLite 和同一 API 进程中的 runner，已实现并连续验收一张图片任务。浏览器明确 POST 一次、收到 202 后仅读取任务；关页不取消该次授权。账号 Bearer 与本人 relay key 只在该次任务的 API 内存中，不写 job/outbox/日志/磁盘，不借管理员 token。数据库保存任务及结果，重启不重复付费调用。
 
 这是持久任务和后台有限执行的第一阶段，不能称为完整B3独立Worker或无人值守重启续跑。后者需要单独完成后台授权、Native请求级资金/组约束和多进程恢复所有权。
 
@@ -76,4 +103,4 @@ Native资金和token结算仍是不同步骤；成功输出可以completed同时
 
 测试用新随机Native＋本地零采购供应商；真实模型另门。真实子进程崩溃分别覆盖接收事务前后、提交屏障前后、供应商收到未回包、原图保存前后、终态事务前后。核对实际调用次数、原key、reservation、原图hash与异户404。再覆盖202丢响应、并发同步入口、失权/过期/禁用、未知资金写、磁盘满、本地保存重试和晚到CAS。未经验证的窗口不能写为通过。
 
-顺序：T1.12/SYS-R2 → B3-I真实任务增量 → B3-II权威后台授权/资金约束 → B3-III独立成熟队列/Worker。具体命令与结果仍写SYSTEM-INTEGRATION-STATUS/STATUS，每项可审查提交；保留默认关闭和日常实例边界。
+已完成 T1.12/SYS-R2 和 B3-I 前端 202 连续真实任务增量；后续顺序为 B3-II 权威后台授权/资金约束 → B3-III 独立成熟队列/Worker。具体命令与结果仍写 SYSTEM-INTEGRATION-STATUS/STATUS，每项可审查提交；保留产品默认关闭和日常实例边界。

@@ -1,10 +1,18 @@
 # Codex 任务清单
 
+## 当前系统主线收口（2026-10-02）
+
+本分支 `codex/system-integration` 已完成本地首交付及 **QA-FINAL**，整合UI799ad3b和系统实现。先读 [LOCAL-SYSTEM-HANDOFF.md](LOCAL-SYSTEM-HANDOFF.md) / [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md) / [STATUS.md](STATUS.md)。SYS-R1、SYS-R2a/b、T1.12核心离线恢复、B3-I/B3.3及其连续真实UI202关页恢复、OPS-N1合成双库实际恢复已完成；E1三入口可编辑版式/精确PNG增量已提交。首次创建thread元信息/详情合同已修正，最终check110领域/205API、隔离浏览器206/206、三阶段stack、真实Native首页首次发送和真实dist本地编辑导出通过。已通过阶段不重复开发。
+
+公开启用下一ID **G1→G2→P**，权威后台授权下一 **B3-II**，独立Worker **B3-III**；月度订阅/Logo素材库/自动长文案排版/批处理和视频仍后续范围。默认generation、trial、renewal、jobs关闭；合成验收开启不代表日常或正式配置开启。真实模型、商户支付、生产/安全/资金修改与部署遵守原独立授权门。
+
+以下各日期“当前/下一”均为阶段历史，最新状态以本段与STATUS顶部为准。不能以历史“云项目暂缓”“前端未接job”或“SQLite只有请求guard”覆盖已实现的私有项目/原图/持久图片任务。失败不自动释放已外发unknown/held或退款；只有可证明未提交的新job业务占用可确定取消。
+
 ## 并行 UI 改版（2026-10-02）
 
 本轮 UI 独立执行 **U0–U7**：完整计划→公共壳→首页/会话→设置→项目库→官方画布→Loomic→响应式与异常回归。任务清单、文件边界与实际结果见 [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md) / [UI-REDESIGN-STATUS.md](UI-REDESIGN-STATUS.md)。系统链路任务继续负责API/adapter/认证/试用/导航守卫，在独立 `codex/system-integration` 工作树运行；当前UI分支不包含其未整合成果。
 
-UI后续任务 **UI-I1 — 与系统分支整合后复核页面合同**：系统任务在其已授权范围内接入本轮UI提交后，核对两分支的ChatLab与adapter请求合同、首次发送、unknown只读恢复、本人项目/原图和最新stack用例。当前UI任务不切换或修改系统工作树；main合并和部署继续遵从单独请求的仓库边界。此前T1任务和真实渠道/商业门槛保持各自记录，不由UI局部验收覆盖。
+系统分支上的 **UI-I1** 已完成：接入UI799ad3b，修正ChatLab创建meta/detail合同，核对首次发送、原结果只读恢复、本人项目/原图并运行最终stack。UI独立分支仍保留，其历史计划不等于已经接入系统提交；按需要再单独整合。main合并和部署继续遵从单独请求的仓库边界。此前T1任务和真实渠道/商业门槛保持各自记录，不由UI局部验收覆盖。
 
 ## 最新用户要求（2026-10-01，本机环境复核后）
 

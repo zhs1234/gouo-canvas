@@ -1,12 +1,37 @@
 # 系统打通：实际进度
 
+## QA-FINAL 完成：本地系统首交付（2026-10-02）
+
+交付分支 `codex/system-integration`，独立工作树 `C:/Users/56161/.codex/worktrees/system-integration/gouo-canvas`。应用源码截至 **3c69835**，隔离测试配置截至 **ad3f844**；本次收口只更新文档。UI799ad3b已整合，原工作区 `codex/registration-trial`、日常8080与旧数据未自动替换。完整功能、启动和继续开发见 [LOCAL-SYSTEM-HANDOFF.md](LOCAL-SYSTEM-HANDOFF.md)。
+
+本地首交付包含普通账号认证、默认聊天与Agent、原请求GET恢复、原PNG及私有项目revision、Loomic图片任务202关页恢复、原生电商版式/精确PNG、unknown/held保护和合成双库冷恢复。New API继续唯一账号/模型/金额权威。图片任务在同API进程继续；重启未提交需本人授权，已提交未知不重发，取得raw后才可仅本地完成。没有持久账号Bearer或独立Worker；公开收费SaaS和所有真实供应商尚未验收。
+
+| 最终实际命令 / 验收 | 结果 | 私有证据 |
+| --- | --- | --- |
+| `npm run check` | exit0；87＋23＝110领域、205API、类型检查、build12.42秒 | `v2/.local/system-final-check-after-chat.log`，应用3c69835 |
+| `npm run test:e2e:isolated -- --workers=1 --reporter=line` | exit0；**206/206，5.3分钟** | `v2/.local/system-final-isolated-playwright-single.log`，ad3f844；自有5187/reusefalse/未匹配API拒绝端口 |
+| `npm run test:stack` | exit0；真实固定未初始化Native边界通过，明确假New API合同2/2 12.4秒，fixture资金普通账号闭环1/1 4.7秒 | `v2/.local/system-final-stack-isolated.log`；独立stack输出，仅清理本次随机项目 |
+| 三个Native runner设施 `node --test` | exit0；40/40，1.540秒，明确F | `v2/.local/system-final-native-fixtures.log` |
+| 普通Native默认首页首次发送＋完整reload | passed；CLI6.972秒；唯一create、唯一chat，原run恢复零重发 | `v2/.local/system-default-chat-native-report.json`；12合成quota、recorded/unconfirmed |
+| 连续Native图片UI202＋关页＋新tab offline/online原GET | passed；CLI9.1706秒；唯一image、同API ticks739、同PNG、恢复业务写0 | `v2/.local/native-image-jobs-ui-continuous-report.json`；500合成quota、recorded/unconfirmed |
+| 配对冷恢复及实际认证只读补验 | passed；恢复exit0 8.6449秒；双库冷逻辑一致，原图/rev2/failed/held恢复，源冷停止 | `v2/.local/system-ops-native-restore-desktop.log` / `system-ops-native-read-report.json`；OPS工具30F已计入check |
+| 实际dist游客商品导入→版式→PNG/文档→重开 | 初始11/11；fresh当前3c69835追加8/8；640×480 PNG解码像素及原bytes一致 | `v2/output/playwright/dist-guest-5a715e5-20261002/report.json`；无HTTP mock/模型POST，3次匿名refresh401如实记录 |
+
+保留原失败：首次stack因会话创建meta误当detail实际崩溃，3c69835修复并新增3F，不吞坏历史或重放创建。第二次stack与全量PW共用test-results，trace ENOENT导致设施失败；ad3f844隔离输出，第三次三阶段通过。旧私有配置206/206 2.8分钟先通过；新隔离配置双worker首次205/206，历史分页“最新回答”5秒未显示，原因未证实。原日志 `v2/.local/system-pagination-original-205-of-206.log` 保留；独立定向12/12及最终单worker206/206通过，未改应用、断言或超时。最终通过不能改写首次失败，后续若复现需保存失败DOM/HTTP/trace。
+
+真实页面验收中原位更新live dist曾使旧标签页动态chunk404，原截图保留；fresh最终构建四入口/390px/设置/键盘及本地E1正常。公开部署需完整版本切换并保留旧hash资源，不应clean/build正在服务的dist。E1长文案或极扁尺寸需原生调整；CLI拦截的原生文件选择器及严格连续焦点锁定未验，HTML导入和键盘可达证据不扩大成这些能力。
+
+原28扩展场景累计 **19通过/9partial/0未执行**，F19/9/0、N16/9/0、P0/0/13，分层重叠不相加，只有B5核心由本轮补齐；不是最终版本再执行全部28。stack账号/资金double、合成本地supplier与实际普通Native专项分别统计，真实供应商/商户采购0。历史429、summary丢终态、脚本result误读、Windows bind及/proc解析错误仍保留，不重发已接受模型请求补通过。
+
+下一任务 **G1→G2→P**：具体公开安全/限流/会话与发布方案、Native资金修正和请求级实扣证据、明确渠道/参数/预算的真实供应商验证；正式执行按既有授权边界处理。无人值守先 **B3-II** 权威后台授权，再B3-III独立Worker；月度订阅、Logo素材库、自动长文案、批处理和视频后续。生产容量/加密备份/保留、SMTP/MFA、支付另门。默认示例generation/trial/renewal/jobs关闭，本轮无main推送/合并、生产迁移或部署。
+
 ## QA-FINAL 首次聊天真实合同修复（2026-10-02）
 
 此前最终源码check110/205/build11.04及203PW passed后，`npm run test:stack` Phase1固定未初始化Native边界和Phase2 F2/2 11.7秒通过，Phase3 timeout90s。截图实际页面为runs.flatMap undefined：新POST /threads返回history.create真实meta，UI created把其当SavedThread重渲染，发送前崩溃。不是删除断言/加等待可解决；首完整stack exit1保留 `.local/system-final-stack.log` 和 `.local/system-stack-first-failure` 的真实trace/screenshot。
 
 修复ChatLab/adapter区分ThreadMetadata（列表/创建）与SavedThread（detail历史），创建成功且UUID有效后明确初始runs[]，保持同runtime和原终态reload，无额外GET。空/非法ID不确定创建，输入保留/零model/不自动重建；历史GET仍严格真实runs而无兜底。新增chat-creation.pw.mjs三项，独立5190/reusefalse配置和原16聊天 **19/19 exit0，32.1秒**，typecheck4.64秒。
 
-root最终改动后 `npm run check` **exit0：87+23=110领域、205API、typecheck、build12.42秒**，`.local/system-final-check-after-chat.log`。真实恢复目标60169保持API/Native不重启，仅dist已更新；新owner12注册/空准备thread不调用模型，然后NativeRSA实际UI登录redirect默认首页。唯一UI POST /threads返回实际meta无runs，再唯一POST /runs/stream，fixedNative/default模型及合法finish最终completed。provider chat1/image0增量、唯一Native12合成quota与usage request ID对应、4→3聊天试用；原thread `36332c9c-1d3a-442f-8e77-1d27e92f1e49`、run `980f561f-6383-4eab-b7ab-493f88e64b08`。fullreload显示同原回答，GET历史精确相等、完成后Native资金安全投影/Studio全表/provider hash不变，无新模型。root ignored opt-in `.local/system-default-chat-native.mjs` 明确同合成instance/owner/全localchannel/binary、0原requests、report wx、429即停；报告 `.local/system-default-chat-native-report.json` **passed，CLI6.972秒**。P未执行；后续完整206PW/stack结果另记。
+root最终改动后 `npm run check` **exit0：87+23=110领域、205API、typecheck、build12.42秒**，`.local/system-final-check-after-chat.log`。真实恢复目标60169保持API/Native不重启，仅dist已更新；新owner12注册/空准备thread不调用模型，然后NativeRSA实际UI登录redirect默认首页。唯一UI POST /threads返回实际meta无runs，再唯一POST /runs/stream，fixedNative/default模型及合法finish最终completed。provider chat1/image0增量、唯一Native12合成quota与usage request ID对应、4→3聊天试用；原thread `36332c9c-1d3a-442f-8e77-1d27e92f1e49`、run `980f561f-6383-4eab-b7ab-493f88e64b08`。fullreload显示同原回答，GET历史精确相等、完成后Native资金安全投影/Studio全表/provider hash不变，无新模型。root ignored opt-in `.local/system-default-chat-native.mjs` 明确同合成instance/owner/全localchannel/binary、0原requests、report wx、429即停；报告 `.local/system-default-chat-native-report.json` **passed，CLI6.972秒**。P未执行；最终完整206PW/stack结果见本页顶部。
 
 ## B3-N2 连续真实UI原图片任务（2026-10-02）
 
@@ -14,7 +39,7 @@ opt-in browser-image-jobs-native.cases.mjs/fixture及仅明确B3N2本地图片�
 
 原job `0d41a72d-f701-4fef-a442-f7be465b14f7`，同browser realm IDB complete sequence < 原window.fetch sequence（只读观察原样执行，不mock/delay/re写参数）；UI唯一POST202，真实supplier hold、DB submission_started+唯一提交标记+试用reserved/业务held。关原page后API startticks相同，continue原supplier得到completed、原asset、raw staging0、native_pending0，原占用used。新tab实际Cookie refresh/self同owner，原画布/模式/UUID/参数复原；真实offline GET net::ERR保原占位；online原GET恢复、同PNG自动插一次；真实下载Excalidraw文件及完整reload只有1图/无占位。PNG hash `796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3`，supplier image+1/chat0；恢复只GET（无同步fallback、authorize/finalize或重发），本人asset200、foreignjob/asset404、anonymous401。完成后读取保护hash不变，Native费用recorded/unconfirmed，不把合成quota当商户实际结算。
 
-root命令 `node tests/stack/browser-image-jobs-native.cases.mjs --state .local/user-restored-093cf047/state.json --identity .local/t112-image-jobs-ui-identity.json --foreign-identity .local/t112-restored-foreign-identity.json --report .local/native-image-jobs-ui-continuous-report.json --confirm-isolated-native` **exit0，9.1706秒，passed**；私有新报告和截图保留。root设施 `node --test tests/stack/browser-image-jobs-native-fixture.cases.mjs tests/stack/browser-offline-fixture.cases.mjs tests/stack/image-jobs-native-fixture.cases.mjs` **40/40 exit0，1.540秒**，`.local/system-final-native-fixtures.log`。第一次 `.local/native-image-jobs-ui-report.json` 在原snapshot前因/proc尾换行解析工具错误failed，0HTTP/浏览器/模型；原失败不覆盖。共用processStartTicks修正尾换行/复杂comm/超安全整数原字符串及坏字段拒绝，保留同API断言后，才新报告用同fresh账号执行。P未执行；没有无条件后台授权或独立Worker完成声明。
+root命令 `node tests/stack/browser-image-jobs-native.cases.mjs --state .local/user-restored-093cf047/state.json --identity .local/t112-image-jobs-ui-identity.json --foreign-identity .local/t112-restored-foreign-identity.json --report .local/native-image-jobs-ui-continuous-report.json --confirm-isolated-native` **exit0，9.1706秒，passed**；私有新报告和截图保留。root设施 `node --test tests/stack/browser-image-jobs-native-fixture.cases.mjs tests/stack/browser-offline-fixture.cases.mjs tests/stack/image-jobs-native-fixture.cases.mjs` **40/40 exit0，1.540秒**，`.local/system-final-native-fixtures.log`。第一次 `.local/native-image-jobs-ui-report.json` 在原snapshot前因/proc尾换行解析工具错误failed，0浏览器/业务HTTP提交/模型（内部供应商stats只读检查不包含在该0范围）；原失败不覆盖。共用processStartTicks修正尾换行/复杂comm/超安全整数原字符串及坏字段拒绝，保留同API断言后，才新报告用同fresh账号执行。P未执行；没有无条件后台授权或独立Worker完成声明。
 
 ## E1 版式与导出实现（2026-10-02）
 
