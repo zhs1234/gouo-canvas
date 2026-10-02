@@ -1,5 +1,13 @@
 # 系统打通：实际进度
 
+## OPS-1 合成双库冷备份工具 F 验证（2026-10-02）
+
+三个新文件 backup-restore.mjs、lib/backup-helper.mjs、tests/backup-restore.cases.mjs：固定实际 Native/source/image、稳定 instance/config/secret/policy/API source hash、完整 full IDs、cold/Pid0/独立私有卷、全部其他运行挂载/alias metadata核验。只完整 inspect 已先证明属于本实例的 Native/Studio，不读取日常 Env。原冷 /data 含 WAL 复制私有 scratch 后使用内建 SQLite backup 规范配对；原卷不 checkpoint，完整 schema/逻辑/BLOB/owner/项目revision/Native引用核验。unknown/held保留，活跃请求/资金/图片暂存拒绝；没有业务构造器或模型调用。
+
+恢复限定同原冷源、新随机project/port与新空卷、同实例/配置/secret/实际镜像/API bind；network none/read-only helper只写目标并设 Studio UID1000，双库核验＋源/目标冷态复核成功后才写 private restore-ready receipt。工具不初始化或启停服务。原生成/job开关为true时按实际hash保存，不假称off；备份本身包含合成敏感数据，不发布。生产备份的加密/保留/稳定secret门不被这些F合同替代，详见 [BACKUP-RESTORE.md](BACKUP-RESTORE.md)。
+
+root `node --test tests/backup-restore.cases.mjs` **25/25 exit0，3.844秒**，`.local/system-backup-root-tests.log`；三个文件语法通过。包含真实未checkpoint WAL原文件不变、精确PNG/revision2/unknownheld/native_pending保留、pin/漂移/源重启/混合/非空/路径symlink/跨owner与Native token/subscription关联、全Docker库存不读无关Env等反例。已纳入 npm test；完整check另跑，实际冷备份/目标启动N尚未执行。下一 OPS-N1。
+
 ## B3-N1 Native202 原图片任务与私有项目分段验证（2026-10-02）
 
 新增 opt-in `image-jobs-native.cases.mjs` 与 5 项设施 F 合同：复用随机 loopback/同 workspace .local/固定 Native pin/普通合成身份/本地供应商/报告不可覆盖护栏；生成前原 owner 必须零请求，实际二进制及全部渠道必须匹配固定本地替身。只保存公开白名单、hash、ID、状态，不保存 prompt、图片正文、密码/Bearer。429 立即停止，无模型/资金重试；分段恢复要求同原失败报告、同实例/owner/key、已完成原图/唯一提交与 provider1，原报告 hash 不变。

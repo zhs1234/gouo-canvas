@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## OPS-1 配对冷备份工具与负例（2026-10-02）
+
+新增仅合成私有验收范围的 inspect/backup/verify/restore-empty；冷 Native/Studio full ID、固定实际pin/image/instance/env/policy/source hash、空新卷与跨owner校验，SQLite backup含WAL而不checkpoint原卷，exact BLOB/revision/unknownheld配对保留。工具零模型、不会停/启服务或初始化账户；完整Docker配置只读先确认归属的两容器。root独立 **25/25 exit0，3.844秒**，`.local/system-backup-root-tests.log`，含真实SQLite与F Docker护栏，纳入默认领域检查。实际N演练尚待，生产加密/稳定secret/保留策略未通过。操作条件见 [BACKUP-RESTORE.md](BACKUP-RESTORE.md)。下一 OPS-N1、前端202、E1最终整合。
+
 ## B3-N1 原任务与私有项目实际分段验收（2026-10-02）
 
 隔离固定 Native/本地替身中，owner10唯一 image job POST202→completed，Native本人500合成quota、私有原图与 asset 保存、provider image+1/chat+0。首脚本误读平铺result为result.image，报告failed保留；修正后仅GET原key并创建/保存revision2私有项目，原图 hash 相同、重复from-asset同项目、重开文档一致、异户404/匿名401，资金/Studio/provider hash在保存后的恢复期间不变。第二命令 **resumed-original-read-and-project-passed**，明确非连续验收、零新生成。5设施合同通过；只刷新自己实例的验收 API，refresh helper等待健康的新参数实测health200。详情/命令/失败记录见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。前端202和连续UI Native202仍待，P/正式实扣未完成。
