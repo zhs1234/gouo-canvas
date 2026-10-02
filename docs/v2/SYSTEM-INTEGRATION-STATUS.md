@@ -1,5 +1,17 @@
 # 系统打通：实际进度
 
+## B3-N1 Native202 原图片任务与私有项目分段验证（2026-10-02）
+
+新增 opt-in `image-jobs-native.cases.mjs` 与 5 项设施 F 合同：复用随机 loopback/同 workspace .local/固定 Native pin/普通合成身份/本地供应商/报告不可覆盖护栏；生成前原 owner 必须零请求，实际二进制及全部渠道必须匹配固定本地替身。只保存公开白名单、hash、ID、状态，不保存 prompt、图片正文、密码/Bearer。429 立即停止，无模型/资金重试；分段恢复要求同原失败报告、同实例/owner/key、已完成原图/唯一提交与 provider1，原报告 hash 不变。
+
+仅自己随机实例开启图片 job 以加载已冻结 B3 API，Native 未重启、旧 held 未解除。首次账号准备在 API 尚未健康时得到 HTML 而中断；保留 owner9，不初始化资金，其 Native consume/token/subscription 数均 0。验收工具 refresh-api/web 新增 Compose `--wait --wait-timeout 90`，语法检查通过，自己实例真实 API 刷新后 health200、零模型。
+
+owner10 原 **683584b2-b2fd-4311-9044-1672dae3be55** 实际 POST202 accepted→GET completed，唯一 image 提交、本地供应商累计 image +1/chat +0、Native 本人 consume500合成quota，私有 asset **bf027e65-7f16-4b71-a678-d7f2c489d9cf** 与原 PNG hash **796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3**已落盘且 staging0/native_pending0。首 runner 错误地按 `result.image` 检查，实际 API 是平铺 `result.url`；报告 `.local/native-image-jobs-report.json` **failed** 保留，未重发原模型意图。此失败属于验收脚本误读，不能把整条首命令记 passed。
+
+修正真实平铺合同后：`node tests/stack/image-jobs-native.cases.mjs --state .local/user-acceptance-D5UKBb/state.json --identity .local/t112-image-jobs-fresh-identity.json --foreign-identity .local/t112-text-continuous-identity.json --report .local/native-image-jobs-resumed-report.json --resume-completed .local/native-image-jobs-report.json --confirm-isolated-native` **resumed-original-read-and-project-passed**，2.6秒，明确 continuousEndToEndPassed=false、无 image-job POST/新模型。本人原图读取、from-asset 私有项目 **379018ec-decf-45bd-a7d2-df870e3bb951**、实际 PATCH revision2、重复 from-asset 同项目与重开原 document hash 一致；foreign job/asset/project/from-asset404、anonymous401。保存完成后的恢复检查 Native资金/用量 hash、Studio全表 hash、供应商全记录 hash不变。费用 recorded/unconfirmed，实际资金二步确认、P未执行，采购0。
+
+最终 `node --test tests/stack/image-jobs-native-fixture.cases.mjs` **5/5 exit0，0.1294秒**，`.local/image-jobs-native-fixture-final.log`，涵盖误终态/秘密/假settled、额外提交/换原图、资金或私有库变动、重复/异实例分段、路径/旧报告/非普通身份护栏。前端202与一次连续 UI Native202仍待；该原私有项目用于 OPS-1 后续冷恢复，旧未知总结/held继续保留。
+
 ## SYS-R2b Agent 原编号跨刷新保存与恢复（2026-10-02）
 
 原请求 UUID 编码在现有本人助手消息 ID，等待 IndexedDB 实际提交后才发唯一 POST；保存未完成时重复 Enter 不重复发送，保存失败零模型调用并在同身份/会话且输入为空时恢复 prompt。旧无编号消息不猜编号；已确认预检未外发的错误仍保存，但不变成后台恢复任务。

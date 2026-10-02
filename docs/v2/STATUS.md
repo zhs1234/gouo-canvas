@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## B3-N1 原任务与私有项目实际分段验收（2026-10-02）
+
+隔离固定 Native/本地替身中，owner10唯一 image job POST202→completed，Native本人500合成quota、私有原图与 asset 保存、provider image+1/chat+0。首脚本误读平铺result为result.image，报告failed保留；修正后仅GET原key并创建/保存revision2私有项目，原图 hash 相同、重复from-asset同项目、重开文档一致、异户404/匿名401，资金/Studio/provider hash在保存后的恢复期间不变。第二命令 **resumed-original-read-and-project-passed**，明确非连续验收、零新生成。5设施合同通过；只刷新自己实例的验收 API，refresh helper等待健康的新参数实测health200。详情/命令/失败记录见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。前端202和连续UI Native202仍待，P/正式实扣未完成。
+
 ## SYS-R2b Agent 请求编号持久化（2026-10-02）
 
 原 UUID 使用现有本人助手消息 ID，等待 IndexedDB 提交后唯一 POST；保存失败零生成，重复 Enter 一发。完整刷新只 GET 本人原请求、替换快照与图片去重；旧消息不补造 ID，预检未提交的原错误保留而不形成恢复任务。异步消息加载/结果发布检查 owner、身份 epoch、会话；删除图片后刷新不复活。root 领域 **14/14，0.1075 秒**；独立浏览器 **8/8，12.6 秒**，含保存未完成/拒绝、跨刷新、迟到异户、失败读与零重发。agent typecheck/build10.99秒通过；完整整合回归还待运行，详见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。下一 B3 前端/Native202、E1、OPS-1。
