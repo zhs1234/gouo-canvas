@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## UI-I1 整合与T1.12真实离线正常路径（2026-10-02）
+
+UI最终提交799ad3b已接入系统分支40ba65d，保留双方STATUS及助手侧栏的恢复/布局。整合check实际 **69领域/195API、typecheck/build11.77秒exit0**。首次完整浏览器 **175/178**，三例都发现not_submitted错误在消息和恢复卡重复显示；修复只过滤没有外发的恢复卡，保原错误持久化和0POST。原loomic/model-selection定向 **15/15，25秒**过，未删断言；完整回归还要再运行，不拿173旧UI绿灯代替。
+
+同新随机固定Native64432、明确本地供应商，默认UI文本与图片两条连续真实offline→原stream ERR_ABORTED→失败刷新保partial→后台原请求完成→原ID GET→完整cookie reload均passed。文本owner7仅1chat；图片owner4仅2chat/1image、原PNG hash全程相同。恢复期间Native资金安全投影/Studio全表/provider hashes不变，0新模型/资金写，实际usage recorded/unconfirmed；采购0。这不是真实AI质量/P/生产验收；上游未知路径与跨reload Loomic原ID仍待完成。报告和命令见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。下一 **T1.12-unknown / SYS-R2b / B3.3**。
+
 ## SYS-R2a Loomic与独立图片只读恢复（2026-10-02）
 
 系统分支接入SYS-R1：Loomic按原runId读取并替换对应assistant快照，保留真实失败终态/已收原图、按toolCallId防重复插图；独立图片占位将原ID/owner保存到本人canvas customData，跨刷新仍只GET。恢复失败保留partial，无轮询或模型重发；读取前后身份epoch和生图前fresh账号核验拒绝迟到异户操作。新增12领域、4浏览器F合同，root独立4/4（8.9秒）；整合check69领域/195API、类型/build11.27秒exit0，旧streaming 5/5仍过。Agent原ID目前仅同mountedpage，完整刷新原内容保留但恢复ID尚未持久，因此只记SYS-R2a，不称完整SYS-R2。默认ChatLab由UI最终提交后再整合。

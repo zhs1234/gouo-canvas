@@ -1,5 +1,22 @@
 # 系统打通：实际进度
 
+## UI-I1 首轮整合与Native连续离线两条通过（2026-10-02）
+
+UI799ad3b已cherry-pick为40ba65d：36文件，无原工作区修改；仅STATUS冲突手动保留双方、chat-sidebar自动保两边。独立5187下整合`npm run check` **exit0：57+12领域/195API、typecheck、build11.77秒**，`.local/system-ui-integrated-check.log`。全量PW首 **175/178，4.8分钟**，`.local/system-ui-integrated-playwright.log`：Loomic失权/图片-only/guest预检三例均真实重复错误消息，两处完全相同文字使严格DOM断言失败。修改恢复卡过滤not_submitted，因为根本没有外发请求可读取；原消息、持久化与零POST断言保持。原两个测试文件定向 **15/15、25秒exit0**，`.local/system-ui-preflight-fix.log`。完整178还待复验，首失败trace保留，不称UI-I1全部通过。
+
+只刷新本轮随机project自己的Studio API以加载终止标记/B3代码（B3仍off）；固定Native未重启、pin/CT/资金设置未改。新构建默认ChatLab具备失败刷新保内容后，实际执行：
+
+| Native实际命令 | 结果 |
+| --- | --- |
+| `node tests/stack/browser-offline-native.cases.mjs --state .local/user-acceptance-D5UKBb/state.json --identity .local/t112-image-identity.json --report .local/t112-image-offline-report.json --scenario image --confirm-isolated-native --check-failed-refresh` | **passed**，owner4，原3d0932a5-2e63-4091-86fa-e091cf5e4a5e；2chat/1image。 |
+| 同runner，identity `t112-text-continuous-identity.json`，report `t112-text-continuous-offline-report.json`，scenario text，failed-refresh | **passed**，新owner7，原5ccc22ed-6fea-4a3a-bb01-150202687b80；1chat/0image。 |
+
+两例真实普通账号Native encrypted UI login及self/role1/status1证明，单次用户发送；前段到达/持久后context.setOffline得到navigatorOnline=false和原stream net::ERR_ABORTED。离线点击原刷新，已收文本/图片继续可见，0另一次POST；供应商只继续原paused请求。Backend本浏览器仍离线时保存完整原run，真实资金/用量变化只归生成阶段。online manualGET与完整reload同run恢复；这两例是连续通过，区别于早前owner6分段补验。
+
+图片页面/Studio事件/供应商原PNG **796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3**一致；GET/reload还是相同原bytes。Terminal→restored Native完整tokens/subscriptions/preconsume/logs及users安全投影、Studio所有非内部表/provider完全hash不变；业务恢复只GET。图片Native3条request IDs/合524合成quota、文本1条/12quota精确映射本人记录，费用仍recorded/unconfirmed，不把合成Native额度称真实采购/钱包结算；realPaidProviderCalls0/procurementCost0。
+
+准备新owner7/8及空thread的helper明确本地合成，0模型；owner8保留供一次未知summary验收，尚未发送。原owner3/5/6失败和分段报告保持，不重放旧意图。**T1.12正常文本/图片离线与失败读子项N通过，完整未知屏障子项仍未完成**。下一受控原summary失响应，SYS-R2b持久Agent ID，B3.3解码前原图暂存；OPS-1冷备份方案已只读审查，未实测。
+
 ## SYS-R2a 原请求读取接入与文本分段Native补验（2026-10-02）
 
 Loomic runId/owner/identity epoch绑定对应assistant；断流和Stop使用真实“停止接收”状态，不制造provider run.failed。在线EOF一次GET、恢复联网各原中断请求一次GET、本人手动GET；同kind/id并发读合并，没有定时轮询或POST重试。服务器快照替换文本和工具，真实run.failed保留、成功工具图按toolCallId只插一次；GET失败/格式错/身份变化不丢partial或误插异户画布。独立图片在首次发送前持久原ID/owner到本人canvas占位，刷新/重开读取原结果，不再生成该占位；旧无尺寸结果插图前解码真实bytes，失败仍保留原图下载和原ID。

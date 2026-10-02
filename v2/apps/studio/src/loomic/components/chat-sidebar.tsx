@@ -855,7 +855,7 @@ export function ChatSidebar({
         </div>
       </ErrorBoundary>
 
-      {ws.runs.filter(run => run.sessionId === activeSessionId && run.status !== 'receiving').map(run => (
+      {ws.runs.filter(run => run.sessionId === activeSessionId && !['receiving', 'not_submitted'].includes(run.status)).map(run => (
         <div key={run.runId} className="px-4 pb-2 text-xs" role="status">
           <p>{run.message}</p>
           {run.status !== 'not_submitted' && <button type="button" className="mt-1 rounded border border-border px-3 py-1" onClick={() => void ws.recoverRun(run.runId)}>读取原请求结果</button>}
