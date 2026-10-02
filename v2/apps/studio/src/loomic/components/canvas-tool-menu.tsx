@@ -86,6 +86,7 @@ type CanvasToolMenuProps = {
   accessToken: string;
   excalidrawApi: any;
   leftPanelOpen?: boolean;
+  onPersistScene: () => Promise<void>;
 };
 
 /** Memoized shimmer overlay for a single generating element */
@@ -146,7 +147,7 @@ const GeneratingOverlay = memo(function GeneratingOverlay({
   );
 });
 
-export function CanvasToolMenu({ accessToken, excalidrawApi, leftPanelOpen }: CanvasToolMenuProps) {
+export function CanvasToolMenu({ accessToken, excalidrawApi, leftPanelOpen, onPersistScene }: CanvasToolMenuProps) {
   const [activeTool, setActiveTool] = useState<string>("selection");
 
   // Image generator state
@@ -503,6 +504,7 @@ export function CanvasToolMenu({ accessToken, excalidrawApi, leftPanelOpen }: Ca
       {/* Image Generator Panel -- floats below the selected placeholder */}
       {activeGeneratorId && generatorData && generatorBounds && (
         <ImageGeneratorPanel
+          key={activeGeneratorId}
           elementId={activeGeneratorId}
           elementBounds={generatorBounds}
           data={generatorData}
@@ -510,6 +512,7 @@ export function CanvasToolMenu({ accessToken, excalidrawApi, leftPanelOpen }: Ca
           accessToken={accessToken}
           canvasScrollZoom={canvasScrollZoom}
           onClose={handleCloseGenerator}
+          onPersistScene={onPersistScene}
         />
       )}
 

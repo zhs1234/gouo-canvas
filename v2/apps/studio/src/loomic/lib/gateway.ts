@@ -4,7 +4,7 @@ export type GatewayModel = {
   description: string; provider: string; qualities?: string[]; aspectRatios?: string[];
   operations?: Array<'generate' | 'edit'>;
 }
-export type GatewayCatalog = { models: GatewayModel[]; generationEnabled: boolean; conversationMode?: 'agent' | 'image' | 'unavailable' }
+export type GatewayCatalog = { models: GatewayModel[]; generationEnabled: boolean; imageJobsEnabled?: boolean; conversationMode?: 'agent' | 'image' | 'unavailable' }
 export async function fetchCatalog(): Promise<GatewayCatalog> {
   try { return await request<GatewayCatalog>('/api/studio/models') }
   catch (error) { if ((error as { status?: number }).status !== 401) throw error }

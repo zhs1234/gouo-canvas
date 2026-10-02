@@ -1,5 +1,11 @@
 # 系统打通：实际进度
 
+## B3 前端图片任务合同（2026-10-02）
+
+新增小模块 image-jobs.ts，白名单Zod读取平铺真实DTO、completed要求asset+原图、按owner/epoch合并当次GET、付款写前真实self核owner。onPersistScene复用现有串行草稿存储，确保模式、原UUID、参数和归属提交IDB后才唯一POST；存储拒绝零生成，重复点击不补发。catalog缺字段默认为false，日常默认off不变；已保存模式在恢复时不重新决定。202断线/拒绝保原编号，不fallback；恢复无poll，仅打开/online/明确刷新原GET。完成同私有asset/PNG插入一次；用户删除的已插图不复活；解码/IDB完成状态写失败保原下载。授权与确定未提交取消需明确二次确认，finalize只本地保存，unknown禁止付费操作。
+
+root `node --experimental-strip-types --test tests/image-job-recovery.cases.mjs` **9/9 exit0，0.144秒**，`.local/system-b3-client-domain.log`；root5187专属配置 `npm run test:e2e -- --config .local/system-playwright.config.mjs image-job-recovery.pw.mjs --workers=1 --reporter=line` **11/11 exit0，16.2秒**，`.local/system-b3-client-root-playwright.log`。tests覆盖IDB因果顺序/拒绝零POST、原ID参数持久化、歧义接受零fallback、关闭开关原GET、读失败保占位、操作政策、跨owner迟到不插图、坏解码和保存失败保原下载；新增领域纳入默认npm test。前端11场景是F，owner10已分段Native202不代替新连续UI关页路径。后者另以全新owner11实际验收；完整check/PW在最终冻结源树执行。
+
 ## OPS-N1 实际配对恢复（2026-10-02）
 
 源 `gouo-user-acceptance-31248-muq4syb7` 四服务冷停止，Native/Studio两个库含WAL规范备份；目标 `gouo-user-acceptance-32620-muq8yzjn` 是新项目、新回环端口60169、新空卷，同固定source/binary/实际镜像、原instance UUID、配置/secret/API/政策与开关。源始终冷停止，仅目标成为可写副本。备份ID `6bf16082-4215-4b15-8e42-6123316673f5`，pairHash `01c68329a64bd3c59289732a394fcc9928f1e9c227906a8e458ef9d376cb2f2b`，logicalHash `b9f22af742f7ae8008589dc74afde150605f8f1e984e3189d3f883ecd6863979`。

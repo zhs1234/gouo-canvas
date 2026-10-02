@@ -1,5 +1,6 @@
 import { getViewportCenter } from "./canvas-elements";
 import type { RequestStatus } from "./request-recovery";
+import type { ImageJobPayload, ImageJobStatus } from "./image-jobs";
 
 export type ImageGeneratorStatus = "idle" | "generating" | "awaiting" | "completed" | "error";
 
@@ -16,6 +17,10 @@ export type ImageGeneratorData = {
   requestId?: string;
   requestOwner?: string;
   requestStatus?: RequestStatus;
+  executionMode?: 'sync' | 'job';
+  jobId?: string;
+  jobStatus?: ImageJobStatus;
+  requestParameters?: ImageJobPayload;
 };
 
 function generateId(): string {

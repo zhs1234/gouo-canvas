@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## B3 前端原任务接线（2026-10-02）
+
+Loomic图片占位按实际catalog选择job或sync，固定执行模式和原UUID/参数/owner，等待原草稿IDB提交后发送；接受失败不换接口或补造编号。202后关闭页面仍由当前API进程处理，重开/上线/手动恢复只GET原任务；旧任务在开关关闭时仍可读。原图完成后替换同占位并携带私有asset ID，坏解码/本地保存失败保留原图下载；显式确认授权/取消、本地finalize各有状态限制，unknown不重发。
+
+root独立领域 **9/9 exit0，0.144秒**，浏览器 **11/11 exit0，16.2秒**，日志 `.local/system-b3-client-domain.log`、`.local/system-b3-client-root-playwright.log`；包含IDB未提交/拒绝零POST、重复点击一发、关页/reload/flagoff、DTO/GET失败、异户迟到、原图下载和无同步fallback。领域检查纳入默认test。仅此Loomic直接图片入口使用202，Agent/默认聊天继续已有SSE与原请求恢复；独立Worker及后台持续授权不在此增量。连续Native UI202验收和全量回归待最后执行。
+
 ## OPS-N1 双库实际恢复与挂载核验（2026-10-02）
 
 固定 Native、源普通合成账号和本地供应商的双库冷备份已恢复到全新私有目标。原项目 revision2、原图 hash、completed job、失败 Agent 终态及 owner8 的 chat/image unknown held 精确保留。启动目标后用本人/独立异户身份两轮读取：本人200、异户404、匿名401；读取阶段 Native资金安全投影、Studio全表与供应商 hash 不变，供应商 chat0/image0。源保持冷停止，没有模型调用、退款或生产操作。
