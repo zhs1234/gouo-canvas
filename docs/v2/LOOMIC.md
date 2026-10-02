@@ -13,7 +13,7 @@
 
 默认`/studio/`为持久assistant-ui聊天；Loomic创作工作台在`/studio/canvas`，官方Excalidraw与私有服务器项目已接通，共用New API身份和侧栏。旧Loomic草稿仍按owner scope保存在IndexedDB；服务器项目、原图与会话则按真实Native owner保存在Studio SQLite。没有覆盖、删除或迁移旧草稿，详见 [WORKSPACE-NAVIGATION.md](WORKSPACE-NAVIGATION.md) 与 [SYSTEM-INTEGRATION-PLAN.md](SYSTEM-INTEGRATION-PLAN.md)。
 
-assistant-ui已有按thread/run的只读历史恢复；SYS-R1新增`GET /api/studio/requests/:kind/:id/result`覆盖Loomic无threadId及独立生图已保存结果，前端保存原ID与恢复入口仍待接线。当前没有持久Worker、供应商取消或月度订阅。以下早期默认画布、Agent偏好清理与“没有服务器恢复接口”等叙述属于当时阶段，模型失权选择保留以MODEL-SELECTION.md最新合同为准。
+assistant-ui已有按thread/run的只读历史恢复；SYS-R1新增`GET /api/studio/requests/:kind/:id/result`覆盖Loomic无threadId及独立生图已保存结果。SYS-R2a/b已接入原ID恢复：Agent在发送前等待本人会话IndexedDB提交原UUID，完整刷新只GET该原请求；直接图片占位保存原ID/owner，已收图片去重，失败读保留内容。旧消息没有原ID时不猜测或重发。B3图片任务后端已有202持久接收和解码前原bytes暂存，默认关闭，前端job接线/Native202仍待。当前没有独立持久Worker、供应商取消或月度订阅。以下早期默认画布、Agent偏好清理与“没有服务器恢复接口”等叙述属于当时阶段，模型失权选择保留以MODEL-SELECTION.md最新合同为准。
 
 ## 早期接入行为（历史，2026-09-30）
 

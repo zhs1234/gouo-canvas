@@ -1,5 +1,5 @@
 // Preserve Loomic's event contract over authenticated SSE and read-only HTTP.
-// Original agent IDs live only for this mounted page; no token is persisted.
+// Original agent IDs are saved in existing owner-scoped assistant message IDs.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { StreamEvent, WsCommandAck, RunCreateRequest } from '../shared'
 import { getIdentityEpoch, requestStream } from '../../api'
@@ -8,17 +8,18 @@ import { fetchCatalog } from '../lib/gateway'
 import { createRequestResultReader, fetchMessages, fetchModels } from '../lib/server-api'
 import { readDraft } from '../lib/local-drafts'
 import { billingChanged, type StudioUsage } from '../lib/billing'
-import { requestStatusMessage, type RequestRecovery, type RequestStatus } from '../lib/request-recovery'
+import { agentRequestIdSchema, assistantIdForRun, requestStatusMessage, type RequestRecovery, type RequestStatus } from '../lib/request-recovery'
 
 type EventCallback = (event: StreamEvent) => void
-export type RunReception = { runId: string; sessionId: string; status: RequestStatus | 'receiving' | 'interrupted' | 'not_submitted'; message: string }
+export type RunReception = { runId: string; sessionId: string; status: RequestStatus | 'receiving' | 'interrupted' | 'unread' | 'not_submitted'; message: string }
 type RecoveryCallback = (state: RunReception, result?: RequestRecovery) => void
 export type WebSocketHandle = {
   connected: boolean
   runs: RunReception[]
-  startRun: (payload: RunCreateRequest, onAck?: (ack: WsCommandAck) => void) => void
+  startRun: (payload: RunCreateRequest, onAck?: (ack: WsCommandAck) => void, freshRunId?: string) => void
   cancelRun: (runId: string) => void
   recoverRun: (runId: string) => Promise<void>
+  restoreRun: (runId: string, sessionId: string) => void
   onEvent: (callback: EventCallback) => () => void
   onRecovery: (callback: RecoveryCallback) => () => void
 }
@@ -82,9 +83,18 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
   }, [owner, getOwner, recoverRun])
   const onEvent = useCallback((callback: EventCallback) => { listeners.current.add(callback); return () => { listeners.current.delete(callback) } }, [])
   const onRecovery = useCallback((callback: RecoveryCallback) => { recoveryListeners.current.add(callback); return () => { recoveryListeners.current.delete(callback) } }, [])
-  const startRun = useCallback((payload: RunCreateRequest, onAck?: (ack: WsCommandAck) => void) => {
-    const runId = crypto.randomUUID(), runOwner = getOwner(), epoch = getIdentityEpoch()
+  const restoreRun = useCallback((runId: string, sessionId: string) => {
+    const owner = getOwner(), epoch = getIdentityEpoch()
+    if (!owner || !/^local:[1-9]\d*$/.test(owner) || !agentRequestIdSchema.safeParse(runId).success || !sessionId) return
+    const existing = active.current.get(runId)
+    if (existing && existing.owner === owner && existing.epoch === epoch) return
+    active.current.set(runId, { owner, epoch, controller: new AbortController(), state: { runId, sessionId, status: 'unread', message: '原请求尚未读取；恢复只读取已保存结果，不会重新生成。' } })
+    publish(runId, 'unread', '原请求尚未读取；恢复只读取已保存结果，不会重新生成。')
+  }, [getOwner, publish])
+  const startRun = useCallback((payload: RunCreateRequest, onAck?: (ack: WsCommandAck) => void, freshRunId?: string) => {
+    const runId = agentRequestIdSchema.parse(freshRunId ?? crypto.randomUUID()), runOwner = getOwner(), epoch = getIdentityEpoch()
     if (!runOwner) throw new Error('本地对话尚未加载')
+    if (active.current.has(runId)) throw new Error('原请求已存在，只允许读取结果；未重新发送')
     const controller = new AbortController()
     if (runOwner) active.current.set(runId, { owner: runOwner, epoch, controller, state: { runId, sessionId: payload.sessionId, status: 'receiving', message: '' } })
     onAck?.({ type: 'command.ack', action: 'run.start', payload: { runId } } as WsCommandAck)
@@ -96,6 +106,8 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
       try {
         if (!runOwner || runOwner === 'local:guest') throw new Error('请先登录 New API 账号')
         const messages = (await fetchMessages(runOwner, payload.sessionId)).messages
+        const currentUserMessage = [...messages].reverse().find(message => message.role === 'user' &&
+          ((message.contentBlocks ?? []).filter(block => block.type === 'text').map(block => block.text).join('\n') || message.content || '') === payload.prompt)
         const canvas = await readDraft(runOwner, payload.canvasId || 'draft')
         const models = (await fetchModels()).models
         assertOwner(); controller.signal.throwIfAborted()
@@ -108,7 +120,7 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
           method: 'POST', signal: controller.signal, headers: { 'Idempotency-Key': runId },
           body: JSON.stringify({ ...safePayload, model, runId,
             ...(payWithBalance === true ? { payWithBalance: true } : {}),
-            history: messages.slice(-12).filter(m => m.role === 'assistant' || m.content !== payload.prompt),
+            history: messages.slice(-12).filter(m => m.id !== assistantIdForRun(runId) && m.id !== currentUserMessage?.id),
             canvasContext: canvas.canvas.content.elements.filter(e => !e.isDeleted).slice(0, 80).map(e => ({ id: e.id, type: e.type, text: e.text, x: e.x, y: e.y, width: e.width, height: e.height })),
           }),
         })
@@ -142,5 +154,5 @@ export function useWebSocket(getOwner: () => string | null): WebSocketHandle {
     })()
   }, [getOwner, emit, publish, recoverRun])
   const cancelRun = useCallback((id: string) => active.current.get(id)?.controller.abort(), [])
-  return useMemo(() => ({ connected, runs: runs.filter(r => active.current.get(r.runId)?.owner === owner && active.current.get(r.runId)?.epoch === getIdentityEpoch()), startRun, cancelRun, recoverRun, onEvent, onRecovery }), [connected, owner, runs, startRun, cancelRun, recoverRun, onEvent, onRecovery])
+  return useMemo(() => ({ connected, runs: runs.filter(r => active.current.get(r.runId)?.owner === owner && active.current.get(r.runId)?.epoch === getIdentityEpoch()), startRun, cancelRun, recoverRun, restoreRun, onEvent, onRecovery }), [connected, owner, runs, startRun, cancelRun, recoverRun, restoreRun, onEvent, onRecovery])
 }

@@ -55,7 +55,10 @@ export async function saveMessage(owner: string, id: string, data: ChatMessageCr
   return { message }
 }
 export async function replaceMessages(owner: string, id: string, messages: Array<{ id: string; role: 'user' | 'assistant'; contentBlocks: ContentBlock[] }>) {
-  await changeDraft(owner, canvasForSession(owner, id), d => { d.messages[id] = messages.map(m => ({ ...m, content: '', createdAt: new Date().toISOString() })) })
+  await changeDraft(owner, canvasForSession(owner, id), d => {
+    if (!d.sessions.some(session => session.id === id)) throw new Error('本地会话已删除，未恢复或发送原请求')
+    d.messages[id] = messages.map(m => ({ ...m, content: '', createdAt: new Date().toISOString() }))
+  })
 }
 export async function uploadFile(owner: string, file: File, projectId?: string) {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 15 * 1024 * 1024) throw new Error('请选择 15 MB 以内的 PNG、JPEG 或 WebP 图片')

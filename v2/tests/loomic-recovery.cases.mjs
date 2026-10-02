@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createResultReader, imageForCanvas, parseRequestResult, recoveredContentBlocks, requestStatusMessage } from '../apps/studio/src/loomic/lib/request-recovery.ts'
+import { assistantIdForRun, createResultReader, imageForCanvas, parseRequestResult, receivedImageTools, recoveredContentBlocks, requestStatusMessage, runIdFromAssistant } from '../apps/studio/src/loomic/lib/request-recovery.ts'
 
 const id = 'original-request-123', ownerA = 'local:7', ownerB = 'local:8', createdAt = '2026-10-02T00:00:00.000Z'
 const image = { url: 'data:image/png;base64,iVBORw0KGgo=', mimeType: 'image/png', width: 1, height: 1, prompt: 'fixture' }
@@ -9,6 +9,21 @@ const agentEvents = [ { type: 'message.delta', delta: '已收到文本' }, { typ
   { type: 'tool.completed', toolCallId: 'tool-1', artifacts: [{ type: 'image', ...image }] }, { type: 'run.failed', error: { code: 'summary_failed', message: '总结失败' } } ]
 const record = (kind = 'agent', result = { events: agentEvents, usage, fundingSelection: { chat: 'trial', image: 'wallet' } }) => ({ kind, requestId: id, status: 'completed', createdAt, result })
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { resolve, reject, promise } }
+
+test('only explicit persisted assistant IDs restore the exact original UUID; old/no-ID/user messages never invent a request', () => {
+  const requestId = crypto.randomUUID(), assistant = { role: 'assistant', id: assistantIdForRun(requestId), contentBlocks: [] }
+  assert.equal(runIdFromAssistant(JSON.parse(JSON.stringify(assistant))), requestId)
+  for (const message of [{ role: 'assistant', id: 'assistant-12345' }, { role: 'assistant', id: requestId },
+    { role: 'assistant', id: 'assistant-run-v1:invalid' }, { role: 'user', id: assistant.id }]) assert.equal(runIdFromAssistant(message), null)
+  assert.throws(() => assistantIdForRun('not-an-original-uuid'))
+})
+
+test('restored received image tools are seen once; pending/failed/text-only tools are not image insertion proof', () => {
+  const blocks = [{ type: 'text', text: 'partial' }, { type: 'tool', toolCallId: 'received', toolName: 'generate_image', status: 'completed', artifacts: [{ type: 'image', ...image }] },
+    { type: 'tool', toolCallId: 'pending', toolName: 'generate_image', status: 'running' }, { type: 'tool', toolCallId: 'failed', toolName: 'generate_image', status: 'completed', outputSummary: '生成失败' }]
+  assert.deepEqual([...receivedImageTools(blocks)], ['received'])
+  assert.deepEqual([...receivedImageTools(recoveredContentBlocks(parseRequestResult(record(), 'agent', id).result.events, []))], ['tool-1'])
+})
 
 test('real failed terminal remains failed with partial text/image; Native evidence and funding intent survive projection', () => {
   const saved = parseRequestResult(record(), 'agent', id)

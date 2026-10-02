@@ -4,6 +4,19 @@ import type { ContentBlock, StreamEvent } from '../shared'
 export const requestStatusSchema = z.enum(['running', 'unknown', 'completed', 'cancelled_before_submission'])
 export type RequestStatus = z.infer<typeof requestStatusSchema>
 export type RequestKind = 'agent' | 'image'
+export const agentRequestIdSchema = z.string().uuid()
+const assistantRunPrefix = 'assistant-run-v1:'
+// Use the existing local message ID, with its enclosing owner/session scope.
+// Old timestamp IDs are kept as-is; a missing request ID is never guessed.
+export function assistantIdForRun(runId: string) { return assistantRunPrefix + agentRequestIdSchema.parse(runId) }
+export function runIdFromAssistant(message: { id: string; role: string }) {
+  if (message.role !== 'assistant' || !message.id.startsWith(assistantRunPrefix)) return null
+  const id = message.id.slice(assistantRunPrefix.length)
+  return agentRequestIdSchema.safeParse(id).success ? id : null
+}
+export function receivedImageTools(blocks: ContentBlock[]) {
+  return new Set(blocks.filter(block => block.type === 'tool' && block.status === 'completed' && block.artifacts?.some(artifact => artifact.type === 'image')).map(block => (block as Extract<ContentBlock, { type: 'tool' }>).toolCallId))
+}
 const imageSchema = z.object({
   url: z.string().max(40 * 1024 * 1024 + 64).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/),
   prompt: z.string().max(8000).optional(), mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']).optional(),

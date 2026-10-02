@@ -29,6 +29,7 @@ type ChatInputProps = {
 export type ChatInputHandle = {
   /** Remove the @query text from input after picker selection */
   clearAtQuery: () => void;
+  restoreDraft: (text: string) => void;
 };
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({
@@ -54,6 +55,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const modelBtnRef = useRef<HTMLButtonElement>(null);
 
   useImperativeHandle(ref, () => ({
+    restoreDraft(text) { setValue(current => current || text); },
     clearAtQuery() {
       setValue((prev) => {
         const lastAtIdx = prev.lastIndexOf("@");

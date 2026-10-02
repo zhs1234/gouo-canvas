@@ -1,5 +1,15 @@
 # 系统打通：实际进度
 
+## SYS-R2b Agent 原编号跨刷新保存与恢复（2026-10-02）
+
+原请求 UUID 编码在现有本人助手消息 ID，等待 IndexedDB 实际提交后才发唯一 POST；保存未完成时重复 Enter 不重复发送，保存失败零模型调用并在同身份/会话且输入为空时恢复 prompt。旧无编号消息不猜编号；已确认预检未外发的错误仍保存，但不变成后台恢复任务。
+
+刷新后从本人会话恢复绑定，只自动 GET 可见会话最新原编号一次，其他保留手动读取；没有轮询或模型重发。读取与异步会话加载均检查 owner/身份 epoch/当前会话；原快照替换、不追加，已收到工具图按原 tool ID 去重，删除画布图片后刷新不会复活。读取失败保留文字、原图和原编号；Ledger completed 的失败终态仍呈现真实失败。
+
+root 独立 `node --experimental-strip-types --test tests/loomic-recovery.cases.mjs` **14/14 exit0，0.1075 秒**；独立 5187 `npx playwright test --config=.local/system-playwright.config.mjs tests/loomic-recovery.pw.mjs` **8/8 exit0，12.6 秒**，`.local/system-r2b-root-playwright.log`。实际覆盖 IDB 未放行零 POST、拒绝零 POST、重复 Enter 一发、原 ID 在 POST 前已落盘、部分文字/PNG 跨刷新同 ID GET、删除图片不复活、失败读保内容、迟到 A 不进 B、旧消息及预检失败零恢复 GET。agent 同冻结源码 typecheck/build10.99秒与 8/8 浏览器14.3秒通过；全量整合检查另行进行，未称完整浏览器全部通过。
+
+SYS-R2a/b 的实现已接通；Native 正常/未知总结证据沿此前 T1.12，新增 Loomic 跨刷新编号目前以明确 F 合同验证。下一 B3 前端 202 原任务占位/GET、真实 Native202、E1 电商画布与 OPS-1 双库冷恢复。没有独立 Worker、真实付费测试或生产部署。
+
 ## B3 前端接线的真实目录能力（2026-10-02）
 
 `config.mjs catalog`公开imageJobsEnabled boolean，只由enableImageJobs、generationEnabled与本人可用image模型共同决定；仅配置job开关而未批准生成/组路由/有限token/图片能力不得宣称可执行。两项新`image-job-catalog.cases.mjs`参数化/秘密白名单合同 **2/2 exit0**；root完整API **205/205 exit0**，`.local/system-image-job-catalog-api.log`。未修改任何实际实例开关或调用模型。客户端旧缺字段按false，受理后须持久执行方式/原ID、恢复使用job GET，不能受目录失权或初POST错误驱动自动同步重发。下一SYS-R2b冻结后接202图片占位。

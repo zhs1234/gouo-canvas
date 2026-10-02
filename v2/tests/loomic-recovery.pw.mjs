@@ -33,6 +33,19 @@ async function exportScene(page) {
   return JSON.parse(await readFile(await (await download).path(), 'utf8'))
 }
 const liveImages = document => document.elements.filter(element => !element.isDeleted && element.type === 'image')
+async function draft(page) {
+  return page.evaluate(async () => (await import('/studio/src/loomic/lib/local-drafts.ts')).readDraft('local:7', 'sys-r2-fixture'))
+}
+async function deleteCanvasImage(page, scene) {
+  const element = liveImages(scene)[0], state = scene.appState, zoom = state.zoom?.value ?? 1
+  const box = await page.locator('.excalidraw .interactive').boundingBox()
+  await page.mouse.click(box.x + (element.x + element.width / 2 + (state.scrollX ?? 0)) * zoom,
+    box.y + (element.y + element.height / 2 + (state.scrollY ?? 0)) * zoom)
+  await page.keyboard.press('Delete')
+  expect(liveImages(await exportScene(page))).toHaveLength(0)
+  await page.getByRole('button', { name: '本地保存', exact: true }).click()
+  await expect.poll(async () => liveImages((await draft(page)).canvas.content).length).toBe(0)
+}
 
 test('Loomic EOF restores the original failed terminal and image through GET, without duplicated text/image or new POST', async ({ page }) => {
   let posts = 0, runId, complete = false, events, reads = []
@@ -56,16 +69,30 @@ test('Loomic EOF restores the original failed terminal and image through GET, wi
   await expect(page.getByText('后台仍在处理；可再次读取原请求，未重新生成。', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0)
   expect(liveImages(await exportScene(page))).toHaveLength(1)
+  await page.getByRole('button', { name: '本地保存', exact: true }).click()
+  await expect.poll(async () => liveImages((await draft(page)).canvas.content).length).toBe(1)
+  await page.reload()
+  await expect(page.getByText('已收到部分文本', { exact: true })).toBeVisible()
+  await expect.poll(() => reads.length).toBe(2)
+  expect(liveImages(await exportScene(page))).toHaveLength(1)
   complete = true
   await page.getByRole('button', { name: '读取原请求结果', exact: true }).click()
   await expect(page.getByText('已收到部分文本', { exact: true })).toHaveCount(1)
   await expect(page.getByText('，原请求后续文本', { exact: true })).toHaveCount(1)
   await expect(page.getByText('原请求总结失败 fixture', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '读取原请求结果', exact: true }).click()
-  await expect.poll(() => reads.length).toBeGreaterThanOrEqual(3)
+  await expect.poll(() => reads.length).toBeGreaterThanOrEqual(4)
   const restored = await exportScene(page)
   expect(liveImages(restored)).toHaveLength(1)
   expect(Object.values(restored.files).map(file => file.dataURL)).toContain(image.url)
+  await deleteCanvasImage(page, restored)
+  await page.reload()
+  await expect.poll(() => reads.length).toBeGreaterThanOrEqual(5)
+  await expect(page.getByText('原请求总结失败 fixture', { exact: true })).toBeVisible()
+  expect(liveImages(await exportScene(page))).toHaveLength(0)
+  await page.getByRole('button', { name: '读取原请求结果', exact: true }).click()
+  await expect(page.getByText('已收到部分文本', { exact: true })).toHaveCount(1)
+  expect(liveImages(await exportScene(page))).toHaveLength(0)
   expect(reads.every(path => path === `/api/studio/requests/agent/${runId}/result`)).toBe(true)
   expect(posts).toBe(1)
 })
@@ -91,7 +118,9 @@ test('failed Loomic recovery reads retain partial text and original ID, with no 
   await page.reload()
   await expect(page.getByText('读失败仍保留的内容', { exact: true })).toBeVisible()
   await expect(page.getByText('接收尚未完成，结果和费用待确认；请检查 New API 记录，不要重复提交。', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '读取原请求结果', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '读取原请求结果', exact: true })).toBeEnabled()
+  await expect.poll(() => reads.length).toBe(3)
+  expect(reads).toEqual(Array(3).fill(`/api/studio/requests/agent/${runId}/result`))
   expect(posts).toBe(1)
 })
 
@@ -137,20 +166,26 @@ test('ambiguous image placeholder stores its original ID across reload and resto
 })
 
 test('late A recovery cannot render or insert into B, and a stale A direct-image handler makes zero B POSTs', async ({ page }) => {
-  let runId, posts = 0, release, reading = false
+  let runId, posts = 0, release, reading = false, hold = false
   const gate = new Promise(resolve => { release = resolve })
   await page.route('**/api/studio/runs/stream', route => {
     posts++; runId = route.request().postDataJSON().runId
     return route.fulfill({ contentType: 'text/event-stream', body: frame({ type: 'message.delta', runId, delta: 'A 本人部分内容' }) })
   })
   await page.route('**/api/studio/requests/agent/*/result', async route => {
+    expect(route.request().headers().authorization).toMatch(/^Bearer test-refresh-token-/)
+    if (!hold) return route.fulfill({ json: saved('agent', runId, 'running') })
     reading = true; await gate
     await route.fulfill({ json: saved('agent', runId, 'completed', { events: [{ type: 'message.delta', runId, delta: 'A 晚到私有结果' },
       { type: 'tool.completed', runId, toolCallId: 'late-image', artifacts: [{ type: 'image', ...image }] }, { type: 'run.completed', runId }] }) }).catch(() => {})
   })
   await page.route('**/api/studio/images', route => { posts++; return route.abort() })
   const account = await setup(page)
-  await send(page, 'A 仅一次请求'); await expect.poll(() => reading).toBe(true)
+  await send(page, 'A 仅一次请求')
+  await expect(page.getByText('后台仍在处理；可再次读取原请求，未重新生成。', { exact: true })).toBeVisible()
+  hold = true
+  await page.reload()
+  await expect.poll(() => reading).toBe(true)
   await expect(page.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0)
   await openAccountSection(page)
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
@@ -179,4 +214,102 @@ test('late A recovery cannot render or insert into B, and a stale A direct-image
   expect(rejection.message).toContain('未发送图片请求')
   expect(liveImages(await exportScene(page))).toHaveLength(0)
   expect(posts).toBe(1)
+})
+
+test('the original agent ID commits before POST and repeated Enter while awaiting storage still sends once', async ({ page }) => {
+  let posts = 0, runId
+  await page.route('**/api/studio/runs/stream', async route => {
+    posts++; runId = route.request().postDataJSON().runId
+    const stored = await draft(page), messages = Object.values(stored.messages).flat()
+    expect(messages.filter(message => message.id === `assistant-run-v1:${runId}`)).toHaveLength(1)
+    expect(messages.filter(message => message.role === 'user' && message.contentBlocks.some(block => block.type === 'text' && block.text === '保存先于发送 fixture'))).toHaveLength(1)
+    expect(route.request().postDataJSON().history.some(message => message.id === `assistant-run-v1:${runId}`)).toBe(false)
+    expect(route.request().postDataJSON().history.some(message => message.role === 'user' && message.contentBlocks?.some(block => block.type === 'text' && block.text === '保存先于发送 fixture'))).toBe(false)
+    expect(JSON.stringify(stored)).not.toContain('test-refresh-token')
+    return route.fulfill({ contentType: 'text/event-stream', body: frame({ type: 'run.completed', runId }) })
+  })
+  await setup(page)
+  await page.evaluate(() => {
+    const put = IDBObjectStore.prototype.put
+    IDBObjectStore.prototype.put = function(value, key) {
+      const result = put.call(this, value, key)
+      if (!window.fixtureCommitHeld && Object.values(value?.messages ?? {}).flat().some(message => message.id.startsWith('assistant-run-v1:'))) {
+        this.transaction.addEventListener('complete', event => {
+          event.stopImmediatePropagation()
+          const transaction = this.transaction
+          window.fixtureCommitHeld = true
+          window.fixtureReleaseCommit = () => transaction.oncomplete?.call(transaction, event)
+        }, { once: true, capture: true })
+      }
+      return result
+    }
+  })
+  await page.getByLabel('输入消息', { exact: true }).fill('保存先于发送 fixture')
+  await page.getByLabel('输入消息', { exact: true }).evaluate(input => {
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  })
+  await expect.poll(() => page.evaluate(() => window.fixtureCommitHeld)).toBe(true)
+  expect(posts).toBe(0)
+  await page.evaluate(() => window.fixtureReleaseCommit())
+  await expect.poll(() => posts).toBe(1)
+  await expect(page.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0)
+  expect(Object.values((await draft(page)).messages).flat().filter(message => message.id === `assistant-run-v1:${runId}`)).toHaveLength(1)
+})
+
+test('IndexedDB rejects preparation: zero model POST, original prompt restored, and no phantom recovery after reload', async ({ page }) => {
+  let posts = 0, reads = 0
+  await page.route('**/api/studio/runs/stream', route => { posts++; return route.abort() })
+  await page.route('**/api/studio/requests/agent/*/result', route => { reads++; return route.abort() })
+  await setup(page)
+  await page.evaluate(() => {
+    const put = IDBObjectStore.prototype.put
+    IDBObjectStore.prototype.put = function(value, key) {
+      if (Object.values(value?.messages ?? {}).flat().some(message => message.id.startsWith('assistant-run-v1:'))) throw new DOMException('fixture storage quota exhausted', 'QuotaExceededError')
+      return put.call(this, value, key)
+    }
+  })
+  await send(page, '存储失败仍保留的输入')
+  await expect(page.getByLabel('输入消息', { exact: true })).toHaveValue('存储失败仍保留的输入')
+  await expect(page.getByText('本地对话保存失败，原请求未发送。fixture storage quota exhausted', { exact: true })).toBeVisible()
+  expect(posts).toBe(0); expect(reads).toBe(0)
+  expect(Object.values((await draft(page)).messages).flat().some(message => message.id.startsWith('assistant-run-v1:'))).toBe(false)
+  await page.reload()
+  await expect(page.getByLabel('输入消息', { exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '读取原请求结果', exact: true })).toHaveCount(0)
+  expect(posts).toBe(0); expect(reads).toBe(0)
+})
+
+test('legacy partial assistant messages without an original ID remain readable and never invent an original GET or POST', async ({ page }) => {
+  let posts = 0, reads = 0
+  await page.route('**/api/studio/runs/stream', route => { posts++; return route.abort() })
+  await page.route('**/api/studio/requests/agent/*/result', route => { reads++; return route.abort() })
+  await setup(page)
+  await page.evaluate(async () => {
+    const { changeDraft } = await import('/studio/src/loomic/lib/local-drafts.ts')
+    await changeDraft('local:7', 'sys-r2-fixture', value => {
+      const sessionId = value.sessions[0].id
+      value.messages[sessionId] = [{ id: 'assistant-1712345678', sessionId, role: 'assistant', content: '旧消息仍然可读 fixture', contentBlocks: [{ type: 'text', text: '旧消息仍然可读 fixture' }], createdAt: new Date().toISOString() }]
+    })
+  })
+  await page.reload()
+  await expect(page.getByText('旧消息仍然可读 fixture', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '读取原请求结果', exact: true })).toHaveCount(0)
+  expect(posts).toBe(0); expect(reads).toBe(0)
+})
+
+test('a known preflight failure stays readable after reload without claiming submission or adding a recovery GET', async ({ page }) => {
+  let posts = 0, reads = 0
+  await page.route('**/api/studio/runs/stream', route => { posts++; return route.abort() })
+  await page.route('**/api/studio/requests/agent/*/result', route => { reads++; return route.abort() })
+  await setup(page)
+  await page.route('**/api/studio/models', route => route.fulfill({ status: 503, json: { success: false, message: 'fixture 预检模型不可用' } }))
+  await send(page, '未提交的原输入 fixture')
+  await expect(page.getByText('fixture 预检模型不可用', { exact: true })).toBeVisible()
+  await expect.poll(async () => Object.values((await draft(page)).messages).flat().filter(message => message.id.startsWith('assistant-unsent-')).length).toBe(1)
+  expect(posts).toBe(0); expect(reads).toBe(0)
+  await page.reload()
+  await expect(page.getByText('fixture 预检模型不可用', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '读取原请求结果', exact: true })).toHaveCount(0)
+  expect(posts).toBe(0); expect(reads).toBe(0)
 })
