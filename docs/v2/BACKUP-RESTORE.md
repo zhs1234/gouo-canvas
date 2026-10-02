@@ -24,11 +24,15 @@ node scripts/backup-restore.mjs verify --backup .local/<new-private-directory> -
 
 工具从冷容器复制 /data 到自己临时目录，包含尚未 checkpoint 的 WAL；再通过 SQLite backup() 生成两个规范库。它不对原卷 checkpoint。配对 manifest 绑定原 instance、实际二进制/镜像、配置及密钥 hash、源码/政策 hash、完整 schema/逻辑数据 hash、原图字节 hash 和 owner 关系。verify 只读本地文件，零 Docker/模型操作。路径链接、旧输出目录、漂移、混合库、损坏或外户引用均拒绝。
 
+冷容器的 API 源码、政策目录及验收入口均实际复制并比对批准 hash，在操作开始和最终复核重复检查；不只相信声明的 host bind。受保护路径的重复、祖先/子项遮蔽以及 /data 子挂载拒绝。Windows Docker Desktop 仅允许 API bind 的精确 `/run/desktop/mnt/host/<drive>/<suffix>` 显示别名，并通过实际源码核验；不放宽其他路径或可写挂载。验证之后 Docker 管理员仍可变更环境，本工具不提供该竞态的原子隔离保证。
+
 ## 恢复到新的空卷
 
 保留原源冷停止。人工准备另一个随机 project、loopback 端口、目录及两个新空卷；保留同 instance UUID、SESSION/CRYPTO 配置、实际镜像、API源码、政策和开关。生产默认随机 SESSION_SECRET 的重启语义不能推定可恢复；本合成实例使用明确稳定的合成 SESSION_SECRET。
 
 只执行目标 Compose create，不执行 acceptance start 或账号初始化。目标 Native/Studio 应为 created/Pid0，卷为空，源和目标卷完全不同。目标源码/配置/密钥/版本与源精确一致，不能通过关闭开关或改模型掩盖漂移。
+
+先固定备份对应的源码版本和供应商设施文件，再创建目标；之后开发改动会使旧manifest的源码hash不再匹配，应使用对应提交恢复，不能重写manifest绕过核验。2026-10-02合成演练已实际恢复同实例账号、原图、revision2、任务和unknown held，并用普通身份验证本人/异户/匿名读取；具体失败及成功证据见状态文档。
 
 ```powershell
 node scripts/backup-restore.mjs restore-empty --state <source-state> --native-container <source-full-id> --studio-container <source-full-id> --backup .local/<private-backup> --target-state <target-state> --target-native-container <target-full-id> --target-studio-container <target-full-id> --confirm-synthetic-private

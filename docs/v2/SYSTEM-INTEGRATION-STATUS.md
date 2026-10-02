@@ -1,5 +1,15 @@
 # 系统打通：实际进度
 
+## OPS-N1 实际配对恢复（2026-10-02）
+
+源 `gouo-user-acceptance-31248-muq4syb7` 四服务冷停止，Native/Studio两个库含WAL规范备份；目标 `gouo-user-acceptance-32620-muq8yzjn` 是新项目、新回环端口60169、新空卷，同固定source/binary/实际镜像、原instance UUID、配置/secret/API/政策与开关。源始终冷停止，仅目标成为可写副本。备份ID `6bf16082-4215-4b15-8e42-6123316673f5`，pairHash `01c68329a64bd3c59289732a394fcc9928f1e9c227906a8e458ef9d376cb2f2b`，logicalHash `b9f22af742f7ae8008589dc74afde150605f8f1e984e3189d3f883ecd6863979`。
+
+初次 restore-empty 拒绝 CONTAINER_BIND_CHANGED：Docker Desktop created容器将声明的C:/ API bind显示为/run/desktop/mnt/host/c/，无target写入或服务启动。原日志 `.local/system-ops-native-restore.log` 保留；修正只有Windows/API精确drive alias可接受，同时冷cp实际受保护API源码比对hash。第二次实际恢复 **exit0，8.6449秒**，`.local/system-ops-native-restore-desktop.log`，双库验证、冷态复核和restore-ready receipt成功。后续扩展政策/入口冷cp与重复/祖先/子项遮蔽负例，root `node --test tests/backup-restore.cases.mjs` **30/30 exit0，4.6378秒**，`.local/system-backup-desktop-final-tests.log`。最终版本再次inspect仍冷目标：全部三处源码与配对summary完全相同，然后才启动目标四服务（no-build/pull never/health wait）。
+
+真实RSA普通身份owner10、8、7登录/self核验后，两轮GET恢复原asset `bf027e65-7f16-4b71-a678-d7f2c489d9cf`、job `683584b2-b2fd-4311-9044-1672dae3be55` completed、project `379018ec-decf-45bd-a7d2-df870e3bb951` revision2及原summary丢失run `537327ab-e87f-420c-b6d7-40754c3291d1`（Ledger completed仅保存失败终态，run.failed）。原PNG SHA256 `796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3`、文档hash `5bdbda5b462d1bd6c04396a37db1859facc41f11f1687968eaab2e80f010e45c` 一致。异户全部404、匿名401；owner8两项unknown held仍各1。读取阶段 Native资金安全投影、Studio全表、供应商hash不变，provider chat0/image0。私有报告 `.local/system-ops-native-read-report.json` **passed**，sourceRemainsCold=true，realPaidProviderCalls=0。
+
+Native启动/登录本身的运行及审计写不冒称全库不变；全逻辑配对一致在冷态证明，运行后只声明实际受保护读取阶段不变。备份含合成敏感数据，保留在忽略的`.local`；源码/供应商后续变更不能改写旧manifest或称旧版本仍匹配。生产加密、secret托管、保留政策和跨实例恢复仍另门，工具不承诺验证后Docker管理员改挂载的原子隔离。
+
 ## OPS-1 合成双库冷备份工具 F 验证（2026-10-02）
 
 三个新文件 backup-restore.mjs、lib/backup-helper.mjs、tests/backup-restore.cases.mjs：固定实际 Native/source/image、稳定 instance/config/secret/policy/API source hash、完整 full IDs、cold/Pid0/独立私有卷、全部其他运行挂载/alias metadata核验。只完整 inspect 已先证明属于本实例的 Native/Studio，不读取日常 Env。原冷 /data 含 WAL 复制私有 scratch 后使用内建 SQLite backup 规范配对；原卷不 checkpoint，完整 schema/逻辑/BLOB/owner/项目revision/Native引用核验。unknown/held保留，活跃请求/资金/图片暂存拒绝；没有业务构造器或模型调用。

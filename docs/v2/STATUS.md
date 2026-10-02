@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## OPS-N1 双库实际恢复与挂载核验（2026-10-02）
+
+固定 Native、源普通合成账号和本地供应商的双库冷备份已恢复到全新私有目标。原项目 revision2、原图 hash、completed job、失败 Agent 终态及 owner8 的 chat/image unknown held 精确保留。启动目标后用本人/独立异户身份两轮读取：本人200、异户404、匿名401；读取阶段 Native资金安全投影、Studio全表与供应商 hash 不变，供应商 chat0/image0。源保持冷停止，没有模型调用、退款或生产操作。
+
+初次恢复因 Docker Desktop 的 Windows API bind Linux显示路径被严格比较拒绝，原失败日志保留。修正只接受 Windows 下该 API 路径的精确 drive alias，并实际冷复制/比对 API、政策和入口源码，初始与最终均核验；拒绝重复、父/子遮蔽挂载及数据卷遮蔽。root负例 **30/30，4.638秒 exit0**。实际恢复 **8.645秒 exit0**；随后用最终30项版本再检查冷目标及全部三处受保护源码，通过后才启动目标。私有备份 pairHash `01c68329a64bd3c59289732a394fcc9928f1e9c227906a8e458ef9d376cb2f2b`，只读报告 `.local/system-ops-native-read-report.json` passed。生产加密/保留/稳定密钥与 Docker管理员操作后竞态保证仍未提供。详情见 [BACKUP-RESTORE.md](BACKUP-RESTORE.md)。
+
 ## OPS-1 配对冷备份工具与负例（2026-10-02）
 
 新增仅合成私有验收范围的 inspect/backup/verify/restore-empty；冷 Native/Studio full ID、固定实际pin/image/instance/env/policy/source hash、空新卷与跨owner校验，SQLite backup含WAL而不checkpoint原卷，exact BLOB/revision/unknownheld配对保留。工具零模型、不会停/启服务或初始化账户；完整Docker配置只读先确认归属的两容器。root独立 **25/25 exit0，3.844秒**，`.local/system-backup-root-tests.log`，含真实SQLite与F Docker护栏，纳入默认领域检查。实际N演练尚待，生产加密/稳定secret/保留策略未通过。操作条件见 [BACKUP-RESTORE.md](BACKUP-RESTORE.md)。下一 OPS-N1、前端202、E1最终整合。

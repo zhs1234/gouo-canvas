@@ -10,7 +10,7 @@
 // All JSON is metadata; the private SQLite backup itself contains synthetic keys.
 import { readFile, mkdir, mkdtemp, rm, writeFile, readdir } from 'node:fs/promises'
 import { lstatSync } from 'node:fs'
-import { resolve, relative, isAbsolute, dirname, join } from 'node:path'
+import { resolve, relative, isAbsolute, dirname, join, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dockerRunner, pinnedBinaryHashes } from './reconcile-funding.mjs'
 import { sourceCommit, binarySha256, guard, digest, safePath, fileProof, createPairBackup, verifyPair, inspectPair, BackupError } from './lib/backup-helper.mjs'
@@ -94,10 +94,25 @@ export async function loadState(path, rootWorkspace = workspace) {
     artifacts: { apiSourceHash: await treeHash(apiSource), policyHash: await treeHash(policyDirectory),
       fixtureSourceHash: digest(await Promise.all(['user-acceptance-environment-api.mjs', 'user-acceptance-environment-provider.mjs'].map(name => fileProof(join(rootWorkspace, 'tests/stack', name))))) } }
 }
+function overlapsProtectedPath(path, target) {
+  return typeof path === 'string' && (path === target || path === '/' || path.startsWith(target + '/') || target.startsWith(path + '/'))
+}
 function dataVolume(container, project, name) {
   const mounts = container.Mounts?.filter(mount => mount.Destination === '/data') ?? []
-  guard(mounts.length === 1 && mounts[0].Type === 'volume' && mounts[0].RW === true && mounts[0].Name === project + '_' + name, 'DATA_VOLUME_REJECTED')
+  guard(mounts.length === 1 && mounts[0].Type === 'volume' && mounts[0].RW === true && mounts[0].Name === project + '_' + name
+    && !container.Mounts.some(mount => mount.Destination !== '/data' && overlapsProtectedPath(mount.Destination, '/data')), 'DATA_VOLUME_REJECTED')
   return mounts[0].Name
+}
+export function readonlyBindMatches(mount, expected, platform = process.platform) {
+  if (mount.Type !== 'bind' || mount.Destination !== expected.target || mount.RW !== false) return false
+  if (resolve(mount.Source) === resolve(expected.source)) return true
+  // Desktop may expose a Windows bind as its internal Linux drive path before
+  // the container has ever started. Restrict this alias to the API source;
+  // operate() additionally copies and hashes the actual cold bound contents.
+  if (platform !== 'win32' || expected.target !== '/app/apps/api/src') return false
+  const windows = win32.resolve(expected.source).replaceAll('\\', '/')
+  if (!/^[A-Za-z]:\//.test(windows)) return false
+  return mount.Source === '/run/desktop/mnt/host/' + windows[0].toLowerCase() + windows.slice(2)
 }
 export function validateColdTopology(input, nativeId, studioId, peers) {
   guard(id(nativeId) && id(studioId) && nativeId !== studioId, 'FULL_CONTAINER_ID_REQUIRED')
@@ -121,8 +136,11 @@ export function validateColdTopology(input, nativeId, studioId, peers) {
     && !nativeEnv.SQL_DSN && !nativeEnv.LOG_SQL_DSN && !nativeEnv.REDIS_CONN_STRING && nativeEnv.SESSION_SECRET === 'synthetic-acceptance-session-only'
     && nativeEnv.BATCH_UPDATE_ENABLED === 'false' && (!nativeEnv.CRYPTO_SECRET || nativeEnv.CRYPTO_SECRET === nativeEnv.SESSION_SECRET), 'NATIVE_CONFIG_REJECTED')
   guard(studio.Config.Entrypoint?.join(' ') === 'node /app/tests/stack/user-acceptance-environment-api.mjs' && ['node', '1000', '1000:1000'].includes(studio.Config.User), 'STUDIO_PROCESS_REJECTED')
-  for (const expected of input.compose.services['studio-api'].volumes.filter(mount => mount?.type === 'bind' && mount.read_only)) guard(studio.Mounts?.some(mount => mount.Type === 'bind'
-    && mount.Destination === expected.target && resolve(mount.Source) === resolve(expected.source) && mount.RW === false), 'CONTAINER_BIND_CHANGED')
+  for (const expected of input.compose.services['studio-api'].volumes.filter(mount => mount?.type === 'bind' && mount.read_only)) {
+    const matches = studio.Mounts?.filter(mount => mount.Destination === expected.target) ?? []
+    guard(matches.length === 1 && readonlyBindMatches(matches[0], expected)
+      && !studio.Mounts.some(mount => mount.Destination !== expected.target && overlapsProtectedPath(mount.Destination, expected.target)), 'CONTAINER_BIND_CHANGED')
+  }
   const nativeVolume = dataVolume(native, input.state.project, 'native-data'), studioVolume = dataVolume(studio, input.state.project, 'studio-data')
   guard(nativeVolume !== studioVolume && !peers.some(peer => peer.State?.Running && peer.Mounts?.some(mount => mount.RW && [nativeVolume, studioVolume].includes(mount.Name))), 'OTHER_VOLUME_WRITER_REJECTED')
   guard(!peers.some(peer => peer.Id !== native.Id && peer.NetworkSettings?.Networks?.[input.state.project + '_default']?.Aliases?.includes('new-api')), 'NATIVE_ALIAS_REJECTED')
@@ -162,6 +180,17 @@ async function binaryProof(docker, container, scratch, name, observeFile = fileP
   const path = join(scratch, name); await docker(['cp', container.Id + ':/usr/local/bin/new-api', path])
   const proof = await observeFile(path); guard(proof.sha256 === binarySha256 && pinnedBinaryHashes.has(proof.sha256), 'ACTUAL_BINARY_PIN_REJECTED')
 }
+async function boundSourcesProof(docker, container, scratch, name, input) {
+  for (const [suffix, source, expected] of [['api', '/app/apps/api/src/.', input.artifacts.apiSourceHash],
+    ['policy', '/fixture-config/.', input.artifacts.policyHash]]) {
+    const directory = join(scratch, name + '-' + suffix); await mkdir(directory)
+    await docker(['cp', container.Id + ':' + source, directory])
+    guard(await treeHash(directory) === expected, 'ACTUAL_BOUND_SOURCE_CHANGED')
+  }
+  const entrypoint = join(scratch, name + '-entrypoint.mjs')
+  await docker(['cp', container.Id + ':/app/tests/stack/user-acceptance-environment-api.mjs', entrypoint])
+  guard(digest(await fileProof(entrypoint)) === digest(await fileProof(join(input.rootWorkspace, 'tests/stack/user-acceptance-environment-api.mjs'))), 'ACTUAL_BOUND_SOURCE_CHANGED')
+}
 export async function operate(rawOptions, dependencies = {}) {
   const options = parseArguments([rawOptions.mode, ...Object.entries(rawOptions).filter(([key]) => key !== 'mode').flatMap(([key, value]) => value === true ? ['--' + key] : ['--' + key, value])])
   const rootWorkspace = dependencies.workspace ?? workspace, local = join(rootWorkspace, '.local')
@@ -187,7 +216,10 @@ export async function operate(rawOptions, dependencies = {}) {
   try {
     await binaryProof(docker, topology.native, scratch, 'source-binary', dependencies.binaryFileProof)
     if (targetTopology) await binaryProof(docker, targetTopology.native, scratch, 'target-binary', dependencies.binaryFileProof)
+    await boundSourcesProof(docker, topology.studio, scratch, 'source-initial', input)
+    if (targetTopology) await boundSourcesProof(docker, targetTopology.studio, scratch, 'target-initial', target)
     const pair = await copyColdPair(docker, topology, scratch, 'source'), summary = inspectPair({ ...pair, instanceId: input.state.instanceId })
+    let verification = 0
     async function recheck() {
       const currentInput = await loadState(options.state, rootWorkspace), current = validateColdTopology(currentInput, options['native-container'], options['studio-container'], await peersOf(docker, currentInput, options['native-container'], options['studio-container']))
       guard(current.seal === topology.seal && digest(proofOf(currentInput, current)) === digest(proof), 'SOURCE_CHANGED_DURING_OPERATION')
@@ -195,6 +227,9 @@ export async function operate(rawOptions, dependencies = {}) {
         const currentTarget = await loadState(options['target-state'], rootWorkspace), cold = validateColdTopology(currentTarget, options['target-native-container'], options['target-studio-container'], await peersOf(docker, currentTarget, options['target-native-container'], options['target-studio-container']))
         guard(cold.seal === targetTopology.seal && digest(proofOf(currentTarget, cold)) === digest(proof), 'TARGET_CHANGED_DURING_OPERATION')
       }
+      verification++
+      await boundSourcesProof(docker, topology.studio, scratch, 'source-verified-' + verification, currentInput)
+      if (target) await boundSourcesProof(docker, targetTopology.studio, scratch, 'target-verified-' + verification, target)
     }
     await recheck()
     if (options.mode === 'inspect') return { ok: true, mode: 'inspect', scope: 'synthetic-private-only', proof, sourceBinding: binding, summary, servicesStarted: false, modelsCalled: 0 }

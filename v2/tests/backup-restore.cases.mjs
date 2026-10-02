@@ -15,7 +15,7 @@ import { Projects } from '../apps/api/src/projects.mjs'
 import { FundingState } from '../apps/api/src/funding-state.mjs'
 import { RelayRenewals } from '../apps/api/src/relay-renewals.mjs'
 import { ImageJobs } from '../apps/api/src/image-jobs.mjs'
-import { parseArguments, loadState, validateColdTopology, operate, confined } from '../scripts/backup-restore.mjs'
+import { parseArguments, loadState, validateColdTopology, operate, confined, readonlyBindMatches } from '../scripts/backup-restore.mjs'
 import { sourceCommit, binarySha256, digest, fileProof, inspectPair, createPairBackup, verifyPair, restorePair } from '../scripts/lib/backup-helper.mjs'
 
 async function directory(t) {
@@ -186,6 +186,9 @@ async function harness(t) {
     if (args[0] === 'cp') {
       const [containerId, path] = args[1].split(':'), peer = peers.find(peer => peer.Id === containerId)
       if (path === '/usr/local/bin/new-api') await writeFile(args[2], 'F mock binary observer; no actual Native binary claim')
+      else if (path === '/app/apps/api/src/.') await cp(join(root, 'apps/api/src'), args[2], { recursive: true })
+      else if (path === '/fixture-config/.') await cp(peer.Mounts.find(mount => mount.Destination === '/fixture-config').Source, args[2], { recursive: true })
+      else if (path === '/app/tests/stack/user-acceptance-environment-api.mjs') await cp(join(root, 'tests/stack/user-acceptance-environment-api.mjs'), args[2])
       else { assert.equal(path, '/data/.'); await cp(peer.fVolumeDirectory, args[2], { recursive: true }) }
       return ''
     }
@@ -298,4 +301,78 @@ test('global Docker writer inventory never reads unrelated environments or full-
   h.calls.length = 0
   await assert.rejects(operate({ mode: 'inspect', state: h.source.statePath, 'native-container': dailyId, 'studio-container': h.studioId, 'confirm-synthetic-private': true }, h.deps), /CONTAINER_IDENTITY/)
   assert.equal(h.calls.some(args => args[0] === 'inspect' && !args.includes('--format')), false)
+})
+
+test('Desktop API drive alias is exact, Windows-only and read-only; other bind aliases remain rejected', () => {
+  const expected = { source: 'C:/Users/fixture/api/src', target: '/app/apps/api/src' }
+  const mount = { Type: 'bind', Source: '/run/desktop/mnt/host/c/Users/fixture/api/src', Destination: expected.target, RW: false }
+  assert.equal(readonlyBindMatches(mount, expected, 'win32'), true)
+  assert.equal(readonlyBindMatches(mount, expected, 'linux'), false)
+  for (const changed of [{ ...mount, RW: true }, { ...mount, Source: mount.Source + '-other' },
+    { ...mount, Source: mount.Source.replace('/host/c/', '/host/d/') }, { ...mount, Type: 'volume' },
+    { ...mount, Destination: '/fixture-config' }]) assert.equal(readonlyBindMatches(changed, expected, 'win32'), false)
+  assert.equal(readonlyBindMatches({ ...mount, Destination: '/fixture-config' }, { ...expected, target: '/fixture-config' }, 'win32'), false)
+})
+
+test('actual cold bound API contents must match the approved host source before any target write', async t => {
+  const h = await harness(t), original = h.deps.docker
+  const docker = async args => {
+    const result = await original(args)
+    if (args[0] === 'cp' && args[1].endsWith(':/app/apps/api/src/.')) await writeFile(join(args[2], 'unexpected.mjs'), 'F actual mounted source drift')
+    return result
+  }
+  await assert.rejects(operate(h.options, { ...h.deps, docker }), /ACTUAL_BOUND_SOURCE_CHANGED/)
+  assert.equal(h.calls.some(args => args[0] === 'cp' && args[1].endsWith(':/data/.')), false)
+  assert.equal(h.calls.some(args => args[0] === 'run'), false)
+  await assert.rejects(readdir(h.options.out), { code: 'ENOENT' })
+})
+
+test('duplicate or nested shadow mounts cannot reuse an otherwise valid approved bind', async t => {
+  const h = await harness(t), input = await loadState(h.source.statePath, h.root)
+  for (const nested of [false, true]) {
+    const peers = structuredClone(h.peers), mount = peers[1].Mounts.find(mount => mount.Destination === '/app/apps/api/src')
+    peers[1].Mounts.push({ ...mount, ...(nested ? { Destination: mount.Destination + '/config.mjs' } : {}) })
+    assert.throws(() => validateColdTopology(input, h.nativeId, h.studioId, peers), /CONTAINER_BIND_CHANGED/)
+  }
+})
+
+test('data child and runtime parent mounts fail before cold data copy; segment-separated controls remain valid', async t => {
+  const h = await harness(t), input = await loadState(h.source.statePath, h.root)
+  for (const [index, destination, code] of [[0, '/data/new-api.db', 'DATA_VOLUME'], [1, '/data/requests.sqlite', 'DATA_VOLUME'],
+    [1, '/app', 'CONTAINER_BIND'], [1, '/app/tests/stack', 'CONTAINER_BIND'], [1, '/', 'CONTAINER_BIND']]) {
+    const peers = structuredClone(h.peers)
+    peers[index].Mounts.push({ Type: 'bind', Source: h.data.path, Destination: destination, RW: false })
+    assert.throws(() => validateColdTopology(input, h.nativeId, h.studioId, peers), new RegExp(code))
+  }
+  const peers = structuredClone(h.peers)
+  for (const destination of ['/data-other', '/fixture']) peers[1].Mounts.push({ Type: 'bind', Source: h.data.path, Destination: destination, RW: true })
+  assert.equal(validateColdTopology(input, h.nativeId, h.studioId, peers).studio.Id, h.studioId)
+  h.peers[0].Mounts.push({ Type: 'bind', Source: h.data.path, Destination: '/data/new-api.db', RW: false })
+  await assert.rejects(operate(h.options, h.deps), /DATA_VOLUME/)
+  assert.equal(h.calls.some(args => ['cp', 'run'].includes(args[0])), false)
+})
+
+test('actual policy and entrypoint drift or later bound-source drift prevents backup publication or receipt', async t => {
+  for (const path of ['/fixture-config/.', '/app/tests/stack/user-acceptance-environment-api.mjs']) {
+    const h = await harness(t), original = h.deps.docker
+    const docker = async args => {
+      const result = await original(args)
+      if (args[0] === 'cp' && args[1].endsWith(':' + path)) await writeFile(path.endsWith('/.') ? join(args[2], 'trial.json') : args[2], 'F actual bound drift')
+      return result
+    }
+    await assert.rejects(operate(h.options, { ...h.deps, docker }), /ACTUAL_BOUND_SOURCE_CHANGED/)
+    assert.equal(h.calls.some(args => args[0] === 'cp' && args[1].endsWith(':/data/.')), false)
+    assert.equal(h.calls.some(args => args[0] === 'run'), false)
+  }
+  const h = await harness(t), original = h.deps.docker
+  let copied = false
+  const docker = async args => {
+    const result = await original(args)
+    if (args[0] === 'cp' && args[1].endsWith(':/data/.')) copied = true
+    if (copied && args[0] === 'cp' && args[1].endsWith(':/app/apps/api/src/.')) await writeFile(join(args[2], 'unexpected.mjs'), 'F drift after initial proof')
+    return result
+  }
+  await assert.rejects(operate(h.options, { ...h.deps, docker }), /ACTUAL_BOUND_SOURCE_CHANGED/)
+  await assert.rejects(readdir(h.options.out), { code: 'ENOENT' })
+  assert.equal(h.calls.some(args => args[0] === 'run'), false)
 })
