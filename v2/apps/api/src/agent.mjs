@@ -37,9 +37,12 @@ export async function runAgent(config, chatModel, payload) {
     config.onEvent?.(event)
   }
   let generated = false
+  let finishedChatCalls = 0, lastChatFinish, terminalFailure
+  const incompleteChat = () => new StudioError('模型响应缺少可信完成标记，结果和费用待确认；未自动重试，请检查网关记录。', 502)
   const imageModelId = payload.imageGenerationPreference?.models?.[0]
   const imageModel = config.models.find(m => m.kind === 'image' && (imageModelId ? m.id === imageModelId : isAvailable(config, m)))
   const imageTool = tool(async ({ prompt }) => {
+    if (terminalFailure) throw terminalFailure
     if (!imageModel || !isAvailable(config, imageModel)) throw new StudioError('请先配置并验证图片模型')
     if (generated) throw new StudioError('本次对话最多生成一张图片，请明确发起下一次请求')
     generated = true
@@ -53,6 +56,7 @@ export async function runAgent(config, chatModel, payload) {
   let chatCalls = 0
   let chatFailure
   const gatewayFetch = async (url, init) => {
+    if (terminalFailure) throw terminalFailure
     if (++chatCalls > (chatModel.maxChatCalls ?? 3)) {
       chatFailure = new StudioError('对话调用已达到本次上限，未继续扣费')
       throw chatFailure
@@ -74,7 +78,17 @@ export async function runAgent(config, chatModel, payload) {
     return response
   }
   const llm = new ChatOpenAI({ model: chatModel.upstreamModelId, apiKey: relayKey(config, chatModel),
-    configuration: { baseURL: config.gateway, fetch: gatewayFetch }, streaming: Boolean(config.onEvent), maxRetries: 0, timeout: 120_000, maxTokens: chatModel.maxTokens ?? 2000 })
+    configuration: { baseURL: config.gateway, fetch: gatewayFetch }, streaming: Boolean(config.onEvent), maxRetries: 0, timeout: 120_000, maxTokens: chatModel.maxTokens ?? 2000,
+    callbacks: [{ name: 'gouo-chat-terminal', handleLLMEnd(output) {
+      // The SDK aggregates each call's actual choice metadata. An upstream
+      // [DONE]/EOF alone can close transport without proving model completion.
+      // Inspect the SDK result rather than duplicating its stream parser.
+      const generations = output.generations.flat()
+      const finish = generations.length === 1 ? generations[0].generationInfo?.finish_reason ?? generations[0].message?.response_metadata?.finish_reason : undefined
+      finishedChatCalls++
+      lastChatFinish = finish
+      if (typeof finish !== 'string' || finish.length > 32 || !['stop', 'tool_calls'].includes(finish)) terminalFailure ??= incompleteChat()
+    } }] })
   const attachments = payload.attachments ?? []
   if (attachments.length && !chatModel.vision) throw new StudioError('当前智能体模型尚未验证图片理解能力，请取消参考图或配置视觉模型')
   for (const attachment of attachments) await decodeImage(attachment.url)
@@ -95,6 +109,8 @@ export async function runAgent(config, chatModel, payload) {
         if (text) emit('message.delta', { delta: text })
       }
     }
+    if (terminalFailure) throw terminalFailure
+    if (finishedChatCalls !== chatCalls || lastChatFinish !== 'stop') throw incompleteChat()
     emit('run.completed')
   } catch (error) {
     emit('run.failed', { error: { code: 'gateway_failed', message: chatFailure?.message ?? (error instanceof StudioError ? error.message : '模型请求失败或结果待确认；未自动重试，请检查网关记录。') } })

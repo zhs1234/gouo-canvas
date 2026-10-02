@@ -9,7 +9,13 @@
 - 保留原生 CanvasPage 布局、Excalidraw 编辑器、浮动工具栏、图层/文件面板、项目菜单、聊天/会话/消息/附件面板和共享事件契约。项目列表也复用上游组件。
 - Next 的 dynamic/link/navigation 改为薄层 React/Vite/Router 适配；继续使用上游 Tailwind 样式。未复制完整第三方仓库、node_modules 或上游后端。
 
-## 当前实际行为
+## 最新实际行为（2026-10-02）
+
+默认`/studio/`为持久assistant-ui聊天；Loomic创作工作台在`/studio/canvas`，官方Excalidraw与私有服务器项目已接通，共用New API身份和侧栏。旧Loomic草稿仍按owner scope保存在IndexedDB；服务器项目、原图与会话则按真实Native owner保存在Studio SQLite。没有覆盖、删除或迁移旧草稿，详见 [WORKSPACE-NAVIGATION.md](WORKSPACE-NAVIGATION.md) 与 [SYSTEM-INTEGRATION-PLAN.md](SYSTEM-INTEGRATION-PLAN.md)。
+
+assistant-ui已有按thread/run的只读历史恢复；SYS-R1新增`GET /api/studio/requests/:kind/:id/result`覆盖Loomic无threadId及独立生图已保存结果。SYS-R2a/b已接入原ID恢复：Agent在发送前等待本人会话IndexedDB提交原UUID，完整刷新只GET该原请求；直接图片占位保存原ID/owner，已收图片去重，失败读保留内容。旧消息没有原ID时不猜测或重发。B3图片任务后端已有202持久接收和解码前原bytes暂存，默认关闭，前端job接线/Native202仍待。当前没有独立持久Worker、供应商取消或月度订阅。以下早期默认画布、Agent偏好清理与“没有服务器恢复接口”等叙述属于当时阶段，模型失权选择保留以MODEL-SELECTION.md最新合同为准。
+
+## 早期接入行为（历史，2026-09-30）
 
 `/studio/` 直接打开创作画布；`/studio/projects` 列出本地草稿。可以导入 PNG/JPEG/WebP、编辑图片和文字/图形、使用原生图层工具、缩放/平移、保存草稿、重新打开并导出 PNG 或 Excalidraw 文档。移动端默认收起聊天，点击“对话”后打开覆盖面板。
 

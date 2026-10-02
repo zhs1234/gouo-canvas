@@ -1,0 +1,25 @@
+.ecommerce-entry { flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); padding: 7px 10px; min-height: 34px; font-size: 12px; cursor: pointer; }
+.ecommerce-entry:disabled { opacity: .45; cursor: default; }
+.loomic-project-heading > :nth-child(2) { min-width: 0; flex-shrink: 1; }
+.ecommerce-dialog { position: fixed; inset: 0; margin: auto; width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid var(--border); border-radius: 16px; padding: 20px; background: var(--background); color: var(--foreground); font-size: 13px; box-shadow: 0 20px 80px #0004; }
+.ecommerce-dialog::backdrop { background: #0006; }
+.ecommerce-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ecommerce-heading strong { font-size: 16px; }
+.ecommerce-dialog p, .ecommerce-dialog small { color: var(--muted-foreground); line-height: 1.6; }
+.ecommerce-dialog p { margin: 12px 0; }
+.ecommerce-dialog fieldset { border: 0; padding: 0; margin: 16px 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ecommerce-dialog legend { margin-bottom: 10px; font-weight: 600; }
+.ecommerce-dialog label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ecommerce-dialog input, .ecommerce-dialog textarea { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); padding: 8px 10px; font: inherit; }
+.ecommerce-dialog button { border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); padding: 8px 10px; min-height: 36px; font: inherit; cursor: pointer; }
+.ecommerce-dialog button:hover { background: var(--muted); }
+.ecommerce-dialog button:disabled, .ecommerce-dialog fieldset:disabled { opacity: .5; cursor: default; }
+.ecommerce-dialog button[type="submit"] { background: var(--foreground); color: var(--background); }
+.ecommerce-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.ecommerce-presets button { font-size: 12px; }
+.ecommerce-size { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ecommerce-exports { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ecommerce-message { display: block; overflow-wrap: anywhere; line-height: 1.6; padding: 10px; background: var(--muted); border-radius: 8px; }
+.ecommerce-dialog :is(input, textarea, button):focus-visible, .ecommerce-entry:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (max-width: 600px) { .loomic-project-heading .ecommerce-entry { padding: 6px; min-height: 32px; font-size: 11px; } .ecommerce-dialog { padding: 16px; } }
+@container loomic-canvas (max-width: 420px) { .loomic-project-heading .ecommerce-entry { font-size: 0; padding: 6px; } .loomic-project-heading .ecommerce-entry::before { content: '版式'; font-size: 11px; } }

@@ -73,6 +73,8 @@ export function loadConfig(env = process.env) {
     relayRoutingMode, normalRoutingEvidence,
     relayOwnerId, relayCredentialMode, userTokenQuotaCap, userTokenLifetimeSeconds, trial, accountInstanceId, tokenRenewalPolicy,
     allowGeneration: env.GOUO_ENABLE_GENERATION === 'true',
+    enableImageJobs: env.GOUO_ENABLE_IMAGE_JOBS === 'true',
+    maxImageJobs: z.coerce.number().int().min(1).max(16).parse(env.GOUO_MAX_IMAGE_JOBS ?? 2),
     ledgerPath: env.GOUO_STUDIO_LEDGER_PATH || fileURLToPath(new URL('../../../.local/studio-requests.sqlite', import.meta.url)),
   }
 }
@@ -86,6 +88,7 @@ export function isAvailable(config, model) {
 export function catalog(config) {
   return {
     generationEnabled: generationEnabled(config),
+    imageJobsEnabled: Boolean(config.enableImageJobs && config.models.some(model => model.kind === 'image' && isAvailable(config, model))),
     conversationMode: config.models.some(m => m.kind === 'chat' && isAvailable(config, m)) ? 'agent'
       : config.models.some(m => m.kind === 'image' && isAvailable(config, m)) ? 'image' : 'unavailable',
     models: config.models.map(m => ({ id: m.id, displayName: m.displayName, kind: m.kind, accessible: isAvailable(config, m),

@@ -57,7 +57,7 @@ if(mode==='start'||mode==='start-selection'){
 }else if(['status','evidence','stop','fault','voucher','seed-history','refresh-api','refresh-web','model-permission'].includes(mode)){
   const stateFile=await load()
   if(mode==='stop'){await compose('down','--volumes','--remove-orphans');state.stopped=true;await save();console.log(JSON.stringify({stopped:state.project}))}
-  else if(mode==='refresh-api'||mode==='refresh-web'){await compose('up','-d','--no-deps','--force-recreate',mode==='refresh-api'?'studio-api':'web');console.log(JSON.stringify({refreshed:mode,origin:state.origin}))}
+  else if(mode==='refresh-api'||mode==='refresh-web'){await compose('up','-d','--no-deps','--force-recreate','--wait','--wait-timeout','90',mode==='refresh-api'?'studio-api':'web');console.log(JSON.stringify({refreshed:mode,origin:state.origin}))}
   else if(mode==='model-permission'){
     assert.equal(state.modelSelectionFixture,true,'Only the explicit two-model selection fixture permits permission changes')
     const model=process.argv[4],enabled=process.argv[5]==='enabled'

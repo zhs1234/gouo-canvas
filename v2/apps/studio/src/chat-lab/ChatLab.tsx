@@ -8,7 +8,7 @@ import { fetchCatalog } from '../loomic/lib/gateway'
 import { request } from '../api'
 import { BalanceConsent, useBalanceConsent } from '../BalanceConsent'
 import { useTrial } from '../trial'
-import { restoreMessages, studioAdapter, type SavedThread } from './adapter'
+import { restoreMessages, studioAdapter, type SavedThread, type ThreadMetadata } from './adapter'
 import { Thread } from '../chat-starter/components/assistant-ui/elements/thread.aui'
 import { WorkspaceShell as StudioShell } from '../workspace/WorkspaceShell'
 import { useWorkspaceAccount } from '../workspace/WorkspaceAccountProvider'
@@ -18,7 +18,7 @@ import { Input } from '../chat-starter/components/ui/input'
 import { PlusIcon, SearchIcon, MoonIcon, SunIcon, RefreshCwIcon } from 'lucide-react'
 import '../chat-starter/theme.css'
 import './chat-lab.css'
-function StudioThreadList({ threads, id, create, select, loading, search, setSearch, searching }: { threads: SavedThread[]; id: string; create: () => void; select: (id: string) => void; loading: boolean; search: string; setSearch: (value: string) => void; searching: boolean }) {
+function StudioThreadList({ threads, id, create, select, loading, search, setSearch, searching }: { threads: ThreadMetadata[]; id: string; create: () => void; select: (id: string) => void; loading: boolean; search: string; setSearch: (value: string) => void; searching: boolean }) {
   const sidebar = useSidebar()
   return <nav aria-label="会话列表" className="flex flex-col gap-0.5">
     <Button variant="ghost" className="h-8 justify-start gap-2 rounded-md px-2.5 text-sm font-normal" disabled={loading} onClick={() => { create(); sidebar.setOpenMobile(false) }} aria-label="＋ 新会话"><PlusIcon />新会话</Button>
@@ -60,11 +60,13 @@ function LabRuntime({ model, imageModel, selectionBlocked, thread, scope, reload
       if (!destination.current) {
         if (createAttempted.current) throw new Error('会话创建结果仍待核对，请先刷新会话列表')
         createAttempted.current = true
-        const value = await request<SavedThread>('/api/studio/threads', { method: 'POST', signal: AbortSignal.any([options.abortSignal, lifetime.current.signal]), body: JSON.stringify({ title: '新会话' }) })
+        const value = await request<ThreadMetadata>('/api/studio/threads', { method: 'POST', signal: AbortSignal.any([options.abortSignal, lifetime.current.signal]), body: JSON.stringify({ title: '新会话' }) })
         lifetime.current.signal.throwIfAborted()
         options.abortSignal.throwIfAborted()
+        if (typeof value?.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.id)) throw new Error('会话创建响应缺少有效编号，请先刷新会话列表核对')
         destination.current = value.id
-        created(value)
+        // POST creates an empty thread and returns metadata, not saved history.
+        created({ ...value, runs: [] })
         // Creation can take time. Check the chosen IDs again before the first
         // model request, preserving the user's intent instead of picking A.
         const fresh = await queryClient.fetchQuery({ queryKey: ['chat-lab-models', user?.id], queryFn: fetchCatalog, staleTime: 0 })
@@ -131,7 +133,7 @@ function OwnedThreads({ model, imageModel, selectionBlocked, toolbar, notice }: 
   const reload = useCallback(() => { revise(n => n + 1); void queryClient.invalidateQueries({ queryKey: ['trial', user?.id] }) }, [queryClient, user?.id])
   useEffect(() => setOffset(0), [id])
   const list = useInfiniteQuery({ queryKey: ['threads', user?.id, debouncedSearch, id, revision], initialPageParam: 0,
-    queryFn: ({ signal, pageParam }) => request<{items: SavedThread[]; nextOffset: number | null}>(`/api/studio/threads${pageParam || debouncedSearch ? '?' + new URLSearchParams({ ...(pageParam ? { offset: String(pageParam) } : {}), ...(debouncedSearch ? { search: debouncedSearch } : {}) }) : ''}`, { signal }),
+    queryFn: ({ signal, pageParam }) => request<{items: ThreadMetadata[]; nextOffset: number | null}>(`/api/studio/threads${pageParam || debouncedSearch ? '?' + new URLSearchParams({ ...(pageParam ? { offset: String(pageParam) } : {}), ...(debouncedSearch ? { search: debouncedSearch } : {}) }) : ''}`, { signal }),
     getNextPageParam: page => page.nextOffset ?? undefined, retry: false })
   const searching = search.trim() !== debouncedSearch || list.isPending
   const threads = list.data?.pages.flatMap(page => page.items).filter((thread, index, all) => all.findIndex(item => item.id === thread.id) === index) ?? []
@@ -142,7 +144,7 @@ function OwnedThreads({ model, imageModel, selectionBlocked, toolbar, notice }: 
     if (pendingCreated.current === id && id) {
       pendingCreated.current = ''
       setReading(false)
-      // The create response already supplied the initial empty snapshot. An
+      // A confirmed new thread starts with an empty history snapshot. An
       // immediate read could return that old snapshot after the live run ends.
       // Read again on its terminal callback or an explicit recovery gesture.
       return () => abort.abort()

@@ -25,7 +25,7 @@ import { useImageAttachments } from "../hooks/use-image-attachments";
 import { useImageModelPreference } from "../hooks/use-image-model-preference";
 import { useVideoModelPreference } from "../hooks/use-video-model-preference";
 import type { WebSocketHandle } from "../hooks/use-websocket";
-import { fetchImageModels, fetchWorkspaceSkills, saveMessage, replaceMessages } from "../lib/server-api";
+import { fetchImageModels, fetchWorkspaceSkills, replaceMessages } from "../lib/server-api";
 import type { CanvasSelectedElement } from "./canvas-editor";
 import {
   type BrandKitMentionItem,
@@ -42,6 +42,8 @@ import { ChatSkills } from "./chat-skills";
 import { useToast } from "./toast";
 import { ErrorBoundary } from "./error-boundary";
 import { SessionSelector } from "./session-selector";
+import { getIdentityEpoch } from "../../api";
+import { assistantIdForRun, receivedImageTools, recoveredContentBlocks, runIdFromAssistant } from "../lib/request-recovery";
 
 type ChatSidebarProps = {
   accessToken: string;
@@ -102,6 +104,7 @@ export function ChatSidebar({
     autoTitleSession,
     reloadMessages,
     accessTokenRef,
+    messageIdentityRef,
   } = useChatSessions({
     canvasId,
     accessToken,
@@ -138,9 +141,55 @@ export function ChatSidebar({
   const initialPromptSent = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef(false);
+  const sendPending = useRef(false);
+  const alive = useRef(false);
   const activeRunId = useRef<string | null>(null)
   const disposeRun = useRef<(() => void) | null>(null)
-  useEffect(() => () => disposeRun.current?.(), [])
+  const { toast: showToast } = useToast();
+  const recoveryBindings = useRef(new Map<string, { owner: string; epoch: number; assistantId: string; sessionId: string; insertedTools: Set<string>; finish: (notSubmitted?: boolean) => void }>())
+  useEffect(() => {
+    alive.current = true
+    return () => { alive.current = false; abortRef.current = true; disposeRun.current?.() }
+  }, [])
+  useEffect(() => ws.onRecovery((state, result) => {
+    const binding = recoveryBindings.current.get(state.runId)
+    if (!alive.current || !binding || binding.owner !== accessTokenRef.current || binding.epoch !== getIdentityEpoch()) return
+    if (state.status === 'not_submitted') updateSessionMessages(binding.sessionId, previous => previous.map(message => message.id === binding.assistantId
+      ? { ...message, id: `assistant-unsent-${state.runId}`, contentBlocks: [...message.contentBlocks, { type: 'text', text: state.message }] } : message))
+    if (state.status !== 'receiving') binding.finish(state.status === 'not_submitted')
+    if (result?.status !== 'completed' || !result.result || !('events' in result.result)) return
+    if (!snapshotMessages(binding.sessionId).some(message => message.id === binding.assistantId)) return
+    updateSessionMessages(binding.sessionId, previous => previous.map(message => message.id === binding.assistantId
+      ? { ...message, contentBlocks: recoveredContentBlocks(result.result && 'events' in result.result ? result.result.events : [], message.contentBlocks) }
+      : message))
+    void replaceMessages(binding.owner, binding.sessionId, snapshotMessages(binding.sessionId)).catch(error => showToast(error instanceof Error ? error.message : '恢复内容本地保存失败', 'error'))
+    for (const event of result.result.events) {
+      if (event.type !== 'tool.completed' || binding.insertedTools.has(event.toolCallId)) continue
+      binding.insertedTools.add(event.toolCallId)
+      for (const artifact of event.artifacts ?? []) if (artifact.type === 'image') onImageGenerated?.(artifact)
+    }
+  }), [ws.onRecovery, accessTokenRef, snapshotMessages, updateSessionMessages, showToast, onImageGenerated])
+  useEffect(() => {
+    if (sessionsLoading || messagesLoading || !activeSessionId || streaming) return
+    const owner = accessTokenRef.current, epoch = getIdentityEpoch()
+    if (messageIdentityRef.current?.owner !== owner || messageIdentityRef.current.epoch !== epoch) return
+    const restored: string[] = []
+    for (const message of messages) {
+      const runId = runIdFromAssistant(message)
+      if (!runId) continue
+      const binding = recoveryBindings.current.get(runId)
+      if (binding?.owner === owner && binding.epoch === epoch && binding.sessionId === activeSessionId && binding.assistantId === message.id) continue
+      // Previously received artifacts stay downloadable. Reading again never
+      // recreates an image the user deleted, or retries a failed canvas insert.
+      recoveryBindings.current.set(runId, { owner, epoch, assistantId: message.id, sessionId: activeSessionId, insertedTools: receivedImageTools(message.contentBlocks), finish: () => {} })
+      ws.restoreRun(runId, activeSessionId)
+      restored.push(runId)
+    }
+    // One automatic read for the visible session's latest saved request;
+    // older original requests remain available through their manual controls.
+    const latest = restored.at(-1)
+    if (latest && navigator.onLine) void ws.recoverRun(latest)
+  }, [messages, sessionsLoading, messagesLoading, streaming, activeSessionId, accessTokenRef, messageIdentityRef, ws.restoreRun, ws.recoverRun])
   const messageMentionsRef = useRef(messageMentions);
   messageMentionsRef.current = messageMentions;
   const selectedCanvasElementsRef = useRef(selectedCanvasElements);
@@ -173,8 +222,6 @@ export function ChatSidebar({
   const { model: agentModel } = useAgentModel();
   const agentModelRef = useRef(agentModel);
   agentModelRef.current = agentModel;
-
-  const { toast: showToast } = useToast();
 
   // ── Sidebar resize ──
   const SIDEBAR_MIN = 300;
@@ -353,7 +400,9 @@ export function ChatSidebar({
       mentionsOverride?: MessageMention[],
     ) => {
       const currentSessionId = activeSessionIdRef.current;
-      if (streaming || !currentSessionId) return;
+      if (sendPending.current || streaming || !currentSessionId) return;
+      if (messageIdentityRef.current?.owner !== accessTokenRef.current || messageIdentityRef.current.epoch !== getIdentityEpoch()) return;
+      sendPending.current = true;
       const payWithBalance = balanceConsent.consume();
 
       // Merge explicitly-attached images with auto-sensed canvas selection images
@@ -428,46 +477,44 @@ export function ChatSidebar({
           ...imageBlocks,
         ],
       };
-      updateSessionMessages(currentSessionId, (prev) => [...prev, userMsg]);
-
-      // Persist user message (fire-and-forget)
-      saveMessage(accessTokenRef.current, currentSessionId, {
-        role: "user",
-        content: text,
-        contentBlocks: [
-          { type: "text" as const, text },
-          ...mentionBlocks,
-          ...imageBlocks,
-        ],
-      }).catch((err) =>
-        showToast(err instanceof Error ? err.message : "本地对话保存失败", "error"),
-      );
-
-      // Auto-title from first user message
-      autoTitleSession(text);
-
       // Create assistant placeholder
-      const assistantId = `assistant-${Date.now()}`;
+      const originalRunId = crypto.randomUUID();
+      const assistantId = assistantIdForRun(originalRunId);
+      const previousMessages = snapshotMessages(currentSessionId);
       updateSessionMessages(currentSessionId, (prev) => [
         ...prev,
+        userMsg,
         { id: assistantId, role: "assistant" as const, contentBlocks: [] },
       ]);
       setStreaming(true);
       abortRef.current = false;
 
       const runOwner = accessTokenRef.current
+      const runEpoch = getIdentityEpoch()
+      const insertedTools = new Set<string>()
+      recoveryBindings.current.set(originalRunId, { owner: runOwner, epoch: runEpoch, assistantId, sessionId: currentSessionId, insertedTools, finish: () => {} })
+      const sameOwner = () => alive.current && runOwner === accessTokenRef.current && runEpoch === getIdentityEpoch()
+      let prepared = false
+      let started = false
       let finished = false
       let saveTimer: ReturnType<typeof setTimeout> | undefined
       let saving = Promise.resolve()
       const persist = () => {
         clearTimeout(saveTimer)
         saveTimer = undefined
+        if (!prepared || !sameOwner()) return
         const snapshot = snapshotMessages(currentSessionId).map(message => !finished && message.id === assistantId
           ? { ...message, contentBlocks: [...message.contentBlocks, { type: 'text' as const, text: '接收尚未完成，结果和费用待确认；请检查 New API 记录，不要重复提交。' }] }
           : message)
         saving = saving.then(() => replaceMessages(runOwner, currentSessionId, snapshot)).catch(error => showToast(error instanceof Error ? error.message : '本地对话保存失败', 'error'))
       }
       try {
+        // No model POST until the original request ID and both message rows
+        // have committed to the existing owner-scoped IndexedDB draft.
+        await replaceMessages(runOwner, currentSessionId, snapshotMessages(currentSessionId))
+        prepared = true
+        if (!sameOwner() || abortRef.current || activeSessionIdRef.current !== currentSessionId) throw new Error('原请求未发送；账号、会话或接收状态已变化')
+        autoTitleSession(text)
         const perf = {
           t0Send: performance.now(),
           tAck: 0,
@@ -482,6 +529,7 @@ export function ChatSidebar({
         const runIdRef = { current: "" };
 
         const cleanup = ws.onEvent((event) => {
+          if (!sameOwner()) { resolveStream(); return }
           if (!runIdRef.current || event.runId !== runIdRef.current) return;
           if (abortRef.current) {
             resolveStream();
@@ -516,8 +564,10 @@ export function ChatSidebar({
             event.type === "tool.completed" &&
             event.artifacts &&
             event.toolName !== "screenshot_canvas" &&
-            !backendInserted
+            !backendInserted &&
+            !insertedTools.has(event.toolCallId)
           ) {
+            insertedTools.add(event.toolCallId)
             for (const artifact of event.artifacts) {
               if (artifact.type === "image" && onImageGenerated) {
                 onImageGenerated(artifact as ImageArtifact);
@@ -600,10 +650,13 @@ export function ChatSidebar({
                 `[perf] send → ack: ${(perf.tAck - perf.t0Send).toFixed(0)}ms`,
               );
               const id = ack.payload.runId as string;
+              started = true
               runIdRef.current = id;
               activeRunId.current = id
+              recoveryBindings.current.set(id, { owner: runOwner, epoch: runEpoch, assistantId, sessionId: currentSessionId, insertedTools, finish: notSubmitted => { if (notSubmitted) finished = true; resolveStream() } })
               resolve(id);
             },
+            originalRunId,
           );
         });
         clearAttachments();
@@ -612,7 +665,15 @@ export function ChatSidebar({
         await streamDone;
         cleanup();
         if (activeRunId.current === runId) activeRunId.current = null
-      } catch {
+      } catch (error) {
+        if (!sameOwner()) return
+        if (!prepared) {
+          updateSessionMessages(currentSessionId, () => previousMessages)
+          if (activeSessionIdRef.current === currentSessionId) chatInputRef.current?.restoreDraft(text)
+          showToast(`本地对话保存失败，原请求未发送。${error instanceof Error ? error.message : ''}`, 'error')
+          return
+        }
+        finished = true
         updateSessionMessages(currentSessionId, (prev) =>
           prev.map((m) => {
             if (m.id !== assistantId) return m;
@@ -620,9 +681,10 @@ export function ChatSidebar({
             if (hasText) return m;
             return {
               ...m,
+              ...(!started ? { id: `assistant-unsent-${originalRunId}` } : {}),
               contentBlocks: [
                 ...m.contentBlocks,
-                { type: "text" as const, text: "请求失败，请检查模型配置或登录状态。" },
+                { type: "text" as const, text: error instanceof Error ? error.message : "请求失败，请检查模型配置或登录状态。" },
               ],
             };
           }),
@@ -631,7 +693,8 @@ export function ChatSidebar({
         persist()
         await saving
         disposeRun.current = null
-        setStreaming(false);
+        sendPending.current = false
+        if (sameOwner()) setStreaming(false);
       }
     },
     [
@@ -829,9 +892,18 @@ export function ChatSidebar({
         </div>
       </ErrorBoundary>
 
+      {ws.runs.filter(run => run.sessionId === activeSessionId && !['receiving', 'not_submitted'].includes(run.status)).map(run => (
+        <div key={run.runId} className="px-4 pb-2 text-xs" role="status">
+          <p>{run.message}</p>
+          {run.status !== 'not_submitted' && <button type="button" className="mt-1 rounded border border-border px-3 py-1" onClick={() => void ws.recoverRun(run.runId)}>读取原请求结果</button>}
+          <p className="mt-1 text-[11px] text-muted-foreground">请求 {run.runId.slice(0, 8)}；恢复仅读取本人会话的原结果，不会重新生成。</p>
+        </div>
+      ))}
+
       {streaming && (
         <div className="px-4 pb-2">
           <button type="button" className="rounded border border-border px-3 py-1 text-xs" onClick={() => {
+            abortRef.current = true
             if (activeRunId.current) ws.cancelRun(activeRunId.current)
           }}>停止接收</button>
           <p className="mt-1 text-[11px] text-muted-foreground">停止接收不会保证取消后台生成，费用仍可能产生。</p>

@@ -2,6 +2,30 @@ import sharp from 'sharp'
 import { StudioError } from './images-error.mjs'
 import { relayKey, recordGatewayResponse } from './relay.mjs'
 export { StudioError } from './images-error.mjs'
+async function readImageJSON(response) {
+  const limit = 48 * 1024 * 1024, length = response.headers.get('content-length')
+  if ((!response.headers.get('content-encoding') || response.headers.get('content-encoding') === 'identity')
+    && length && /^\d+$/.test(length) && Number(length) > limit) {
+    await response.body?.cancel().catch(() => {})
+    throw new StudioError('图片网关响应超过安全大小限制，未自动重试', 502)
+  }
+  const reader = response.body?.getReader()
+  if (!reader) throw new StudioError('图片网关未返回有效响应，未自动重试', 502)
+  const chunks = []; let size = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > limit) { await reader.cancel().catch(() => {}); throw new StudioError('图片网关响应超过安全大小限制，未自动重试', 502) }
+      chunks.push(value)
+    }
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, size)))
+  } catch (error) {
+    if (error instanceof StudioError) throw error
+    throw new StudioError('图片网关响应不完整或协议无效，未自动重试', 502)
+  } finally { reader.releaseLock() }
+}
 export async function decodeImage(dataURL) {
   if (typeof dataURL !== 'string' || dataURL.length > 12 * 1024 * 1024 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(dataURL)) throw new StudioError('仅接受本地 PNG、JPEG、WebP 图片，单张不超过 8 MB')
   const data = Buffer.from(dataURL.slice(dataURL.indexOf(',') + 1), 'base64')
@@ -43,10 +67,16 @@ export async function generateImage(config, model, payload, fetcher = fetch) {
   }
   recordGatewayResponse(config, response)
   if (!response.ok) throw new StudioError(`图片网关返回 HTTP ${response.status}，未自动重试`, 502)
-  const raw = await response.json()
-  const encoded = raw.data?.[0]?.b64_json
+  const raw = await readImageJSON(response)
+  const encoded = raw?.data?.[0]?.b64_json
   if (typeof encoded !== 'string' || !encoded || encoded.length > 40 * 1024 * 1024) throw new StudioError('该渠道未返回支持的内嵌图片；请验证返回协议', 502)
   const bytes = Buffer.from(encoded, 'base64')
+  if (config.onImageOutput) {
+    if (!bytes.length || bytes.length > 30 * 1024 * 1024 || bytes.toString('base64') !== encoded) throw new StudioError('模型返回图片编码或大小无效，未自动重试', 502)
+    // This optional job-only sink must commit the original raster bytes before
+    // Sharp reads a header. Provider JSON/headers and credentials never enter it.
+    await config.onImageOutput(bytes)
+  }
   let metadata
   try { metadata = await sharp(bytes, { limitInputPixels: 24_000_000 }).metadata() } catch { throw new StudioError('模型返回的图片无效', 502) }
   if (!['png', 'jpeg', 'webp'].includes(metadata.format)) throw new StudioError('模型返回格式不支持', 502)

@@ -9,6 +9,7 @@ import { createStore, get, set } from 'idb-keyval'
 import { getProject, getAsset, saveProject, type StudioDocument, type StudioProject } from './projects-api'
 import { decodeDocument } from './documents'
 import { useWorkspaceLeaveGuard } from '../workspace/WorkspaceNavigationProvider'
+import { EcommerceControls } from '../ecommerce/EcommerceControls'
 const store = createStore('gouo-canvas-lab-v1', 'documents')
 function download(raw: string, name: string) {
   const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }))
@@ -148,6 +149,7 @@ export function ServerCanvasEditor({ owner, projectId, assetId }: { owner: strin
       <button disabled={!ready || blocked} onClick={() => void save(serialize())}>保存 Studio 项目</button>
       <button disabled={!ready} onClick={() => { const raw = serialize(); if (raw) download(raw, `${project?.title ?? 'studio'}.excalidraw`) }}>导出文档备份</button>
       <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
+      <EcommerceControls api={api.current} scope={`${owner}:${projectId}`} ready={ready} canEdit={ready && !blocked} isEditable={() => !stopped.current} documentBackup={serialize} />
       <Link to="/">返回聊天</Link>
       <button onClick={() => void (async () => {
         // Local export must not wait for an in-flight or unresponsive remote save.

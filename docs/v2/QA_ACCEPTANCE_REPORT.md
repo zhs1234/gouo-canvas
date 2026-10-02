@@ -1,4 +1,43 @@
-# T1.6–T1.11 四角色实操、问题修复与回归
+# V2 系统验收与历史四角色报告
+
+## 系统主线最新证据（2026-10-02）
+
+系统分支 `codex/system-integration` 整合UI799ad3b，应用源码截至 `3c69835`，隔离测试配置截至 `ad3f844`。独立worktree交付，没有替换原日常8080或修改旧QA/生产数据。当前最终完整回归及整栈结果以STATUS顶部为准，以下不把旧T1.11快照当作最终源码的新执行。
+
+| 当前角色/能力 | 本轮实际证据 | 结果与边界 |
+| --- | --- | --- |
+| A 新普通账号 | 全新owner11/12实际Native注册；owner12加密UI登录到默认首页，真实meta-only create后唯一文本发送 | completed、试用4→3、Native唯一12合成quota/request ID；刷新同thread/run，无模型重发。商户支付/MFA/真实权益未验 |
+| B 回访/断网 | owner7文本、owner4图片真实offline/online；owner8原图成功后总结丢响应、失败GET/完整reload；owner12首页完成后reload | 部分文本/同PNG保留；原GET恢复0新调用；owner8真实run.failed+chat/image unknown held保留，不把Ledger completed称模型成功 |
+| C 商品画布 | 新E1三入口10F；真实dist游客导入明确本地PNG、可编辑版式/PNG及文档/reload验收单列 | 原bytes/比例/裁剪/翻转保留，精确frame PNG、文档可编辑；短文案范围，无真实AI质量/Logo素材库/自动长文案适配声明 |
+| D 授权/费用/任务 | 连续B3N2 owner11/foreign7、原job GET/asset本人200、异户404/匿名401；独立backend报告复核 | IDB sequence1→原fetch2、参数hash一致、唯一POST202，同API ticks739关页继续；原占用held/reserved→used。费用recorded/unconfirmed |
+| 原任务与原图 | B3N2新tab真offline GET失败保占位→online同ID GET插一次；实际导出文档和reload；B3N1私有项目revision2分段补验 | B3N2完整连续passed，image+1/chat0、恢复业务写0；导出为文档内嵌PNG，不冒称独立PNG下载。B3N1分段仍明确noncontinuous |
+| 运行恢复 | OPS-N1实际配对冷备份→全新空目标恢复→ordinary读取 | 冷态双库logical/schema/hash相同；原项目rev2/PNG/failed/unknownheld恢复。源冷停止，目标启动后两轮本人/异户/匿名读，保护投影不变，供应商0调用 |
+
+私有证据索引：`.local/t112-text-continuous-offline-report.json`、`t112-image-offline-report.json`、`t112-image-unknown-offline-report.json`，`.local/native-image-jobs-resumed-report.json`（分段），`.local/native-image-jobs-ui-continuous-report.json`（连续），`.local/system-default-chat-native-report.json`，`.local/system-ops-native-read-report.json`。原PNG SHA256 `796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3`。报告脱敏，账号manifest/数据库/原始secret不提交；详细时间、命令、失败及边界见SYSTEM-INTEGRATION-STATUS。真实供应商调用与采购0，F/N/P不相加。
+
+本轮首次整栈发现meta/detail创建崩溃，新增3F并修正应用；首失败trace/screenshot保留。第二次整栈遭并行PW共用test-results导致trace ENOENT，保留失败日志，随后ad3f844将stack/完整fixture输出隔离；不把设施失败归为新资金/模型成功。旧Native429、首次frame缓存、offline reader、summary失终止标记、N202脚本误读平铺result和/proc尾换行等失败均保留，受理后只有原请求查询/继续，没有重试模型补绿灯。
+
+最终QA-FINAL已通过本地首交付：应用3c69835的check为110领域/205API/类型/build12.42秒exit0；配置ad3f844的`npm run test:e2e:isolated -- --workers=1 --reporter=line` **206/206，5.3分钟**；三阶段stack exit0（真实固定未初始化Native边界，明确假New API合同2/2 12.4秒，fixture资金普通账号闭环1/1 4.7秒）。设施40F和实际Native专项分别记录，准确命令/日志见STATUS顶部。
+
+隔离双worker首次205/206历史分页5秒未见“最新回答”，原因未证实；原日志另存`.local/system-pagination-original-205-of-206.log`，独立12次定向及最终单worker全量通过，没有改应用/断言/超时。保留失败，不将后续通过视为根因证明。真实dist游客报告`output/playwright/dist-guest-5a715e5-20261002/report.json`初始11/11、fresh当前3c69835另8/8，通过商品PNG导入、640×480原生版式、PNG/文档导出、原bytes及重开像素一致；模型POST0，3次匿名refresh401如实保留。旧tab在live dist更新后chunk404真实失败，fresh最终四入口/390px/设置及键盘路径另验，生产需原子版本切换并保留旧hash资产。原生文件选择器CLI AbortError及严格连续焦点锁定不计通过，完整限制见LOCAL-SYSTEM-HANDOFF/STATUS。
+
+## 原28场景的新增子项与保留门（2026-10-02）
+
+B5核心F/N“提交→浏览器真实断网→恢复→只读刷新，未知保held/零重发/零退款”已由T1.12连续文本、图片和丢总结响应补齐，改为核心通过。其真实供应商P仍未执行。其他9个partial不因新增自动测试或单条图片任务通过而整体升级；原场景与新增B3/E1/OPS不是同一计数单位。
+
+| 角色 | 核心通过 | partial | 未执行 | 原计划 |
+| --- | ---: | ---: | ---: | ---: |
+| A | 3 | 4 | 0 | 7 |
+| B | 6 | 1 | 0 | 7 |
+| C | 7 | 0 | 0 | 7 |
+| D | 3 | 4 | 0 | 7 |
+| 合计 | 19 | 9 | 0 | 28 |
+
+原标记F19/9/0（28）、N16/9/0（25）、P0/0/13（13）。B2/C5/C6本来只标F；Native身份参与不升级它们为N模型验收。此计数是已有证据加新子项，**不是最终版本重新实操全部28项**。
+
+保留partial：A1首次原生注册完整默认返回成本；A5全部类别/不可用变体；A6充值/余图与下一同意完整生命周期；A7各政策生命周期；B7当前/全部旧session失效直接观察；D4未知key的全部重放变体；D5其它token/订阅失效组合；D6其它503/素材保存/续用unknown变体；D7混合钱包→订阅→钱包逐笔资金链。已有合同/局部Native证据不当完整N操作。公开安全G1、资金修正/请求级实扣G2、具体供应商质量成本P、商户支付/SMTP/MFA、生产容量/加密/保留仍另门；独立授权/Worker为B3-II/III，后续产品范围不冒称完成。
+
+下方所有“当前/下一”和18/10等均为当日历史，不覆盖本页最新证据。
 
 ## T1.11 双账号完整地址隔离与费用记录（2026-10-01）
 

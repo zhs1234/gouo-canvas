@@ -75,7 +75,7 @@ export class RelayRenewals {
   blocked(owner) { return Boolean(this.db.prepare("SELECT 1 FROM relay_renewals WHERE owner=? AND status IN ('pending','unknown')").get(owner)) }
   assertReady(owner) { if (this.blocked(owner)) throw new StudioError('生成权限续用结果待核对，已暂停新生成；请联系管理员，不要重复提交', 409) }
   unresolvedGeneration(owner) {
-    return Boolean(this.db.prepare("SELECT 1 FROM requests WHERE owner=? AND status!='completed' LIMIT 1").get(owner))
+    return Boolean(this.db.prepare("SELECT 1 FROM requests WHERE owner=? AND status NOT IN ('completed','cancelled_before_submission') LIMIT 1").get(owner))
       || Boolean(this.db.prepare("SELECT 1 FROM trial_reservations WHERE owner=? AND status!='used' LIMIT 1").get(owner))
       || Boolean(this.db.prepare("SELECT 1 FROM requests WHERE owner=? AND result IS NOT NULL AND EXISTS (SELECT 1 FROM json_each(result,'$.events') WHERE json_extract(value,'$.type')='run.failed') LIMIT 1").get(owner))
   }

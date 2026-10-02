@@ -15,6 +15,7 @@ import { CanvasToolMenu } from "./canvas-tool-menu";
 import { normalizeCanvasElements } from "../lib/canvas-normalize";
 import { ErrorBoundary } from "./error-boundary";
 import { useWorkspaceLeaveGuard } from "../../workspace/WorkspaceNavigationProvider";
+import { getIdentityEpoch } from "../../api";
 
 const Excalidraw = dynamic(
   () => import("@excalidraw/excalidraw").then((mod) => mod.Excalidraw),
@@ -143,6 +144,19 @@ export function CanvasEditor({
     savingRef.current = task;
     try { await task; } finally { if (savingRef.current === task) savingRef.current = null; }
   }, [accessToken, canvasId]);
+  const persistCurrentScene = useCallback(async () => {
+    const epoch = getIdentityEpoch(), api = loadedApiRef.current;
+    if (!aliveRef.current || deletedDraftRef.current || !hydratedRef.current || !api || accessTokenRef.current !== accessToken) throw new Error('画布已关闭、删除或归属已变化，原请求未发送');
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const state = api.getAppState(), files: Record<string, Record<string, unknown>> = {};
+    for (const [id, file] of Object.entries(api.getFiles() as Record<string, any>)) files[id] = { id: file.id, dataURL: file.dataURL, mimeType: file.mimeType, created: file.created };
+    // Capture the updated SDK scene now; an older pending write must finish
+    // before this snapshot passes through the existing serial draft pipeline.
+    pendingSaveRef.current = { elements: api.getSceneElements().filter((element: any) => !element.isDeleted),
+      appState: { viewBackgroundColor: state.viewBackgroundColor, gridModeEnabled: state.gridModeEnabled, scrollX: state.scrollX, scrollY: state.scrollY, zoom: state.zoom }, files };
+    await savePending();
+    if (!aliveRef.current || deletedDraftRef.current || accessTokenRef.current !== accessToken || epoch !== getIdentityEpoch()) throw new Error('画布归属或身份已变化，原请求未发送');
+  }, [accessToken, savePending]);
   const flushForNavigation = useCallback(async () => {
     if (deletedDraftRef.current) return true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -338,6 +352,7 @@ export function CanvasEditor({
             accessToken={accessToken}
             excalidrawApi={excalidrawApi}
             leftPanelOpen={leftPanelOpen ?? false}
+            onPersistScene={persistCurrentScene}
           />
         )}
       </div>

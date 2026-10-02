@@ -27,6 +27,7 @@ async function openStream(page) {
           state.close = () => controller.close()
           init.signal.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')), { once: true })
         },
+        cancel() { state.cancelled = (state.cancelled || 0) + 1 },
       }), { headers: { 'Content-Type': 'text/event-stream' } })
     }
   })
@@ -64,12 +65,32 @@ test('stream EOF preserves partial reply and marks unknown outcome without resub
     window.streamFixture.close()
   })
   await expect(page.getByText('已收到的部分内容', { exact: true })).toBeVisible()
-  await expect(page.getByText('连接或生成事件异常，结果和费用待确认；请检查 New API 记录，不要重复提交。', { exact: true })).toBeVisible()
+  await expect(page.getByText(/^读取失败，已收到内容保留；未重新生成。/)).toBeVisible()
   expect(await page.evaluate(() => window.streamFixture.calls)).toBe(1)
   await expect(page.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0)
   await page.reload()
   await expect(page.getByText('已收到的部分内容', { exact: true })).toBeVisible()
-  await expect(page.getByText('连接或生成事件异常，结果和费用待确认；请检查 New API 记录，不要重复提交。', { exact: true })).toBeVisible()
+  await expect(page.getByText('接收尚未完成，结果和费用待确认；请检查 New API 记录，不要重复提交。', { exact: true })).toBeVisible()
+})
+
+test('actual browser offline stops local reception, retains partial content and never resends on online', async ({ page, context }) => {
+  await openStream(page)
+  await page.evaluate(() => window.streamFixture.send({ type: 'message.delta', delta: '断网前已收到的内容' }))
+  await expect(page.getByText('断网前已收到的内容', { exact: true })).toBeVisible()
+  try {
+    await context.setOffline(true)
+    expect(await page.evaluate(() => navigator.onLine)).toBe(false)
+    await expect.poll(() => page.evaluate(() => window.streamFixture.cancelled)).toBe(1)
+    await expect(page.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0)
+    await expect(page.getByText('断网前已收到的内容', { exact: true })).toBeVisible()
+    await expect(page.getByText('已停止接收；后台可能仍在处理。已收到内容保留，请读取原请求，费用待核对。', { exact: true })).toBeVisible()
+    expect(await page.evaluate(() => window.streamFixture.calls)).toBe(1)
+  } finally { await context.setOffline(false) }
+  await expect(page.getByText('断网前已收到的内容', { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => window.streamFixture.calls)).toBe(1)
+  await page.reload()
+  await expect(page.getByText('断网前已收到的内容', { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => window.streamFixture.calls)).toBe(0)
 })
 
 test('Stop preserves received content and explicitly leaves provider outcome unconfirmed', async ({ page }) => {
@@ -77,12 +98,12 @@ test('Stop preserves received content and explicitly leaves provider outcome unc
   await page.evaluate(() => window.streamFixture.send({ type: 'message.delta', messageId: 'fixture', delta: '停止前已收到' }))
   await expect(page.getByText('停止前已收到', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '停止接收', exact: true }).click()
-  await expect(page.getByText('已停止接收；后台可能仍在生成，结果和费用待确认，请勿重复提交。', { exact: true })).toBeVisible()
+  await expect(page.getByText('已停止接收；后台可能仍在处理。已收到内容保留，请读取原请求，费用待核对。', { exact: true })).toBeVisible()
   expect(await page.evaluate(() => window.streamFixture.calls)).toBe(1)
   await expect(page.getByRole('button', { name: '停止接收', exact: true })).toHaveCount(0)
   await page.reload()
   await expect(page.getByText('停止前已收到', { exact: true })).toBeVisible()
-  await expect(page.getByText('已停止接收；后台可能仍在生成，结果和费用待确认，请勿重复提交。', { exact: true })).toBeVisible()
+  await expect(page.getByText('接收尚未完成，结果和费用待确认；请检查 New API 记录，不要重复提交。', { exact: true })).toBeVisible()
 })
 
 test('refresh during reception retains partial history with an unfinished outcome marker', async ({ page }) => {

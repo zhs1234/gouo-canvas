@@ -1,5 +1,11 @@
 # 架构与迁移地图
 
+## 最新实现边界（2026-10-02）
+
+`/studio/`默认assistant-ui聊天；`/studio/canvas`保留Loomic，`/studio/projects`包含本人服务器项目及本机旧草稿，`/studio/canvas-lab`使用官方Excalidraw。Studio SQLite实际保存owner-scoped会话/运行/事件、私有原图BLOB和revision项目；IndexedDB继续保存旧本机草稿。下文早期“云项目暂缓/默认画布/只本地图片”按阶段历史读取，不表示当前没有服务器私有项目。没有S3、协作或独立云存储服务。
+
+当前生成仍由API请求执行；网络断开不取消供应商，API重启把未知外发意图保守保留，不存在持久Worker。统一原请求只读恢复和后台任务计划见 [SYSTEM-INTEGRATION-PLAN.md](SYSTEM-INTEGRATION-PLAN.md)；只有实际完成后才能称该阶段已实现。New API继续是唯一账号与金额权威，Studio次数/历史不构成第二个钱包。
+
 ## 当前架构（2026-09-30）
 
 图片优先的无限画布与智能体工作台，后续接入视频生成；不做视频剪裁。使用固定版本 Loomic 原生前端，New API 提供账号与模型网关，业务适配位于 `v2/apps/api`。云项目/素材库暂缓，没有旧数据迁移。

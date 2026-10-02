@@ -2,11 +2,16 @@
 
 import { BalanceConsent, useBalanceConsent } from "../../../BalanceConsent";
 import { ImageUp, Lock, Zap } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { ImageModelInfo } from "../../lib/server-api";
-import { fetchImageModels, generateImageDirect, uploadFile } from "../../lib/server-api";
+import { createRequestResultReader, fetchImageModels, generateImageDirect, uploadFile } from "../../lib/server-api";
+import { currentUser, getIdentityEpoch, request } from "../../../api";
+import { fetchCatalog } from "../../lib/gateway";
+import { billingChanged } from "../../lib/billing";
+import { canOperateJob, createImageJobClient, imageJobMessage, imageJobPayloadSchema, validPersistedImageBinding, type ImageJob, type ImageJobAction } from "../../lib/image-jobs";
+import { imageForCanvas, requestStatusMessage, type SavedImage, type RequestStatus } from "../../lib/request-recovery";
 import { useGenerationErrorHandler } from "../../hooks/use-generation-error-handler";
 import {
   updateImageGeneratorElement,
@@ -15,7 +20,6 @@ import {
 } from "../../lib/canvas-image-generator";
 import {
   createExcalidrawImageElement,
-  fetchAsDataURL,
 } from "../../lib/canvas-elements";
 
 type ImageGeneratorPanelProps = {
@@ -26,6 +30,7 @@ type ImageGeneratorPanelProps = {
   accessToken: string;
   canvasScrollZoom: { scrollX: number; scrollY: number; zoom: number };
   onClose: () => void;
+  onPersistScene: () => Promise<void>;
 };
 
 
@@ -43,13 +48,20 @@ export function ImageGeneratorPanel({
   accessToken,
   canvasScrollZoom,
   onClose,
+  onPersistScene,
 }: ImageGeneratorPanelProps) {
   const balanceConsent = useBalanceConsent(accessToken + ":" + elementId);
   const [prompt, setPrompt] = useState(data.prompt);
   const [model, setModel] = useState(data.model);
   const [aspectRatio, setAspectRatio] = useState(data.aspectRatio);
   const [quality, setQuality] = useState(data.quality);
-  const [loading, setLoading] = useState(data.status === "generating");
+  const [loading, setLoading] = useState(false);
+  const [requestId, setRequestId] = useState(data.jobId ?? data.requestId);
+  const [requestStatus, setRequestStatus] = useState<RequestStatus | undefined>(data.requestStatus);
+  const [completedImage, setCompletedImage] = useState<SavedImage | null>(null);
+  const [job, setJob] = useState<ImageJob | null>(null);
+  const [confirmation, setConfirmation] = useState<'authorize' | 'cancel' | null>(null);
+  const [notice, setNotice] = useState(data.status === 'generating' && !data.requestId ? '旧图片占位没有原请求 ID，无法确认后台结果；未重新生成。请新建占位来明确发送新的请求。' : '');
   const [error, setError] = useState<string | null>(data.errorMessage ?? null);
   const [models, setModels] = useState<ImageModelInfo[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -64,6 +76,19 @@ export function ImageGeneratorPanel({
   const { handleGenerationError } = useGenerationErrorHandler();
   // AbortController for in-flight generation requests so we can cancel on unmount
   const abortRef = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+  const applyingImage = useRef(false);
+  const busy = useRef(false);
+  const executionMode = useRef(data.executionMode ?? 'sync');
+  const invalidBinding = useRef(!validPersistedImageBinding(data));
+  const requestOwner = useRef(data.requestOwner);
+  const parametersRef = useRef(data.requestParameters);
+  const requestIdRef = useRef(requestId);
+  requestIdRef.current = requestId;
+  const getOwner = useCallback(() => accessTokenRef.current, []);
+  const readResult = useMemo(() => createRequestResultReader(getOwner), [getOwner]);
+  const jobClient = useMemo(() => createImageJobClient({ transport: request, getOwner, getEpoch: getIdentityEpoch,
+    verifyOwner: async (owner, signal) => { const user = await currentUser(signal); return !!user && owner === `local:${user.id}`; } }), [getOwner]);
 
   // Fetch available models with error logging
   useEffect(() => {
@@ -93,10 +118,18 @@ export function ImageGeneratorPanel({
 
   // Cancel in-flight generation on unmount to prevent memory leaks
   useEffect(() => {
+    mounted.current = true;
+    const epoch = getIdentityEpoch();
+    const owner = accessTokenRef.current;
     return () => {
+      mounted.current = false;
       abortRef.current?.abort();
+      if (requestIdRef.current && epoch === getIdentityEpoch() && owner === accessTokenRef.current) {
+        const element = excalidrawApi.getSceneElements().find((el: any) => el.id === elementId && !el.isDeleted);
+        if (element?.customData?.status === 'generating') updateImageGeneratorElement(excalidrawApi, elementId, { status: 'awaiting', errorMessage: '接收已停止；请读取原请求，后台结果和费用待核对。' });
+      }
     };
-  }, []);
+  }, [excalidrawApi, elementId]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -157,76 +190,136 @@ export function ImageGeneratorPanel({
     [excalidrawApi, elementId, models],
   );
 
+  const insertCompletedImage = useCallback(async (result: SavedImage, owner: string, epoch: number, assetId?: string) => {
+    if (applyingImage.current || !mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+    applyingImage.current = true;
+    try {
+      setCompletedImage(result);
+      const resolved = await imageForCanvas(result, async url => {
+        const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+        try { return { width: bitmap.width, height: bitmap.height }; }
+        finally { bitmap.close(); }
+      });
+      // Recovery DTOs contain validated inline originals; insertion does not fetch a provider.
+      const dataURL = result.url;
+      const placeholder = excalidrawApi.getSceneElements().find((el: any) => el.id === elementId && !el.isDeleted);
+      if (!placeholder || !mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      const fileId = generateId();
+      excalidrawApi.addFiles([{ id: fileId, dataURL, mimeType: resolved.mimeType, created: Date.now() }]);
+      const imageElement = createExcalidrawImageElement({ fileId, x: placeholder.x, y: placeholder.y,
+        width: resolved.width * Math.min(placeholder.width / resolved.width, placeholder.height / resolved.height),
+        height: resolved.height * Math.min(placeholder.width / resolved.width, placeholder.height / resolved.height), title: (result.prompt ?? data.prompt).slice(0, 60) });
+      if (executionMode.current === 'job') imageElement.customData = { type: 'image-job-result', jobId: requestIdRef.current, requestOwner: owner, ...(assetId ? { assetId } : {}) };
+      const elements = excalidrawApi.getSceneElements().map((el: any) => el.id === elementId ? { ...el, isDeleted: true } : el);
+      excalidrawApi.updateScene({ elements: [...elements, imageElement], captureUpdate: 'IMMEDIATELY' });
+      await onPersistScene();
+      onClose();
+    } finally { applyingImage.current = false; }
+  }, [excalidrawApi, elementId, data.prompt, onClose, onPersistScene]);
+
+  const recoverOriginal = useCallback(async () => {
+    const id = requestIdRef.current;
+    if (invalidBinding.current) { setError('原图片任务模式、编号或归属记录不一致，未读取或重新生成；原占位保留。'); return; }
+    if (!id || busy.current) return;
+    const owner = accessTokenRef.current, epoch = getIdentityEpoch();
+    if (requestOwner.current !== owner) { setError('此占位缺少本人归属或属于另一账号，未读取结果；请新建图片占位。'); return; }
+    setLoading(true);
+    try {
+      if (executionMode.current === 'job') {
+        const record = await jobClient.read(owner, id);
+        if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+        setJob(record); setNotice(imageJobMessage(record.status)); setError(null);
+        if (record.result) setCompletedImage(record.result);
+        billingChanged(owner, record.result?.usage);
+        updateImageGeneratorElement(excalidrawApi, elementId, { status: record.status === 'completed' ? 'completed' : 'awaiting', jobStatus: record.status, errorMessage: undefined });
+        await onPersistScene();
+        if (record.result && mounted.current && owner === accessTokenRef.current && epoch === getIdentityEpoch()) await insertCompletedImage(record.result, owner, epoch, record.assetId);
+        return;
+      }
+      const record = await readResult(owner, 'image', id);
+      if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      setRequestStatus(record.status); setNotice(requestStatusMessage(record.status)); setError(null);
+      updateImageGeneratorElement(excalidrawApi, elementId, { status: record.status === 'completed' ? 'completed' : 'awaiting', requestStatus: record.status, errorMessage: undefined });
+      if (record.status === 'completed' && record.result && !('events' in record.result)) await insertCompletedImage(record.result, owner, epoch);
+    } catch (error) {
+      if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      setError('读取或加入画布失败，原请求 ID 和已有结果保留；未重新生成。' + (error instanceof Error ? ` ${error.message}` : ''));
+    } finally { if (mounted.current && owner === accessTokenRef.current && epoch === getIdentityEpoch()) setLoading(false); }
+  }, [readResult, jobClient, excalidrawApi, elementId, insertCompletedImage, onPersistScene]);
+  useEffect(() => {
+    // Reopen/reconnect reads the stored original ID once; manual reads remain available.
+    if (requestIdRef.current) void recoverOriginal();
+    const online = () => { if (requestIdRef.current) void recoverOriginal(); };
+    window.addEventListener('online', online);
+    return () => window.removeEventListener('online', online);
+  }, [recoverOriginal]);
+
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || loading) return;
+    if (invalidBinding.current) { setError('原图片任务记录不完整，不能补造编号或改用同步生成；请保留原占位核对。'); return; }
+    if (!prompt.trim() || busy.current || loading || requestIdRef.current || data.status === 'generating') return;
     if (currentModel?.accessible !== true) { setError("尚未配置并验证可用图片模型"); return; }
 
+    busy.current = true;
     const payWithBalance = balanceConsent.consume();
     // Cancel any previous in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-
+    const owner = accessTokenRef.current, epoch = getIdentityEpoch();
+    let persisted = false, preparedId: string | undefined;
     setLoading(true);
     setError(null);
-    updateImageGeneratorElement(excalidrawApi, elementId, {
-      status: "generating",
-      prompt: prompt.trim(),
-      model,
-      aspectRatio,
-      quality,
-    });
-
     try {
+      const catalog = await fetchCatalog(), approved = catalog.models.find(candidate => candidate.id === model && candidate.kind === 'image' && candidate.accessible === true);
+      if (!catalog.generationEnabled || !approved) throw new Error('图片生成或原模型当前未获批准，原请求未发送');
+      if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      controller.signal.throwIfAborted();
+      const parameters = imageJobPayloadSchema.parse({ prompt: prompt.trim(), model, ...(payWithBalance ? { payWithBalance: true } : {}), ...(aspectRatio ? { aspectRatio } : {}), ...(quality ? { quality } : {}), inputImages: refImages.map(image => image.dataUrl) });
+      const mode = catalog.imageJobsEnabled === true ? 'job' : 'sync', id = crypto.randomUUID();
+      executionMode.current = mode; requestOwner.current = owner;
+      parametersRef.current = parameters;
+      preparedId = id; requestIdRef.current = id;
+      setRequestId(id); setRequestStatus(undefined);
+      updateImageGeneratorElement(excalidrawApi, elementId, { status: 'generating', prompt: parameters.prompt, model, aspectRatio, quality,
+        executionMode: mode, jobId: mode === 'job' ? id : undefined, requestId: id, requestOwner: owner, requestParameters: parameters, inputImages: parameters.inputImages, requestStatus: undefined, errorMessage: undefined });
+      await onPersistScene();
+      persisted = true;
+      if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      controller.signal.throwIfAborted();
+      if (mode === 'job') {
+        const accepted = await jobClient.start(owner, id, parameters, controller.signal);
+        if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+        setJob(accepted); setNotice(imageJobMessage(accepted.status));
+        updateImageGeneratorElement(excalidrawApi, elementId, { status: 'awaiting', jobStatus: accepted.status });
+        await onPersistScene();
+        // A 202 is an acceptance receipt, followed by one read of the same job.
+        busy.current = false;
+        await recoverOriginal();
+        return;
+      }
       const result = await generateImageDirect(
-        accessTokenRef.current,
+        owner,
         prompt.trim(),
-        { model, ...(payWithBalance ? { payWithBalance: true } : {}), ...(aspectRatio ? { aspectRatio } : {}), ...(quality ? { quality } : {}), inputImages: refImages.map(image => image.dataUrl) }, controller.signal,
+        { model, ...(payWithBalance ? { payWithBalance: true } : {}), ...(aspectRatio ? { aspectRatio } : {}), ...(quality ? { quality } : {}), inputImages: refImages.map(image => image.dataUrl) }, controller.signal, id,
       );
 
       // Check if this generation was cancelled while awaiting
-      if (controller.signal.aborted) return;
-
-      // Download and insert as real image element at same position
-      const dataURL = await fetchAsDataURL(result.url);
-      if (controller.signal.aborted) return;
-
-      const fileId = generateId();
-      excalidrawApi.addFiles([
-        {
-          id: fileId,
-          dataURL,
-          mimeType: result.mimeType,
-          created: Date.now(),
-        },
-      ]);
-
-      const imageElement = createExcalidrawImageElement({
-        fileId,
-        x: elementBounds.x,
-        y: elementBounds.y,
-        width: result.width * Math.min(elementBounds.width / result.width, elementBounds.height / result.height),
-        height: result.height * Math.min(elementBounds.width / result.width, elementBounds.height / result.height),
-        title: prompt.trim().slice(0, 60),
-      });
-
-      // Replace: delete placeholder, add image
-      const elements = excalidrawApi
-        .getSceneElements()
-        .map((el: any) => {
-          if (el.id === elementId) return { ...el, isDeleted: true };
-          return el;
-        });
-      excalidrawApi.updateScene({
-        elements: [...elements, imageElement],
-        captureUpdate: "IMMEDIATELY",
-      });
-
-      onClose();
+      if (controller.signal.aborted || !mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      setRequestStatus('completed');
+      updateImageGeneratorElement(excalidrawApi, elementId, { status: 'completed', requestStatus: 'completed' });
+      await insertCompletedImage(result, owner, epoch);
     } catch (err) {
       // Ignore aborted requests (user cancelled or component unmounted)
-      if (controller.signal.aborted) return;
-
+      if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      if (!persisted) {
+        if (preparedId) {
+          requestIdRef.current = undefined; requestOwner.current = undefined; setRequestId(undefined);
+          parametersRef.current = undefined;
+          updateImageGeneratorElement(excalidrawApi, elementId, { status: 'idle', requestId: undefined, requestOwner: undefined, executionMode: undefined, jobId: undefined, jobStatus: undefined, requestParameters: undefined });
+        }
+        setError(`本地画布保存失败或准备未通过，原请求未发送。${err instanceof Error ? err.message : ''}`);
+        return;
+      }
       console.error("[image-gen] Generation error:", err);
       const handled = handleGenerationError(err);
       if (!handled) {
@@ -234,10 +327,10 @@ export function ImageGeneratorPanel({
       }
       setLoading(false);
       updateImageGeneratorElement(excalidrawApi, elementId, {
-        status: "error",
-        errorMessage: "生成失败",
+        status: "awaiting",
+        errorMessage: "接收中断或结果未完成；请读取原请求，未重新生成。",
       });
-    }
+    } finally { busy.current = false; if (mounted.current && owner === accessTokenRef.current && epoch === getIdentityEpoch()) setLoading(false); }
   }, [
     prompt,
     balanceConsent.consume,
@@ -252,7 +345,34 @@ export function ImageGeneratorPanel({
     elementBounds,
     onClose,
     handleGenerationError,
+    insertCompletedImage,
+    data.status,
+    jobClient,
+    recoverOriginal,
+    onPersistScene,
   ]);
+
+  const handleJobAction = useCallback(async (action: ImageJobAction, confirm = false) => {
+    if (!job || busy.current || loading || requestOwner.current !== accessTokenRef.current) return;
+    const owner = accessTokenRef.current, epoch = getIdentityEpoch();
+    busy.current = true; setLoading(true); setError(null); setConfirmation(null);
+    try {
+      if (action === 'authorize') {
+        const catalog = await fetchCatalog(), original = parametersRef.current;
+        if (catalog.imageJobsEnabled !== true || !catalog.generationEnabled || !original || !catalog.models.some(candidate => candidate.id === original.model && candidate.kind === 'image' && candidate.accessible === true)) throw new Error('原任务的模型或任务功能当前未获批准，未重新授权');
+      }
+      if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      const updated = await jobClient.operate(owner, job, action, confirm);
+      if (!mounted.current || owner !== accessTokenRef.current || epoch !== getIdentityEpoch()) return;
+      setJob(updated); setNotice(imageJobMessage(updated.status));
+      updateImageGeneratorElement(excalidrawApi, elementId, { status: 'awaiting', jobStatus: updated.status });
+      await onPersistScene();
+      busy.current = false;
+      await recoverOriginal();
+    } catch (error) {
+      if (mounted.current && owner === accessTokenRef.current && epoch === getIdentityEpoch()) setError(`原图片任务操作未完成，原编号和结果保留；未自动重试。${error instanceof Error ? error.message : ''}`);
+    } finally { busy.current = false; if (mounted.current && owner === accessTokenRef.current && epoch === getIdentityEpoch()) setLoading(false); }
+  }, [job, loading, jobClient, excalidrawApi, elementId, onPersistScene, recoverOriginal]);
 
   return createPortal(
     <div
@@ -284,6 +404,20 @@ export function ImageGeneratorPanel({
           {error}
         </div>
       )}
+      {(requestId || notice) && <div className="mb-2 px-2 py-1.5 text-xs" role="status">
+        <p>{notice || '原编号已保存；受理和后台结果待核对，不会自动重复生成。'}</p>
+        {requestId && <><p>原请求 {requestId.slice(0, 8)}{executionMode.current === 'job' ? ` · ${job?.status ?? data.jobStatus ?? '待查询'}` : requestStatus ? ` · ${requestStatus}` : ''}</p><button type="button" disabled={loading} className="mt-1 rounded border border-border px-3 py-1" onClick={() => void recoverOriginal()}>{executionMode.current === 'job' ? '读取原图片任务' : '读取原图片结果'}</button></>}
+        {job && <div>
+          {canOperateJob(job, 'authorize') && <button type="button" disabled={loading} className="mt-1 rounded border border-border px-3 py-1" onClick={() => setConfirmation('authorize')}>重新授权原图片任务</button>}
+          {canOperateJob(job, 'cancel') && <button type="button" disabled={loading} className="mt-1 rounded border border-border px-3 py-1" onClick={() => setConfirmation('cancel')}>取消确定未提交任务</button>}
+          {canOperateJob(job, 'finalize') && <button type="button" disabled={loading} className="mt-1 rounded border border-border px-3 py-1" onClick={() => void handleJobAction('finalize')}>仅完成原图本地保存</button>}
+          {confirmation && <div><p>{confirmation === 'authorize' ? '确认使用原参数及原付款同意授权同一任务；可能使用可用次数或金额。' : '仅请求服务端核验并取消确定未外发的原任务；不请求退款，不释放未知占用。'}</p>
+            <button type="button" disabled={loading} className="mt-1 rounded border border-border px-3 py-1" onClick={() => void handleJobAction(confirmation, true)}>{confirmation === 'authorize' ? '确认授权原图片任务' : '确认取消原图片任务'}</button>
+            <button type="button" onClick={() => setConfirmation(null)}>返回只读</button></div>}
+        </div>}
+        {completedImage && <a className="ml-2 underline" href={completedImage.url} download="gouo-original.png">下载原图</a>}
+        {requestId && <p className="mt-1">如需新的生成，请新建图片占位并明确发送；会使用可用次数或金额。</p>}
+      </div>}
 
       <BalanceConsent checked={balanceConsent.checked} change={balanceConsent.change} disabled={loading} />
 
@@ -496,7 +630,7 @@ export function ImageGeneratorPanel({
             type="button"
             aria-label="生成图片"
             onClick={() => void handleGenerate()}
-            disabled={!prompt.trim() || loading || currentModel?.accessible !== true}
+            disabled={!prompt.trim() || loading || !!requestId || data.status === 'generating' || currentModel?.accessible !== true}
             className="flex h-8 min-w-12 items-center justify-center gap-1 rounded-full bg-primary p-2 text-primary-foreground transition-colors hover:bg-primary/80 hover:accent-glow disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
           >
             {loading ? (

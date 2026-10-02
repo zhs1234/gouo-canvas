@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ChatSessionSummary, ContentBlock } from "@loomic/shared";
 import type { ChatMessage as ChatMessageData } from "@loomic/shared";
+import { getIdentityEpoch } from "../../api";
 import {
   createSession,
   deleteSession as deleteSessionApi,
@@ -136,6 +137,9 @@ export function useChatSessions({
 
   // LRU message cache (replaces unbounded Record)
   const msgCacheRef = useRef<LRUMessageCache>(createLRUMessageCache());
+  const mounted = useRef(false);
+  const messageIdentityRef = useRef<{ owner: string; epoch: number } | null>(null);
+  const sameIdentity = (owner: string, epoch: number) => mounted.current && owner === accessTokenRef.current && epoch === getIdentityEpoch();
 
   // ── Update messages for a specific session ──
   // Always writes to cache; only syncs to React state if the session is visible.
@@ -155,13 +159,21 @@ export function useChatSessions({
   // ── Load sessions on mount ──
   useEffect(() => {
     let cancelled = false;
+    mounted.current = true;
+    const owner = accessTokenRef.current, epoch = getIdentityEpoch();
+    const current = () => !cancelled && sameIdentity(owner, epoch);
+    msgCacheRef.current = createLRUMessageCache();
+    messageIdentityRef.current = null;
+    activeSessionIdRef.current = null;
+    setActiveSessionId(null);
+    setMessages([]);
 
     async function init() {
       const token = accessTokenRef.current;
       setSessionsLoading(true);
       try {
         const res = await fetchSessions(token, canvasId);
-        if (cancelled) return;
+        if (!current()) return;
 
         if (res.sessions.length > 0) {
           setSessions(res.sessions);
@@ -169,17 +181,21 @@ export function useChatSessions({
             ? (res.sessions.find((s: ChatSessionSummary) => s.id === initialSessionId) ??
               res.sessions[0]!)
             : res.sessions[0]!;
+          activeSessionIdRef.current = target.id;
           setActiveSessionId(target.id);
           onSessionChangeRef.current?.(target.id);
           const msgRes = await fetchMessages(token, target.id);
-          if (cancelled) return;
+          if (!current() || activeSessionIdRef.current !== target.id) return;
           const mapped = mapServerMessages(msgRes.messages);
           msgCacheRef.current.set(target.id, mapped);
+          messageIdentityRef.current = { owner, epoch };
           setMessages(mapped);
         } else {
           const created = await createSession(token, canvasId);
-          if (cancelled) return;
+          if (!current()) return;
           setSessions([created.session]);
+          messageIdentityRef.current = { owner, epoch };
+          activeSessionIdRef.current = created.session.id;
           setActiveSessionId(created.session.id);
           onSessionChangeRef.current?.(created.session.id);
           setMessages([]);
@@ -187,43 +203,46 @@ export function useChatSessions({
       } catch {
         // Session loading failed — remain in empty state
       } finally {
-        if (!cancelled) setSessionsLoading(false);
+        if (current()) setSessionsLoading(false);
       }
     }
 
     void init();
     return () => {
       cancelled = true;
+      mounted.current = false;
     };
-    // Intentionally depends only on canvasId — accessTokenRef, onSessionChangeRef,
-    // initialSessionId, and msgCacheRef are stable refs that never trigger re-runs.
-    // This effect is a one-time init per canvas, not a token-refresh handler.
+    // accessToken is the nonsecret local owner scope, never the account Bearer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasId]);
+  }, [canvasId, accessToken]);
 
   // ── Session switch ──
   const handleSelectSession = useCallback(
     async (sessionId: string) => {
       if (sessionId === activeSessionIdRef.current) return;
+      const owner = accessTokenRef.current, epoch = getIdentityEpoch();
       if (streaming) setStreaming(false);
+      activeSessionIdRef.current = sessionId;
       setActiveSessionId(sessionId);
       onSessionChangeRef.current?.(sessionId);
 
       const cached = msgCacheRef.current.get(sessionId);
       if (cached && cached.length > 0) {
         setMessages(cached);
+        setMessagesLoading(false);
       } else {
         setMessages([]);
         setMessagesLoading(true);
         try {
-          const msgRes = await fetchMessages(accessTokenRef.current, sessionId);
+          const msgRes = await fetchMessages(owner, sessionId);
+          if (!sameIdentity(owner, epoch) || activeSessionIdRef.current !== sessionId) return;
           const mapped = mapServerMessages(msgRes.messages);
           msgCacheRef.current.set(sessionId, mapped);
           setMessages(mapped);
         } catch (err) {
           console.error("[chat] Failed to load session messages:", err);
         } finally {
-          setMessagesLoading(false);
+          if (sameIdentity(owner, epoch) && activeSessionIdRef.current === sessionId) setMessagesLoading(false);
         }
       }
     },
@@ -232,10 +251,13 @@ export function useChatSessions({
 
   // ── New chat ──
   const handleNewChat = useCallback(async () => {
+    const owner = accessTokenRef.current, epoch = getIdentityEpoch();
     if (streaming) setStreaming(false);
     try {
-      const res = await createSession(accessTokenRef.current, canvasId);
+      const res = await createSession(owner, canvasId);
+      if (!sameIdentity(owner, epoch)) return;
       setSessions((prev) => [res.session, ...prev]);
+      activeSessionIdRef.current = res.session.id;
       setActiveSessionId(res.session.id);
       onSessionChangeRef.current?.(res.session.id);
       setMessages([]);
@@ -249,12 +271,15 @@ export function useChatSessions({
     async (sessionId: string) => {
       if (streaming || !sessionId) return;
       const token = accessTokenRef.current;
+      const epoch = getIdentityEpoch();
       const remaining = sessionsRef.current.filter((s) => s.id !== sessionId);
 
       if (remaining.length === 0) {
         try {
           const res = await createSession(token, canvasId);
+          if (!sameIdentity(token, epoch)) return;
           setSessions([res.session]);
+          activeSessionIdRef.current = res.session.id;
           setActiveSessionId(res.session.id);
           onSessionChangeRef.current?.(res.session.id);
           setMessages([]);
@@ -265,24 +290,26 @@ export function useChatSessions({
         setSessions(remaining);
         if (sessionId === activeSessionIdRef.current) {
           const next = remaining[0]!;
+          activeSessionIdRef.current = next.id;
           setActiveSessionId(next.id);
           onSessionChangeRef.current?.(next.id);
           setMessagesLoading(true);
           fetchMessages(token, next.id)
             .then((msgRes) => {
+              if (!sameIdentity(token, epoch) || activeSessionIdRef.current !== next.id) return;
               const mapped = mapServerMessages(msgRes.messages);
               msgCacheRef.current.set(next.id, mapped);
               setMessages(mapped);
             })
-            .catch(() => setMessages([]))
-            .finally(() => setMessagesLoading(false));
+            .catch(() => { if (sameIdentity(token, epoch) && activeSessionIdRef.current === next.id) setMessages([]); })
+            .finally(() => { if (sameIdentity(token, epoch) && activeSessionIdRef.current === next.id) setMessagesLoading(false); });
         }
       }
 
       // Delete in background
       deleteSessionApi(token, sessionId).catch(() => {
         fetchSessions(token, canvasId)
-          .then((res) => setSessions(res.sessions))
+          .then((res) => { if (sameIdentity(token, epoch)) setSessions(res.sessions); })
           .catch(() => {});
       });
 
@@ -312,8 +339,10 @@ export function useChatSessions({
       console.warn("[chat] reloadMessages called with empty sessionId, skipping");
       return;
     }
+    const owner = accessTokenRef.current, epoch = getIdentityEpoch();
     try {
-      const msgRes = await fetchMessages(accessTokenRef.current, sessionId);
+      const msgRes = await fetchMessages(owner, sessionId);
+      if (!sameIdentity(owner, epoch)) return;
       if (msgRes.messages && msgRes.messages.length > 0) {
         const mapped = mapServerMessages(msgRes.messages);
         msgCacheRef.current.set(sessionId, mapped);
@@ -347,5 +376,6 @@ export function useChatSessions({
     autoTitleSession,
     reloadMessages,
     accessTokenRef,
+    messageIdentityRef,
   };
 }

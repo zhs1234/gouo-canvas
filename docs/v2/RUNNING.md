@@ -2,7 +2,7 @@
 
 New API 是账号、渠道、价格、余额和消费日志的唯一权威；Studio API 负责画布业务、模型能力验证、有限智能体循环和请求去重；Studio SQLite 另存账号私有会话、项目和原始素材；浏览器负责编辑及本地草稿。服务和数据库不合并，不引入第二套账号系统。
 
-2026-10-01 本机实际环境为 Windows、Node24.15/npm11.12 和 Docker Desktop；日常三个服务已 healthy，generation/trial/renewal 保持关闭，账号未初始化。最新四角色隔离实操与问题修复见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)，共享来源限流启用门槛见 [NATIVE_RATE_LIMIT_GATE.md](NATIVE_RATE_LIMIT_GATE.md)。隔离 fixture 的真实注册和零钱包网关验证不表示日常实例已配置或真实供应商已验。
+2026-10-02 系统分支使用 Windows、Node24.15/npm11.12 和 Docker Desktop，原日常服务未更新。2026-10-01日常healthy/未初始化是当时快照，不能据此声称今天状态。当前独立合成目标60169的Native/Studio/web与明确本地supplier已通过实际恢复/浏览器验收；默认示例generation/trial/renewal/jobs仍关闭。最新证据见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md) 和 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)，共享来源限流启用门槛见 [NATIVE_RATE_LIMIT_GATE.md](NATIVE_RATE_LIMIT_GATE.md)。合成注册、用量和图片不表示真实供应商或商户资金已验。
 
 Windows 的默认 npm 缓存／日志目录在本环境不可写，曾出现 `Exit handler never called`。从仓库根在 PowerShell 使用项目内缓存；这些目录已被忽略，不修改锁文件或根 legacy 依赖：
 
@@ -20,7 +20,7 @@ npm run check
 
 需要 Docker Engine 与 Docker Compose v2.24+（隔离测试使用 `!reset`），以及构建时访问 npm、官方 GitHub 发布资产和公开基础镜像。New API 固定 `v1.0.0-rc.40`，amd64/arm64 发布二进制按官方 SHA-256 校验；不依赖任何 `/workspace/...` 环境 helper，不构建旧 `server/`。
 
-仓库根运行：
+默认Compose固定项目名`gouo-v2`、端口8080。仅不存在该项目/数据卷且8080空闲的干净机器可直接执行以下命令；当前用户机器已有日常项目，系统worktree不能用此默认命令自动更新它。干净机器从仓库根运行：
 
 ```sh
 docker compose --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --build --wait
@@ -28,7 +28,18 @@ docker compose --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --b
 
 访问 **http://localhost:8080/studio/**。所有发布端口默认仅绑定回环地址；New API 与 Studio API 不直接发布宿主端口。初始模型禁用，不需要任何账号密码或 API key，不会调用模型。
 
-- `/studio/`：现有画布、账号和流式聊天。
+在已有日常项目的本机新开开发实例时，先确认`gouo-system-local`未使用且18080空闲，然后在仓库根的单独PowerShell终端执行：
+
+```powershell
+$env:GOUO_HTTP_PORT = '18080'
+$env:GOUO_PUBLIC_ORIGIN = 'http://localhost:18080'
+docker compose -p gouo-system-local --env-file v2/deploy/.env.example -f v2/deploy/compose.yml up --build --wait
+```
+
+入口为`http://localhost:18080/studio/`；shell变量优先于示例env，独立项目名创建自己的Native/Studio卷。重复运行会更新该独立开发项目，因此不要把同名已有数据当全新环境。不复用验收目标60169的合成配置；完成后关闭本终端可避免其端口变量影响其他命令。新实例初始化与渠道配置仍由操作者通过原生页面处理。
+
+- `/studio/`：默认assistant-ui聊天，共同侧栏/账号/费用入口。
+- `/studio/canvas`：原Loomic无限画布、Agent与独立图片；旧id/session/query/hash继续兼容。
 - `/setup`、`/sign-in`、`/security`、`/wallet`：New API 原生初始化/控制台，沿用其权限校验。
 - `/studio/chat`：assistant-ui 正式聊天入口，按 New API 账号持久化会话，复用原生账号与费用面板；`/studio/chat-lab` 兼容跳转，不覆盖旧画布历史。
 - `/studio/canvas-lab`：官方 Excalidraw 候选：无参数为本地独立草稿；带 project 参数为账号私有 Studio 项目，可从聊天图片打开或插入。旧草稿仅副本导入，不覆盖。
@@ -107,6 +118,10 @@ Studio 会话只保存 New API 的数字 owner ID，不保存密码或复制账�
 
 
 ## 安全配置交接
+
+持久图片任务开关 `GOUO_ENABLE_IMAGE_JOBS=false`、全实例活跃上限 `GOUO_MAX_IMAGE_JOBS=2`（1–16）见 [B3-JOBS.md](B3-JOBS.md)。只有actual目录批准时Loomic直接图片使用202；已有任务只读恢复不依赖当前开关。关页不取消原授权；API重启未提交需本人明确授权，已提交未知不重发，原raw已暂存可仅本地保存。不是独立Worker，不能把浏览器Cookie或账号Bearer放入数据库。原结果/私有asset/project读均按本人鉴权；公网入口不开放/v1旁路。
+
+合成验收双数据库冷备份、同实例空目标恢复和实际挂载hash复核见 [BACKUP-RESTORE.md](BACKUP-RESTORE.md)。同时恢复Native＋Studio并保持instance/config/secret/源码，源保持停止，只启动一个可写副本；不要使用会down --volumes的acceptance stop进行冷备份。该工具拒绝日常/生产库，生产加密/保留/容量策略另门。
 
 T1.4 的有限生成权限续用与原生登录导航均为 prepared opt-in 配置。日常栈仍不启用试用、生成或续用；人工核验文件不会自行开放网络。具体原生固定版本、三个私有模型入口、Redis/batch关闭、状态/version/幂等合同及unknown限制见 [TOKEN-RENEWAL.md](TOKEN-RENEWAL.md)。`GOUO_ENABLE_TOKEN_RENEWAL=false` 是示例默认值。未知续用不能借付款偏好恢复工具解锁。
 

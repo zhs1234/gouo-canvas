@@ -1,4 +1,20 @@
-# API 与数据契约（设计，不表示接口已经实现）
+# API 已实现契约与历史设计
+
+## B3-I 已实现的持久图片任务（2026-10-02）
+
+`GET /api/studio/models`现公开`imageJobsEnabled:boolean`，仅job开关、生成批准和本人可用image能力全部满足为true；缺字段的旧客户端按false处理。这个值只声明本次目录的执行能力，不代表已受理/生成或支付。既有任务始终沿保存的执行方式和原ID读取，不能因目录关闭或POST失败改用同步/images重新发送。目录不含raw/Native写内部状态或密钥。
+
+完整路由/状态/配置见 [B3-JOBS.md](B3-JOBS.md)。`POST /api/studio/image-jobs`使用原image参数和UUID Idempotency-Key，202返回`{jobId,requestId,kind:'image',status,createdAt,updatedAt,assetId?,pendingNativeOperation?}`；jobId=requestId=原Studio key，Native IDs仍在usage。GET本人原job，在completed才有公开image result；output_received的私有raw不返回。匿名401、异户404、参数或配置/付款批准漂移409；所有读private/no-store。
+
+同原key不从/images绕过；重复accepted/ready/submitted/raw/saved返回原202，completed同参数返回原200，unknown/needs_authorization/cancelled拒409。`authorize`/`cancel` body仅confirm:true，重授权仅确定未提交且原批准不变；cancel仅证明无模型外发和本次试用reserve。`finalize`只处理既有output_received/output_saved bytes，无模型/Native写；账本已保存失败与unknown不重发。关闭生成/job入口后GET和本地恢复仍可用。默认off、活跃上限2，22任务/4输出F合同及API203通过；前端/Native202/独立Worker不能由此提前记完成。
+
+## SYS-R1 已实现的原请求只读恢复（2026-10-02）
+
+`GET /api/studio/requests/:kind/:id/result`支持`kind=agent|image`、8–100字符原Studio幂等ID。使用New API本人身份，按owner/kind/key读取既有Ledger；匿名401，异户/不存在404，非法参数400（超过Fastify参数长度由框架先拒414）。返回`{success:true,data:{kind,requestId,status,createdAt,result?}}`，`requestId`是Studio幂等ID，`result.usage.requestIds`才是Native请求ID。
+
+running/unknown只返回状态，不返回终态结果、不推断失败/取消。completed返回经过公开字段白名单的原事件或图片，即使事件最后为run.failed也保持真实失败：Ledger completed表示已经保存终态，不代表模型成功。费用仅归一化已有`recorded/pending + settlementState:unconfirmed`；fundingSelection只是trial/wallet选源意图，不是实扣凭据。新GET除身份校验外不查询Native账单/模型/token、不调用供应商、不修改SQLite或释放held。
+
+读取JSON上限48MiB；单图base64保持40MiB边界。未知状态、坏JSON/时间、非法结果形状/超限均脱敏502，原数据不变。响应`private,no-store`。旧`GET /api/studio/requests/:kind/:id`仍做费用核对；`GET /api/studio/runs/:id`仍只读已有会话历史。此新增接口覆盖无threadId的Loomic和独立生图已保存结果；前端接线与持久Worker尚未由SYS-R1完成。
 
 公共 TypeScript 入口 `v2/packages/contracts/src/index.ts`。服务端 HTTP 边界必须做自己的运行时校验与鉴权，不能把前端校验当安全机制。计划中的业务 API 成功 `{ success: true, data }`；失败 `{ success: false, error: { code, message, requestId } }`，禁止把上游密钥、完整错误响应或内部 URL 返给用户。已接入的 New API 账号接口使用上游 `{ success, message, data }` envelope，由 v2/apps/studio/src/api.ts 处理。
 
