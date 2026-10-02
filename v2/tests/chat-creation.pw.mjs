@@ -43,6 +43,90 @@ async function creationFixture(page, id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
   return { metadata, state }
 }
 
+// Complete creation, catalog and SSE with browser-native Responses in one
+// task. Network interception alone leaves React time to commit the handoff and
+// cannot deterministically exercise a terminal event preceding that commit.
+async function immediateCreationFixture(page, { handoffFirst = false, failDetails = false } = {}) {
+  const fixture = await creationFixture(page)
+  await page.addInitScript(({ metadata, handoffFirst, failDetails }) => {
+    const original = window.fetch.bind(window)
+    const state = window.fastThreadCreation = { creates: 0, sends: [], details: [], runs: [], catalogReleased: false }
+    const json = data => new Response(JSON.stringify({ success: true, data }), { headers: { 'Content-Type': 'application/json' } })
+    const catalog = { generationEnabled: true, models: [{ id: 'fixture-chat', displayName: '明确同步响应协议测试', kind: 'chat', accessible: true }] }
+    window.fetch = (url, init) => {
+      const path = new URL(typeof url === 'string' ? url : url.url, location.href).pathname
+      if (path === '/api/studio/models') {
+        if (handoffFirst && state.creates && !state.catalogReleased) return new Promise(resolve => {
+          state.releaseCatalog = () => { state.catalogReleased = true; resolve(json(catalog)) }
+        })
+        return Promise.resolve(json(catalog))
+      }
+      if (path === '/api/studio/threads') {
+        if (init?.method === 'POST') { state.creates++; return Promise.resolve(json(metadata)) }
+        return Promise.resolve(json({ items: state.creates ? [metadata] : [], nextOffset: null }))
+      }
+      if (path === `/api/studio/threads/${metadata.id}`) {
+        state.details.push({ sends: state.sends.length })
+        if (failDetails) return Promise.resolve(new Response(JSON.stringify({ success: false, message: '明确完成后刷新失败' }), { status: 503, headers: { 'Content-Type': 'application/json' } }))
+        return Promise.resolve(json({ ...metadata, runs: state.runs, nextOffset: null }))
+      }
+      if (path === '/api/studio/runs/stream') {
+        const payload = JSON.parse(init.body)
+        state.sends.push(payload)
+        const events = [{ runId: payload.runId, type: 'message.delta', delta: '同任务完整回答' }, { runId: payload.runId, type: 'run.completed' }]
+        state.runs.push({ runId: payload.runId, prompt: payload.prompt, status: 'completed', events })
+        return Promise.resolve(new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'Content-Type': 'text/event-stream' } }))
+      }
+      return original(url, init)
+    }
+  }, { metadata: fixture.metadata, handoffFirst, failDetails })
+  return fixture
+}
+
+for (const handoffFirst of [false, true]) test(`immediate terminal delivery preserves authoritative recovery when handoffFirst=${handoffFirst}`, async ({ page }) => {
+  const { metadata, state } = await immediateCreationFixture(page, { handoffFirst })
+  await page.goto('./chat')
+  const input = page.getByLabel('消息', { exact: true })
+  await expect(input).toBeEnabled()
+  await input.fill('终态和首次创建交接不得互相覆盖')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  if (handoffFirst) {
+    await expect(page).toHaveURL(new RegExp(`thread=${metadata.id}`))
+    await expect.poll(() => page.evaluate(() => typeof window.fastThreadCreation.releaseCatalog)).toBe('function')
+    expect(await page.evaluate(() => window.fastThreadCreation.details)).toEqual([])
+    expect(await page.evaluate(() => window.fastThreadCreation.sends)).toEqual([])
+    await page.evaluate(() => window.fastThreadCreation.releaseCatalog())
+  }
+  await expect(page.getByText('同任务完整回答', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`thread=${metadata.id}`))
+  await expect.poll(() => page.evaluate(() => window.fastThreadCreation.details.length)).toBeGreaterThan(0)
+  await expect(input).toBeEnabled()
+  expect(await page.evaluate(() => window.fastThreadCreation.creates)).toBe(1)
+  expect(await page.evaluate(() => window.fastThreadCreation.sends.length)).toBe(1)
+  expect(await page.evaluate(() => window.fastThreadCreation.details.every(detail => detail.sends === 1))).toBe(true)
+  await input.fill('下一次仍使用同一个会话')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => window.fastThreadCreation.sends.length)).toBe(2)
+  await expect(input).toBeEnabled()
+  expect(await page.evaluate(() => window.fastThreadCreation.creates)).toBe(1)
+  expect(state.pageErrors).toEqual([])
+})
+
+test('immediate terminal delivery with a failed authoritative read stays locked without resubmission', async ({ page }) => {
+  const { state } = await immediateCreationFixture(page, { failDetails: true })
+  await page.goto('./chat')
+  const input = page.getByLabel('消息', { exact: true })
+  await expect(input).toBeEnabled()
+  await input.fill('已完成但未核对记录时不要重复提交')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(page.getByText('同任务完整回答', { exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText('明确完成后刷新失败')
+  await expect(input).toBeDisabled()
+  expect(await page.evaluate(() => window.fastThreadCreation.creates)).toBe(1)
+  expect(await page.evaluate(() => window.fastThreadCreation.sends.length)).toBe(1)
+  expect(state.pageErrors).toEqual([])
+})
+
 test('metadata-only creation sends once and restores the complete original history', async ({ page }) => {
   const { metadata, state } = await creationFixture(page)
   await page.goto('./chat')

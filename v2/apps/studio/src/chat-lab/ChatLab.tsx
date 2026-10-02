@@ -37,7 +37,7 @@ function GuestConversation({ login }: { login: () => void }) {
     if ((event.target as Element).closest('button[aria-label="发送"]')) { event.preventDefault(); event.stopPropagation(); login() }
   }}><Thread components={{ Welcome: ChatWelcome }} composerFooter={<div className="studio-chat-home-signin px-2 py-1 text-sm text-muted-foreground">登录后即可保存会话并发送创作需求。<Button variant="link" onClick={login}>登录账号</Button></div>} /></div></AssistantRuntimeProvider>
 }
-function LabRuntime({ model, imageModel, selectionBlocked, thread, scope, reload, created, refreshing }: { model: string; imageModel?: string; selectionBlocked: boolean; thread: SavedThread; scope: string; reload: () => void; created: (thread: SavedThread) => void; refreshing: boolean }) {
+function LabRuntime({ model, imageModel, selectionBlocked, thread, snapshotVersion, scope, reload, created, refreshing }: { model: string; imageModel?: string; selectionBlocked: boolean; thread: SavedThread; snapshotVersion: number; scope: string; reload: () => void; created: (thread: SavedThread) => void; refreshing: boolean }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const consent = useBalanceConsent(String(user?.id) + ":" + scope)
@@ -45,6 +45,7 @@ function LabRuntime({ model, imageModel, selectionBlocked, thread, scope, reload
   useEffect(() => { lifetime.current = new AbortController(); return () => lifetime.current.abort() }, [])
   const runtimeRef = useRef<AssistantRuntime | null>(null)
   const runInFlight = useRef(false)
+  const applySnapshot = useRef(() => {})
   const destination = useRef(thread.id)
   const createAttempted = useRef(false)
   const [creationUnconfirmed, setCreationUnconfirmed] = useState(false)
@@ -90,21 +91,27 @@ function LabRuntime({ model, imageModel, selectionBlocked, thread, scope, reload
         }
       }
       throw error
-    } finally { runInFlight.current = false }
+    } finally { runInFlight.current = false; applySnapshot.current() }
   } }), [model, imageModel, selectionBlocked, created, queryClient, user?.id, consent.consume, finish])
   const initialMessages = useMemo(() => restoreMessages(thread), [thread])
   const runtime = useLocalRuntime(adapter, { initialMessages })
   runtimeRef.current = runtime
-  const snapshot = useRef(thread)
+  const appliedSnapshot = useRef(snapshotVersion)
   useEffect(() => {
-    if (snapshot.current === thread) return
-    snapshot.current = thread
-    // A successful read may replace history, but must not interrupt the live
-    // stream. Its terminal callback requests a new authoritative snapshot.
-    if (runInFlight.current || runtime.thread.getState().isRunning) return
-    runtime.thread.reset(restoreMessages(thread))
-    setNeedsRefresh(false)
-  }, [thread, runtime])
+    const apply = () => {
+      // Only a successful detail GET confirms history. Keep its snapshot pending
+      // while the adapter or SDK is running; creation metadata never confirms it.
+      if (lifetime.current.signal.aborted || appliedSnapshot.current === snapshotVersion
+        || runInFlight.current || runtime.thread.getState().isRunning) return
+      appliedSnapshot.current = snapshotVersion
+      runtime.thread.reset(restoreMessages(thread))
+      setNeedsRefresh(false)
+    }
+    applySnapshot.current = apply
+    apply()
+    const unsubscribe = runtime.thread.subscribe(apply)
+    return () => { unsubscribe(); applySnapshot.current = () => {} }
+  }, [thread, snapshotVersion, runtime])
   const [stopped, setStopped] = useState(false)
   const unknown = thread.runs.some(run => run.status === 'unknown')
   const unresolved = thread.runs.some(run => run.status === 'running' || run.status === 'unknown')
@@ -124,8 +131,8 @@ function OwnedThreads({ model, imageModel, selectionBlocked, toolbar, notice }: 
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300); return () => window.clearTimeout(timer) }, [search])
-  const [view, setView] = useState<{ thread: SavedThread; offset: number; key: string }>(() => ({ thread: { id: '', title: '新会话', updatedAt: '', runs: [] }, offset: 0, key: crypto.randomUUID() }))
-  const pendingCreated = useRef('')
+  const [view, setView] = useState<{ thread: SavedThread; offset: number; key: string; snapshotVersion: number }>(() => ({ thread: { id: '', title: '新会话', updatedAt: '', runs: [] }, offset: 0, key: crypto.randomUUID(), snapshotVersion: 0 }))
+  const pendingCreated = useRef<{ id: string; revision: number } | null>(null)
   const [error, setError] = useState('')
   const [reading, setReading] = useState(false)
   const [revision, revise] = useState(0)
@@ -141,42 +148,41 @@ function OwnedThreads({ model, imageModel, selectionBlocked, toolbar, notice }: 
     const abort = new AbortController()
     setError('')
     setReading(Boolean(id))
-    if (pendingCreated.current === id && id) {
-      pendingCreated.current = ''
-      setReading(false)
-      // A confirmed new thread starts with an empty history snapshot. An
-      // immediate read could return that old snapshot after the live run ends.
-      // Read again on its terminal callback or an explicit recovery gesture.
-      return () => abort.abort()
+    if (pendingCreated.current?.id === id && id) {
+      const skipInitialRead = pendingCreated.current.revision === revision
+      pendingCreated.current = null
+      // A terminal callback or explicit refresh may already share this commit
+      // with the new URL. Skip only the initial empty read, never that refresh.
+      if (skipInitialRead) { setReading(false); return () => abort.abort() }
     }
-    if (!id && !pendingCreated.current) setView(previous => previous.thread.id ? { thread: { id: '', title: '新会话', updatedAt: '', runs: [] }, offset: 0, key: crypto.randomUUID() } : previous)
+    if (!id && !pendingCreated.current) setView(previous => previous.thread.id ? { thread: { id: '', title: '新会话', updatedAt: '', runs: [] }, offset: 0, key: crypto.randomUUID(), snapshotVersion: 0 } : previous)
     if (id) request<SavedThread>(`/api/studio/threads/${encodeURIComponent(id)}?offset=${offset}`, { signal: abort.signal }).then(thread => {
-      if (!abort.signal.aborted) setView(previous => ({ thread, offset, key: previous.thread.id === id && previous.offset === offset ? previous.key : `${id}:${offset}` }))
+      if (!abort.signal.aborted) setView(previous => ({ thread, offset, key: previous.thread.id === id && previous.offset === offset ? previous.key : `${id}:${offset}`, snapshotVersion: previous.snapshotVersion + 1 }))
     }).catch(e => { if (!abort.signal.aborted) setError(e.message) }).finally(() => { if (!abort.signal.aborted) setReading(false) })
     return () => abort.abort()
   }, [id, revision, offset])
   function create() {
-    pendingCreated.current = ''
+    pendingCreated.current = null
     setError('')
     setOffset(0)
-    setView({ thread: { id: '', title: '新会话', updatedAt: '', runs: [] }, offset: 0, key: crypto.randomUUID() })
+    setView({ thread: { id: '', title: '新会话', updatedAt: '', runs: [] }, offset: 0, key: crypto.randomUUID(), snapshotVersion: 0 })
     setParams({})
   }
   const created = useCallback((thread: SavedThread) => {
     // The navigation guard may commit the new URL after this state update.
     // Keep the draft runtime alive across that specific creation handoff.
-    pendingCreated.current = thread.id
+    pendingCreated.current = { id: thread.id, revision }
     setView(previous => ({ ...previous, thread }))
     setParams({ thread: thread.id })
-  }, [setParams])
+  }, [setParams, revision])
   const detail = view.thread
-  const visible = (detail.id === id || !id && pendingCreated.current === detail.id) && view.offset === offset
+  const visible = (detail.id === id || !id && pendingCreated.current?.id === detail.id) && view.offset === offset
   return <StudioShell toolbar={toolbar} notice={notice} list={<><StudioThreadList threads={threads} id={id} create={create} select={id => setParams({ thread: id })} loading={false} search={search} setSearch={setSearch} searching={searching} />{list.error && <p role="alert">会话查询失败：{list.error.message}</p>}{list.hasNextPage && !searching && <Button variant="ghost" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>更多会话</Button>}</>}>
     <section className="flex h-full flex-col">
       {error && <div role="alert" className="studio-chat-notice"><p>{error}</p><Button variant="outline" disabled={reading} onClick={reload}>重新读取会话</Button></div>}
       {visible ? <>
         {(offset > 0 || detail.nextOffset != null) && <div className="flex gap-2 px-4 py-2">{offset > 0 && <Button variant="ghost" onClick={() => setOffset(0)}>返回最新记录</Button>}{detail.nextOffset != null && <Button variant="ghost" onClick={() => setOffset(detail.nextOffset!)}>查看更早记录</Button>}</div>}
-        <div className="flex-1 min-h-0"><LabRuntime key={view.key} scope={view.key} thread={detail} model={offset ? '' : model} imageModel={imageModel} selectionBlocked={selectionBlocked} reload={reload} created={created} refreshing={reading || list.isFetching} /></div>
+        <div className="flex-1 min-h-0"><LabRuntime key={view.key} scope={view.key} thread={detail} snapshotVersion={view.snapshotVersion} model={offset ? '' : model} imageModel={imageModel} selectionBlocked={selectionBlocked} reload={reload} created={created} refreshing={reading || list.isFetching} /></div>
       </> : !error && <div role="status" className="flex h-full items-center justify-center text-muted-foreground">加载会话…</div>}
     </section>
   </StudioShell>

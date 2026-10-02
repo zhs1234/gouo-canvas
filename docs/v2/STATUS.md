@@ -1,5 +1,20 @@
 # 实际交付与验证状态
 
+## PR #4 首次会话终态交接竞态修复（2026-10-02）
+
+同一 `9818305` 的 [push CI](https://github.com/zhs1234/gouo-canvas/actions/runs/36985546147) 全通过：110领域/205API、浏览器206/206（6.8分钟）、三阶段stack；[PR CI](https://github.com/zhs1234/gouo-canvas/actions/runs/36985550668) 浏览器204/206（8.2分钟），stack未执行。原成功/失败日志分别保存 `.local/pr4-ci-push-first-success.log` 与 `.local/pr4-ci-pr-first-failure.log`，不把另一路成功代替该失败。
+
+失败对应真实竞态：首次created的metadata/URL与finish(true)的revision可同批commit，旧pendingCreated无条件skip吞掉唯一终态GET，回答已出现但输入保持禁用。另一处旧snapshot effect在SDK仍运行时先标记快读快照已消费，导致之后无法应用。现在pendingCreated记录创建revision，只有没有终态或显式refresh时才跳过初始空GET；成功detail GET才推进snapshotVersion，metadata不确认，快照待adapter和SDK均停止再应用，并清理订阅/卸载迟到。失败GET不解除needsRefresh，unknown/running仍由服务端状态阻止发送，没有新增模型重试或自动切换。
+
+| 本地实际命令 | 结果 | 证据 |
+| --- | --- | --- |
+| 新3项`immediate terminal`回归，旧源码 | **2失败/1通过，16.3秒**；同browser task终态先到与失败读均稳定复现 | `.local/pr4-handoff-before-fix.log`；`output/playwright/pr4-handoff-before-fix/` |
+| `npm run test:e2e:isolated -- tests/chat-creation.pw.mjs tests/chat-home.pw.mjs --workers=1 --repeat-each=2 ...` | **44/44，51.5秒 exit0**；终态先到/URL先到、失败读、next send、失权/重复/owner/旧unknown均覆盖 | `.local/pr4-handoff-after-fix.log`；`output/playwright/pr4-handoff-after-fix/` |
+| `npm run check` | exit0；**110领域/205API**、typecheck、build10.60秒 | `.local/pr4-handoff-check.log` |
+| `node --check tests/chat-creation.pw.mjs`、`git diff --check` | exit0 | 无新依赖；不增timeout/retry、不删失败断言 |
+
+新增3项浏览器合同后全套为209。修复推送后重新等待PR最新head的两路CI；合并结果仍以 [PR #4](https://github.com/zhs1234/gouo-canvas/pull/4) 与Git记录为准，不提前写成功。本次继续只合入v2，不改main或生产；G1/G2/P、B3-II门项保持。
+
 ## 开发分支推送与 v2 PR（2026-10-02）
 
 用户批准“推送统一开发分支 → 创建目标为v2的PR → CI通过后合并”。`git push --set-upstream origin codex/registration-trial` 已exit0；`gh pr create --base v2 --head codex/registration-trial` 已exit0，创建 [PR #4](https://github.com/zhs1234/gouo-canvas/pull/4)，并附加到当前Codex任务。远端v2起点 `25f57e1` 为本地整合交付 `5a21998` 的祖先，初次提交领先68个commit；本地应用/UI与系统交付均已保留。独立审查核对完整diff，不涉及legacy src/server、root package/lockfile或main。
