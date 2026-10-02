@@ -1,5 +1,13 @@
 # 系统打通：实际进度
 
+## QA-FINAL 首次聊天真实合同修复（2026-10-02）
+
+此前最终源码check110/205/build11.04及203PW passed后，`npm run test:stack` Phase1固定未初始化Native边界和Phase2 F2/2 11.7秒通过，Phase3 timeout90s。截图实际页面为runs.flatMap undefined：新POST /threads返回history.create真实meta，UI created把其当SavedThread重渲染，发送前崩溃。不是删除断言/加等待可解决；首完整stack exit1保留 `.local/system-final-stack.log` 和 `.local/system-stack-first-failure` 的真实trace/screenshot。
+
+修复ChatLab/adapter区分ThreadMetadata（列表/创建）与SavedThread（detail历史），创建成功且UUID有效后明确初始runs[]，保持同runtime和原终态reload，无额外GET。空/非法ID不确定创建，输入保留/零model/不自动重建；历史GET仍严格真实runs而无兜底。新增chat-creation.pw.mjs三项，独立5190/reusefalse配置和原16聊天 **19/19 exit0，32.1秒**，typecheck4.64秒。
+
+root最终改动后 `npm run check` **exit0：87+23=110领域、205API、typecheck、build12.42秒**，`.local/system-final-check-after-chat.log`。真实恢复目标60169保持API/Native不重启，仅dist已更新；新owner12注册/空准备thread不调用模型，然后NativeRSA实际UI登录redirect默认首页。唯一UI POST /threads返回实际meta无runs，再唯一POST /runs/stream，fixedNative/default模型及合法finish最终completed。provider chat1/image0增量、唯一Native12合成quota与usage request ID对应、4→3聊天试用；原thread `36332c9c-1d3a-442f-8e77-1d27e92f1e49`、run `980f561f-6383-4eab-b7ab-493f88e64b08`。fullreload显示同原回答，GET历史精确相等、完成后Native资金安全投影/Studio全表/provider hash不变，无新模型。root ignored opt-in `.local/system-default-chat-native.mjs` 明确同合成instance/owner/全localchannel/binary、0原requests、report wx、429即停；报告 `.local/system-default-chat-native-report.json` **passed，CLI6.972秒**。P未执行；后续完整206PW/stack结果另记。
+
 ## B3-N2 连续真实UI原图片任务（2026-10-02）
 
 opt-in browser-image-jobs-native.cases.mjs/fixture及仅明确B3N2本地图片标签的hold/continue供应商控制，process/config/control/entry均绑定原instance UUID。只recreate自己的恢复目标fixture-provider加载设施，不重启Native/API、不改限流；源保持冷停止。注册全新普通owner11+空thread（0模型），领取由唯一原UI提交ensureTrial完成；独立owner7仅只读授权核验。实际target60169原binary/source核验、全部channel本地、fresh请求/job/asset/reservation零行、当前supplier控制版本/同UUID后才允许模型提交。

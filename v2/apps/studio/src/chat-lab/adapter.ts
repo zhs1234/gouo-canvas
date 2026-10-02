@@ -5,7 +5,8 @@ import { readEventStream } from '../event-stream'
 export type StudioEvent = { runId: string; type: string; delta?: string; toolCallId?: string; toolName?: string; outputSummary?: string; artifacts?: { type: string; url: string }[]; error?: { message: string }; usage?: unknown }
 export type GeneratedImageReference = { runId: string; toolCallId: string; artifactIndex: number; url: string }
 export type SavedRun = { runId: string; prompt: string; status: 'running' | 'completed' | 'failed' | 'unknown'; events: StudioEvent[]; usage?: unknown }
-export type SavedThread = { id: string; title: string; updatedAt: string; nextOffset?: number | null; runs: SavedRun[] }
+export type ThreadMetadata = { id: string; title: string; createdAt?: string; updatedAt: string }
+export type SavedThread = ThreadMetadata & { nextOffset?: number | null; runs: SavedRun[] }
 type Parts = NonNullable<ChatModelRunResult['content']>
 export type PublicFailure = { message: string; walletSuggested: boolean }
 function publicFailure(message: string, status?: number): PublicFailure {

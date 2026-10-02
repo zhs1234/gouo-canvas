@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## QA-FINAL 首次聊天元信息合同修复（2026-10-02）
+
+整栈Phase1边界及Phase2两个测试通过后，Phase3 fresh用户首次发送真实触发崩溃：POST /threads仅返回meta，UI误当含runs的SavedThread，restoreMessages.flatMap抛错。原日志 `.local/system-final-stack.log`、截图/trace复制到 `.local/system-stack-first-failure` 保留。拆分ThreadMetadata和SavedThread，仅确定新建且有效UUID时构造该新thread的初始runs[]；不吞坏历史、不增加GET影响运行时、不重放未确认创建。新3F覆盖meta无runs一create一model、空/非法ID保输入零model；独立 **19/19 exit0，32.1秒**（含原16聊天）。
+
+root整合 `npm run check` 再次 **exit0：110领域、205API、typecheck/build12.42秒**，`.local/system-final-check-after-chat.log`。最终真实dist Native普通owner12加密UI登录，默认首页唯一新建meta→唯一发送→completed；固定supplier chat+1/image0、Native一条12合成quota记录、试用剩3、原thread/run完整reload仅GET、保护hash不变。报告 `.local/system-default-chat-native-report.json` **passed，CLI6.972秒**；原thread `36332c9c-1d3a-442f-8e77-1d27e92f1e49`、run `980f561f-6383-4eab-b7ab-493f88e64b08`。真实采购0，原图任务不重跑。最终206PW/三阶段stack尚在复验，另记最终结果。
+
 ## B3-N2 连续关页恢复实际通过（2026-10-02）
 
 最终build的真实UI、固定Native和本地受控供应商，全新普通owner11：同browser事件序号证明模式/原UUID/参数/owner先IDB transaction.complete再原fetch，唯一POST202；原任务submission_started且image reserved/held时关页，同API进程继续原调用完成。新tab由HttpOnly Cookie恢复本人和原画布，真实offline原GET失败保占位，online只GET原ID插入同PNG，实际Excalidraw文档下载和reload单图。原job `0d41a72d-f701-4fef-a442-f7be465b14f7`，PNG hash `796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3`；provider image+1/chat0、恢复业务写0、异户404/匿名401、恢复保护hash不变。连续报告 `.local/native-image-jobs-ui-continuous-report.json` **passed，命令9.17秒 exit0**；新11+旧24+旧5设施F由root **40/40 exit0，1.540秒**。真实付费调用0。
