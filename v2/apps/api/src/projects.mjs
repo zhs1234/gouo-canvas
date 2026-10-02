@@ -104,6 +104,12 @@ export async function validateImage(dataURL) {
   if (typeof dataURL !== 'string' || dataURL.length > 40 * 1024 * 1024 || !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(dataURL)) throw new StudioError('仅支持有效的内嵌 PNG、JPEG、WebP 图片', 400)
   const encoded = dataURL.slice(dataURL.indexOf(',') + 1), bytes = Buffer.from(encoded, 'base64')
   if (!bytes.length || bytes.length > 30 * 1024 * 1024 || bytes.toString('base64') !== encoded) throw new StudioError('图片编码或大小无效', 400)
+  const { metadata } = await validateImageBytes(bytes)
+  if (!dataURL.startsWith(`data:image/${metadata.format};base64,`)) throw new StudioError('图片 MIME 与内容不一致', 400)
+  return { bytes, metadata }
+}
+export async function validateImageBytes(bytes) {
+  if (!(bytes instanceof Uint8Array) || !bytes.length || bytes.length > 30 * 1024 * 1024) throw new StudioError('图片编码或大小无效', 400)
   let metadata
   try {
     const image = sharp(bytes, { limitInputPixels: 24_000_000 })
@@ -111,6 +117,5 @@ export async function validateImage(dataURL) {
     if (!['png', 'jpeg', 'webp'].includes(metadata.format) || !metadata.width || !metadata.height || (metadata.pages ?? 1) !== 1) throw new Error('unsupported')
     await image.stats() // Decode all image bytes, not merely a plausible header.
   } catch { throw new StudioError('图片内容无效或超过 2400 万像素', 400) }
-  if (!dataURL.startsWith(`data:image/${metadata.format};base64,`)) throw new StudioError('图片 MIME 与内容不一致', 400)
   return { bytes, metadata }
 }

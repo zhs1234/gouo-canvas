@@ -1,6 +1,6 @@
 # B3 持久图片任务：授权与恢复方案
 
-2026-10-02，系统分支已实现并合同验证B3-I。默认关闭，同API进程内存授权执行；尚未接入前端或完成Native任务实测。独立Worker、持久后台授权及原始输出在解码前暂存仍未完成，以下分别区分当前合同与后续方案。
+2026-10-02，系统分支已实现并合同验证B3-I及B3.3的图片解码前暂存。默认关闭，同API进程内存授权执行；尚未接入前端或完成Native202任务实测。独立Worker与持久后台授权仍未完成，以下分别区分当前合同与后续方案。
 
 ## 当前 B3-I 接口
 
@@ -12,13 +12,15 @@
 | `GET /api/studio/image-jobs/:id` | 仅本人、private/no-store；真实状态；completed可返回已保存原图与保守费用。 |
 | `POST /api/studio/image-jobs/:id/authorize` | body仅`{"confirm":true}`；只允许确定未提交的needs_authorization，重新核验原参数/组/模型/付款来源，202后执行同一任务。 |
 | `POST /api/studio/image-jobs/:id/cancel` | body仅`{"confirm":true}`；需要无模型提交、无本次试用预留、无未知Native写证据；只释放新业务占用。 |
-| `POST /api/studio/image-jobs/:id/finalize` | 仅output_saved；核验本人原图hash和元数据，本地事务完成，不再次调用模型。 |
+| `POST /api/studio/image-jobs/:id/finalize` | 仅output_received/output_saved；核验本人原图hash、完整解码及元数据，本地事务完成，不再次调用模型。 |
 
-新增image_jobs/image_job_reservations/image_job_outbox保存业务状态，不保存账号Bearer/relay key/Cookie或自建金额。接收和提交屏障各自使用SQLite事务；提交前trial reserve与唯一model_submissions同事务。进程重启明确区分未提交需授权、已提交未知、已保存原图本地完成。原图验证成功后与output_saved同事务写私有asset BLOB；**响应收到但解码/持久化前崩溃仍unknown，不假称已实现B3.3原始输出暂存**。
+新增image_jobs/image_job_reservations/image_job_outbox保存业务状态，不保存账号Bearer/relay key/Cookie或自建金额。接收和提交屏障各自使用SQLite事务；提交前trial reserve与唯一model_submissions同事务。进程重启明确区分未提交需授权、已提交未知、已保存原图本地完成。image_job_staging在有界HTTP JSON读取和规范base64转换后、第一次Sharp metadata之前保存私有原bytes/hash及output_received；验证成功后原bytes与output_saved同事务写asset，核验完全一致后才删除暂存。HTTP不完整/JSON错误/暂存未提交仍unknown，不能本地恢复尚未取得的原图。
+
+暂存30MiB原bytes/40MiB编码，HTTP JSON实际读上限48MiB；GET在完整验证前不发布raw，继续拒绝binary和URL-only，不增加URL下载。损坏hash/格式/像素/截断raw保持私有，将这个新模型请求unknown、原key/held保护；本地存储失败保output_received/output_saved可仅保存重试。启动或显式finalize只读取旧bytes/既有Ledger request IDs，费用pending/unconfirmed，不访问Native或模型（HTTP入口认证GET仍保留）。
 
 执行阶段只在真实POST创建令牌/购买试用和PUT资金偏好前建立Native写标记；token-key的只读POST及搜索故障不伪装成未知写。标记仅由原helper的完整receipt/token/readback成功清除，响应丢失或崩溃不自动解锁。
 
-实际18项新顶层F合同覆盖匿名/异户、参数/批准漂移、重复/并发、取消/授权/关闭开关、SQLite原子回滚、密钥不落盘、三阶段child-process kill、原图本地恢复及真实写未知和只读失败对照。全check实际69领域/195API、类型和build11.27秒通过，详情见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。没有真实付费调用或独立队列依赖。
+实际22项任务＋4项输出F合同覆盖匿名/异户、参数/批准漂移、重复/并发、取消/授权/关闭开关、SQLite原子回滚、密钥不落盘、child-process kill（含pre-Sharp hook）、原图本地恢复及真实写未知和只读失败对照。root最新API203/203 exit0，阶段命令见 [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。没有真实付费调用或独立队列依赖。
 
 ## 先交付的 B3-I
 
@@ -41,14 +43,16 @@ stateDiagram-v2
     ready --> submission_started: 先持久提交意图
     ready --> needs_authorization: 授权失效或API重启
     ready --> cancelled_before_submission: 明确未外发且无未知Native写
-    submission_started --> output_saved
+    submission_started --> output_received: 私有原bytes先暂存
+    output_received --> output_saved: 本地完整解码和asset保存
+    output_received --> unknown: raw损坏，保原key及held
     submission_started --> unknown: 已外发意图且结果不明
     output_saved --> completed: 仅本地保存和验证
     needs_authorization --> ready: 本人明确重新授权同一未提交任务
     completed --> [*]
 ```
 
-启动恢复：accepted/ready且无提交标记转needs_authorization；submission_started转unknown；output_saved仅恢复本地处理；completed只读返回。未知提交不得重新授权再生成。lease到期不证明供应商停止，TTL不自动退回权益或资金。
+启动恢复：accepted/ready且无提交标记转needs_authorization；submission_started转unknown；output_received/output_saved仅恢复本地处理；completed只读返回。未知提交不得重新授权再生成。lease到期不证明供应商停止，TTL不自动退回权益或资金。
 
 现有`Trial.remaining()`统计全部reservation；实现新released_before_submission时只排除这种具有证明的新状态，历史reserved/unknown保留。对未领取试用的用户也必须按现有严格资金receipt流程，不悄悄改为钱包。新增任务owner并发守卫应与现有同步生成/资料/领取/续用统一，不能只新增另一个busy Set。
 

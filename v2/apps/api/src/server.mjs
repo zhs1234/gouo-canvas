@@ -1,7 +1,7 @@
 import Fastify from 'fastify'
 import { z } from 'zod'
 import { catalog, isAvailable, generationEnabled } from './config.mjs'
-import { Projects, documentSchema, validateImage } from './projects.mjs'
+import { Projects, documentSchema, validateImage, validateImageBytes } from './projects.mjs'
 import { History } from './history.mjs'
 import { Ledger } from './ledger.mjs'
 import { generateImage, decodeImage, StudioError } from './images.mjs'
@@ -347,7 +347,7 @@ export function createServer(config, overrides = {}) {
         || (method === 'PUT' && path === '/api/subscription/self/preference')) jobs.native(owner, key, true)
       return fetcher(url, init)
     } : fetcher
-    let transportStarted = false, externalStarted = false
+    let transportStarted = false, externalStarted = false, localValidationStarted = false
     try {
       fundingState.assertReady(owner)
       renewals.assertReady(owner)
@@ -387,7 +387,7 @@ export function createServer(config, overrides = {}) {
       transport?.start()
       transportStarted = Boolean(transport)
       const requests = []
-      const result = await action({ ...context, onGatewayRequest: async info => {
+      const result = await action({ ...context, ...(job ? { onImageOutput: bytes => jobs.stageOutput(owner, key, bytes) } : {}), onGatewayRequest: async info => {
         fundingState.assertReady(owner)
         let selected = 'account'
         if (managedFunding) {
@@ -416,14 +416,8 @@ export function createServer(config, overrides = {}) {
       } } : {}), onGatewayResponse: info => { ledger.gateway(owner, kind, key, info); requests.push(info) } })
       if (managedFunding) result.fundingSelection = fundingSelection
       if (job) {
-        if (requests.length) result.usage = { state: 'pending', settlementState: 'unconfirmed', requestCount: requests.length,
-          requestIds: requests.map(info => info.requestId).filter(id => typeof id === 'string' && /^[\w-]{1,64}$/.test(id)), currency: 'CNY' }
-        const prepared = await validateImage(result.url)
-        const output = savedResults.image.parse({ ...result, width: prepared.metadata.width, height: prepared.metadata.height, mimeType: `image/${prepared.metadata.format}` })
-        jobs.transaction(() => {
-          const asset = projects.saveImage(owner, key, prepared)
-          jobs.saveOutput(owner, key, output, asset.id)
-        })
+        localValidationStarted = true
+        const output = await saveReceivedJob(owner, key)
         const usage = await recordedUsage(config, request.headers.authorization, requests, fetcher)
         if (usage) {
           output.usage = usage
@@ -447,7 +441,13 @@ export function createServer(config, overrides = {}) {
       return { success: true, data: result }
     } catch (error) {
       if (job) {
-        if (jobs.require(owner, key).status !== 'output_saved') { trial.finish(owner, kind, key, false); jobs.interrupted(owner, key) }
+        // Even a header decode failure cannot discard the durable original.
+        // Validation handles known invalid bytes; storage faults keep them for
+        // local retry. Neither path repeats Native or model work.
+        if (!localValidationStarted && jobs.require(owner, key).status === 'output_received') {
+          try { await completeLocalJob(owner, key) } catch { /* Original stays private. */ }
+        }
+        if (!['output_received','output_saved','completed','unknown'].includes(jobs.require(owner, key).status)) { trial.finish(owner, kind, key, false); jobs.interrupted(owner, key) }
         throw error
       }
       trial.finish(owner, kind, key, false)
@@ -497,15 +497,46 @@ export function createServer(config, overrides = {}) {
     if (existing && (approval !== existing.approval_hash || funding !== existing.funding_source)) throw new StudioError('原图片任务的模型能力或付款批准已变化，未切换或外发', 409)
     return { model, approval, funding }
   }
+  async function saveReceivedJob(owner, key) {
+    let prepared
+    try { prepared = await validateImageBytes(jobs.rawOutput(owner, key)) }
+    catch (error) {
+      if (error instanceof StudioError && [400,502].includes(error.status)) {
+        jobs.transaction(() => { jobs.invalidOutput(owner, key); trial.finish(owner, 'image', key, false) })
+        throw new StudioError('已保存原始图片无法安全验证，原始输出保留且未重新生成', 502)
+      }
+      throw error
+    }
+    const row = jobs.assertOriginal(owner, key), payload = imageBody.parse(jobs.payload(row)), attempts = ledger.detail(owner, 'image', key).attempts
+    const output = savedResults.image.parse({ url: `data:image/${prepared.metadata.format};base64,${Buffer.from(prepared.bytes).toString('base64')}`,
+      prompt: payload.prompt, width: prepared.metadata.width, height: prepared.metadata.height, mimeType: `image/${prepared.metadata.format}`,
+      ...(['trial','wallet'].includes(row.funding_source) ? { fundingSelection: { image: row.funding_source } } : {}),
+      ...(attempts.length ? { usage: { state: 'pending', settlementState: 'unconfirmed', requestCount: attempts.length,
+        requestIds: attempts.map(info => info.requestId).filter(id => typeof id === 'string' && /^[\w-]{1,64}$/.test(id)), currency: 'CNY' } } : {}) })
+    jobs.transaction(() => {
+      const asset = projects.saveImage(owner, key, prepared)
+      verifyJobAsset(owner, asset.id, output)
+      jobs.saveOutput(owner, key, output, asset.id)
+    })
+    return output
+  }
+  async function completeLocalJob(owner, key) {
+    if (jobs.require(owner, key).status === 'output_received') await saveReceivedJob(owner, key)
+    finalizeJob(owner, key)
+  }
   function finalizeJob(owner, key) {
     const row = jobs.require(owner, key)
     if (row.status !== 'output_saved') throw new StudioError('图片任务没有可本地完成的已保存输出', 409)
-    const output = savedResults.image.parse(JSON.parse(row.output)), asset = projects.verifySavedImage(owner, row.asset_id)
-    if (asset.dataURL !== output.url || asset.width !== output.width || asset.height !== output.height || asset.mimeType !== output.mimeType) throw new StudioError('已保存图片与任务结果不一致，未重新生成', 502)
+    const output = savedResults.image.parse(JSON.parse(row.output))
+    verifyJobAsset(owner, row.asset_id, output)
     jobs.transaction(() => {
       trial.finishSavedImage(owner, key)
       jobs.finalize(owner, key, output)
     })
+  }
+  function verifyJobAsset(owner, id, output) {
+    const asset = projects.verifySavedImage(owner, id)
+    if (asset.dataURL !== output.url || asset.width !== output.width || asset.height !== output.height || asset.mimeType !== output.mimeType) throw new StudioError('已保存图片与任务结果不一致，未重新生成', 502)
   }
   function scheduleJob(request, key) {
     // Credentials belong only to this in-memory, explicit authorization. No
@@ -525,14 +556,21 @@ export function createServer(config, overrides = {}) {
         let model
         await execute(resumed, 'image', payload, context => (overrides.generateImage ?? generateImage)(context, model, payload), undefined,
           context => { model = selectModel(row.model_id, 'image', context); if (imageApproval(config, model, resumed.studioAccount) !== row.approval_hash) throw new StudioError('图片能力批准已变化', 409); return 'image' }, row)
-      } catch { if (!['unknown','needs_authorization','completed','output_saved','cancelled_before_submission'].includes(jobs.require(owner, key).status)) jobs.interrupted(owner, key) }
+      } catch { if (!['unknown','needs_authorization','completed','output_received','output_saved','cancelled_before_submission'].includes(jobs.require(owner, key).status)) jobs.interrupted(owner, key) }
     })
     background.add(task)
     task.finally(() => background.delete(task)).catch(() => {})
   }
   for (const row of jobs.pendingOutputs()) {
     // Only local asset/result completion is recoverable without user credentials.
-    try { finalizeJob(row.owner, row.key) } catch { /* Keep output_saved and its private original for explicit local recovery. */ }
+    if (row.status === 'output_saved') {
+      try { finalizeJob(row.owner, row.key) } catch { /* Keep output_saved and its private original for explicit local recovery. */ }
+    } else {
+      busy.add(row.owner)
+      const task = completeLocalJob(row.owner, row.key).catch(() => {}).finally(() => busy.delete(row.owner))
+      background.add(task)
+      task.finally(() => background.delete(task)).catch(() => {})
+    }
   }
   app.post('/api/studio/image-jobs', async (request, reply) => {
     jobsEnabled()
@@ -591,7 +629,9 @@ export function createServer(config, overrides = {}) {
     const key = jobId(request.params.id), owner = request.studioUser
     jobs.require(owner, key)
     if (busy.has(owner)) throw new StudioError('图片结果正在保存，请稍后只读查询', 409)
-    try { finalizeJob(owner, key) } catch (error) { if (error instanceof StudioError) throw error; throw new StudioError('图片本地完成暂不可用，原图保留且未重新生成', 502) }
+    busy.add(owner)
+    try { await completeLocalJob(owner, key) } catch (error) { if (error instanceof StudioError) throw error; throw new StudioError('图片本地完成暂不可用，原图保留且未重新生成', 502) }
+    finally { busy.delete(owner) }
     return { success: true, data: jobs.summary(jobs.require(owner, key)) }
   })
   async function handleRun(request, reply, streaming = false) {

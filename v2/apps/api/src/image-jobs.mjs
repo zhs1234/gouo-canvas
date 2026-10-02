@@ -8,7 +8,7 @@ export function imageApproval(config, model, account) {
     lifetime: config.userTokenLifetimeSeconds, trial: config.trial, bindingPolicy: config.tokenRenewalPolicy,
     account: { owner: account.id, group: account.group } })
 }
-const active = "('accepted','ready','submission_started','output_saved')"
+const active = "('accepted','ready','submission_started','output_received','output_saved')"
 export class ImageJobs {
   constructor(ledger) {
     this.ledger = ledger
@@ -19,10 +19,12 @@ export class ImageJobs {
       status TEXT NOT NULL, native_pending INTEGER NOT NULL DEFAULT 0,
       output TEXT, asset_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       PRIMARY KEY(owner,key));
-      CREATE UNIQUE INDEX IF NOT EXISTS image_job_owner_active ON image_jobs(owner) WHERE status IN ${active};
       CREATE TABLE IF NOT EXISTS image_job_reservations (owner INTEGER NOT NULL,key TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(owner,key));
-      CREATE TABLE IF NOT EXISTS image_job_outbox (owner INTEGER NOT NULL,key TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(owner,key));`)
+      CREATE TABLE IF NOT EXISTS image_job_outbox (owner INTEGER NOT NULL,key TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(owner,key));
+      CREATE TABLE IF NOT EXISTS image_job_staging (owner INTEGER NOT NULL,key TEXT NOT NULL,bytes BLOB NOT NULL,sha256 TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(owner,key));`)
     this.transaction(() => {
+      // Upgrade the partial owner gate under the same exclusive Ledger lock.
+      this.db.exec(`DROP INDEX IF EXISTS image_job_owner_active; CREATE UNIQUE INDEX image_job_owner_active ON image_jobs(owner) WHERE status IN ${active}`)
       for (const row of this.db.prepare(`SELECT owner,key,status,native_pending FROM image_jobs WHERE status IN ('accepted','ready','submission_started')`).all()) {
         const submitted = this.db.prepare("SELECT 1 FROM model_submissions WHERE owner=? AND kind='image' AND key=?").get(row.owner, row.key)
         const unsafe = row.native_pending || submitted || row.status === 'submission_started'
@@ -61,7 +63,7 @@ export class ImageJobs {
     return payload
   }
   summary(row) {
-    if (!['accepted','ready','submission_started','output_saved','needs_authorization','unknown','completed','cancelled_before_submission'].includes(row.status)) throw new StudioError('图片任务状态无法安全读取', 502)
+    if (!['accepted','ready','submission_started','output_received','output_saved','needs_authorization','unknown','completed','cancelled_before_submission'].includes(row.status)) throw new StudioError('图片任务状态无法安全读取', 502)
     return { jobId: row.key, requestId: row.key, kind: 'image', status: row.status,
       createdAt: row.created_at, updatedAt: row.updated_at, ...(row.status === 'unknown' && row.native_pending ? { pendingNativeOperation: true } : {}),
       ...(row.asset_id ? { assetId: row.asset_id } : {}) }
@@ -107,7 +109,7 @@ export class ImageJobs {
   interrupted(owner, key) {
     this.transaction(() => {
       const row = this.require(owner, key)
-      if (['completed','cancelled_before_submission','output_saved'].includes(row.status)) return
+      if (['completed','cancelled_before_submission','output_received','output_saved'].includes(row.status)) return
       const safe = !row.native_pending && !this.db.prepare("SELECT 1 FROM model_submissions WHERE owner=? AND kind='image' AND key=?").get(owner, key)
         && !this.db.prepare("SELECT 1 FROM funding_writes WHERE owner=? AND status IN ('pending','unknown')").get(owner)
         && !this.db.prepare("SELECT 1 FROM relay_renewals WHERE owner=? AND status IN ('pending','unknown')").get(owner)
@@ -147,9 +149,42 @@ export class ImageJobs {
       return this.summary(this.require(owner, key))
     })
   }
+  stageOutput(owner, key, bytes) {
+    if (!(bytes instanceof Uint8Array) || !bytes.length || bytes.length > 30 * 1024 * 1024) throw new StudioError('图片原始输出大小无效，未重新生成', 502)
+    this.transaction(() => {
+      this.assertOriginal(owner, key)
+      this.change(owner, key, ['submission_started'], 'output_received')
+      this.db.prepare('INSERT INTO image_job_staging VALUES(?,?,?,?,?)').run(owner, key, bytes, createHash('sha256').update(bytes).digest('hex'), new Date().toISOString())
+    })
+  }
+  assertOriginal(owner, key) {
+    const row = this.require(owner, key), original = this.db.prepare("SELECT hash,status FROM requests WHERE owner=? AND kind='image' AND key=?").get(owner, key)
+    const submitted = this.db.prepare("SELECT model_kind,model_id,funding_source FROM model_submissions WHERE owner=? AND kind='image' AND key=? LIMIT 2").all(owner, key)
+    if (row.native_pending || original?.hash !== row.hash || !['running','unknown'].includes(original.status)
+      || submitted.length !== 1 || submitted[0].model_kind !== 'image' || submitted[0].model_id !== row.model_id || submitted[0].funding_source !== row.funding_source) throw new StudioError('原图片提交记录已变化，不能发布输出或重新生成', 409)
+    return row
+  }
+  rawOutput(owner, key) {
+    const row = this.assertOriginal(owner, key)
+    if (row.status !== 'output_received') throw new StudioError('图片任务没有可本地验证的原始输出', 409)
+    // Bound at SQL before materializing a potentially corrupted BLOB in JS.
+    const size = this.db.prepare('SELECT length(bytes) AS n FROM image_job_staging WHERE owner=? AND key=?').get(owner, key)?.n
+    if (!size || size > 30 * 1024 * 1024) throw new StudioError('已保存原始图片大小无法安全读取，未重新生成', 502)
+    const raw = this.db.prepare('SELECT bytes,sha256 FROM image_job_staging WHERE owner=? AND key=?').get(owner, key)
+    if (!(raw.bytes instanceof Uint8Array) || !/^[a-f0-9]{64}$/.test(raw.sha256) || createHash('sha256').update(raw.bytes).digest('hex') !== raw.sha256) throw new StudioError('已保存原始图片完整性校验失败，未重新生成', 502)
+    return Buffer.from(raw.bytes)
+  }
+  invalidOutput(owner, key) {
+    this.change(owner, key, ['output_received'], 'unknown')
+    this.ledger.unknown(owner, 'image', key)
+    this.db.prepare("UPDATE image_job_reservations SET status='unknown' WHERE owner=? AND key=?").run(owner, key)
+  }
   saveOutput(owner, key, result, assetId) {
-    this.change(owner, key, ['submission_started'], 'output_saved')
+    this.assertOriginal(owner, key)
+    this.change(owner, key, ['output_received'], 'output_saved')
     this.db.prepare('UPDATE image_jobs SET output=?,asset_id=? WHERE owner=? AND key=?').run(JSON.stringify(result), assetId, owner, key)
+    // The same transaction now holds the exact bytes in the validated asset.
+    this.db.prepare('DELETE FROM image_job_staging WHERE owner=? AND key=?').run(owner, key)
   }
   finalize(owner, key, result) {
     const row = this.require(owner, key), original = this.db.prepare("SELECT hash,status FROM requests WHERE owner=? AND kind='image' AND key=?").get(owner, key)
@@ -158,5 +193,5 @@ export class ImageJobs {
     this.ledger.complete(owner, 'image', key, result)
     this.db.prepare("UPDATE image_job_reservations SET status='used' WHERE owner=? AND key=?").run(owner, key)
   }
-  pendingOutputs() { return this.db.prepare("SELECT owner,key FROM image_jobs WHERE status='output_saved'").all() }
+  pendingOutputs() { return this.db.prepare("SELECT owner,key,status FROM image_jobs WHERE status IN ('output_received','output_saved')").all() }
 }

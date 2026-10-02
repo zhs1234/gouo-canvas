@@ -86,7 +86,8 @@ async function fixture(t, options = {}) {
     context.onGatewayResponse({ requestId: 'fixture-' + calls.length, status: 200 })
     if (options.gate) await options.gate.promise
     if (options.failedModel) throw new Error('fixture-private-provider-secret')
-    if (options.invalidImage) return { url: 'data:image/png;base64,AAAA' }
+    if (options.invalidImage) { await context.onImageOutput?.(Buffer.from('AAAA', 'base64')); return { url: 'data:image/png;base64,AAAA' } }
+    await context.onImageOutput?.(png)
     return { ...image, provider: { key: 'fixture-private-provider-secret' } }
   }
   const overrides = { fetch, generateImage, runAgent: async (context, _model, body) => {
@@ -433,7 +434,109 @@ test('late group change after HTTP202 moves this unsubmitted task to needs_autho
   assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM model_submissions WHERE key=?').get(id).n, 0)
 })
 
-for (const stage of ['accepted','submitted','output_saved']) test(`real API child-process crash at ${stage} resumes only proven local work and never replays a submitted model`, { timeout: 20000 }, async t => {
+test('raw staging transaction failure stays model unknown and cannot release held benefits or repeat submission', async t => {
+  const f = await fixture(t, { trial: true }), id = crypto.randomUUID()
+  f.db.exec("CREATE TRIGGER reject_raw BEFORE INSERT ON image_job_staging BEGIN SELECT RAISE(ABORT,'fixture disk full'); END")
+  assert.equal((await post(f.app, id, { ...payload, payWithBalance: false })).statusCode, 202)
+  await waitFor(f.app, id, 'unknown')
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM image_job_staging').get().n, 0)
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM studio_assets').get().n, 0)
+  assert.equal(f.db.prepare('SELECT status FROM trial_reservations WHERE key=?').get(id).status, 'unknown')
+  assert.equal((await post(f.app, id, { ...payload, payWithBalance: false })).statusCode, 409)
+  assert.equal((await operation(f.app, id, 'authorize')).statusCode, 409)
+  assert.equal((await operation(f.app, id, 'finalize')).statusCode, 409)
+  assert.equal(f.calls.length, 1)
+})
+
+test('asset persistence failure keeps private raw bytes, owner/capacity barriers and local recovery while the job flag is off', async t => {
+  const f = await fixture(t, { trial: true }), id = crypto.randomUUID(), oldHeld = crypto.randomUUID()
+  f.db.exec("CREATE TRIGGER reject_asset BEFORE INSERT ON studio_assets BEGIN SELECT RAISE(ABORT,'fixture disk full'); END")
+  assert.equal((await post(f.app, id, { ...payload, payWithBalance: false })).statusCode, 202)
+  const received = await waitFor(f.app, id, 'output_received')
+  assert.equal('result' in received, false); assert.equal('assetId' in received, false)
+  const raw = f.db.prepare('SELECT bytes,sha256 FROM image_job_staging WHERE key=?').get(id)
+  assert.deepEqual(Buffer.from(raw.bytes), f.png)
+  assert.equal(raw.sha256, createHash('sha256').update(f.png).digest('hex'))
+  assert.equal((await get(f.app, id, 8)).statusCode, 404)
+  assert.equal((await f.app.inject({ url: '/api/studio/requests/image/' + id + '/result', headers: headers(7) })).json().data.result, undefined)
+  assert.equal((await sync(f.app, crypto.randomUUID())).statusCode, 409)
+  assert.equal((await f.app.inject({ method: 'PUT', url: '/api/studio/profile', headers: headers(7), payload: { display_name: 'blocked' } })).statusCode, 409)
+  f.account.set(9, { id: 9, status: 1, role: 1, group: 'default', quota: 1000 })
+  seedAccepted(f, crypto.randomUUID(), 'accepted', { owner: 8 })
+  const third = crypto.randomUUID()
+  assert.equal((await post(f.app, third, payload, 9)).statusCode, 429)
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM requests WHERE key=?').get(third).n, 0)
+  f.db.prepare("INSERT INTO trial_reservations VALUES(7,'agent',?,'chat','unknown')").run(oldHeld)
+  f.db.prepare("INSERT INTO funding_writes VALUES(7,'subscription_only','unknown',?) ON CONFLICT(owner) DO UPDATE SET status='unknown'").run(new Date().toISOString())
+  f.config.enableImageJobs = false
+  const native = f.native.length
+  await f.restart()
+  await waitFor(f.app, id, 'output_received')
+  // Wait for the local-only startup validation to release the in-process guard.
+  for(let i=0;i<100;i++) {
+    const attempt=await operation(f.app,id,'finalize')
+    if(attempt.statusCode!==409) { assert.equal(attempt.statusCode,502); break }
+    await new Promise(resolve=>setTimeout(resolve,5))
+    if(i===99)assert.fail('local startup processing did not settle')
+  }
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM studio_assets').get().n, 0)
+  assert.deepEqual(Buffer.from(f.db.prepare('SELECT bytes FROM image_job_staging WHERE key=?').get(id).bytes), f.png)
+  f.db.exec('DROP TRIGGER reject_asset')
+  const complete = await operation(f.app, id, 'finalize')
+  assert.equal(complete.statusCode, 200)
+  const saved = (await get(f.app, id)).json().data
+  assert.equal(saved.result.url, f.image.url)
+  assert.equal(saved.result.usage.state, 'pending'); assert.equal(saved.result.usage.settlementState, 'unconfirmed')
+  assert.deepEqual(Buffer.from(f.db.prepare('SELECT bytes FROM studio_assets WHERE id=?').get(saved.assetId).bytes), f.png)
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM image_job_staging WHERE key=?').get(id).n, 0)
+  assert.equal(f.db.prepare('SELECT status FROM trial_reservations WHERE key=?').get(id).status, 'used')
+  assert.equal(f.db.prepare('SELECT status FROM trial_reservations WHERE key=?').get(oldHeld).status, 'unknown')
+  assert.equal(f.db.prepare('SELECT status FROM funding_writes WHERE owner=7').get().status, 'unknown')
+  assert.ok(f.native.slice(native).every(call => call.route === '/api/user/self' && call.method === 'GET'))
+  assert.equal(f.calls.length, 1)
+})
+
+test('corrupt/hash/size/format/pixel raw output remains private and retained, fails closed, and never replays or locks unrelated new model keys', async t => {
+  const huge = await sharp({ create: { width: 6001, height: 4000, channels: 3, background: '#5533aa' } }).png().toBuffer()
+  const gif = await sharp({ create: { width: 2, height: 3, channels: 3, background: '#5533aa' } }).gif().toBuffer()
+  for (const failure of ['hash','format','pixels','truncated','oversized']) {
+    const f = await fixture(t, { trial: true }), id = crypto.randomUUID()
+    f.db.exec("CREATE TRIGGER reject_asset BEFORE INSERT ON studio_assets BEGIN SELECT RAISE(ABORT,'fixture disk full'); END")
+    assert.equal((await post(f.app, id, { ...payload, payWithBalance: false })).statusCode, 202)
+    await waitFor(f.app, id, 'output_received')
+    for(let i=0;i<100;i++) {
+      const attempt=await operation(f.app,id,'finalize')
+      if(attempt.statusCode!==409) { assert.equal(attempt.statusCode,502); break }
+      await new Promise(resolve=>setTimeout(resolve,5))
+      if(i===99)assert.fail('initial local validation did not settle')
+    }
+    // The API exposes no raw-write route. Simulate corruption in this temp DB.
+    const replacement = failure === 'format' ? gif : failure === 'pixels' ? huge : failure === 'truncated' ? f.png.subarray(0, f.png.length - 25) : f.png
+    if (failure === 'oversized') f.db.prepare('UPDATE image_job_staging SET bytes=zeroblob(?),sha256=? WHERE key=?').run(30 * 1024 * 1024 + 1, '0'.repeat(64), id)
+    else f.db.prepare('UPDATE image_job_staging SET bytes=?,sha256=? WHERE key=?').run(replacement, failure === 'hash' ? '0'.repeat(64) : createHash('sha256').update(replacement).digest('hex'), id)
+    const before = f.db.prepare('SELECT length(bytes) AS size,sha256 FROM image_job_staging WHERE key=?').get(id)
+    f.db.exec('DROP TRIGGER reject_asset')
+    const response = await operation(f.app, id, 'finalize')
+    assert.equal(response.statusCode, 502); assert.doesNotMatch(response.body, /data:image|fixture-private|SELECT|INSERT/)
+    const status = (await get(f.app, id)).json().data
+    assert.equal(status.status, 'unknown'); assert.equal('result' in status, false)
+    assert.deepEqual(f.db.prepare('SELECT length(bytes) AS size,sha256 FROM image_job_staging WHERE key=?').get(id), before)
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM studio_assets WHERE run_id=?').get(id).n, 0)
+    assert.equal(f.db.prepare('SELECT status FROM trial_reservations WHERE key=?').get(id).status, 'unknown')
+    assert.equal((await post(f.app, id, { ...payload, payWithBalance: false })).statusCode, 409)
+    assert.equal((await operation(f.app, id, 'authorize')).statusCode, 409)
+    assert.equal((await operation(f.app, id, 'finalize')).statusCode, 409)
+    await f.restart()
+    assert.equal((await get(f.app, id)).json().data.status, 'unknown')
+    f.account.get(7).quota = 1000
+    const next = crypto.randomUUID()
+    assert.equal((await post(f.app, next)).statusCode, 202)
+    await waitFor(f.app, next, 'completed')
+    assert.equal(f.calls.length, 2)
+  }
+})
+
+for (const stage of ['accepted','submitted','output_received','output_saved']) test(`real API child-process crash at ${stage} resumes only proven local work and never replays a submitted model`, { timeout: 20000 }, async t => {
   const directory = mkdtempSync(join(tmpdir(), 'gouo-job-crash-')), path = join(directory, 'ledger.sqlite'), providerReached = deferred()
   const png = await sharp({ create: { width: 2, height: 3, channels: 4, background: '#5533aa' } }).png().toBuffer()
   let providerCalls = 0, child, app, db
@@ -457,6 +560,7 @@ for (const stage of ['accepted','submitted','output_saved']) test(`real API chil
       verification: 'live-verified', operations: ['generate'], qualities: [], sizes: {} }] }
   const source = `
     import { createServer } from './apps/api/src/server.mjs';
+    import { generateImage } from './apps/api/src/images.mjs';
     import { DatabaseSync } from 'node:sqlite';
     let reads=0;
     const app=createServer(${JSON.stringify(config)}, {fetch: async (url, init) => {
@@ -467,7 +571,10 @@ for (const stage of ['accepted','submitted','output_saved']) test(`real API chil
       }
       if(path==='/api/status')return Response.json({success:true,data:{quota_per_unit:1000,usd_exchange_rate:1}});
       return Response.json({success:true,data:{page:1,page_size:2,total:0,items:[]}});
-    }});
+    },generateImage:async(context,model,payload)=>generateImage({...context,onImageOutput:async bytes=>{
+      await context.onImageOutput(bytes);
+      if(${JSON.stringify(stage)}==='output_received') await new Promise(()=>{});
+    }},model,payload)});
     if(${JSON.stringify(stage)}==='output_saved') {
       const db=new DatabaseSync(${JSON.stringify(path)});
       db.exec("CREATE TRIGGER fail_final BEFORE UPDATE ON requests WHEN NEW.status='completed' BEGIN SELECT RAISE(ABORT,'fixture disk failure'); END");db.close();
@@ -487,10 +594,10 @@ for (const stage of ['accepted','submitted','output_saved']) test(`real API chil
   assert.equal(accepted.status, 202)
   await accepted.json()
   if (stage !== 'accepted') await providerReached.promise
-  if (stage === 'output_saved') {
+  if (['output_received','output_saved'].includes(stage)) {
     for (let i=0;i<100;i++) {
       const data=(await (await fetch(origin+'/api/studio/image-jobs/'+id,{headers:{authorization:'Bearer owner'}})).json()).data
-      if(data.status==='output_saved')break
+      if(data.status===stage)break
       if(i===99)assert.fail('child output was not saved')
       await new Promise(resolve=>setTimeout(resolve,5))
     }
@@ -508,6 +615,18 @@ for (const stage of ['accepted','submitted','output_saved']) test(`real API chil
   } else if(stage==='submitted') {
     assert.equal(status.status,'unknown');assert.equal(providerCalls,1)
     assert.equal((await app.inject({method:'POST',url:'/api/studio/image-jobs/'+id+'/authorize',headers:{authorization:'Bearer owner'},payload:{confirm:true}})).statusCode,409)
+  } else if(stage==='output_received') {
+    for(let i=0;i<100 && status.status!=='completed';i++) {
+      await new Promise(resolve=>setTimeout(resolve,5))
+      status=(await app.inject({url:'/api/studio/image-jobs/'+id,headers:{authorization:'Bearer owner'}})).json().data
+    }
+    assert.equal(status.status,'completed')
+    const original=db.prepare('SELECT sha256,bytes FROM studio_assets WHERE id=?').get(status.assetId)
+    assert.equal(original.sha256,createHash('sha256').update(png).digest('hex'))
+    assert.deepEqual(Buffer.from(original.bytes),png)
+    assert.equal(status.result.url,'data:image/png;base64,'+png.toString('base64'))
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM image_job_staging WHERE key=?').get(id).n,0)
+    assert.equal(providerCalls,1)
   } else {
     assert.equal(status.status,'output_saved')
     const original=db.prepare('SELECT sha256,bytes FROM studio_assets WHERE id=?').get(status.assetId)

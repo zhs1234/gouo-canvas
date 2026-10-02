@@ -1,5 +1,15 @@
 # 系统打通：实际进度
 
+## B3.3 pre-Sharp原bytes暂存及本地恢复（2026-10-02）
+
+API六文件实现image_job_staging BLOB/hash、output_received状态与owner/global容量、有界HTTP JSON实际48MiB读、规范40MiB encoded/30MiB原bytes与awaited hook。事务提交在第一次Sharp输出metadata之前；不保存完整供应商body/headers/URL或凭据、不增加binary/URL-only下载入口。GET不公开raw；本地hash/唯一模型提交/原摘要核验后复用Sharp完整decode与asset保存，exact bytes/hash核验成功才同事务删除暂存。旧funding/renewal unknown和历史held不变。
+
+启动及显式finalize可只处理已有raw/output，无Native/供应商；费用仅既有Ledger IDs的pending/unconfirmed。raw确定损坏后保私有，原新模型key与held继续unknown；存储故障维持output_received/output_saved供本地保存重试。HTTP断开、坏JSON或stage写入未成功前仍无法恢复，unknown不重放。未新增队列依赖、凭据储存或跨进程授权。
+
+`image-jobs.cases.mjs`22＋新`image-output.cases.mjs`4，定向 **26/26**：真实loopback供应商child-process停止在raw stage hook await、尚未首metadata→kill→restart/flag-off local恢复相同PNG且provider累计1；另覆盖SQL写失败/原asset校验、虚假/缺失Content-Length、body截断/坏UTF8/JSON、非规范编码、raw hash/format/pixel/完整decode/SQL长度损坏、原key/异户和旧Native funding unknown保留。root独立`npm run test:api` **203/203 exit0，8.082秒**，`.local/system-raw-output-api.log`；agent六文件node/diff-check与check **71领域/203API/type/build10.87秒exit0**，当时包含R2b尚在开发的14领域，最终整合要另外跑。
+
+当前B3-I/B3.3后端合同已实现，默认off。前端202接线、Native202、OPS-1双库恢复及独立Worker授权仍待。下一先SYS-R2b与202读/保存闭环，再冷备份；E1尺寸/编辑文字/商品分层可按现有Excalidraw并行，不调用AI。
+
 ## T1.12 真实Native未知总结与原图保留通过（2026-10-02）
 
 opt-in runner新增`--lose-response`，禁止与resume/login-only混用；复用普通身份、固定actualbinary、仅本地供应商、随机loopback/独立卷/报告不可覆盖护栏。真正前段＋tool PNG后context.offline/原HTTP requestfailed，原pausedsummary执行lose-response，不再发模型。loss-only安全快照校验末事件/失败类型/events hash，不保存正文/图片URL/未知错误；正常和旧resume结构保持兼容。新增flag、伪成功/丢图/释放held/错误账本/误称settled和敏感内容反例，root`node --test tests/stack/browser-offline-fixture.cases.mjs` **24/24 exit0，1.287秒**，`.local/t112-loss-fixture.log`；语法检查通过。
