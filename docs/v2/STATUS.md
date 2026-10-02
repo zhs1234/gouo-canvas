@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## 开发分支推送与 v2 PR（2026-10-02）
+
+用户批准“推送统一开发分支 → 创建目标为v2的PR → CI通过后合并”。`git push --set-upstream origin codex/registration-trial` 已exit0；`gh pr create --base v2 --head codex/registration-trial` 已exit0，创建 [PR #4](https://github.com/zhs1234/gouo-canvas/pull/4)，并附加到当前Codex任务。远端v2起点 `25f57e1` 为本地整合交付 `5a21998` 的祖先，初次提交领先68个commit；本地应用/UI与系统交付均已保留。独立审查核对完整diff，不涉及legacy src/server、root package/lockfile或main。
+
+本次另清理theme.css末尾冗余空行，不改变样式或依赖。PR的push与pull_request两路Gouo V2 checks包含类型/110领域/205API/build、206浏览器和三阶段整栈；等待最新head检查成功后使用保留历史的merge合入v2，不绕过失败检查。实际CI与合并提交见 [PR检查](https://github.com/zhs1234/gouo-canvas/pull/4/checks) 和 [PR状态](https://github.com/zhs1234/gouo-canvas/pull/4)，本段创建时尚未合并，不提前记录成功。本次授权目标为v2；main的两份独立文档提交保留，正式发布、生产启用和付费供应商验收另按G1/G2/P边界。
+
 ## UI-I1 双分支合并与当前工作区复验（2026-10-02）
 
 用户明确要求“合并然后告诉你的那个队友也合并”。原工作区 `codex/registration-trial` 将 UI tip `799ad3b` 与系统交付 `codex/system-integration` tip `f62275e` 合并，保留双方提交历史。5处冲突为 START_HERE、STATUS、TASKS、ChatLab及CanvasPage；保留系统最新meta/detail合同修复与电商控件接线、全部UI和系统功能。独立只读审查与 `git diff --quiet codex/system-integration -- v2` 均确认应用/配置/测试树完全相同，依赖锁不变；本次只追加当前合并交接文档。
