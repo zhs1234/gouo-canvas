@@ -1,16 +1,73 @@
 # Codex 任务清单
 
-工作方式：先执行 P0，然后按依赖完成 B1 → B2 → B3；E1 可在 B1 后并行；S1 的数据设计可以提前，但真实收费必须等 B3 的额度/幂等底座。每项单独形成可审查提交，更新 STATUS.md。不要一次性把整个清单标为完成。
+## 当前系统主线收口（2026-10-02）
+
+系统分支 `codex/system-integration` 已完成本地首交付及 **QA-FINAL**，整合UI799ad3b和系统实现。用户明确要求合并后，系统交付f62275e现已合入原工作区 `codex/registration-trial`；双方历史保留，合并回归以 [STATUS.md](STATUS.md) 顶部为准。先读 [LOCAL-SYSTEM-HANDOFF.md](LOCAL-SYSTEM-HANDOFF.md) / [SYSTEM-INTEGRATION-STATUS.md](SYSTEM-INTEGRATION-STATUS.md)。SYS-R1、SYS-R2a/b、T1.12核心离线恢复、B3-I/B3.3及其连续真实UI202关页恢复、OPS-N1合成双库实际恢复已完成；E1三入口可编辑版式/精确PNG增量已提交。首次创建thread元信息/详情合同已修正，系统QA-FINAL的check110领域/205API、隔离浏览器206/206、三阶段stack、真实Native首页首次发送和真实dist本地编辑导出通过。已通过阶段不重复开发。
+
+公开启用下一ID **G1→G2→P**，权威后台授权下一 **B3-II**，独立Worker **B3-III**；月度订阅/Logo素材库/自动长文案排版/批处理和视频仍后续范围。默认generation、trial、renewal、jobs关闭；合成验收开启不代表日常或正式配置开启。真实模型、商户支付、生产/安全/资金修改与部署遵守原独立授权门。
+
+以下各日期“当前/下一”均为阶段历史，最新状态以本段与STATUS顶部为准。不能以历史“云项目暂缓”“前端未接job”或“SQLite只有请求guard”覆盖已实现的私有项目/原图/持久图片任务。失败不自动释放已外发unknown/held或退款；只有可证明未提交的新job业务占用可确定取消。
+
+## 并行 UI 改版（2026-10-02）
+
+本轮 UI 独立执行 **U0–U7**：完整计划→公共壳→首页/会话→设置→项目库→官方画布→Loomic→响应式与异常回归。任务清单、文件边界与实际结果见 [UI-REDESIGN-PLAN.md](UI-REDESIGN-PLAN.md) / [UI-REDESIGN-STATUS.md](UI-REDESIGN-STATUS.md)。系统链路任务负责API/adapter/认证/试用/导航守卫，在独立工作树执行；本次用户授权合并后两边共享整合成果。
+
+**UI-I1** 已完成：系统先接入UI799ad3b，修正ChatLab创建meta/detail合同，核对首次发送、原结果只读恢复、本人项目/原图并运行最终stack；本次再把完整系统交付合入原UI分支并复验。后续按G1→G2→P继续，不重复页面改版或已通过的本地系统实现。main合并和部署继续遵从单独请求的仓库边界。此前T1任务和真实渠道/商业门槛保持各自记录，不由UI局部验收覆盖。
+
+## 最新用户要求（2026-10-01，本机环境复核后）
+
+**T1.11 双用户完整地址隔离已完成核心D1/D2**：当前项目/codex/registration-trial，三位gpt-6.1-sol子智能体，新随机真实固定Native+明确本地供应商。独立profiles完整8/8、双向52HTTP及全owner被拒新ID零行、Native/Studio/provider保护哈希无新增副作用；同浏览器A退出→B登录/4地址/本机草稿隔离/本人原图和试用恢复通过，Q28后实际展开A/B不同调用时间，六元组及DOM匹配各自Native记录，B无A费用缓存，最终after-billing保护证据不变。Q26画布只读重开、Q27旧地址query/外部端口、Q28近期费用时间修正，最终check51/157、146浏览器、三阶段stack exit0。原28当前18/10/0，F18/10/0、N15/10/0、P0/0/13，不能相加或称支付已验。累计28修正10P1/18P2。主Native/API不重启、不初始化、真实开关关闭，旧unknown/held/资金和G1/G2门项保留；准确终态以STATUS顶部为准。下一 **T1.12 浏览器断网/重连与未知请求屏障**：新随机Native、本地成本0，实际发送后浏览器离线/重连/只读恢复，分别区分客户端停止、上游结果丢失和实扣待核对，已接收内容/原图保留，不自动新ID/重发/退款/释放held；再补D6对应故障子项，真实供应商/安全/资金配置另门槛。后面下一T1.11是历史。
+
+**T1.10 模型失权保护与原生安全限定子项已实施**，最终命令和证据边界见STATUS顶部。明确B失权不换A、owner偏好/corrupt JSON隔离、同SPA五分钟选择保留、fresh目录禁发/原地保输入；实际Native旧目录只一次POST403且模型/资金0，安全UI当前会话改密后reload恢复、其它429停止，B7仍partial。最终51领域/157API、143浏览器和三阶段stack通过；累计25项修正，原28仍16/12/0。主Native/API未重启或初始化，真实generation/trial/renewal继续关闭。下一 **T1.11 双用户完整地址隔离验收**：新随机Native与明确本地供应商，通过同浏览器A退出→B原生登录及两个独立profiles双向核验完整thread/project/project+asset（包含本人项目+异户asset）地址；没有run UI地址的范围用真实authenticated API合同，确认他人404/403、无内容/原图泄漏、无写入或模型请求。先持久RO基线、操作后核对；发现确定问题修正再回归，unknown不重试、旧资金/held不动，真实配置/付费/安全更改门槛保留。后面下一T1.10是历史。
+
+**T1.9 共享账号菜单与设置已实施，最终命令见STATUS顶部**。全工作页原地开设置、真实保存后注销/无reload、sameowner关闭与标签页刷新未知资料保护、严格业务profile桥、原生newtab、登录/退出epoch防护已实现；真实固定Native新增合同和三位独立访客实际验收已做。视觉/顶部遮挡/矮视口修正必须用最终bundle复验；原28仍16/12/0，付费/支付及启用配置门项保留。下一 **T1.10 剩余账号/双用户子场景隔离验收**：优先完成不需要真实资金/安全变更的F/N地址互换、失权竞态、响应丢失和未知屏障变体，分实际用户实操与fixture/API合同统计，继续问题修复；不手改旧unknown/资金，不重发旧请求。后面T1.9未接线/下一T1.9是历史。
+
+**T1.8 已实施，最终验证见 STATUS 顶部**：默认聊天、共有侧栏/手机抽屉与真实保存后出口，旧画布入口/原图/未知字段保留；实际 ChatGPT 双浏览器参考和独立本机往返补验完成。下一 **T1.9 全页面共享账号菜单与设置**：底部身份入口在聊天/官方画布/项目库/Loomic直接打开同一设置，不先跳聊天；复用真实 New API 账号与金额查询。同owner关闭/切页不能解除未知写入闸；退出POST前先保存，不reload丢草稿；原生链接明确保留工作页。prepared自助全量setting写继续阻断，显示名只允许严格业务adapter。未启用真实配置，不复制无实现的订阅/支付/设置项目。当前T1.9尚未接线，后面T1.8“正在实施”是历史。
+
+当前首要 **T1.8 默认聊天与统一侧栏导航**：用户报告画布无明确出口，要求实际打开chatgpt.com截图、参考其侧栏/聊天布局。默认 `/studio/` 进入完整assistant-ui聊天；聊天、画布、项目库固定共同侧栏，旧Loomic入口及id/session/search/hash可恢复。站内和浏览器返回经过真实保存guard，失败留页并可导出，未知私有保存不自动重试；验证桌面/手机、原图/旧草稿/跨账号与旧URL。禁止为了布局更换编辑器或另造状态/账号/财务系统，完成后继续原多角色问题统计。
+
+T1.7已完成可审查退款独立候选和限定剩余UI子项；详见 [NATIVE_REFUND_TRANSACTION_GATE.md](NATIVE_REFUND_TRANSACTION_GATE.md) / [STATUS.md](STATUS.md)。同一补丁退款三库18/18、完整model包SQLite退出0，真实新隔离Native失败预扣候选396ms在线退款观测通过；日常pin/二进制/旧held与资金未改，真实配置仍不启用。原28当前16通过/12partial/0未执行，P未验；Q9权限空态提示修正。51领域、151API、93浏览器通过均属于导航改动前，不能代替T1.8验证。以下旧下一T1.7、默认画布及历史计数保留作背景。
+
+T1.6已实施四角色真实浏览器的限定验收与8项修复；28场景当前通过/partial/未执行和原失败、同数据复验见 [QA_ACCEPTANCE_REPORT.md](QA_ACCEPTANCE_REPORT.md)，不再把原计划当成“全部尚未执行”，也不把本阶段称为整体成熟产品完成。51领域、151API、87浏览器与三阶段stack通过，真实采购0；stack先于Q8搜索增量，增量由完整API/PW/build验。身份恢复/跨标签/竞态、草稿失败导航、导入错误、生成原因和钱包入口、官方画布路径及本人服务端搜索已修。当前新下一具体任务 **T1.7 隔离剩余场景与启用门槛核验**。先补报告剩余F/N子项；公开限流/可信代理/原生key桶需要确切方案审批，候选与未变默认值见 [NATIVE_RATE_LIMIT_GATE.md](NATIVE_RATE_LIMIT_GATE.md)。真实计划/入口暂不启用决定保留，付费供应商和商户支付另需授权；以下T1.5b“下一T1.6”是历史记录。
+
+最终核心F/N计数16通过/11partial/1未执行，P全未验。T1.7优先核对新增G2：唯一实际失败NativeID的预扣20仍consumed、token/sub56与consume/userused36不一致；锁退款错误缺requestID关联，不能断言请求根因/已结算或自行补退款。准备新随机环境最小重现、原生原子资金/token证据及可审查修正方案，详细当前证据见 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md)；旧held/资金不改、模型不重发、固定pin不暗换，再补其余隔离UI子项。
+
+P0 环境已验收；用户已批准持续开发，所有工作留在当前 Gouo Canvas 项目并基于 `codex/new-api-v2`，保留已认可的 assistant-ui/Excalidraw、旧草稿/原图/许可证。需要安装系统组件或改安全设置先询问用户。最终产品准备好后，使用多个子智能体模拟真实用户并统计报告问题。
+
+最新T1.5a/T1.5b已完成 [BILLING-EVIDENCE.md](BILLING-EVIDENCE.md) 与 [TOKEN-RECOVERY.md](TOKEN-RECOVERY.md)：消费日志只是recorded/实扣unconfirmed，旧金额/ID/原图保留；v2批准与退休proof持久后唯一POST，私有连续锁/Native真实进程边界/前后RO持久证据/Studio审计CAS支持adopt或完全absent close-empty，原key仍409。旧v1/缺proof、软删除/重复/跨owner/使用/漂移/配置变化均保守拒，不清旧run/held/funding、不改Native资金。51领域、150API、71浏览器与三阶段整栈通过，真实恢复2例及正常到期/耗尽2例另验，0模型/真实费用。下一具体任务 **T1.6 综合用户验收与问题修复**：隔离真实Native＋明确本地供应商替身，按QA_ACCEPTANCE四角色/28场景独立浏览器实操、保留发现并统计F/N/P通过/失败/门槛/未执行。真实计划和入口仍暂不启用，未授权付费不计为成功；最终整体产品不因局部恢复测试通过而称已完成。
+
+当前 **T1 — 注册试用：每位新用户 4 次聊天＋1 次生图，用完提示充值**。用户确认按发送计聊天、图片另计，批准先实现原生一次性零价有限试用资金与隔离测试，真实配置暂不启用。T1/T1.2/T1.3 已接通次数、原生资金、每次余额授权、严格来源、未知屏障、安全账户桥与停服恢复、独立钱包生命周期；T1.4 接通默认关闭的本人权限查询/明确有限token续用、新binding与持久unknown屏障，真实Native到期/耗尽合同与完整注册/改密浏览器路径已验，prepared边界单独通过；T1.5a/b接通保守记录语义与独立token恢复。详见 [TRIAL.md](TRIAL.md)、[ACCOUNT-CONTRACT.md](ACCOUNT-CONTRACT.md)、[TOKEN-RENEWAL.md](TOKEN-RENEWAL.md)、[FUNDING-RECOVERY.md](FUNDING-RECOVERY.md)。真实计划/入口遵从暂不启用决定。New API继续作为唯一账号、模型网关和金额计费权威；不能另造账号系统或钱包，不能用fixture充当真实供应商验收。下一T1.6综合验收按证据范围统计，不宣称真实付费已就绪。
+
+实施前核对固定版真实 New API 的资金来源/赠额、本人组和有限令牌、预扣及结算路径。现有 `user-token` 在原生 quota<=0 时直接 402；token cap 只限权、不提供资金，不能单靠移除 Studio 检查声称零余额可用。需明确“零充值”与“原生零额度”的实际路径，保证试用真实经过网关、费用仍由 New API 记录。
+
+验收覆盖：同一用户仅领取一次；聊天/图片次数分别限制，工具循环的多次调用规则明确；并发不能超用；重放不重复领取/扣次数/扣费；跨账号拒绝；耗尽引导原生充值。unknown 结果保持待核对，不盲目退回权益/资金或重试。真实原生设置和付费调用仍需安全录入与明确授权。已实现的 fixture/SDK/edge 证据与真实门槛逐项记录，不能混称已上线。
+
+新增已授权优先级 C1：assistant-ui 服务端账号隔离会话、只读运行恢复与官方 Excalidraw 对照/旧草稿副本验证。该项不要求先实施 B1 云项目或 B3 Worker；New API 继续管理账号与真实费用，Studio 只保存业务历史。是否切换默认编辑器须依据具体交互/资产完整性回归，保留原始草稿和回退入口。
+
+当前决策（2026-09-30）：使用 New API 作为账号与模型网关，没有旧数据迁移，云库暂缓。当前已接入固定版本 Loomic 原生画布/聊天，业务服务为 v2/apps/api；本地草稿/项目/对话已接通，见 LOOMIC.md。工作顺序为 B2 实际渠道验证 → B3，本地 E1 可继续；B1 及依赖云保存的部分等待后续需求。以下原有项目/素材设计保留作参考，不应自动执行。业务请求通过 New API /api/user/self 校验 Bearer 身份，不写入旧 One Hub 的 server/。视频生成后续接入，视频剪裁不在范围。真实收费必须等额度/幂等底座。每项单独形成可审查提交，更新 STATUS.md。
+
+## 当前收尾计划（2026-09-30，用户已批准继续）
+
+| 阶段 | 验收条件 | 状态 |
+| --- | --- | --- |
+| 1 CI | 可移植截图；原生裁剪/落盘状态等待；精确提交 push/PR 全部通过 | 已完成：569449c，两路 36748136445/36748146849 成功 |
+| 2 新普通用户闭环 | 固定 New API 注册条件→验证→登录→本人组模型→本人额度请求→本人账单→画布保存重开；双用户隔离与无额度/禁用反例 | 替身闭环已通过；显式每用户模式保持关闭，真实原生验收待批准 |
+| 3 原生账户管理 | 复用固定版原生注册/恢复/安全会话/管理权限页面；Studio JWT/refresh/logout 契约一致 | 固定契约核验与原生入口完成；真实邮件/MFA/安全设置待批准 |
+| 4 计费与对账 | New API 唯一余额/定价/结算权威；run 关联 request_id；失败/重复/断开/unknown 不自动再扣或退款 | 每用户及异常对账替身通过；真实价格/支付待决定 |
+| 5 UI 与恢复 | 已认可官方布局；移动/无权限/保存失败/会话失效可理解且不跨户恢复 | 官方样板已认可；50/50 完整浏览器通过 |
+| 6 收尾 | 最终两路 CI、最新目标兼容、部署触发核验；父线程合并 v2 开发分支；真实验收清单 | 最终提交两路 CI 正在核验；父线程合并，不部署、不切默认 |
+
+商业决策/真实执行阻塞：注册赠额、对外价格与利润、充值/支付渠道未决定；每用户令牌额度上限和有效期、生产安全设置/SMTP/真实账户及渠道录入须批准。¥5 仅最后模型测试预算。默认示例保持生成关闭；隔离 fixture 的余额/价格不是商业配置。当前固定 New API 为 `0aec08fee811ec6136828fda790551b49e410301`，不升级或混用 rc.41 PAT 接口。真实模型调用 0。
 
 ## P0 — 安装、基线与现状确认（第一个任务）
 
 读取全部适用 AGENTS。运行 `node v2/scripts/setup.mjs`、`cd v2 && npm run check`，安装浏览器后运行 `npm run test:e2e`。已提交 CI 生成的真实 package-lock.json；使用 npm ci，不无故重新解析版本或手工编造 integrity。记录运行的 Node/npm/Go 版本。
 
-核实旧 UI、Go 测试基线；不要通过修改无关旧业务修复已有失败。缺少网路/工具/凭据时明确记录，允许继续不依赖它的任务。确认没有改 main、生产配置和数据。核对源代码中 Image 2.5 的实际限制，见 MODELS.md。
+验证固定版本 New API 的真实登录、刷新、退出和图片路由鉴权；旧 UI/Go 基线仅在改动旧代码时复验。缺少网络/工具/凭据时明确记录，允许继续不依赖它的任务。确认没有改 main、生产配置和数据。核对 New API 当前版本的模型协议行为，不沿用旧网关限制，见 MODELS.md。
 
-验收：V2 类型检查、14 个 Node 测试和 Playwright smoke 成功；依赖锁已提交；真实模型调用未自动发生。
+验收：V2 类型检查、领域/探测/API 协议测试和 Playwright 流程通过（实际数量见 STATUS.md）；依赖锁已提交；真实模型调用未自动发生。
 
-## B1 — Project / Asset 服务端闭环
+## B1 — Project / Asset 服务端闭环（暂缓，历史设计）
 
 位置：server/internal/studio/{projects,assets,httpapi}；新 `/api/studio/*` 路由；v2/apps/studio 的工作台与项目页。
 
@@ -22,17 +79,19 @@
 
 ## B2 — 多模型目录与协议兼容（Image 2.5 优先）
 
-位置：server/internal/studio/{models,adapters}，配置参考 v2/config/models.example.json。复用网关适配先通过测试；确实不支持时新增服务器端 direct adapter，不能逼用户换模型或把供应商密钥发给浏览器。
+2026-09-30 本实例已完成 `gpt-5.6-sol` 对话渠道 2 + `gpt-image-2` 图片渠道 1 的授权真实工具链验证和原生账单核对；跨渠道固定路由、受限工具循环、CNY 余额/用量/单价显示已实现。用户随后要求还原原版 Agent 选择器：仅选择对话模型，图片模型保留在原生独立偏好设置与生图面板中。保留当前单价，default 1 倍计费；没有手工改余额或新增订阅。剩余别名价格依据、视觉/编辑/质量参数与其他协议继续按本任务验证，不能把这一次结果推广到全部模型。B3/S1 仍是公众销售、订阅和可恢复任务的前置工作。
+
+业务入口已在 v2/apps/api；Loomic 实际配置参考 v2/config/loomic.models.example.json，原 models.example.json 供 operator probe 参考。已完成 Images JSON/multipart、Chat Completions + LangGraph 工具循环的本地协议测试，仍待真实渠道验证。复用固定版本 New API 的网关适配；确实不支持时评估服务器端 direct adapter，不能逼用户换模型或把供应商密钥发给浏览器。当前不依赖 B1 云库。
 
 实现公开能力目录与仅管理员可编辑的渠道配置；modelKey、upstreamModelId、protocol、adapter、capabilityRevision 分离。先做 OpenAI Images JSON 与 multipart 编辑，再 Responses。后续独立适配 Gemini Content/Interactions、fal Queue、其他 native 协议。每个协议单独提交，不把不同接口假装成一套 Images JSON。
 
-Image 2.5 优先核查官方两个 ID 与实际渠道别名，JSON 字段、模型映射 multipart 字段、quality xhigh/max、usage、超时、路由权限和计费。加入脱敏 golden request/response fixtures。没有凭据时 status 保持 contract-tested，不能 enabled 给用户。
+Image 2.5 优先核查官方两个 ID 与实际渠道别名，JSON 字段、模型映射 multipart 字段、quality xhigh/max、usage、超时、路由权限和计费。加入脱敏 golden request/response fixtures。没有凭据时保持禁用：示例占位模型为 pending，本地 adapter 测试仅证明协议行为；实际渠道必须 live-verified 后才可启用。URL-only 输出当前明确拒绝，后续需要私有下载适配后单独验证。
 
 验收：新模型无需改前端源码便可注册；不支持的参数明确拒绝；multipart 改名不丢字段；JSON、b64、URL、错误/拒绝、超时都有测试；配置未验证时 fail closed。真实付费探测需另行授权。
 
 ## B3 — Durable Job / Worker / Usage Reservation
 
-位置：server/internal/studio/{jobs,usage,outbox}，独立 worker 入口；按实际使用引入 Asynq。
+在已选的 v2/apps/api 边界划分 jobs/usage/outbox 与独立 worker 入口；按实际技术栈选择成熟队列。当前 SQLite request guard 不是 durable job 或 usage reservation；原 Asynq/Go 建议是可选方案，不能为了它默认搬回旧 server/。云库暂缓时不得宣称已有云端结果保存，输出保留/下载与删除策略需在本任务明确。
 
 POST job 返回 202 + jobId。数据库事务写 job/reservation/outbox，server 校验套餐权益与素材归属。后台 worker 执行、保存私有结果、持久化状态；浏览器只查询，不持有上游长连接或 service token。刷新/关页不丢任务。
 
@@ -42,7 +101,7 @@ POST job 返回 202 + jobId。数据库事务写 job/reservation/outbox，server
 
 ## E1 — 编辑器 / 模板
 
-在已有 Fabric 包之上实现撤销重做、图层、对齐、裁剪、模板导入、品牌素材、字号与文字编辑、项目保存/恢复；保存带版本的 document JSON + assetId。只序列化认可的对象类型，不接受任意外部 URL/SVG/脚本。恢复时等待字体/图片加载完成。
+使用 Loomic + Excalidraw 的原生编辑功能，维护已接入的图层、文字/图片、项目保存/恢复和导出；无需重写画布引擎。继续添加电商模板字段、对齐/导出预设、品牌素材、图片处理和文档版本。现在文档内嵌图片，云 assetId 仅在 B1 重启后采用。视频生成是独立后续协议任务，视频剪裁不实现。只序列化认可的对象类型，不接受任意外部 URL/SVG/脚本。恢复时等待字体/图片加载完成。
 
 商品、背景、价格、卖点和 Logo 独立图层；价格与宣传文案可修改，不要求重新生图。商用字体/模板必须有单独授权记录；不从系统拷贝字体入仓库。尺寸先作为用户可配置预设，不假称“平台官方最新规则”。
 

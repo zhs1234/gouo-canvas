@@ -1,0 +1,27 @@
+{
+  "models": [
+    {
+      "id": "fixture-chat",
+      "displayName": "\u534f\u8bae\u66ff\u8eab\u5bf9\u8bdd",
+      "kind": "chat",
+      "upstreamModelId": "fixture-chat",
+      "enabled": true,
+      "verification": "live-verified",
+      "toolCalling": true,
+      "maxChatCalls": 3,
+      "maxTokens": 256
+    },
+    {
+      "id": "fixture-image",
+      "displayName": "\u534f\u8bae\u66ff\u8eab\u56fe\u7247",
+      "kind": "image",
+      "upstreamModelId": "fixture-image",
+      "enabled": true,
+      "verification": "live-verified",
+      "operations": [
+        "generate"
+      ],
+      "responseFormat": "b64_json"
+    }
+  ]
+}

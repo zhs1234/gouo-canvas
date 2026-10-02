@@ -1,0 +1,22 @@
+{
+  "sourceCommit": "0aec08fee811ec6136828fda790551b49e410301",
+  "gatewayOrigin": "http://new-api:3000",
+  "instanceId": "OPERATOR_MUST_GENERATE_INSTALLATION_UUID",
+  "minUserId": "OPERATOR_APPROVED_FIRST_NEW_USER_ID",
+  "planId": "OPERATOR_APPROVED_NATIVE_PLAN_ID",
+  "relayIngress": "studio-only",
+  "operatorVerified": false,
+  "plan": {
+    "price_amount": 0,
+    "total_amount": "OPERATOR_APPROVED_FINITE_QUOTA",
+    "duration_unit": "OPERATOR_APPROVED_DURATION_UNIT",
+    "duration_value": "OPERATOR_APPROVED_DURATION_VALUE",
+    "custom_seconds": "OPERATOR_APPROVED_CUSTOM_SECONDS_OR_ZERO",
+    "quota_reset_period": "never",
+    "max_purchase_per_user": 1,
+    "allow_balance_pay": true,
+    "allow_wallet_overflow": false,
+    "upgrade_group": "",
+    "downgrade_group": ""
+  }
+}

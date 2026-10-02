@@ -1,74 +1,83 @@
 # 架构与迁移地图
 
-## 1. 产品与边界
+## 最新实现边界（2026-10-02）
 
-用户选择商品主图、白底图、换背景/场景图、海报和批量输出，而不是先理解几十个模型参数。先做这五种通用工作流；淘宝/拼多多/抖音/社媒/外贸差异用模板与可配置导出预设表达，不复制五套应用。AI 模特、高清化、扩图是后续可插拔操作。没有视频范围。
+`/studio/`默认assistant-ui聊天；`/studio/canvas`保留Loomic，`/studio/projects`包含本人服务器项目及本机旧草稿，`/studio/canvas-lab`使用官方Excalidraw。Studio SQLite实际保存owner-scoped会话/运行/事件、私有原图BLOB和revision项目；IndexedDB继续保存旧本机草稿。下文早期“云项目暂缓/默认画布/只本地图片”按阶段历史读取，不表示当前没有服务器私有项目。没有S3、协作或独立云存储服务。
 
-初期使用**模块化单体**：继续使用现有 Go/Gin/GORM，业务域分包；耗时任务在单独 worker 进程执行。不要为了新架构再造认证中心、独立支付微服务或同时维护三套数据库。
+当前生成仍由API请求执行；网络断开不取消供应商，API重启把未知外发意图保守保留，不存在持久Worker。统一原请求只读恢复和后台任务计划见 [SYSTEM-INTEGRATION-PLAN.md](SYSTEM-INTEGRATION-PLAN.md)；只有实际完成后才能称该阶段已实现。New API继续是唯一账号与金额权威，Studio次数/历史不构成第二个钱包。
+
+## 当前架构（2026-09-30）
+
+图片优先的无限画布与智能体工作台，后续接入视频生成；不做视频剪裁。使用固定版本 Loomic 原生前端，New API 提供账号与模型网关，业务适配位于 `v2/apps/api`。云项目/素材库暂缓，没有旧数据迁移。
 
 ```text
-Browser: React + Router + TanStack Query + Fabric
-  /api/user/*            -> existing session authentication
-  /api/studio/*          -> authenticated V2 business API
-                             projects / assets / models / jobs
-                             subscriptions / entitlements / usage
-                             SQL transaction + outbox
-                                      |
-                                 Asynq / Redis
-                                      |
-                              server-side worker
-                          /                   \
-                validated One Hub      direct protocol adapters
-                internal relay          (when needed, approved hosts)
-                          \                   /
-                         provider image APIs
-                                      |
-                         private assets -> object storage
+Browser: React + Router + TanStack Query + Loomic/Excalidraw
+  IndexedDB             -> local canvas / projects / sessions / messages
+  /api/user/*           -> New API account authentication :3000
+  /api/studio/models    -> public sanitized capability catalog
+  /api/studio/images    -> authenticated Fastify adapter :3001
+  /api/studio/threads   -> owner-scoped persistent chat history :3001
+  /api/studio/runs       -> authenticated LangGraph agent / read-only status :3001
+                              identity via New API /api/user/self
+                              local SQLite idempotency guard + conversation events
+                              server-only relay -> New API /v1
+                                Chat Completions / Images JSON / multipart
 ```
 
-浏览器不能获取 relay service token，也不能直接调用上游或通过旧 `/v1` 绕过 V2 权益。不要把“保留 One Hub”理解为所有新模型必须等待它支持。
+浏览器账号 token 只在内存中，刷新用 HttpOnly Cookie；真实 relay key 只由业务服务读取，浏览器不能直接请求 `/v1`。默认没有模型密钥与可用模型，不调用付费渠道。当前通过 SSE 逐 token/工具事件传输，兼容批次端点保留；关闭页面不保证供应商取消或恢复完整运行；任务队列和权益尚未实现。
 
-## 2. 目录
+本地草稿按访客/账号 scope 显示，但同一浏览器的 IndexedDB 不提供共享设备安全隔离；重要结果须导出备份。服务端 SQLite 保存请求去重与按账号隔离的聊天历史；未知结果阻止重交，不具备 Worker/usage reservation 语义。详见 [LOOMIC.md](LOOMIC.md)。
+
+## 目录
 
 ```text
 src/                         legacy UI, kept intact
-server/                      existing Go module and gateway
-  internal/studio/           new Go domains (B1+)
+server/                      legacy One Hub reference, not started by V2
 v2/                          isolated npm workspace
-  apps/studio/src/           pages and application integration
-  packages/ui/src/           shared UI primitives
-  packages/contracts/src/    public types / capabilities / job transitions
-  scripts/                   setup + operator image probe
-  tests/                     contracts + browser smoke
-  config/                    non-secret catalog examples
-docs/v2/                     task contracts and design decisions
+  apps/studio/src/loomic/     pinned Loomic frontend and thin adapters
+  apps/api/src/              config / auth boundary / agent / images / ledger
+  packages/ui/src/           small shared UI primitives (account integration)
+  packages/contracts/src/    domain types / capabilities / job transitions
+  scripts/                   setup / joint dev startup / explicit operator probe
+  tests/                     contracts / probe / browser workflows
+  config/                    disabled model examples, no secrets
+docs/v2/                     task contracts and decisions
 ```
 
-旧 root package.json/package-lock.json 不升级、不转换为 workspace。V2 自带依赖树，旧 root `npm run build` 仍面向旧站。
+旧 root package/lockfile 不升级、不转换为 workspace。前端只使用 Excalidraw 一个画布引擎；移除 Fabric starter 和未采用的其他编辑器包。保留 Loomic 源码许可证与 provenance，不复制完整上游后端。
 
-## 3. 复用地图（均需测试后接入）
+## 后续业务边界
 
-| 现有位置 | 处理 | 不应照搬的部分 |
-| --- | --- | --- |
-| server/middleware/auth.go、controller/user.go | 复用登录态与身份识别 | 不能接受客户端 userId 代替鉴权 |
-| server/providers、relay | 复用渠道与已验证协议 | 不能因模型出现在列表就判定图片支持 |
-| src/lib/gouoBackend.ts | 已参考账号 envelope；V2 建独立轻量 API client | 不搬其浏览器 relay token 路径到 V2 |
-| src/lib/openaiCompatibleImageApi.ts、falAiImageApi.ts | 提取协议行为与测试样例 | 上游执行迁移到 worker，非浏览器长请求 |
-| server/controller/gouo_cloud.go、model/gouo_cloud.go | 复用用户隔离与旧素材映射思路 | 旧 done/error 同步记录不是 durable job |
-| server/common/storage | 复用 SDK 基础 | 不等于已有私有素材签名下载与 quota 原子性 |
-| server/payment/gateway | 复用微信/支付宝/Stripe SDK | 旧充值回调不等于可靠订阅状态机 |
-| server/controller/order.go | 查阅协议和历史订单 | 新订单、权益发放必须改成事务/唯一键/幂等 |
-| src/lib/exportZip、mask、size 等 | 迁移纯函数及测试 | 不导入完整 store.ts 或旧 UI 类型图 |
-| src/store.ts、InputBar、SettingsModal | 行为参考，不作为 V2 状态基础 | 禁止复制成新的超大 store/component |
+B2：逐渠道验证模型 ID、JSON/multipart、质量、尺寸、图片理解与返回格式。URL-only 图片当前报错；Responses、Gemini、fal、视频异步协议分别适配，不强行映射为 Images JSON。真实验证前模型保持禁用。
 
-## 4. 状态与任务
+B3/S1：增加持久化 job、事务性的权益/usage reservation/outbox、成熟后台队列、私有输出保存/下载、幂等结算与 unknown reconciliation，再开放收费。刷新/关页恢复与取消费用策略在该阶段实现；不声称当前同步请求已满足这些要求。
 
-服务端是真实任务、素材、套餐的权威数据源；TanStack Query 缓存这些 DTO。Fabric 画布运行时对象不能直接放进全局 JSON store；持久化必须使用带 schemaVersion 的编辑文档，以 assetId 引用素材，不能存永久外部签名 URL。
+B1 暂缓：以后启用云库时明确存储、owner scoped 查询、revision、上传校验和删除/保留策略。当前画布文件内嵌本地图片，不引入 Supabase 或公开桶。
 
-新任务先事务写入 job、预留额度和 outbox，再投递队列。Worker 至少一次执行语义由数据库 idempotency key 保证业务效果不重复。上游调用成功但下载保存失败时优先恢复既有结果，不重复生图。
+商品主图、白底图、换背景/场景图、海报与批量输出作为后续工作流/模板；保留商品外观的要求应由确定性合成与样本质量回归验证，不由营销名称推断。
 
-## 5. 运行与部署
+## 旧代码参考
 
-开发端口：旧 UI 5173、V2 5174、Go 默认 3000。生产目标同源 `/studio/`，静态文件在 `v2/apps/studio/dist`，API 仍由现有 Go 处理。需要单独新增 Nginx location 与 feature flag，但本提交不变更实际部署配置。
+旧 `server/providers`、图片 API 纯函数、支付/存储 SDK 可作为协议参考，采用前逐项验证；不复用旧 Session、浏览器 relay token 路径或充值语义。New API 自己维护认证/渠道管理，V2 不再造认证中心。月度订阅的业务管理在新服务独立实现。
 
-V2 初期不必另建管理员身份系统。模型渠道继续使用 One Hub 管理界面；项目/套餐/任务管理新增带 admin 权限的业务页。只引入一个设计体系；不同时嵌入 Fabric、Konva、tldraw、Filerobot 四套编辑器。
+## 运行
+
+开发：`cd v2 && npm run dev` 同时运行 API 3001、前端 5174；New API 3000 单独运行。生产目标同源 `/studio/` 静态资源及账号/业务 API 的分别反向代理，产物在 `v2/apps/studio/dist`。生产 HTTPS、Cookie/CSRF、备份、队列和收费策略待单独实施。
+
+## 可重复一体化运行
+
+新增 `v2/deploy/compose.yml`、独立镜像和同源 Nginx 入口，详见 [RUNNING.md](RUNNING.md)。保持前端、Studio、New API 三服务，以及浏览器草稿 / Studio 去重 / New API 账号费用三个数据职责。没有合库或复制第二套认证；旧根部署文件不参与 V2。`/studio/chat-lab` 和 `/studio/canvas-lab` 是隔离、可回退的体验对照，尚未替换默认画布和会话存储。
+
+## 持久聊天与画布对照（C1）
+
+`/studio/chat` 使用 assistant-ui 组件、自定义 Studio transport 和 New API 会话；没有第二套账号、模型网关或账单。Studio 同一 SQLite 文件新增会话、运行与流事件表，每次读写以已验证的 New API user ID 为 owner。历史图像仍以内嵌结果保存，不等于云项目/对象存储。旧 `/studio/chat-lab` 重定向到正式聊天入口，默认画布菜单提供入口与回退。
+
+流中进度逐事件落盘，终态与幂等结果同事务保存；断网/切线程/停止接收只断开客户端接收，运行可在当前进程继续完成。刷新可按线程或 run ID 读取已保存结果，不会重新提交生成。进程重启使尚在 running 的记录变为 unknown；没有后台 Worker 自动续跑，也不保证供应商取消或收费停止。
+
+模型上下文取服务端最近六次完成运行的用户/助手文本，每段最多 8000 字符；完整历史另行保留，不能把上下文窗口称为无限记忆。New API 仍是实际费用权威，历史记录中的 usage 是查询结果/待确认状态，不是新增财务账本。单实例 SQLite 数据与备份应由部署者按隐私及保留策略管理；当前不自动删历史。
+
+官方画布与现有包装共用 Excalidraw，独立存储副本并以只读方式查看当前账号的旧本机草稿。默认编辑器切换必须通过图片文件完整性与交互回归；本阶段不静默替换旧草稿或转换不支持的 Fabric payload。
+
+## 普通用户与原生账户/计费收尾
+
+原 personal relay 的单 owner 安全边界保留；新增默认不启用的 user-token 模式，按本人 JWT/组模型权限获取 New API 原生有限令牌，key 仅本次服务端请求内存。New API 是唯一钱包，Studio SQLite 只记录 run/调用序号/request_id 与状态供本人只读核对，未新增用户库、余额、支付或自动退款。原生账户页面通过同源 HTTP 集成复用，AGPLv3/NOTICE 归属保留；固定 SHA 和许可/流程见 ACCOUNT-CONTRACT.md、USER-BILLING.md。试用赠額/售价/支付和真实安全策略仍待决定/批准。

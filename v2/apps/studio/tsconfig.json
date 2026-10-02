@@ -1,1 +1,44 @@
-{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM","DOM.Iterable"],"module":"ESNext","moduleResolution":"Bundler","jsx":"react-jsx","strict":true,"noEmit":true,"skipLibCheck":true,"allowImportingTsExtensions":true,"esModuleInterop":true,"types":["vite/client"]},"include":["src","../../packages/contracts/src","../../packages/ui/src"]}
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "types": [
+      "vite/client"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/loomic/*"
+      ],
+      "@loomic/shared": [
+        "src/loomic/shared/index.ts"
+      ],
+      "next/navigation": [
+        "src/loomic/compat/navigation.ts"
+      ],
+      "next/dynamic": [
+        "src/loomic/compat/dynamic.tsx"
+      ],
+      "next/link": [
+        "src/loomic/compat/link.tsx"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "../../packages/contracts/src",
+    "../../packages/ui/src"
+  ]
+}

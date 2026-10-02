@@ -11,7 +11,7 @@ permissions:
 jobs:
   studio:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: v2
@@ -29,4 +29,8 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Browser smoke (no provider keys)
-        run: npm run test:e2e
+        run: npm run test:e2e -- --workers=1
+      - name: Integrated services (real uninitialized New API, then explicit contract fixture)
+        env:
+          GOUO_STACK_DOCKER_HUB: 'true'
+        run: npm run test:stack

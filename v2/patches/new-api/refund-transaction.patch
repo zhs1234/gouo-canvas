@@ -1,0 +1,257 @@
+diff --git a/model/subscription.go b/model/subscription.go
+--- a/model/subscription.go
++++ b/model/subscription.go
+@@ -1416,7 +1416,7 @@
+ 			record.Status = "refunded"
+ 			return tx.Save(&record).Error
+ 		}
+-		if err := PostConsumeUserSubscriptionDelta(record.UserSubscriptionId, -record.PreConsumed); err != nil {
++		if err := postConsumeUserSubscriptionDeltaTx(tx, record.UserSubscriptionId, -record.PreConsumed); err != nil {
+ 			return err
+ 		}
+ 		record.Status = "refunded"
+@@ -1515,17 +1515,26 @@
+ 		return nil
+ 	}
+ 	return DB.Transaction(func(tx *gorm.DB) error {
+-		var sub UserSubscription
+-		if err := lockForUpdate(tx).
+-			Where("id = ?", userSubscriptionId).
+-			First(&sub).Error; err != nil {
+-			return err
+-		}
+-		newUsed := max(sub.AmountUsed+delta, 0)
+-		if sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
+-			return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
+-		}
+-		sub.AmountUsed = newUsed
+-		return tx.Save(&sub).Error
++		return postConsumeUserSubscriptionDeltaTx(tx, userSubscriptionId, delta)
+ 	})
+ }
++
++// postConsumeUserSubscriptionDeltaTx keeps the caller's transaction boundary.
++// In particular, a refund must commit its amount and idempotency record together.
++func postConsumeUserSubscriptionDeltaTx(tx *gorm.DB, userSubscriptionId int, delta int64) error {
++	if userSubscriptionId <= 0 {
++		return errors.New("invalid userSubscriptionId")
++	}
++	var sub UserSubscription
++	if err := lockForUpdate(tx).
++		Where("id = ?", userSubscriptionId).
++		First(&sub).Error; err != nil {
++		return err
++	}
++	newUsed := max(sub.AmountUsed+delta, 0)
++	if sub.AmountTotal > 0 && newUsed > sub.AmountTotal {
++		return fmt.Errorf("subscription used exceeds total, used=%d total=%d", newUsed, sub.AmountTotal)
++	}
++	sub.AmountUsed = newUsed
++	return tx.Save(&sub).Error
++}
+diff --git a/model/subscription_refund_transaction_test.go b/model/subscription_refund_transaction_test.go
+new file mode 100644
+--- /dev/null
++++ b/model/subscription_refund_transaction_test.go
+@@ -0,0 +1,201 @@
++package model
++
++import (
++	"errors"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/QuantumNous/new-api/common"
++	"github.com/glebarez/sqlite"
++	"github.com/stretchr/testify/require"
++	"gorm.io/driver/mysql"
++	"gorm.io/driver/postgres"
++	"gorm.io/gorm"
++	"gorm.io/gorm/logger"
++	"gorm.io/gorm/schema"
++)
++
++// Do not use t.Parallel: Native's model package owns a global DB handle.
++func setupRefundTransactionDB(t *testing.T) {
++	t.Helper()
++	previousDB, previousType := DB, common.MainDatabaseType()
++	dialect := os.Getenv("REFUND_TEST_DIALECT")
++	if dialect == "" {
++		dialect = "sqlite"
++	}
++	var driver gorm.Dialector
++	switch dialect {
++	case "sqlite":
++		driver = sqlite.Open(filepath.Join(t.TempDir(), "refund.db") + "?_pragma=busy_timeout(100)")
++	case "mysql":
++		dsn := os.Getenv("TEST_MYSQL_DSN")
++		if dsn == "" {
++			t.Fatal("REFUND_TEST_DIALECT=mysql requires an isolated TEST_MYSQL_DSN")
++		}
++		driver = mysql.Open(dsn)
++	case "postgres":
++		dsn := os.Getenv("TEST_POSTGRES_DSN")
++		if dsn == "" {
++			t.Fatal("REFUND_TEST_DIALECT=postgres requires an isolated TEST_POSTGRES_DSN")
++		}
++		driver = postgres.Open(dsn)
++	default:
++		t.Fatal("unsupported REFUND_TEST_DIALECT")
++	}
++	// A unique prefix limits migration/drop to this test's two tables; never truncate
++	// other tables in the root-managed isolated database. Connection details stay private.
++	prefix := "refund_test_" + strconv.FormatInt(time.Now().UnixNano(), 36) + "_"
++	db, err := gorm.Open(driver, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), NamingStrategy: schema.NamingStrategy{TablePrefix: prefix}})
++	if err != nil {
++		t.Fatal("refund test database open failed (connection details suppressed)")
++	}
++	sqlDB, err := db.DB()
++	require.NoError(t, err)
++	sqlDB.SetMaxOpenConns(4) // An accidental inner global-DB transaction must use a different connection.
++	t.Cleanup(func() {
++		DB = previousDB
++		common.SetMainDatabaseType(previousType)
++		defer sqlDB.Close()
++		require.NoError(t, db.Migrator().DropTable(&SubscriptionPreConsumeRecord{}, &UserSubscription{}))
++	})
++	require.NoError(t, db.AutoMigrate(&UserSubscription{}, &SubscriptionPreConsumeRecord{}))
++	DB = db
++	common.SetMainDatabaseType(common.DatabaseType(dialect))
++	versionQuery := "SELECT version()"
++	if dialect == "sqlite" {
++		versionQuery = "SELECT sqlite_version()"
++	}
++	var version string
++	require.NoError(t, db.Raw(versionQuery).Scan(&version).Error)
++	t.Logf("refund test dialect=%s database version=%s", dialect, version)
++}
++
++func seedRefundTransaction(t *testing.T, requestID string, subID, owner int, used, preConsumed int64) {
++	t.Helper()
++	require.NoError(t, DB.Create(&UserSubscription{Id: subID, UserId: owner, AmountTotal: 1000, AmountUsed: used, Status: "active"}).Error)
++	require.NoError(t, DB.Create(&SubscriptionPreConsumeRecord{RequestId: requestID, UserId: owner, UserSubscriptionId: subID, PreConsumed: preConsumed, Status: "consumed"}).Error)
++}
++
++func assertRefundTransaction(t *testing.T, requestID string, subID int, used int64, status string) {
++	t.Helper()
++	var sub UserSubscription
++	var record SubscriptionPreConsumeRecord
++	require.NoError(t, DB.First(&sub, subID).Error)
++	require.NoError(t, DB.Where("request_id = ?", requestID).First(&record).Error)
++	require.Equal(t, used, sub.AmountUsed)
++	require.Equal(t, status, record.Status)
++}
++
++func TestRefundTransactionCommitsOnceAndPreservesOtherOwner(t *testing.T) {
++	setupRefundTransactionDB(t)
++	seedRefundTransaction(t, "refund-owner-a", 1, 101, 56, 20)
++	seedRefundTransaction(t, "refund-owner-b", 2, 102, 70, 30)
++	require.NoError(t, RefundSubscriptionPreConsume("refund-owner-a"))
++	require.NoError(t, RefundSubscriptionPreConsume("refund-owner-a"))
++	assertRefundTransaction(t, "refund-owner-a", 1, 36, "refunded")
++	assertRefundTransaction(t, "refund-owner-b", 2, 70, "consumed")
++}
++
++func TestRefundTransactionRollsBackAmountWhenMarkerFails(t *testing.T) {
++	setupRefundTransactionDB(t)
++	seedRefundTransaction(t, "refund-marker-fail", 1, 101, 56, 20)
++	var amountInsideTransaction int64
++	require.NoError(t, DB.Callback().Update().Before("gorm:update").Register("refund_test_marker_failure", func(tx *gorm.DB) {
++		if strings.HasSuffix(tx.Statement.Table, "subscription_pre_consume_records") {
++			// Read through the actual caller transaction after its amount write.
++			if err := tx.Session(&gorm.Session{NewDB: true}).Model(&UserSubscription{}).Where("id = ?", 1).Select("amount_used").Scan(&amountInsideTransaction).Error; err != nil {
++				tx.AddError(err)
++				return
++			}
++			tx.AddError(errors.New("forced marker failure"))
++		}
++	}))
++	err := RefundSubscriptionPreConsume("refund-marker-fail")
++	require.ErrorContains(t, err, "forced marker failure")
++	require.EqualValues(t, 36, amountInsideTransaction)
++	assertRefundTransaction(t, "refund-marker-fail", 1, 56, "consumed")
++	require.NoError(t, DB.Callback().Update().Remove("refund_test_marker_failure"))
++	require.NoError(t, RefundSubscriptionPreConsume("refund-marker-fail"))
++	assertRefundTransaction(t, "refund-marker-fail", 1, 36, "refunded")
++}
++
++func TestRefundTransactionRollsBackWhenAmountFails(t *testing.T) {
++	setupRefundTransactionDB(t)
++	seedRefundTransaction(t, "refund-amount-fail", 1, 101, 56, 20)
++	require.NoError(t, DB.Callback().Update().Before("gorm:update").Register("refund_test_amount_failure", func(tx *gorm.DB) {
++		if strings.HasSuffix(tx.Statement.Table, "user_subscriptions") {
++			tx.AddError(errors.New("forced amount failure"))
++		}
++	}))
++	require.ErrorContains(t, RefundSubscriptionPreConsume("refund-amount-fail"), "forced amount failure")
++	assertRefundTransaction(t, "refund-amount-fail", 1, 56, "consumed")
++}
++
++func TestRefundTransactionConcurrentDuplicate(t *testing.T) {
++	setupRefundTransactionDB(t)
++	seedRefundTransaction(t, "refund-concurrent", 1, 101, 56, 20)
++	start := make(chan struct{})
++	errors := make(chan error, 2)
++	var group sync.WaitGroup
++	for i := 0; i < 2; i++ {
++		group.Add(1)
++		go func() { defer group.Done(); <-start; errors <- RefundSubscriptionPreConsume("refund-concurrent") }()
++	}
++	close(start)
++	group.Wait()
++	close(errors)
++	for err := range errors {
++		if err != nil {
++			require.True(t, common.UsingMainDatabase(common.DatabaseTypeSQLite), "non-SQLite duplicate refunds must both succeed")
++			// SQLite has no FOR UPDATE: a losing writer may fail. The caller's explicit
++			// retry after both transactions ended must observe the persisted marker.
++			require.True(t, strings.Contains(err.Error(), "locked") || strings.Contains(err.Error(), "SQLITE_BUSY"), err.Error())
++			require.NoError(t, RefundSubscriptionPreConsume("refund-concurrent"))
++		}
++	}
++	assertRefundTransaction(t, "refund-concurrent", 1, 36, "refunded")
++}
++
++func TestRefundTransactionMissingAndZeroReservation(t *testing.T) {
++	setupRefundTransactionDB(t)
++	require.Error(t, RefundSubscriptionPreConsume(""))
++	require.Error(t, RefundSubscriptionPreConsume("missing"))
++	seedRefundTransaction(t, "zero-reserve", 1, 101, 56, 0)
++	require.NoError(t, RefundSubscriptionPreConsume("zero-reserve"))
++	assertRefundTransaction(t, "zero-reserve", 1, 56, "refunded")
++	require.NoError(t, DB.Create(&SubscriptionPreConsumeRecord{RequestId: "missing-sub", UserId: 101, UserSubscriptionId: 99, PreConsumed: 20, Status: "consumed"}).Error)
++	require.Error(t, RefundSubscriptionPreConsume("missing-sub"))
++	var record SubscriptionPreConsumeRecord
++	require.NoError(t, DB.Where("request_id = ?", "missing-sub").First(&record).Error)
++	require.Equal(t, "consumed", record.Status)
++	// A corrupted persisted association must not bypass the public positive-ID
++	// contract even if a negative-ID subscription row exists in the database.
++	seedRefundTransaction(t, "negative-sub", -1, 101, 56, 20)
++	require.EqualError(t, RefundSubscriptionPreConsume("negative-sub"), "invalid userSubscriptionId")
++	assertRefundTransaction(t, "negative-sub", -1, 56, "consumed")
++	require.NoError(t, DB.Create(&SubscriptionPreConsumeRecord{RequestId: "zero-sub-id", UserId: 101, UserSubscriptionId: 0, PreConsumed: 20, Status: "consumed"}).Error)
++	require.EqualError(t, RefundSubscriptionPreConsume("zero-sub-id"), "invalid userSubscriptionId")
++	record = SubscriptionPreConsumeRecord{}
++	require.NoError(t, DB.Where("request_id = ?", "zero-sub-id").First(&record).Error)
++	require.Equal(t, "consumed", record.Status)
++	assertRefundTransaction(t, "zero-reserve", 1, 56, "refunded")
++}
++
++func TestRefundTransactionPublicDeltaContract(t *testing.T) {
++	setupRefundTransactionDB(t)
++	seedRefundTransaction(t, "public-delta", 1, 101, 56, 20)
++	require.Error(t, PostConsumeUserSubscriptionDelta(0, 0))
++	require.NoError(t, PostConsumeUserSubscriptionDelta(99, 0)) // Existing zero-delta no-op.
++	require.Error(t, PostConsumeUserSubscriptionDelta(99, 1))
++	require.Error(t, PostConsumeUserSubscriptionDelta(1, 1000))
++	assertRefundTransaction(t, "public-delta", 1, 56, "consumed")
++	require.NoError(t, PostConsumeUserSubscriptionDelta(1, 10))
++	assertRefundTransaction(t, "public-delta", 1, 66, "consumed")
++	require.NoError(t, PostConsumeUserSubscriptionDelta(1, -100))
++	assertRefundTransaction(t, "public-delta", 1, 0, "consumed")
++}

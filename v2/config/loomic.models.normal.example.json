@@ -1,0 +1,6 @@
+{
+  "models": [
+    { "id": "studio-agent", "displayName": "gpt-6.1-sol（待渠道验证）", "kind": "chat", "upstreamModelId": "gpt-6.1-sol", "enabled": false, "verification": "pending", "vision": false, "toolCalling": false, "maxChatCalls": 1, "maxTokens": 128 },
+    { "id": "studio-image", "displayName": "gpt-image-2（待渠道验证）", "kind": "image", "upstreamModelId": "gpt-image-2", "enabled": false, "verification": "pending", "qualities": [], "sizes": {}, "operations": ["generate"], "responseFormat": "b64_json" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "sourceCommit": "0aec08fee811ec6136828fda790551b49e410301",
+  "retryTimes": 0,
+  "gatewayOrigin": "http://new-api:3000",
+  "operatorVerified": true,
+  "verifiedAt": "2026-09-30T00:00:00Z",
+  "note": "In-memory fixture only; not evidence of real gateway configuration"
+}

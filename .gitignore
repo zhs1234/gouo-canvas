@@ -1,6 +1,7 @@
 node_modules/
 dist/
 output/
+.playwright-cli/
 dev-proxy.config.json
 .env
 .env.*
@@ -19,3 +20,6 @@ server/data/
 .idea/
 .vscode/
 .wrangler/
+# V2 用户自行配置的运行时文件；只保留说明。
+v2/deploy/runtime/*
+!v2/deploy/runtime/README.md

@@ -43,11 +43,11 @@ server-only：modelKey、upstreamModelId、protocol、adapterId、channelId、se
 
 public：模型标签、业务 modelKey、已验证操作、参考图上限、输出张数、质量/尺寸/格式、透明底等能力；不能包含 keys、内部 URL 或管理员配置。
 
-`v2/config/models.example.json` 只是非生产配置示例。默认全 disabled/pending；不能通过导入示例直接开放付费模型。共享校验在 `v2/packages/contracts/src/index.ts`，服务端还需验证数据库、配额和资产归属。
+`v2/config/models.example.json` 供 operator probe 参考；Loomic 业务服务实际目录为 `v2/config/loomic.models.example.json`，见 LOOMIC.md。默认全 disabled/pending；不能通过导入示例直接开放付费模型。共享校验在 `v2/packages/contracts/src/index.ts`，当前服务端协议实现不代替数据库权益/配额或云资产归属校验。
 
 ## 5. 网关不支持时
 
-先用最小 JSON 请求区分上游与 One Hub 故障；通过下面的 operator probe 可分别配置官方端点和经过授权的中转端点。网关路径暂不具备新字段时，可由 Go Worker 内的 direct adapter 访问批准的上游；仍经过统一身份、素材、Job、权益与审计。禁止在浏览器直接调用，禁止自动转送到未经批准的第三方。
+先用最小 JSON 请求区分上游与 New API 故障；通过下面的 operator probe 可分别配置官方端点和经过授权的中转端点。2026-09-30 已选择固定版本 New API，旧网关排查结论仅作参考，不能据此宣称新网关支持或不支持某模型。网关路径暂不具备新字段时，可由服务器端 worker 的 direct adapter 访问批准的上游；仍经过统一身份、Job、权益与审计。禁止在浏览器直接调用，禁止自动转送到未经批准的第三方。
 
 不得以关闭所有校验、放开任意 URL、忽略 quality/mask 字段或统一把模型名替换成 gpt-image-2 的方式“修好”。
 

@@ -1,8 +1,10 @@
 node_modules/
 dist/
 .cache/
+.local/
 .reports/
 playwright-report/
+.playwright-cli/
 test-results/
 .env
 .env.*
