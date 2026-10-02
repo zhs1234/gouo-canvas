@@ -2,14 +2,17 @@
 // T112-<16 hex> 本地验收受控慢流 pauses after one visible delta (after
 // image completion for tool requests). Private offline-control.json controls
 // only that tag: {version:1,streams:{[tag]:{command:'hold'|'continue'|'lose-response'}}}.
+// B3N2-<16 hex> 本地验收受控图片 holds the original image HTTP response.
+// image-job-control.json must match GOUO_ACCOUNT_INSTANCE_ID in the supplier
+// process and in images[tag].instanceId; only hold/continue are supported.
 import { createServer } from 'node:http'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import sharp from 'sharp'
-export async function createAcceptanceProvider({directory='/fixture',controlTimeout=120_000}={}) {
-const path=join(directory,'provider-stats.json'),controlPath=join(directory,'offline-control.json')
+export async function createAcceptanceProvider({directory='/fixture',controlTimeout=120_000,instanceId=process.env.GOUO_ACCOUNT_INSTANCE_ID}={}) {
+const path=join(directory,'provider-stats.json'),controlPath=join(directory,'offline-control.json'),imageControlPath=join(directory,'image-job-control.json')
 let stats={chat:0,image:0,anonymousRejected:0,slow:0,unavailable:0,ambiguous:0,requests:[]}
 try{stats=JSON.parse(readFileSync(path,'utf8'))}catch{}
 const save=()=>writeFileSync(path,JSON.stringify(stats))
@@ -18,7 +21,7 @@ const png=await sharp(Buffer.from('<svg width="640" height="480"><rect width="64
 const ownerPng=Object.fromEntries(await Promise.all(['T111-A','T111-B'].map(async(tag,index)=>[tag,await sharp(Buffer.from(`<svg width="640" height="480"><rect width="640" height="480" fill="${index?'#73568e':'#56738e'}"/><text x="40" y="160" fill="white" font-size="40">${tag}</text><text x="40" y="230" fill="white" font-size="30">LOCAL ACCEPTANCE FIXTURE</text><text x="40" y="290" fill="white" font-size="22">No real AI / procurement cost 0</text></svg>`)).png().toBuffer()])))
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms))
 return createServer(async(req,res)=>{
-  if(req.url==='/stats'&&req.method==='GET'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(stats))}
+  if(req.url==='/stats'&&req.method==='GET'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({...stats,imageControl:{version:1,instanceId:/^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(instanceId??'')?instanceId:null}}))}
   if(req.headers.authorization!=='Bearer fixture-provider-zero-procurement-cost'){stats.anonymousRejected++;save();res.writeHead(401);return res.end('{"error":{"message":"Explicit local fixture requires synthetic credential"}}')}
   let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>2_000_000){res.writeHead(413);return res.end()}}
   let body;try{body=JSON.parse(raw)}catch{res.writeHead(400);return res.end()}
@@ -26,12 +29,33 @@ return createServer(async(req,res)=>{
   if(!kind){res.writeHead(404);return res.end()}
   stats[kind]++;const id='local-fixture-'+kind+'-'+stats[kind]
   const messages=body.messages??[],last=messages.findLastIndex(row=>row.role==='user'),prompt=JSON.stringify(messages[last]?.content??body.prompt??'')
-  const roleTag=/T112-[a-f0-9]{16}|T111-[AB]|T16-[ABCD]/.exec(prompt)?.[0]??'unmarked'
+  const roleTag=/B3N2-[a-f0-9]{16}|T112-[a-f0-9]{16}|T111-[AB]|T16-[ABCD]/.exec(prompt)?.[0]??'unmarked'
   const nativeRequestId=req.headers['x-request-id']
   const request={id,kind,roleTag,stream:body.stream===true,outcome:'started',...(typeof nativeRequestId==='string'&&/^[\w-]{1,64}$/.test(nativeRequestId)?{nativeRequestId}:{})};stats.requests.push(request);save()
   if(prompt.includes('本地验收503')){stats.unavailable++;request.outcome='503';save();res.writeHead(503,{'Content-Type':'application/json'});return res.end('{"error":{"message":"Explicit local acceptance fixture 503","type":"fixture_unavailable"}}')}
   if(prompt.includes('本地验收未知')){stats.ambiguous++;request.outcome='response-lost';save();return req.socket.destroy()}
-  if(kind==='image'){const bytes=ownerPng[roleTag]??png;request.outcome='completed';request.imageSha256=createHash('sha256').update(bytes).digest('hex');save();res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({created:1,data:[{b64_json:bytes.toString('base64'),revised_prompt:'LOCAL ACCEPTANCE FIXTURE; no real AI; cost zero'}]}))}
+  if(kind==='image'){
+    if(prompt.includes('本地验收受控图片')&&/^B3N2-[a-f0-9]{16}$/.test(roleTag)){
+      request.outcome='waiting-image-control';request.pauseAt=new Date().toISOString();save()
+      let finished=false
+      res.on('close',()=>{if(!finished&&!['image-control-invalid','image-control-timeout'].includes(request.outcome)){request.outcome='connection-closed';save()}})
+      const deadline=Date.now()+controlTimeout
+      while(!res.destroyed){
+        let command
+        try{
+          const control=JSON.parse(readFileSync(imageControlPath,'utf8')),entry=control.images?.[roleTag]
+          if(!/^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(instanceId??'')||control.version!==1||control.instanceId!==instanceId||entry?.instanceId!==instanceId||!['hold','continue'].includes(entry.command))throw Error('Invalid explicit same-instance image control')
+          request.controlInstanceMatches=true
+          command=entry.command
+        }catch{request.outcome='image-control-invalid';save();return res.destroy()}
+        if(command==='continue'){request.controlCommand=command;request.controlInstanceMatches=true;finished=true;break}
+        if(Date.now()>=deadline){request.outcome='image-control-timeout';save();return res.destroy()}
+        await pause(100)
+      }
+      if(res.destroyed)return
+    }
+    const bytes=ownerPng[roleTag]??png;request.outcome='completed';request.imageSha256=createHash('sha256').update(bytes).digest('hex');save();res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({created:1,data:[{b64_json:bytes.toString('base64'),revised_prompt:'LOCAL ACCEPTANCE FIXTURE; no real AI; cost zero'}]}))
+  }
   const hasTool=messages.slice(last+1).some(row=>row.role==='tool'),wantsImage=prompt.includes('本地验收生图')
   const message=wantsImage&&!hasTool?{role:'assistant',content:'',tool_calls:[{id:'local-fixture-image-tool',type:'function',function:{name:'generate_image',arguments:JSON.stringify({prompt:roleTag+' LOCAL ACCEPTANCE FIXTURE image; cost zero'})}}]}:{role:'assistant',content:hasTool?'【本地验收替身】图片工具已完成；此图是合成验收素材，采购成本为0。':'【本地验收替身】这是一条明确的本地协议测试回复，没有调用真实AI供应商。'}
   const usage={prompt_tokens:100,completion_tokens:20,total_tokens:120}

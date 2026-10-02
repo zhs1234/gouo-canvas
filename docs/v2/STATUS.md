@@ -1,5 +1,11 @@
 # 实际交付与验证状态
 
+## B3-N2 连续关页恢复实际通过（2026-10-02）
+
+最终build的真实UI、固定Native和本地受控供应商，全新普通owner11：同browser事件序号证明模式/原UUID/参数/owner先IDB transaction.complete再原fetch，唯一POST202；原任务submission_started且image reserved/held时关页，同API进程继续原调用完成。新tab由HttpOnly Cookie恢复本人和原画布，真实offline原GET失败保占位，online只GET原ID插入同PNG，实际Excalidraw文档下载和reload单图。原job `0d41a72d-f701-4fef-a442-f7be465b14f7`，PNG hash `796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3`；provider image+1/chat0、恢复业务写0、异户404/匿名401、恢复保护hash不变。连续报告 `.local/native-image-jobs-ui-continuous-report.json` **passed，命令9.17秒 exit0**；新11+旧24+旧5设施F由root **40/40 exit0，1.540秒**。真实付费调用0。
+
+首次工具/proc尾换行错误在live-scope-check、0HTTP/浏览器/模型前拒绝，失败报告原样保留；修正共用字段22字符串解析和负例后才用同未提交fresh账号新报告执行。没有重发已接受任务或删除失败断言。实际首次试用领取属于唯一原UI生成的核验，不另行初始化grant。完成会自动替换占位并关闭浮层，因此验证的是画布文档含原PNG，不伪称点击仅插入失败时出现的下载原图按钮。独立Worker、无人值守重新授权及正式实扣仍未完成。
+
 ## E1 可编辑电商版式与精确导出增量（2026-10-02）
 
 三个画布入口复用官方Excalidraw新增电商版式：1024方形、1200×1600竖版、1600×900横版，以及100–4096整数自定义尺寸。选中的单张商品复制原fileId/字节、裁剪/翻转/角度/比例，原元素不动；无图片时明确空版式。标题、价格、卖点和品牌是可编辑原生文字，原生撤销/重做与既有草稿/CAS保存继续工作。所选未旋转画框按实际整数尺寸导出无额外边距白底PNG，失败仍可导出文档备份，换户后的迟到下载被阻止。

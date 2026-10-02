@@ -1,5 +1,13 @@
 # 系统打通：实际进度
 
+## B3-N2 连续真实UI原图片任务（2026-10-02）
+
+opt-in browser-image-jobs-native.cases.mjs/fixture及仅明确B3N2本地图片标签的hold/continue供应商控制，process/config/control/entry均绑定原instance UUID。只recreate自己的恢复目标fixture-provider加载设施，不重启Native/API、不改限流；源保持冷停止。注册全新普通owner11+空thread（0模型），领取由唯一原UI提交ensureTrial完成；独立owner7仅只读授权核验。实际target60169原binary/source核验、全部channel本地、fresh请求/job/asset/reservation零行、当前supplier控制版本/同UUID后才允许模型提交。
+
+原job `0d41a72d-f701-4fef-a442-f7be465b14f7`，同browser realm IDB complete sequence < 原window.fetch sequence（只读观察原样执行，不mock/delay/re写参数）；UI唯一POST202，真实supplier hold、DB submission_started+唯一提交标记+试用reserved/业务held。关原page后API startticks相同，continue原supplier得到completed、原asset、raw staging0、native_pending0，原占用used。新tab实际Cookie refresh/self同owner，原画布/模式/UUID/参数复原；真实offline GET net::ERR保原占位；online原GET恢复、同PNG自动插一次；真实下载Excalidraw文件及完整reload只有1图/无占位。PNG hash `796624ad4af7f93c4be52b243483386321deb37279c054bfa6921b16908261f3`，supplier image+1/chat0；恢复只GET（无同步fallback、authorize/finalize或重发），本人asset200、foreignjob/asset404、anonymous401。完成后读取保护hash不变，Native费用recorded/unconfirmed，不把合成quota当商户实际结算。
+
+root命令 `node tests/stack/browser-image-jobs-native.cases.mjs --state .local/user-restored-093cf047/state.json --identity .local/t112-image-jobs-ui-identity.json --foreign-identity .local/t112-restored-foreign-identity.json --report .local/native-image-jobs-ui-continuous-report.json --confirm-isolated-native` **exit0，9.1706秒，passed**；私有新报告和截图保留。root设施 `node --test tests/stack/browser-image-jobs-native-fixture.cases.mjs tests/stack/browser-offline-fixture.cases.mjs tests/stack/image-jobs-native-fixture.cases.mjs` **40/40 exit0，1.540秒**，`.local/system-final-native-fixtures.log`。第一次 `.local/native-image-jobs-ui-report.json` 在原snapshot前因/proc尾换行解析工具错误failed，0HTTP/浏览器/模型；原失败不覆盖。共用processStartTicks修正尾换行/复杂comm/超安全整数原字符串及坏字段拒绝，保留同API断言后，才新报告用同fresh账号执行。P未执行；没有无条件后台授权或独立Worker完成声明。
+
 ## E1 版式与导出实现（2026-10-02）
 
 新增ecommerce/layout.ts、EcommerceControls.tsx、ecommerce.css，三个入口各窄接线，并有独立5189配置与10浏览器场景。复用Excalidraw convertToExcalidrawElements、native frame/font/bounds/exportToBlob，没有新engine/store/dependency。商品副本保持原fileId/raw bytes/crop/flip/angle/opacity/currentratio；contain按native bounds、源元素不动。标题/价格/卖点/品牌各独立编辑，空图不伪称AI结果。100..4096整数、官方SDK frame clipping/scale1/padding0导出白底精确PNG；旋转/非整数frame明确拒绝。图片≤40MiB编码/24MP、解码与字体就绪后才变更或下载。owner/epoch/scope/API/mounted迟到守卫，现有草稿/CAS管线及冲突时backup保留，server备份仍保processedSourceIds。
