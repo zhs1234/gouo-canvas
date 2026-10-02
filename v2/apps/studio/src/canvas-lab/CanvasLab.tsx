@@ -12,6 +12,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { ServerCanvasEditor } from './ServerCanvasEditor'
 import { useWorkspaceLeaveGuard } from '../workspace/WorkspaceNavigationProvider'
 import { decodeDocument, readLegacyDrafts, type LegacyDraft } from './documents'
+import { EcommerceControls } from '../ecommerce/EcommerceControls'
 
 // 独立数据库，不读取或改写正式画布与会话草稿。
 const store = createStore('gouo-canvas-lab-v1', 'documents')
@@ -131,6 +132,7 @@ function CanvasLabEditor({ owner }: { owner: string }) {
       <Link to="/">返回聊天</Link>
       <div className="canvas-project-title"><strong>本机画布</strong><span>保存在当前浏览器</span></div>
       <details className="canvas-more"><summary>更多操作</summary><div className="canvas-more-panel">
+      <EcommerceControls key={`${owner}:${revision}`} api={api.current} scope={`${owner}:${revision}`} ready={ready} canEdit={ready && !importing.current} isEditable={() => !importing.current} />
       <label>导入文档副本<input aria-label="导入文档副本" type="file" accept=".excalidraw,application/json" disabled={!ready} onChange={event => { void importCopy(event.target.files?.[0]); event.target.value = '' }} /></label>
       <button disabled={!ready} onClick={() => void save()}>保存本机画布</button>
       <button disabled={!ready} onClick={() => {

@@ -1,5 +1,13 @@
 # 系统打通：实际进度
 
+## E1 版式与导出实现（2026-10-02）
+
+新增ecommerce/layout.ts、EcommerceControls.tsx、ecommerce.css，三个入口各窄接线，并有独立5189配置与10浏览器场景。复用Excalidraw convertToExcalidrawElements、native frame/font/bounds/exportToBlob，没有新engine/store/dependency。商品副本保持原fileId/raw bytes/crop/flip/angle/opacity/currentratio；contain按native bounds、源元素不动。标题/价格/卖点/品牌各独立编辑，空图不伪称AI结果。100..4096整数、官方SDK frame clipping/scale1/padding0导出白底精确PNG；旋转/非整数frame明确拒绝。图片≤40MiB编码/24MP、解码与字体就绪后才变更或下载。owner/epoch/scope/API/mounted迟到守卫，现有草稿/CAS管线及冲突时backup保留，server备份仍保processedSourceIds。
+
+作者typecheck/build **exit0，12.67秒**、`playwright.ecommerce.config.ts` **10/10，24.8秒**；独立只读复审再跑同配置 **10/10 exit0，25.1秒**，输出output/playwright/ecommerce。全部F，模型计数0，无Native操作。root最终整合check及全量PW另记。图像哈希、真实PNG decode/pixelwhite/尺寸、cropflipangle、预设及100/4096边界、edit/undo/redo/save-reload、非法输入零修改、decode/toBlob错误、logout零下载、CAS暂停backup、320px窄屏覆盖。
+
+边界：固定纵向文字布局，长文案/多行或极扁自定义尺寸可能重叠或裁切，用户可原生调整；品牌是文字而非独立Logo素材系统。没有代表商品真实AI质量/P、官方电商平台尺寸合规、批处理或全部模板版本管理的完成声明。此增量满足本地可编辑版式/指定像素导出，完整E1后续产品项保留。
+
 ## B3 前端图片任务合同（2026-10-02）
 
 新增小模块 image-jobs.ts，白名单Zod读取平铺真实DTO、completed要求asset+原图、按owner/epoch合并当次GET、付款写前真实self核owner。onPersistScene复用现有串行草稿存储，确保模式、原UUID、参数和归属提交IDB后才唯一POST；存储拒绝零生成，重复点击不补发。catalog缺字段默认为false，日常默认off不变；已保存模式在恢复时不重新决定。202断线/拒绝保原编号，不fallback；恢复无poll，仅打开/online/明确刷新原GET。完成同私有asset/PNG插入一次；用户删除的已插图不复活；解码/IDB完成状态写失败保原下载。授权与确定未提交取消需明确二次确认，finalize只本地保存，unknown禁止付费操作。

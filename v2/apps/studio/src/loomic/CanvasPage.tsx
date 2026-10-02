@@ -22,6 +22,7 @@ import { CanvasFilesPanel } from "./components/canvas-files-panel";
 import { CanvasLayersPanel } from "./components/canvas-layers-panel";
 import { AccountMenu } from "./components/account-menu";
 import { useToast } from "./components/toast";
+import { EcommerceControls } from "../ecommerce/EcommerceControls";
 
 function CanvasPageContent() {
   const searchParams = useSearchParams();
@@ -252,6 +253,7 @@ function CanvasPageContent() {
         <div className="loomic-project-heading absolute top-3 left-3 z-20 flex min-w-0 items-center gap-1.5">
           <CanvasLogoMenu accessToken={accessToken} projectId={canvasData.projectId} canvasId={canvasData.id} excalidrawApi={excalidrawApi} />
           <EditableProjectName accessToken={accessToken} projectId={canvasData.projectId} key={accessToken + canvasData.id} initialName={projectName} />
+          <EcommerceControls key={`${accessToken}:${canvasData.id}`} api={excalidrawApi} scope={`${accessToken}:${canvasData.id}`} ready={!!excalidrawApi} canEdit={!!excalidrawApi} />
         </div>
         {/* Local save and New API account controls */}
         <div className={`absolute top-3 z-20 ${chatOpen ? 'right-3' : 'right-24'}`}>
