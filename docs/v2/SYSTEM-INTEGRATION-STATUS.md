@@ -1,5 +1,17 @@
 # 系统打通：实际进度
 
+## T1.12 真实Native未知总结与原图保留通过（2026-10-02）
+
+opt-in runner新增`--lose-response`，禁止与resume/login-only混用；复用普通身份、固定actualbinary、仅本地供应商、随机loopback/独立卷/报告不可覆盖护栏。真正前段＋tool PNG后context.offline/原HTTP requestfailed，原pausedsummary执行lose-response，不再发模型。loss-only安全快照校验末事件/失败类型/events hash，不保存正文/图片URL/未知错误；正常和旧resume结构保持兼容。新增flag、伪成功/丢图/释放held/错误账本/误称settled和敏感内容反例，root`node --test tests/stack/browser-offline-fixture.cases.mjs` **24/24 exit0，1.287秒**，`.local/t112-loss-fixture.log`；语法检查通过。
+
+实际一次命令：`node tests/stack/browser-offline-native.cases.mjs --state .local/user-acceptance-D5UKBb/state.json --identity .local/t112-image-unknown-identity.json --report .local/t112-image-unknown-offline-report.json --scenario image --confirm-isolated-native --lose-response --check-failed-refresh` **passed**。owner8/run537327ab-e87f-420c-b6d7-40754c3291d1，新普通账号空thread；planning完成→本地原图完成→原summary前段持久→2026-10-02T00:07:04Z真实offline/navigatorfalse/ERR_ABORTED→供应商原summary response-lost。
+
+固定Native此时仍以DONE结束transport，Agent新guard实际收到缺少真实finish标记，原History **failed**，Ledger **completed**（保存失败result）；末run.failed、0run.completed、Ledger/History event hash一致；固定公开“模型响应缺少可信完成标记...”被GET和reload恢复。仅前段没有后段，原PNG仍 **796624ad…261f3**，成功工具图和文字保留；chat/image reservations各unknown，held均未释放。供应商只有原chat2/image1：planning/image completed，summary response-lost，没有retry/换模型。
+
+Native实际本人consume三条quota12/500/28合540，三request IDs精确对应原usage，**recorded/unconfirmed**；不得因为UI失败或fixture丢响应假称Native没有收费/已退款。Terminal→GET/reload所有Native资金安全投影、Studio全表及provider哈希精确不变；恢复businessGET、1原POST，原图片hash恒定。真实采购0，这证明固定Native链路及新SDKguard的N行为，不证明真实供应商质量、付费P或Native两步实扣门。
+
+T1.12核心断网/重连正常文本、原图和未知summary、失败读保partial已实际通过；金融/续用未知全owner守卫沿既有API/F合同，并非此次又释放/核对旧屏障。原owner3/5/6失败报告保留；owner4/7/8三条连续通过与owner6分段补验分列。下一SYS-R2b完整刷新Agent原ID、B3.3解码前私有输出与OPS-1同实例双库冷备份；完整系统保持active。
+
 ## UI-I1 首轮整合与Native连续离线两条通过（2026-10-02）
 
 UI799ad3b已cherry-pick为40ba65d：36文件，无原工作区修改；仅STATUS冲突手动保留双方、chat-sidebar自动保两边。独立5187下整合`npm run check` **exit0：57+12领域/195API、typecheck、build11.77秒**，`.local/system-ui-integrated-check.log`。全量PW首 **175/178，4.8分钟**，`.local/system-ui-integrated-playwright.log`：Loomic失权/图片-only/guest预检三例均真实重复错误消息，两处完全相同文字使严格DOM断言失败。修改恢复卡过滤not_submitted，因为根本没有外发请求可读取；原消息、持久化与零POST断言保持。原两个测试文件定向 **15/15、25秒exit0**，`.local/system-ui-preflight-fix.log`。完整178还待复验，首失败trace保留，不称UI-I1全部通过。

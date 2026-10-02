@@ -1,5 +1,9 @@
 # 实际交付与验证状态
 
+## T1.12 原图成功后总结响应丢失实际通过（2026-10-02）
+
+新增明确opt-in `--lose-response`，同随机固定Native、全新普通owner8仅一次真实UI发送。规划和原图已成功，浏览器真实offline/ERR_ABORTED后本地供应商丢原总结响应；固定Native仍转DONE，但新Agent完成标记校验正确保存run.failed，文字前段和同原PNG保留。History failed、Ledger completed仅代表失败终态已保存，chat/image两项unknown held未释放；Native本人三条合540合成quota实际记录，仍recorded/unconfirmed，未推断退款。失败读、同ID GET和完整reload恢复，0新生成/Native资金写、保护hash不变。24设施F合同及该N用例passed；报告 `.local/t112-image-unknown-offline-report.json`。T1.12文本/图片离线、失败读和未知summary原图保留子项已通过；金融/续用全owner屏障维持既有合同，P/正式资金门未完成。下一SYS-R2b、B3.3与OPS-1。
+
 ## UI-I1 整合与T1.12真实离线正常路径（2026-10-02）
 
 UI最终提交799ad3b已接入系统分支40ba65d，保留双方STATUS及助手侧栏的恢复/布局。整合check实际 **69领域/195API、typecheck/build11.77秒exit0**。首次完整浏览器 **175/178**，三例都发现not_submitted错误在消息和恢复卡重复显示；修复只过滤没有外发的恢复卡，保原错误持久化和0POST。原loomic/model-selection定向 **15/15，25秒**过，未删断言；完整回归还要再运行，不拿173旧UI绿灯代替。

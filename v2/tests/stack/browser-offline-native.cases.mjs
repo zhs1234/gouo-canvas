@@ -4,6 +4,8 @@
 // node tests/stack/browser-offline-native.cases.mjs --state .local/.../state.json
 //   --identity .local/t112-identity.json --report .local/t112-report.json
 //   --scenario text|image --confirm-isolated-native [--check-failed-refresh]
+// Add --lose-response to drop the original paused supplier stream and verify
+// its saved failed result, original partial/image and held reservations via GET.
 // --login-only diagnoses one ordinary UI login without arming/sending a model.
 // --resume-completed .local/<blocked-report.json> only reads an original saved
 // terminal run in a NEW browser profile after the operator waits naturally.
@@ -63,6 +65,39 @@ export function rateLimitDiagnostic(method, path, headers, observedAt = Date.now
     path: /^\/api\/[a-z\d/_-]+$/i.test(path) ? path : 'excluded', httpStatus: 429, observedAt: new Date(observedAt).toISOString(),
     retryAfterPresent: raw !== undefined, retryAfterSeconds: seconds, retryAfterDate: Number.isFinite(date) ? new Date(date).toISOString() : null,
     headerValuesExcluded: true, automaticRetry: false }
+}
+export function terminalEventSummary(events) {
+  const allowed = ['run.started', 'message.delta', 'tool.started', 'tool.completed', 'run.completed', 'run.failed']
+  const rows = Array.isArray(events) ? events : []
+  const failed = rows.findLast(event => event?.type === 'run.failed')
+  const publicMessages = [
+    '模型响应缺少可信完成标记，结果和费用待确认；未自动重试，请检查网关记录。',
+    '模型请求失败或结果待确认；未自动重试，请检查网关记录。',
+  ]
+  return { eventCount: rows.length, eventTypes: rows.slice(-100).map(event => allowed.includes(event?.type) ? event.type : 'excluded'),
+    lastEventType: allowed.includes(rows.at(-1)?.type) ? rows.at(-1).type : null,
+    failedCount: rows.filter(event => event?.type === 'run.failed').length,
+    completedCount: rows.filter(event => event?.type === 'run.completed').length,
+    failure: failed ? { code: ['gateway_failed', 'result_unknown'].includes(failed.error?.code) ? failed.error.code : 'excluded',
+      fixedPublicMessage: publicMessages.includes(failed.error?.message) ? failed.error.message : null, rawErrorExcluded: true } : null }
+}
+export function validateLostResponseTerminal({ run, savedRequest, reservations, scenario, originalPngSha256 }) {
+  assert.ok(run?.status === 'failed' && run.front === true && run.back === false, 'Lost response must preserve only the original partial text in failed history')
+  for (const summary of [run.terminal, savedRequest?.terminal]) {
+    assert.ok(summary?.lastEventType === 'run.failed' && summary.failedCount === 1 && summary.completedCount === 0
+      && summary.failure?.code === 'gateway_failed' && summary.failure.fixedPublicMessage, 'Lost response must save a truthful failed terminal without run.completed')
+  }
+  assert.ok(savedRequest.status === 'completed' && /^[a-f\d]{64}$/.test(run.eventHash)
+    && savedRequest.eventHash === run.eventHash, 'Completed ledger must contain the same saved failed events, not a successful generation')
+  assert.ok(['pending', 'recorded'].includes(run.usage?.state) && run.usage.settlementState === 'unconfirmed', 'Lost response usage cannot prove settlement or refund')
+  const images = scenario === 'image' ? 1 : 0
+  assert.ok(run.images?.length === images && (!images || /^[a-f\d]{64}$/.test(originalPngSha256)
+    && run.images[0].sha256 === originalPngSha256), 'Lost response must preserve the exact original PNG')
+  assert.ok(reservations?.length === 1 + images && reservations.every(row => row.status === 'unknown')
+    && new Set(reservations.map(row => row.benefit)).size === 1 + images
+    && reservations.some(row => row.benefit === 'chat') && (!images || reservations.some(row => row.benefit === 'image')), 'Lost response keeps its original chat/image reservations held and unknown')
+  return { historyStatus: run.status, ledgerStatus: savedRequest.status, terminalEvent: 'run.failed', heldBenefits: reservations.map(row => row.benefit).sort(),
+    usageState: run.usage.state, settlementState: 'unconfirmed', refundInferred: false }
 }
 export function validateCompletedResume(source, state, account, scenario) {
   assert.ok(source.version === 1 && source.state === 'blocked-rate-limit' && source.rateLimited === true
@@ -143,12 +178,12 @@ export function createStreamEvidence(tag, sentAt = Date.now()) {
 }
 export async function validateOfflineInputs(args, localRoot = resolve('.local')) {
   assert.ok(args.includes('--confirm-isolated-native'), 'Explicit isolated Native confirmation required')
-  const allowed = ['--state', '--identity', '--report', '--scenario', '--confirm-isolated-native', '--check-failed-refresh', '--validate-only', '--login-only', '--resume-completed']
+  const allowed = ['--state', '--identity', '--report', '--scenario', '--confirm-isolated-native', '--check-failed-refresh', '--validate-only', '--login-only', '--resume-completed', '--lose-response']
   const values = new Map()
   for (let i = 0; i < args.length; i++) {
     const key = args[i]
     assert.ok(allowed.includes(key) && !values.has(key), 'Unknown or repeated acceptance option')
-    values.set(key, ['--confirm-isolated-native', '--check-failed-refresh', '--validate-only', '--login-only'].includes(key) ? true : args[++i])
+    values.set(key, ['--confirm-isolated-native', '--check-failed-refresh', '--validate-only', '--login-only', '--lose-response'].includes(key) ? true : args[++i])
   }
   const local = await realpath(localRoot)
   async function localPath(value, output = false) {
@@ -187,18 +222,19 @@ export async function validateOfflineInputs(args, localRoot = resolve('.local'))
   assert.ok(services['fixture-provider'].volumes?.some(mount => mount.target === '/fixture' && resolve(mount.source) === controlDirectory && mount.read_only === false), 'Provider controls must be confined to this random fixture directory')
   assert.ok(!Object.values(composeData.volumes ?? {}).some(volume => volume?.external === true || volume?.name), 'External or named user data volumes are forbidden')
   let resume
+  assert.ok(!values.has('--lose-response') || !values.has('--login-only'), 'Lose-response cannot run login-only')
   if (values.has('--resume-completed')) {
-    assert.ok(!values.has('--login-only') && !values.has('--check-failed-refresh'), 'Read-only resume cannot run login-only or another offline scenario')
+    assert.ok(!values.has('--login-only') && !values.has('--check-failed-refresh') && !values.has('--lose-response'), 'Read-only resume cannot run login-only or another offline scenario')
     const sourcePath = await localPath(values.get('--resume-completed'))
     assert.ok(![reportPath, statePath, identityPath].includes(sourcePath), 'Resume source must remain a separate preserved report')
     const bytes = await readFile(sourcePath)
     resume = { ...validateCompletedResume(JSON.parse(bytes.toString('utf8').replace(/^\uFEFF/, '')), state, account, scenario), sourcePath, sourceSha256: digest(bytes) }
   }
-  return { state, account, statePath, reportPath, scenario, controlDirectory, resume, failedRefresh: values.has('--check-failed-refresh'), validateOnly: values.has('--validate-only'), loginOnly: values.has('--login-only') }
+  return { state, account, statePath, reportPath, scenario, controlDirectory, resume, loseResponse: values.has('--lose-response'), failedRefresh: values.has('--check-failed-refresh'), validateOnly: values.has('--validate-only'), loginOnly: values.has('--login-only') }
 }
 
 async function run(input) {
-  const { state, account, reportPath, scenario, controlDirectory, failedRefresh, resume } = input
+  const { state, account, reportPath, scenario, controlDirectory, failedRefresh, resume, loseResponse } = input
   const tag = resume?.tag ?? 'T112-' + randomBytes(8).toString('hex'), controlPath = join(controlDirectory, 'offline-control.json')
   const report = { version: 1, state: 'started', scenario, tag, origin: state.origin, project: state.project, owner: account.owner,
     instanceId: state.instanceId,
@@ -209,6 +245,7 @@ async function run(input) {
     report.runId = resume.runId; report.originalPngSha256 = resume.originalPngSha256
     report.resumption = { ...resume.proof, sourceReport: resume.sourcePath, sourceReportSha256: resume.sourceSha256, freshBrowserProfile: true, noModelSendOrControl: true }
   }
+  if (loseResponse) report.supplierFault = { kind: 'original-paused-response-loss', commanded: false, noModelResubmission: true }
   const persist = () => writeFile(reportPath, JSON.stringify(report, null, 2), { mode: 0o600 })
   const check = (condition, label) => { if (!condition) report.failedCheck = label; assert.ok(condition, label); report.assertions.push(label) }
   function compose(service, code, binary = false) {
@@ -223,7 +260,7 @@ async function run(input) {
     })
   }
   const nativeCode = `import{DatabaseSync}from'node:sqlite';import{createHash}from'node:crypto';const db=new DatabaseSync('/data/new-api.db',{readOnly:true});db.exec('PRAGMA busy_timeout=5000');const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');const owner=${account.owner};const tables=['tokens','user_subscriptions','subscription_pre_consume_records','logs'];const monetaryHash=hash(tables.map(table=>[table,db.prepare('SELECT * FROM '+table+' ORDER BY rowid').all()]));console.log(JSON.stringify({monetaryHash,account:db.prepare('SELECT id,username,role,status,quota,used_quota,request_count FROM users WHERE id=?').get(owner),channels:db.prepare('SELECT id,type,status,base_url,key FROM channels').all().map(channel=>({id:channel.id,localOnly:channel.type===1&&channel.status===1&&channel.base_url==='http://fixture-provider:19000'&&channel.key==='fixture-provider-zero-procurement-cost'})),tokens:db.prepare('SELECT id,user_id,status,remain_quota,used_quota,expired_time FROM tokens WHERE user_id=? ORDER BY id').all(owner),subscriptions:db.prepare('SELECT id,user_id,status,amount_used,amount_total FROM user_subscriptions WHERE user_id=? ORDER BY id').all(owner),preconsume:db.prepare('SELECT id,request_id,user_id,pre_consumed,status FROM subscription_pre_consume_records WHERE user_id=? ORDER BY id').all(owner),logs:db.prepare('SELECT id,user_id,token_id,type,quota,request_id FROM logs WHERE user_id=? ORDER BY id').all(owner)}));db.close()`
-  const studioCode = `import{DatabaseSync}from'node:sqlite';import{createHash}from'node:crypto';const db=new DatabaseSync('/data/requests.sqlite',{readOnly:true});db.exec('PRAGMA busy_timeout=5000');const hash=value=>createHash('sha256').update(typeof value==='string'||Buffer.isBuffer(value)?value:JSON.stringify(value)).digest('hex');const owner=${account.owner};const tables=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row=>row.name);const dataHash=hash(tables.map(table=>[table,db.prepare('SELECT * FROM '+table+' ORDER BY rowid').all()]));const runs=db.prepare('SELECT * FROM studio_runs WHERE owner=? ORDER BY rowid').all(owner).map(run=>{const events=['running','unknown'].includes(run.status)?db.prepare('SELECT event FROM studio_run_events WHERE owner=? AND run_id=? ORDER BY sequence').all(owner,run.run_id).map(row=>JSON.parse(row.event)):JSON.parse(run.events);const text=events.filter(event=>event.type==='message.delta').map(event=>event.delta).join('');return{runId:run.run_id,threadId:run.thread_id,status:run.status,textHash:hash(text),textLength:text.length,front:text.includes(${JSON.stringify(tag+' 本地验收受控慢流前半段')}),back:text.includes(${JSON.stringify(tag+' 本地验收受控慢流后半段')}),images:events.filter(event=>event.type==='tool.completed').flatMap(event=>(event.artifacts??[]).filter(artifact=>artifact.type==='image').map((artifact,index)=>({toolCallId:event.toolCallId,index,sha256:hash(Buffer.from(artifact.url.split(',')[1],'base64'))}))),usage:run.usage?JSON.parse(run.usage):null}});console.log(JSON.stringify({dataHash,thread:db.prepare('SELECT id,owner FROM studio_threads WHERE id=?').get(${JSON.stringify(account.threadId)}),runs,requests:db.prepare('SELECT kind,key,status FROM requests WHERE owner=? ORDER BY rowid').all(owner),reservations:db.prepare('SELECT request_kind,key,benefit,status FROM trial_reservations WHERE owner=? ORDER BY rowid').all(owner),funding:db.prepare('SELECT status FROM funding_writes WHERE owner=?').get(owner)??null,renewals:db.prepare('SELECT status FROM relay_renewals WHERE owner=? ORDER BY rowid').all(owner),grants:db.prepare('SELECT status FROM trial_grants WHERE owner=?').get(owner)??null}));db.close()`
+  const studioCode = `import{DatabaseSync}from'node:sqlite';import{createHash}from'node:crypto';const db=new DatabaseSync('/data/requests.sqlite',{readOnly:true});db.exec('PRAGMA busy_timeout=5000');const hash=value=>createHash('sha256').update(typeof value==='string'||Buffer.isBuffer(value)?value:JSON.stringify(value)).digest('hex');const terminalSummary=${terminalEventSummary.toString()};const owner=${account.owner};const tables=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row=>row.name);const dataHash=hash(tables.map(table=>[table,db.prepare('SELECT * FROM '+table+' ORDER BY rowid').all()]));const runs=db.prepare('SELECT * FROM studio_runs WHERE owner=? ORDER BY rowid').all(owner).map(run=>{const events=['running','unknown'].includes(run.status)?db.prepare('SELECT event FROM studio_run_events WHERE owner=? AND run_id=? ORDER BY sequence').all(owner,run.run_id).map(row=>JSON.parse(row.event)):JSON.parse(run.events);const text=events.filter(event=>event.type==='message.delta').map(event=>event.delta).join('');return{runId:run.run_id,threadId:run.thread_id,status:run.status,textHash:hash(text),textLength:text.length,front:text.includes(${JSON.stringify(tag+' 本地验收受控慢流前半段')}),back:text.includes(${JSON.stringify(tag+' 本地验收受控慢流后半段')}),images:events.filter(event=>event.type==='tool.completed').flatMap(event=>(event.artifacts??[]).filter(artifact=>artifact.type==='image').map((artifact,index)=>({toolCallId:event.toolCallId,index,sha256:hash(Buffer.from(artifact.url.split(',')[1],'base64'))}))),usage:run.usage?JSON.parse(run.usage):null,...(${Boolean(loseResponse)}?{terminal:terminalSummary(events),eventHash:hash(events)}:{})}});const lossEvidence=${Boolean(loseResponse)}?{savedRequests:db.prepare("SELECT key,status,result FROM requests WHERE owner=? AND kind='agent' ORDER BY rowid").all(owner).map(row=>{const events=row.result?JSON.parse(row.result).events:[];return{key:row.key,status:row.status,terminal:terminalSummary(events),eventHash:hash(events)}}),attempts:db.prepare("SELECT key,attempt,request_id AS requestId,status FROM gateway_attempts WHERE owner=? AND kind='agent' ORDER BY rowid").all(owner)}:{};console.log(JSON.stringify({dataHash,thread:db.prepare('SELECT id,owner FROM studio_threads WHERE id=?').get(${JSON.stringify(account.threadId)}),runs,requests:db.prepare('SELECT kind,key,status FROM requests WHERE owner=? ORDER BY rowid').all(owner),reservations:db.prepare('SELECT request_kind,key,benefit,status FROM trial_reservations WHERE owner=? ORDER BY rowid').all(owner),funding:db.prepare('SELECT status FROM funding_writes WHERE owner=?').get(owner)??null,renewals:db.prepare('SELECT status FROM relay_renewals WHERE owner=? ORDER BY rowid').all(owner),grants:db.prepare('SELECT status FROM trial_grants WHERE owner=?').get(owner)??null,...lossEvidence}));db.close()`
   async function snapshot(stage) {
     const [native, studio, provider] = await Promise.all([compose('new-api', nativeCode).then(JSON.parse), compose('studio-api', studioCode).then(JSON.parse), json(join(controlDirectory, 'provider-stats.json')).catch(error => { if (error.code === 'ENOENT') return { chat: 0, image: 0, requests: [] }; throw error })])
     const entry = { stage, capturedAt: new Date().toISOString(), native, studio, provider }; report.snapshots.push(entry); await persist(); return entry
@@ -302,7 +339,8 @@ async function run(input) {
         rejectRateLimit(new Error('Native rate limit stops acceptance; manual continuation requires natural reset'))
       }
       if (response.request().method() === 'GET' && path === '/api/studio/threads/' + account.threadId) responseTasks.push(response.json().then(body => {
-        report.historyReads ??= []; report.historyReads.push({ status: response.status(), runIds: body.data?.runs?.map(run => ({ runId: run.runId, status: run.status })) ?? [] })
+        report.historyReads ??= []; report.historyReads.push({ status: response.status(), runIds: body.data?.runs?.map(run => ({ runId: run.runId, status: run.status,
+          ...(loseResponse ? { terminal: terminalEventSummary(run.events) } : {}) })) ?? [] })
       }).catch(() => { report.historyReadUnavailable = true }))
     })
     report.stage = 'ordinary-ui-login'; await persist()
@@ -412,36 +450,71 @@ async function run(input) {
     const offline = await snapshot('offline-provider-held')
     check(offline.provider.chat === accepted.provider.chat && offline.provider.image === accepted.provider.image
       && offline.provider.requests.find(row => row.roleTag === tag && row.outcome === 'waiting-control'), 'Browser disconnect did not cancel or resubmit accepted supplier work')
-    await control('continue'); providerReleased = true
-    report.stage = 'backend-completes-browser-offline'; await persist()
+    await control(loseResponse ? 'lose-response' : 'continue'); providerReleased = true
+    if (loseResponse) { report.supplierFault.commanded = true; report.supplierFault.commandedAt = new Date().toISOString() }
+    const terminalStatus = loseResponse ? 'failed' : 'completed'
+    report.stage = loseResponse ? 'backend-saves-lost-response-browser-offline' : 'backend-completes-browser-offline'; await persist()
     await until(async () => {
       const result = JSON.parse(await compose('studio-api', `import{DatabaseSync}from'node:sqlite';const db=new DatabaseSync('/data/requests.sqlite',{readOnly:true});db.exec('PRAGMA busy_timeout=5000');console.log(JSON.stringify(db.prepare('SELECT status FROM studio_runs WHERE owner=? AND run_id=?').get(${account.owner},${JSON.stringify(report.runId)})));db.close()`))
-      return result?.status === 'completed'
-    }, 'Backend did not complete the existing request while browser was offline', 25_000)
+      return result?.status === terminalStatus
+    }, loseResponse ? 'Backend did not save the original lost response as failed' : 'Backend did not complete the existing request while browser was offline', 25_000)
     const terminal = await snapshot('backend-terminal-before-recovery'), terminalRun = terminal.studio.runs.find(run => run.runId === report.runId)
-    check(terminalRun.front && terminalRun.back && terminalRun.status === 'completed', 'Backend saved the complete original request before recovery')
-    check(terminalRun.usage?.settlementState === 'unconfirmed', 'Consumption record is not presented as a confirmed funds settlement')
-    check(terminal.provider.chat === accepted.provider.chat && terminal.provider.image === accepted.provider.image, 'Continuing the paused request added no new model call')
     const reservations = terminal.studio.reservations.filter(row => row.key === report.runId)
-    check(reservations.length === 1 + expectedImage && reservations.every(row => row.status === 'used'), 'Known complete local request has its exact chat/image reservations and no held usage')
     const newLogs = terminal.native.logs.filter(row => row.type === 2 && !before.native.logs.some(old => old.id === row.id))
-    check(newLogs.length === expectedChat + expectedImage && new Set(newLogs.map(row => row.request_id)).size === newLogs.length
-      && terminalRun.usage?.state === 'recorded' && terminalRun.usage.requestIds?.length === newLogs.length && terminalRun.usage.requestIds.every(id => newLogs.some(log => log.request_id === id)), 'Completed run maps its exact owner Native consumption records without claiming settlement')
+    if (loseResponse) {
+      try {
+        report.failedTerminalProof = validateLostResponseTerminal({ run: terminalRun,
+          savedRequest: terminal.studio.savedRequests.find(row => row.key === report.runId), reservations, scenario, originalPngSha256: report.originalPngSha256 })
+      } catch (error) { report.failedCheck = 'Original lost response failed terminal, preserved output and held usage'; throw error }
+      report.assertions.push('Original lost response has a saved failed terminal, preserved partial/PNG and unknown held reservations')
+      const originalRequests = terminal.provider.requests.filter(row => row.roleTag === tag)
+      check(originalRequests.filter(row => row.kind === 'chat').length === expectedChat
+        && originalRequests.filter(row => row.kind === 'image').length === expectedImage
+        && originalRequests.filter(row => row.outcome === 'response-lost' && row.controlCommand === 'lose-response').length === 1
+        && originalRequests.every(row => ['completed', 'response-lost'].includes(row.outcome)), 'Only the original paused supplier response was lost; previous tool work was preserved')
+      const attempts = terminal.studio.attempts.filter(row => row.key === report.runId), ids = attempts.map(row => row.requestId).filter(Boolean)
+      check(attempts.length === expectedChat + expectedImage && newLogs.length <= attempts.length
+        && new Set(newLogs.map(row => row.request_id)).size === newLogs.length
+        && newLogs.every(row => row.user_id === account.owner && ids.includes(row.request_id)), 'Observed owner Native consumption records map only to original gateway attempts; missing records remain pending')
+      check(terminalRun.usage.requestIds.every(id => ids.includes(id))
+        && (terminalRun.usage.state !== 'recorded' || terminalRun.usage.requestIds.every(id => newLogs.some(row => row.request_id === id))), 'Recorded usage requires its observed request IDs; pending usage does not invent missing logs')
+      report.nativeFailureEvidence = { attempts, consumeLogCount: newLogs.length, consumeRecords: newLogs, usageState: terminalRun.usage.state,
+        settlementState: 'unconfirmed', expectedAcceptedCalls: expectedChat + expectedImage, exactConsumeLogCountRequired: false, refundInferred: false,
+        interpretation: 'Actual owner/request-ID observations only; EOF, a saved failed result and consume logs do not prove settlement or refund' }
+    } else {
+      check(terminalRun.front && terminalRun.back && terminalRun.status === 'completed', 'Backend saved the complete original request before recovery')
+      check(terminalRun.usage?.settlementState === 'unconfirmed', 'Consumption record is not presented as a confirmed funds settlement')
+      check(reservations.length === 1 + expectedImage && reservations.every(row => row.status === 'used'), 'Known complete local request has its exact chat/image reservations and no held usage')
+      check(newLogs.length === expectedChat + expectedImage && new Set(newLogs.map(row => row.request_id)).size === newLogs.length
+        && terminalRun.usage?.state === 'recorded' && terminalRun.usage.requestIds?.length === newLogs.length && terminalRun.usage.requestIds.every(id => newLogs.some(log => log.request_id === id)), 'Completed run maps its exact owner Native consumption records without claiming settlement')
+    }
+    check(terminal.provider.chat === accepted.provider.chat && terminal.provider.image === accepted.provider.image, 'Releasing the original paused request added no new model call')
+    const restoredText = loseResponse ? front : front + back
+    const recoveredRun = read => read.status === 200 && read.runIds.some(run => run.runId === report.runId && run.status === terminalStatus
+      && (!loseResponse || run.terminal?.lastEventType === 'run.failed' && run.terminal.completedCount === 0))
     const recoveryStart = report.browserRequests.length
     report.stage = 'online-get-recovery'; await persist(); await context.setOffline(false)
     await ui(() => page.getByRole('button', { name: '刷新任务记录', exact: true }).click())
-    await ui(() => expect(page.getByText(front + back, { exact: true })).toBeVisible())
+    await ui(() => expect(page.getByText(restoredText, { exact: true })).toBeVisible())
+    if (loseResponse) {
+      await ui(() => expect(page.getByText(back, { exact: true })).toHaveCount(0))
+      await ui(() => expect(page.getByText(terminalRun.terminal.failure.fixedPublicMessage, { exact: true })).toBeVisible())
+    }
     if (scenario === 'image') check(digest(Buffer.from((await page.getByAltText('生成图片').getAttribute('src')).split(',')[1], 'base64')) === report.originalPngSha256, 'Recovery renders the same original PNG bytes')
     await ui(() => Promise.all(responseTasks))
-    check(report.historyReads?.some(read => read.status === 200 && read.runIds.some(run => run.runId === report.runId && run.status === 'completed')), 'First manual online GET rendered the complete original saved run')
+    check(report.historyReads?.some(recoveredRun), loseResponse ? 'First manual online GET rendered the original failed run with preserved partial/PNG' : 'First manual online GET rendered the complete original saved run')
     report.manualGetRecoveredAt = new Date().toISOString()
     await screenshot('restored'); report.stage = 'full-reload-cookie-recovery'; await persist(); await ui(() => page.reload())
-    await ui(() => expect(page.getByText(front + back, { exact: true })).toBeVisible())
+    await ui(() => expect(page.getByText(restoredText, { exact: true })).toBeVisible())
+    if (loseResponse) {
+      await ui(() => expect(page.getByText(back, { exact: true })).toHaveCount(0))
+      await ui(() => expect(page.getByText(terminalRun.terminal.failure.fixedPublicMessage, { exact: true })).toBeVisible())
+    }
     if (scenario === 'image') check(digest(Buffer.from((await page.getByAltText('生成图片').getAttribute('src')).split(',')[1], 'base64')) === report.originalPngSha256, 'Full reload preserves the same original PNG bytes')
     await Promise.all(responseTasks)
     const restored = await snapshot('after-get-and-reload')
     check(report.browserRequests.slice(recoveryStart).filter(row => row.path.startsWith('/api/studio/') && row.method !== 'GET').length === 0, 'Online recovery and reload only read business APIs')
-    check(modelPosts().length === 1 && report.historyReads.some(read => read.status === 200 && read.runIds.some(run => run.runId === report.runId && run.status === 'completed')), 'Actual GET recovered the original completed runId without a second send')
+    check(modelPosts().length === 1 && report.historyReads.some(recoveredRun), loseResponse ? 'Actual GET recovered the original failed runId without a second send' : 'Actual GET recovered the original completed runId without a second send')
     check(restored.native.monetaryHash === terminal.native.monetaryHash && digest(JSON.stringify(restored.native.account)) === digest(JSON.stringify(terminal.native.account)) && restored.studio.dataHash === terminal.studio.dataHash
       && digest(JSON.stringify(restored.provider)) === digest(JSON.stringify(terminal.provider)), 'GET recovery did not alter Native money, Studio data, held state or provider counts')
     check(!report.rateLimited, 'No rate-limit response was counted as successful recovery')

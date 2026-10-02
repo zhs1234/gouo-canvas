@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { createAcceptanceProvider } from './user-acceptance-environment-provider.mjs'
-import { validateOfflineInputs, validateCompletedResume, rateLimitDiagnostic, sourceCommit, binarySha256, loginDiagnostic, failureDiagnostic, selfDiagnostic, createStreamEvidence } from './browser-offline-native.cases.mjs'
+import { validateOfflineInputs, validateCompletedResume, validateLostResponseTerminal, terminalEventSummary, rateLimitDiagnostic, sourceCommit, binarySha256, loginDiagnostic, failureDiagnostic, selfDiagnostic, createStreamEvidence } from './browser-offline-native.cases.mjs'
 
 test('login and locator diagnostics exclude passwords, auth values and raw logs', () => {
   const secret = 'Synthetic_sensitive_value_must_not_persist'
@@ -33,6 +33,48 @@ test('split UTF-8 stream evidence records types and first-delta timings without 
   assert.equal(Number.isFinite(observer.evidence.firstDeltaAfterSendMilliseconds), true)
   assert.equal(JSON.stringify(observer.evidence).includes(secret), false)
   assert.equal(JSON.stringify(observer.evidence).includes(event.delta), false)
+})
+test('saved terminal summaries exclude content, artifacts, unknown error codes and raw failures', () => {
+  const secret = 'private_content_password_bearer_png_must_not_persist'
+  const events = [{ type: 'message.delta', delta: secret }, { type: 'tool.completed', artifacts: [{ type: 'image', url: secret }] },
+    { type: secret, secret }, { type: 'run.failed', error: { code: secret, message: secret, cause: secret } }]
+  const summary = terminalEventSummary(events)
+  assert.equal(summary.lastEventType, 'run.failed'); assert.equal(summary.failedCount, 1); assert.equal(summary.completedCount, 0)
+  assert.deepEqual(summary.eventTypes, ['message.delta', 'tool.completed', 'excluded', 'run.failed'])
+  assert.deepEqual(summary.failure, { code: 'excluded', fixedPublicMessage: null, rawErrorExcluded: true })
+  assert.equal(JSON.stringify(summary).includes(secret), false)
+  assert.equal(terminalEventSummary(Array(120).fill({ type: 'message.delta', delta: secret })).eventTypes.length, 100)
+})
+function lostTerminalFixture() {
+  const events = [{ type: 'run.started' }, { type: 'tool.completed' }, { type: 'message.delta' },
+    { type: 'run.failed', error: { code: 'gateway_failed', message: '模型响应缺少可信完成标记，结果和费用待确认；未自动重试，请检查网关记录。' } }]
+  const terminal = terminalEventSummary(events), eventHash = 'a'.repeat(64), originalPngSha256 = 'b'.repeat(64)
+  return { scenario: 'image', originalPngSha256,
+    run: { status: 'failed', front: true, back: false, images: [{ sha256: originalPngSha256 }], terminal, eventHash,
+      usage: { state: 'pending', settlementState: 'unconfirmed', requestIds: ['observed-native-request'] } },
+    savedRequest: { status: 'completed', terminal: structuredClone(terminal), eventHash },
+    reservations: [{ benefit: 'chat', status: 'unknown' }, { benefit: 'image', status: 'unknown' }] }
+}
+test('lost image summary permits pending or recorded usage while preserving exact PNG and unknown held benefits', () => {
+  for (const usageState of ['pending', 'recorded']) {
+    const f = lostTerminalFixture(); f.run.usage.state = usageState
+    const result = validateLostResponseTerminal(f)
+    assert.equal(result.historyStatus, 'failed'); assert.equal(result.ledgerStatus, 'completed')
+    assert.equal(result.terminalEvent, 'run.failed'); assert.deepEqual(result.heldBenefits, ['chat', 'image'])
+    assert.equal(result.usageState, usageState); assert.equal(result.settlementState, 'unconfirmed'); assert.equal(result.refundInferred, false)
+  }
+})
+test('lost response refuses invented success, full text, altered PNG, released held state and mismatched ledger evidence', () => {
+  const mutations = [
+    f => { f.run.status = 'completed' }, f => { f.run.back = true }, f => { f.run.front = false },
+    f => { f.run.terminal.lastEventType = 'run.completed' }, f => { f.run.terminal.completedCount = 1 },
+    f => { f.savedRequest.terminal.failedCount = 0 }, f => { f.savedRequest.eventHash = 'c'.repeat(64) },
+    f => { f.savedRequest.status = 'unknown' }, f => { f.run.images[0].sha256 = 'c'.repeat(64) },
+    f => { f.run.images = [] }, f => { f.reservations[0].status = 'used' }, f => { f.reservations.pop() },
+    f => { f.reservations[1].benefit = 'chat' }, f => { f.run.usage.settlementState = 'confirmed' },
+    f => { f.run.usage.state = 'settled' }, f => { f.run.terminal.failure.fixedPublicMessage = null },
+  ]
+  for (const mutate of mutations) { const f = lostTerminalFixture(); mutate(f); assert.throws(() => validateLostResponseTerminal(f)) }
 })
 test('429 evidence records only safe Retry-After guidance and never automatically retries', () => {
   const secret = 'Excluded_secret_header_value', at = Date.parse('2026-10-02T00:00:00Z')
@@ -132,7 +174,7 @@ test('image resume requires the original PNG and every bounded Native/tool consu
 test('resume rejects out-of-scope reports and flags that could mix a new offline/send scenario into read-only recovery', async t => {
   const f = await guardFixture(t), path = join(f.local, 'blocked-original.json'), outside = await directory(t, 'gouo-t112-outside-report-')
   await writeFile(path, JSON.stringify(completedReport(f))); const args = [...f.args, '--resume-completed', path]
-  for (const option of ['--login-only', '--check-failed-refresh']) await assert.rejects(validateOfflineInputs([...args, option], f.local), /Read-only resume/)
+  for (const option of ['--login-only', '--check-failed-refresh', '--lose-response']) await assert.rejects(validateOfflineInputs([...args, option], f.local), /Read-only resume/)
   const external = join(outside, 'blocked-original.json'); await writeFile(external, JSON.stringify(completedReport(f)))
   await assert.rejects(validateOfflineInputs([...f.args, '--resume-completed', external], f.local), /workspace .local/)
   const invalid = completedReport(f); invalid.state = 'failed'; await writeFile(path, JSON.stringify(invalid))
@@ -141,6 +183,15 @@ test('resume rejects out-of-scope reports and flags that could mix a new offline
 test('valid synthetic manifest scope needs no Native, HTTP or browser', async t => {
   const f = await guardFixture(t), input = await validateOfflineInputs(f.args, f.local)
   assert.equal(input.account.owner, 2); assert.equal(input.scenario, 'text')
+  await assert.rejects(readFile(f.reportPath), { code: 'ENOENT' })
+})
+test('explicit response loss uses all isolated input guards and cannot become login-only or duplicate control', async t => {
+  const f = await guardFixture(t), args = [...f.args, '--lose-response']; args[args.indexOf('--scenario') + 1] = 'image'
+  const input = await validateOfflineInputs([...args, '--check-failed-refresh'], f.local)
+  assert.equal(input.loseResponse, true); assert.equal(input.scenario, 'image'); assert.equal(input.failedRefresh, true); assert.equal(input.resume, undefined)
+  await assert.rejects(validateOfflineInputs([...args, '--login-only'], f.local), /Lose-response/)
+  await assert.rejects(validateOfflineInputs([...args, '--lose-response'], f.local), /repeated/)
+  await assert.rejects(validateOfflineInputs(args.filter(value => value !== '--confirm-isolated-native'), f.local), /confirmation/)
   await assert.rejects(readFile(f.reportPath), { code: 'ENOENT' })
 })
 for (const port of [8080, 53238, 58438]) test(`reject daily/old QA origin ${port} before live operations`, async t => {
@@ -220,6 +271,24 @@ test('image hash records original PNG bytes; tool planning precedes controlled s
   const before = await f.stats(); assert.equal(before.chat, 2); assert.equal(before.image, 1); assert.equal(before.requests.find(row => row.kind === 'image').imageSha256, hash)
   await f.command('continue'); await remainder(reader)
   assert.equal((await f.stats()).requests.at(-1).outcome, 'completed')
+})
+test('losing only an image summary preserves completed planning/original PNG and never emits a truthful terminal or resubmits', async t => {
+  const f = await provider(t); await f.command('hold')
+  const planning = await (await f.chat()).text(); assert.ok(planning.includes('tool_calls') && planning.includes('[DONE]'))
+  const image = await (await f.post('/v1/images/generations', { prompt: f.tag + ' LOCAL ACCEPTANCE FIXTURE' })).json()
+  const hash = createHash('sha256').update(Buffer.from(image.data[0].b64_json, 'base64')).digest('hex')
+  const response = await f.chat([{ role: 'tool', content: 'image completed before summary' }]), reader = response.body.getReader()
+  const initial = await readTo(reader, '前半段')
+  assert.equal(initial.includes('后半段'), false); assert.equal(initial.includes('[DONE]'), false); assert.equal(initial.includes('"finish_reason":"stop"'), false)
+  const before = await f.stats(); assert.equal(before.chat, 2); assert.equal(before.image, 1)
+  assert.equal(before.requests.at(-1).imageCompletedBeforePause, true); assert.equal(before.requests.at(-1).outcome, 'waiting-control')
+  await f.command('lose-response'); await assert.rejects(remainder(reader))
+  const lost = await f.stats(); assert.equal(lost.chat, 2); assert.equal(lost.image, 1); assert.equal(lost.ambiguous, 1)
+  assert.deepEqual(lost.requests.map(row => row.outcome), ['completed', 'completed', 'response-lost'])
+  assert.equal(lost.requests[1].imageSha256, hash); assert.equal(lost.requests.at(-1).controlCommand, 'lose-response')
+  // A cleanup command cannot revive a destroyed original response or create work.
+  await f.command('continue'); await new Promise(done => setTimeout(done, 120))
+  assert.deepEqual(await f.stats(), lost)
 })
 test('unauthorized local requests and missing/expired control never continue silently', async t => {
   const f = await provider(t, 150)
