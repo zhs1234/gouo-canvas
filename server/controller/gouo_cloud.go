@@ -382,6 +382,10 @@ func PutGouoTask(c *gin.Context) {
 			gouoFail(c, http.StatusConflict, "original_asset_conflict", err.Error())
 			return
 		}
+		if errors.Is(err, model.ErrGouoStorageQuota) {
+			gouoFail(c, http.StatusInsufficientStorage, "storage_quota_exceeded", "云端空间不足，本地作品不会受到影响")
+			return
+		}
 		gouoFail(c, http.StatusInternalServerError, "task_save_failed", "同步任务失败")
 		return
 	}

@@ -29,6 +29,8 @@ type GouoDocument struct {
 	CreatedAt  int64                                  `json:"created_at" gorm:"autoCreateTime:milli"`
 	UpdatedAt  int64                                  `json:"updated_at" gorm:"autoUpdateTime:false;index:idx_gouo_document_cursor,priority:3"`
 	HiddenAt   int64                                  `json:"hidden_at"`
+	// 文档正文与标题的字节数，计入云端空间
+	ContentBytes int64 `json:"-" gorm:"default:0"`
 }
 
 func GetGouoDocumentAssets(userID int, ids []string) ([]GouoAsset, error) {
@@ -86,6 +88,10 @@ func SaveGouoDocument(doc *GouoDocument, expected int64, hidden *bool) error {
 				if owned != int64(len(doc.AssetIDs)) {
 					return ErrGouoDocumentAssets
 				}
+			}
+			doc.ContentBytes = int64(len(doc.Document) + len(doc.Title))
+			if err := checkGouoStorageQuota(tx, doc.UserID, doc.ContentBytes-old.ContentBytes); err != nil {
+				return err
 			}
 			if old.ID != "" {
 				doc.ID, doc.CreatedAt, doc.HiddenAt = old.ID, old.CreatedAt, old.HiddenAt

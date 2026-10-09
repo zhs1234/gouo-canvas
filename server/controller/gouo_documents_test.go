@@ -22,7 +22,7 @@ func TestGouoDocumentAPIValidationConflictAndAssets(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoDocument{}, &model.GouoAsset{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoDocument{}, &model.GouoAsset{}, &model.GouoTask{}, &model.GouoStorageQuota{}))
 	oldDB, oldEnabled := model.DB, config.GouoCloudLibraryEnabled
 	model.DB, config.GouoCloudLibraryEnabled = db, true
 	t.Cleanup(func() { model.DB, config.GouoCloudLibraryEnabled = oldDB, oldEnabled })

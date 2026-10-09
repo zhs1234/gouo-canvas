@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ func setupGouoCloudTestDB(t *testing.T) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&User{}, &GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}))
+	require.NoError(t, db.AutoMigrate(&User{}, &GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}, &GouoDocument{}))
 	oldDB := DB
 	DB = db
 	t.Cleanup(func() { DB = oldDB })
@@ -316,4 +317,40 @@ func TestGouoCollectionHideAdvancesTaskCursorAndHidesFavorites(t *testing.T) {
 			require.Len(t, items, 1)
 		}
 	}
+}
+
+func TestGouoDocumentsAndTasksCountTowardStorageQuota(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	require.NoError(t, SetGouoUserQuota(1, 2000))
+	doc := GouoDocument{ID: "doc-1", UserID: 1, Kind: "canvases", ClientID: "canvas-1", Title: "画布", Document: datatypes.JSON(`{"schemaVersion":1,"nodes":"` + strings.Repeat("a", 900) + `"}`)}
+	require.NoError(t, SaveGouoDocument(&doc, 0, nil))
+	task := GouoTask{ID: "task-1", UserID: 1, ClientTaskID: "client-1", SchemaVersion: 1, Status: "done", Operation: "generation", Prompt: strings.Repeat("猫", 200), Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}
+	require.NoError(t, UpsertGouoTask(&task, nil, nil))
+	used, _, err := GetGouoStorageUsage(1)
+	require.NoError(t, err)
+	require.EqualValues(t, doc.ContentBytes+task.ContentBytes, used)
+
+	// 超出配额的新文档或作品记录被拒绝，已有数据不变
+	big := GouoDocument{ID: "doc-2", UserID: 1, Kind: "canvases", ClientID: "canvas-2", Title: "大画布", Document: datatypes.JSON(`{"schemaVersion":1,"nodes":"` + strings.Repeat("b", 1500) + `"}`)}
+	require.ErrorIs(t, SaveGouoDocument(&big, 0, nil), ErrGouoStorageQuota)
+	bigTask := GouoTask{ID: "task-2", UserID: 1, ClientTaskID: "client-2", SchemaVersion: 1, Status: "done", Operation: "generation", Prompt: strings.Repeat("x", 1500), Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}
+	require.ErrorIs(t, UpsertGouoTask(&bigTask, nil, nil), ErrGouoStorageQuota)
+	// 缩小已有文档不受限制
+	doc.Document = datatypes.JSON(`{"schemaVersion":1}`)
+	require.NoError(t, SaveGouoDocument(&doc, 1, nil))
+	// 服务端保存的付费生成结果不受配额限制
+	require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "paid", Prompt: strings.Repeat("y", 3000), Params: datatypes.JSON(`{}`)}))
+}
+
+func TestGouoContentBytesMigrationBackfillsExistingRows(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	task := GouoTask{ID: "old-task", UserID: 1, ClientTaskID: "old", Prompt: "旧提示词", Params: datatypes.JSON(`{"n":1}`), ResultMeta: datatypes.JSON(`{}`)}
+	require.NoError(t, DB.Create(&task).Error)
+	doc := GouoDocument{ID: "old-doc", UserID: 1, Kind: "canvases", ClientID: "old", Title: "旧画布", Document: datatypes.JSON(`{"schemaVersion":1}`)}
+	require.NoError(t, DB.Create(&doc).Error)
+	require.NoError(t, DB.Model(&GouoTask{}).Where("id = ?", task.ID).UpdateColumn("content_bytes", 0).Error)
+	require.NoError(t, gouoContentBytesMigration().Migrate(DB))
+	used, _, err := GetGouoStorageUsage(1)
+	require.NoError(t, err)
+	require.EqualValues(t, task.contentBytes()+int64(len(doc.Document)+len(doc.Title)), used)
 }
