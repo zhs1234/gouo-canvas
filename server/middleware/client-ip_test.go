@@ -39,4 +39,10 @@ func TestClientIPOnlyTrustsConfiguredProxies(t *testing.T) {
 	require.Equal(t, "198.51.100.7", clientIP("10.0.0.0/8,172.16.0.0/12", "172.18.0.5"))
 	// 设为空时不信任任何代理
 	require.Equal(t, "172.18.0.5", clientIP("", "172.18.0.5"))
+
+	// 环境变量显式设为空时同样不信任任何代理，不回退到默认网段
+	t.Setenv("TRUSTED_PROXIES", "")
+	require.Equal(t, "172.18.0.5", clientIP(defaults, "172.18.0.5"))
+	t.Setenv("TRUSTED_PROXIES", "172.16.0.0/12")
+	require.Equal(t, "198.51.100.7", clientIP(defaults, "172.18.0.5"))
 }

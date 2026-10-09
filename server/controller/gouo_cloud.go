@@ -715,7 +715,12 @@ func GetGouoAdminStorage(c *gin.Context) {
 }
 
 func ListGouoAdminStorageUsers(c *gin.Context) {
-	rows, err := model.ListGouoStorageUserUsage()
+	// 普通管理员只能看到权限比自己低的账号
+	belowRole := 0
+	if role := c.GetInt("role"); role != config.RoleRootUser {
+		belowRole = role
+	}
+	rows, err := model.ListGouoStorageUserUsage(belowRole)
 	if err != nil {
 		gouoFail(c, http.StatusInternalServerError, "storage_query_failed", "读取用户存储统计失败")
 		return

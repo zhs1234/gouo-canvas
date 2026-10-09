@@ -457,11 +457,19 @@ type GouoStorageUserUsage struct {
 	AssetCount int64  `json:"asset_count"`
 }
 
-func ListGouoStorageUserUsage() ([]GouoStorageUserUsage, error) {
+// ListGouoStorageUserUsage 按账号汇总已用空间；belowRole 大于 0 时只返回权限低于该等级的账号。
+func ListGouoStorageUserUsage(belowRole int) ([]GouoStorageUserUsage, error) {
+	scope := func(tx *gorm.DB) *gorm.DB {
+		if belowRole > 0 {
+			return tx.Where("users.role < ?", belowRole)
+		}
+		return tx
+	}
 	var rows []GouoStorageUserUsage
 	err := DB.Table("gouo_assets").
 		Select("gouo_assets.user_id, users.username, COALESCE(SUM(gouo_assets.file_size), 0) AS used_bytes, COUNT(gouo_assets.id) AS asset_count").
 		Joins("LEFT JOIN users ON users.id = gouo_assets.user_id").
+		Scopes(scope).
 		Group("gouo_assets.user_id, users.username").
 		Scan(&rows).Error
 	if err != nil {
@@ -476,6 +484,7 @@ func ListGouoStorageUserUsage() ([]GouoStorageUserUsage, error) {
 		var parts []GouoStorageUserUsage
 		if err := DB.Table(table).Select(table + ".user_id, users.username, COALESCE(SUM(" + table + ".content_bytes), 0) AS used_bytes").
 			Joins("LEFT JOIN users ON users.id = " + table + ".user_id").
+			Scopes(scope).
 			Group(table + ".user_id, users.username").Scan(&parts).Error; err != nil {
 			return nil, err
 		}

@@ -146,10 +146,10 @@ func TestGouoBillingDurableRecoveryAndAtomicFinalization(t *testing.T) {
 	} else {
 		assertBalance(980)
 	}
-	page, err := ListGouoImageCharges(user.Id+1, dispatched.ID, "", &PaginationParams{Page: 1, Size: 20})
+	page, err := ListGouoImageCharges(user.Id+1, 0, dispatched.ID, "", &PaginationParams{Page: 1, Size: 20})
 	require.NoError(t, err)
 	require.Zero(t, page.TotalCount)
-	page, err = ListGouoImageCharges(user.Id, dispatched.ID, "", &PaginationParams{Page: 1, Size: 20})
+	page, err = ListGouoImageCharges(user.Id, 0, dispatched.ID, "", &PaginationParams{Page: 1, Size: 20})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, page.TotalCount)
 }
