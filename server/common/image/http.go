@@ -15,7 +15,17 @@ var ImageHttpClients = &http.Client{
 		Proxy:       utils.ProxyFunc,
 	},
 	Timeout: 15 * time.Second,
+	// 经管理员配置的代理下载用户图片时，每一跳重定向都要重新检查目标
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return errors.New("重定向次数过多")
+		}
+		return utils.CheckPublicHost(req.Context(), req.URL.Hostname())
+	},
 }
+
+// 图片 URL 由用户提供，直连下载时在建立连接时校验目标地址；测试中可替换
+var publicImageClient = utils.NewPublicHTTPClient(15 * time.Second)
 
 var maxFileSize int64 = 20 * 1024 * 1024 // 20MB
 
@@ -53,7 +63,15 @@ func RequestFile(url, action string) (*http.Response, error) {
 		return nil, err
 	}
 
-	response, err := ImageHttpClients.Do(res)
+	client := ImageHttpClients
+	if config.CFWorkerImageUrl == "" {
+		if config.ChatImageRequestProxy == "" {
+			client = publicImageClient
+		} else if err := utils.CheckPublicHost(res.Context(), res.URL.Hostname()); err != nil {
+			return nil, err
+		}
+	}
+	response, err := client.Do(res)
 	if err != nil {
 		return nil, err
 	}

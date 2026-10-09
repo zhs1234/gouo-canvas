@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"one-api/common"
 	"one-api/common/config"
 	"one-api/common/logger"
+	"one-api/common/utils"
 	"one-api/model"
 	"one-api/relay/relay_util"
 	"one-api/types"
@@ -187,7 +187,8 @@ type gouoImageCapture struct {
 // ponytail: 生成图上限 64 MB；接入更大输出前调整。
 const gouoGeneratedImageMaxBytes = 64 * 1024 * 1024
 
-var gouoImageDownloadClient = &http.Client{Timeout: 60 * time.Second}
+// 图片 URL 来自供应商响应，只允许下载公网地址；测试中可替换
+var gouoImageDownloadClient = utils.NewPublicHTTPClient(60 * time.Second)
 
 // recordGouoGeneration 在返回图片前把结果写入用户作品库；失败只记日志，图片仍按原流程返回并保留在恢复缓存中。
 func recordGouoGeneration(c *gin.Context, capture *gouoImageCapture, response *types.ImageResponse) {
@@ -256,7 +257,7 @@ func gouoImageBytes(item types.ImageResponseDataInner) ([]byte, error) {
 		if len(encoded)%4 != 0 {
 			encoding = base64.RawStdEncoding
 		}
-		return io.ReadAll(io.LimitReader(base64.NewDecoder(encoding, strings.NewReader(encoded)), gouoGeneratedImageMaxBytes))
+		return readGouoImage(base64.NewDecoder(encoding, strings.NewReader(encoded)))
 	}
 	resp, err := gouoImageDownloadClient.Get(item.URL)
 	if err != nil {
@@ -266,7 +267,17 @@ func gouoImageBytes(item types.ImageResponseDataInner) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("下载生成图片失败：HTTP %d", resp.StatusCode)
 	}
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, io.LimitReader(resp.Body, gouoGeneratedImageMaxBytes))
-	return buf.Bytes(), err
+	return readGouoImage(resp.Body)
+}
+
+// readGouoImage 超过上限直接报错，截断的图片不能入库
+func readGouoImage(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, gouoGeneratedImageMaxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > gouoGeneratedImageMaxBytes {
+		return nil, fmt.Errorf("生成图片超过 %d MB", gouoGeneratedImageMaxBytes/1024/1024)
+	}
+	return data, nil
 }

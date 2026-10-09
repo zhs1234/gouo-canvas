@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -43,6 +44,10 @@ func TestRecordGouoGenerationStoresOutputsAndReferences(t *testing.T) {
 	remote := encode(3)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(remote) }))
 	defer server.Close()
+	// httptest 服务在回环地址，生产 client 会拒绝访问
+	oldClient := gouoImageDownloadClient
+	gouoImageDownloadClient = server.Client()
+	t.Cleanup(func() { gouoImageDownloadClient = oldClient })
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
@@ -69,4 +74,26 @@ func TestRecordGouoGenerationStoresOutputsAndReferences(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 3, count)
 	require.Positive(t, used)
+}
+
+func TestGouoImageBytesRejectsInternalURLsAndOversizedImages(t *testing.T) {
+	var hits int
+	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+	defer internal.Close()
+	_, err := gouoImageBytes(types.ImageResponseDataInner{URL: internal.URL + "/image.png"})
+	require.Error(t, err)
+	require.Zero(t, hits)
+
+	_, err = readGouoImage(io.LimitReader(zeroReader{}, gouoGeneratedImageMaxBytes+1))
+	require.ErrorContains(t, err, "超过")
+	data, err := readGouoImage(bytes.NewReader([]byte("ok")))
+	require.NoError(t, err)
+	require.Equal(t, []byte("ok"), data)
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
 }
