@@ -1,6 +1,6 @@
 # 光构待修复清单
 
-截至 2026 年 10 月 9 日（北京时间），光构共登记 28 项问题：25 项已修复并合并到 main、待验证；GOUO-025 复核为误报，不适用；GOUO-027、028 为合并后复查新发现、待修复。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
+截至 2026 年 10 月 9 日（北京时间），光构共登记 28 项问题：25 项已修复并合并到 main、待验证；GOUO-025 复核为误报，不适用；GOUO-027、028 为合并后复查新发现，已提交修复 PR #15、待验证。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
 
 审查基线为 main 提交 [1f3c463](https://github.com/zhs1234/gouo-canvas/commit/1f3c463d4f5d5b51ede64622fab20cef265770b6)。原始结论均为静态代码发现；各条目的单元测试及复现情况见其"修复记录"；用户于 2026 年 10 月 9 日说明该项目没有线上运行；此部署状态为用户提供，尚未独立核实，实际部署版本及功能开关未核验。P1/P2 是修复优先级，不表示相关条件已在生产环境成立。
 
@@ -10,11 +10,11 @@
 
 - 待验证：25 项（GOUO-001 至 024、GOUO-026），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全、[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13) 存储与账号（叠加在 PR #11 之上）、[PR #14](https://github.com/zhs1234/gouo-canvas/pull/14) 来源 IP 与 Agent 确认，均已于 2026-10-09 合并到 main（合并后提交 [0b9b54f](https://github.com/zhs1234/gouo-canvas/commit/0b9b54f)）
 
-- 待修复：2 项（GOUO-027、028），均为 P2
+- 待修复：0 项（GOUO-027、028 已提交 [PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)，未合并，待验证）
 
 - 不适用：1 项（GOUO-025，复核为误报）
 
-- 验证状态：19 项已由单元测试复现（撤掉修复后失败），GOUO-005 由脚本复现，GOUO-024 已用本地请求复现，GOUO-027 已用前端解析复现，GOUO-028 仅有静态证据，GOUO-013、GOUO-015、GOUO-021、GOUO-022 待复现；均未在运行环境、支付沙箱或真实并发下复现
+- 验证状态：19 项已由单元测试复现（撤掉修复后失败），GOUO-005 由脚本复现，GOUO-024 已用本地请求复现，GOUO-027 已用前端解析复现，GOUO-028 已由单元测试复现，GOUO-013、GOUO-015、GOUO-021、GOUO-022 待复现；均未在运行环境、支付沙箱或真实并发下复现
 
 - 已完成并验证的修复：0 项
 
@@ -772,7 +772,7 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 ### GOUO-027 重置密码链接未编码邮箱，含"+"的邮箱无法通过链接重置
 
-优先级：P2。处理状态：待修复。验证状态：已复现（`new URLSearchParams('email=a+b@example.com').get('email')` 得到 `a b@example.com`），尚未在运行环境复现。
+优先级：P2。处理状态：待验证。验证状态：已复现（`new URLSearchParams('email=a+b@example.com').get('email')` 得到 `a b@example.com`），尚未在运行环境复现。
 
 **触发场景**
 
@@ -794,9 +794,13 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 [拼接重置链接](https://github.com/zhs1234/gouo-canvas/blob/0b9b54ff49f2388d61f23c4b4dd22ad490e27593/server/controller/misc.go#L170)、[前端读取链接参数](https://github.com/zhs1234/gouo-canvas/blob/0b9b54ff49f2388d61f23c4b4dd22ad490e27593/src/components/BackendAuthGate.tsx#L46-L54)。基线为合并后的 main 0b9b54f。
 
+**修复记录（2026-10-09）**
+
+[PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)，提交 [4030dc2](https://github.com/zhs1234/gouo-canvas/commit/4030dc2)，基于 main 0b9b54f。用 `url.Values` 编码邮箱与令牌。已运行：`TestPasswordResetLinkEncodesEmail`：含 `+` 的邮箱和含 `&` 的令牌解析后与原值一致。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-028 管理员调整余额与核对账务不受角色范围限制
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -817,6 +821,10 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 **代码依据**
 
 [增减额度无角色检查](https://github.com/zhs1234/gouo-canvas/blob/0b9b54ff49f2388d61f23c4b4dd22ad490e27593/server/controller/user.go#L857-L898)、[路由仅要求管理员](https://github.com/zhs1234/gouo-canvas/blob/0b9b54ff49f2388d61f23c4b4dd22ad490e27593/server/router/api-router.go#L102)、[账务核对](https://github.com/zhs1234/gouo-canvas/blob/0b9b54ff49f2388d61f23c4b4dd22ad490e27593/server/controller/gouo_billing.go#L77-L99)、[核对路由](https://github.com/zhs1234/gouo-canvas/blob/0b9b54ff49f2388d61f23c4b4dd22ad490e27593/server/router/api-router.go#L236)。基线为合并后的 main 0b9b54f。
+
+**修复记录（2026-10-09）**
+
+[PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)，提交 [cbfa082](https://github.com/zhs1234/gouo-canvas/commit/cbfa082)，基于 main 0b9b54f。额度调整与账务核对采用与用户管理相同的角色范围，普通管理员不能操作自己。已运行：`TestAdminQuotaAndBillingActionsRespectRoleScope`：普通管理员调整或核对 root、同级管理员和自己时被拒绝且数据不变，对普通用户正常，root 可操作管理员。合并并按上方验收检查完成验证前，不标记为已验证修复。
 
 ## 维护与关闭标准
 
@@ -854,3 +862,4 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 | 2026-10-09 | GOUO-024、026 提交修复 [PR #14](https://github.com/zhs1234/gouo-canvas/pull/14)，处理状态改为待验证；GOUO-026 按默认上限 4 张实现弹窗确认，未显示金额。GOUO-025 复核为误报（开启代理时异步自定义服务商在提交前即被拒绝），改为不适用。 | 26 项：待验证 25 项，不适用 1 项，待修复 0 项，已验证修复 0 项 |
 | 2026-10-09 | 复查 PR #13、#14 及 GOUO-017 至 019 的修复，未发现问题，仅删除清理函数中一个未使用的字段（提交 0ddf1b1）。PR #8 至 #14 按顺序合并到 main（[0b9b54f](https://github.com/zhs1234/gouo-canvas/commit/0b9b54f)），合并后测试与构建通过。各项仍为待验证，需部署后按验收检查验证。 | 26 项：待验证 25 项，不适用 1 项，待修复 0 项，已验证修复 0 项 |
 | 2026-10-09 | 复查合并后的 main（0b9b54f）：复核各项修复之间的交互（同步、配额、回收站、账号头、可信代理），以及后台用户管理、图片中继重试与计费、密码重置、模型目录、账务接口，未发现已合并修复引入的问题。新增 GOUO-027（重置链接未编码邮箱，P2，已复现）、GOUO-028（管理员调整余额与核对账务无角色范围，P2）。 | 28 项：待验证 25 项，不适用 1 项，待修复 2 项（均为 P2），已验证修复 0 项 |
+| 2026-10-09 | GOUO-027、028 提交修复 [PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)（未合并），处理状态改为待验证。 | 28 项：待验证 27 项（其中 2 项未合并），不适用 1 项，待修复 0 项，已验证修复 0 项 |
