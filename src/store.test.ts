@@ -330,6 +330,29 @@ describe('product model task snapshots', () => {
     }
   })
 
+  it('keeps a paid result that arrives after the watchdog marked the task as timed out', async () => {
+    vi.useFakeTimers()
+    try {
+      const { callImageApi } = await import('./lib/api')
+      let finish!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
+      vi.mocked(callImageApi).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+      useStore.getState().setSettings({ timeout: 1 })
+      const running = task({ status: 'running', gouoPriceVersion: 'quote-a', createdAt: Date.now() })
+      useStore.setState({ tasks: [running] })
+      const { executeTask } = await import('./store')
+      const execution = executeTask(running.id)
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(useStore.getState().tasks[0].status).toBe('error')
+      // 请求自身的超时恢复随后取回了已扣费的结果
+      finish({ images: ['data:image/png;base64,late-result'] })
+      await execution
+      expect(useStore.getState().tasks[0]).toMatchObject({ status: 'done', error: null })
+      expect(useStore.getState().tasks[0].outputImages).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('recovers an old failed task with its original request ID without requiring deleted inputs or creating a new task', async () => {
     const { callImageApi } = await import('./lib/api')
     const { executeTask } = await import('./store')
@@ -359,7 +382,34 @@ describe('product model task snapshots', () => {
     expect(useStore.getState().tasks[0].status).toBe('done')
   })
 
-  it.each(['failure', 'success', 'saved output'])('ignores an old execution %s after watchdog timeout and result recovery starts', async (outcome) => {
+  it('completes with the received result when saving it crosses the watchdog deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      const { callImageApi } = await import('./lib/api')
+      const { executeTask } = await import('./store')
+      const db = await import('./lib/db')
+      let releaseSave!: () => void
+      vi.mocked(callImageApi).mockResolvedValueOnce({ images: ['data:image/png;base64,in-time'] })
+      const save = db.storeImageWithSize
+      const gate = new Promise<void>((resolve) => { releaseSave = resolve })
+      vi.spyOn(db, 'storeImageWithSize').mockImplementationOnce(async (...args) => { await gate; return save(...args) })
+      useStore.getState().setSettings({ timeout: 1 })
+      const running = task({ status: 'running', gouoPriceVersion: 'quote-a', createdAt: Date.now() })
+      useStore.setState({ tasks: [running] })
+      const execution = executeTask(running.id)
+      // 结果在截止前已到，保存图片跨过截止时间：不能判为超时，也不能丢掉结果
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(useStore.getState().tasks[0].status).toBe('running')
+      releaseSave()
+      await execution
+      expect(useStore.getState().tasks[0]).toMatchObject({ status: 'done', error: null })
+      expect((await getImage(useStore.getState().tasks[0].outputImages[0]))?.dataUrl).toBe('data:image/png;base64,in-time')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['failure', 'success'])('ignores an old execution %s after watchdog timeout and result recovery starts', async (outcome) => {
     vi.useFakeTimers()
     try {
       const { callImageApi } = await import('./lib/api')
@@ -368,26 +418,18 @@ describe('product model task snapshots', () => {
       let finishOld!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
       let failOld!: (error: Error) => void
       let finishRecovery!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
-      let releaseSave!: () => void
       vi.mocked(callImageApi)
         .mockImplementationOnce(() => new Promise((resolve, reject) => { finishOld = resolve; failOld = reject }))
         .mockImplementationOnce(() => new Promise((resolve) => { finishRecovery = resolve }))
-      if (outcome === 'saved output') {
-        const save = db.storeImageWithSize
-        const gate = new Promise<void>((resolve) => { releaseSave = resolve })
-        vi.spyOn(db, 'storeImageWithSize').mockImplementationOnce(async (...args) => { await gate; return save(...args) })
-      }
       useStore.getState().setSettings({ timeout: 1 })
       const running = task({ status: 'running', gouoPriceVersion: 'quote-a', requestId: 'original-request', createdAt: Date.now() })
       useStore.setState({ tasks: [running] })
       const original = executeTask(running.id)
-      if (outcome === 'saved output') finishOld({ images: ['data:image/png;base64,stale-original'] })
       await vi.advanceTimersByTimeAsync(1_000)
       expect(useStore.getState().tasks[0].status).toBe('error')
       const recovery = executeTask(running.id, true)
       if (outcome === 'failure') failOld(new Error('old request aborted'))
-      else if (outcome === 'success') finishOld({ images: ['data:image/png;base64,stale-original'] })
-      else releaseSave()
+      else finishOld({ images: ['data:image/png;base64,stale-original'] })
       await original
       expect(useStore.getState().tasks[0]).toMatchObject({ status: 'running', error: null, outputImages: [] })
       expect((await db.getAllImages()).some((image) => image.dataUrl === 'data:image/png;base64,stale-original')).toBe(false)

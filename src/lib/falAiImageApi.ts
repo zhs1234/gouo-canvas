@@ -1,4 +1,4 @@
-import { fal } from '@fal-ai/client'
+import { createFalClient } from '@fal-ai/client'
 import type { ApiProfile, FalApiResponse, TaskParams } from '../types'
 import { DEFAULT_FAL_BASE_URL } from './apiProfiles'
 import { getFalErrorMessage } from './falError'
@@ -37,14 +37,15 @@ function mapFalQuality(quality: TaskParams['quality']): 'low' | 'medium' | 'high
   return quality === 'auto' ? 'high' : quality
 }
 
-function configureFal(profile: ApiProfile) {
+// 每个请求按自己的配置创建客户端：全局 fal.config 会被并发的其他任务改掉，恢复时可能用别的 Key 和地址取结果
+function createFal(profile: ApiProfile) {
   const baseUrl = profile.baseUrl.trim().replace(/\/+$/, '') || DEFAULT_FAL_BASE_URL
-  const config: Parameters<typeof fal.config>[0] = {
+  const config: Parameters<typeof createFalClient>[0] = {
     credentials: profile.apiKey,
     suppressLocalCredentialsWarning: true,
   }
   if (baseUrl !== DEFAULT_FAL_BASE_URL) config.proxyUrl = baseUrl
-  fal.config(config)
+  return createFalClient(config)
 }
 
 async function createFalRequestInput(opts: CallApiOptions): Promise<Record<string, unknown>> {
@@ -164,7 +165,7 @@ export async function getFalQueuedImageResult(
   requestId: string,
   params: TaskParams,
 ): Promise<FalQueuedImageResult> {
-  configureFal(profile)
+  const fal = createFal(profile)
   await fal.queue.subscribeToStatus(endpoint, { requestId, logs: true })
   const result = await fal.queue.result(endpoint, { requestId })
   return parseFalResult(result.data as FalApiResponse, params, getFalCustomBaseUrlLabel(profile))
@@ -182,7 +183,7 @@ export async function callFalAiImageApi(opts: CallApiOptions, profile: ApiProfil
     )
 
     // 使用当前配置保存的 API Key，避免 fal SDK 额外输出前端凭据警告。
-    configureFal(profile)
+    const fal = createFal(profile)
 
     const isEdit = opts.inputImageDataUrls.length > 0
     const endpoint = mapFalEndpoint(profile.model, isEdit)

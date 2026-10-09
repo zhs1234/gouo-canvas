@@ -79,6 +79,8 @@ const SUPPORT_PROMPT_IMAGE_THRESHOLD = 50
 const falRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const customRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const openAIWatchdogTimers = new Map<string, ReturnType<typeof setTimeout>>()
+// 被看门狗判为超时、请求本身可能仍会返回结果的任务
+const watchdogTimedOutTasks = new Set<string>()
 const taskExecutions = new Map<string, symbol>()
 const OPENAI_INTERRUPTED_ERROR = '请求中断'
 // 执行中的任务持有的 Web Locks 名称前缀，供其他标签页判断任务仍在执行
@@ -1067,6 +1069,7 @@ function scheduleOpenAIWatchdog(taskId: string, timeoutSeconds: number, profile?
   const timer = setTimeout(() => {
     openAIWatchdogTimers.delete(taskId)
     const failed = failOpenAITaskIfStillRunning(taskId, createOpenAITimeoutError(timeoutSeconds, profile))
+    if (failed) watchdogTimedOutTasks.add(taskId)
     if (failed) useStore.getState().showToast('OpenAI 任务请求超时', 'error')
   }, remainingMs)
   openAIWatchdogTimers.set(taskId, timer)
@@ -1605,6 +1608,7 @@ async function runTask(taskId: string, recoverOnly: boolean) {
   taskExecutions.set(taskId, execution)
   if (recoverOnly) {
     clearOpenAIWatchdogTimer(taskId)
+    watchdogTimedOutTasks.delete(taskId)
     updateTaskInStore(taskId, { status: 'running', error: null, finishedAt: null })
   }
 
@@ -1673,8 +1677,13 @@ async function runTask(taskId: string, recoverOnly: boolean) {
 
     if (taskExecutions.get(taskId) !== execution) return
     receivedResult = true
+    // 已拿到结果，保存图片等后续处理不能再被看门狗判为超时
+    clearOpenAIWatchdogTimer(taskId)
     const latestBeforeSuccess = useStore.getState().tasks.find((t) => t.id === taskId)
-    if (!latestBeforeSuccess || latestBeforeSuccess.status !== 'running') {
+    // 只被看门狗判为超时、且没有开始新的取回时，迟到的结果仍是这次请求的（平台模式已扣费），照常保存
+    if (latestBeforeSuccess?.status === 'error' && watchdogTimedOutTasks.has(taskId)) updateTaskInStore(taskId, { status: 'running', error: null, finishedAt: null })
+    watchdogTimedOutTasks.delete(taskId)
+    if (!latestBeforeSuccess || useStore.getState().tasks.find((t) => t.id === taskId)?.status !== 'running') {
       useStore.getState().setTaskStreamPreview(taskId)
       return
     }
