@@ -2,6 +2,7 @@ package model
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -10,8 +11,10 @@ import (
 	"time"
 
 	"one-api/common/config"
+	"one-api/common/logger"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"gorm.io/datatypes"
 )
 
@@ -109,4 +112,34 @@ func TestPurgeGouoTrashKeepsReuploadedAsset(t *testing.T) {
 	require.EqualValues(t, 1, count)
 	_, err = os.Stat(filepath.Join(config.GouoAssetDir, asset.StoragePath))
 	require.NoError(t, err)
+}
+
+func TestPurgeGouoTrashContinuesAfterOneUserFails(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	oldLogger := logger.Logger
+	logger.Logger = zap.NewNop()
+	t.Cleanup(func() { logger.Logger = oldLogger })
+	oldDir := config.GouoAssetDir
+	config.GouoAssetDir = t.TempDir()
+	t.Cleanup(func() { config.GouoAssetDir = oldDir })
+	expired := time.Now().Add(-GouoTrashRetention - time.Hour).UnixMilli()
+	for _, userID := range []int{1, 2} {
+		id := fmt.Sprintf("asset-%d", userID)
+		path := filepath.Join(config.GouoAssetDir, id)
+		require.NoError(t, DB.Create(&GouoAsset{ID: id, UserID: userID, SHA256: id, StoragePath: id, MimeType: "image/png", FileSize: 1, CreatedAt: expired, UpdatedAt: expired}).Error)
+		require.NoError(t, DB.Create(&GouoTask{ID: id, UserID: userID, ClientTaskID: id, Status: "done", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), HiddenAt: expired}).Error)
+		require.NoError(t, DB.Create(&GouoTaskAsset{TaskID: id, AssetID: id, Role: "output"}).Error)
+		if userID == 1 {
+			// 用户 1 的文件删不掉（非空目录），模拟单个账号清理失败
+			require.NoError(t, os.MkdirAll(filepath.Join(path, "child"), 0o750))
+		} else {
+			require.NoError(t, os.WriteFile(path, []byte(id), 0o600))
+		}
+	}
+	require.Error(t, PurgeGouoTrash(time.Now()))
+	_, err := os.Stat(filepath.Join(config.GouoAssetDir, "asset-2"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+	var count int64
+	require.NoError(t, DB.Model(&GouoTask{}).Where("user_id = ?", 2).Count(&count).Error)
+	require.Zero(t, count)
 }

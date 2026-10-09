@@ -350,6 +350,13 @@ func ListGouoCollections(userID int, includeHidden bool) ([]GouoFavoriteCollecti
 	return collections, err
 }
 
+// CountGouoCollections 统计用户的全部收藏夹（含回收站中的）
+func CountGouoCollections(userID int) (int64, error) {
+	var count int64
+	err := DB.Model(&GouoFavoriteCollection{}).Where("user_id = ?", userID).Count(&count).Error
+	return count, err
+}
+
 func CountOwnedGouoCollections(userID int, ids []string) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
