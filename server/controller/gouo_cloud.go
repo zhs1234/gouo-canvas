@@ -744,10 +744,24 @@ func ListGouoAdminStorageUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"data": data, "page": page, "size": size, "total_count": len(rows)}})
 }
 
+// gouoAdminCanAccess 普通管理员只能管理权限比自己低的账号，与用户管理接口的范围一致。
+func gouoAdminCanAccess(c *gin.Context, userID int) bool {
+	myRole := c.GetInt("role")
+	if myRole == config.RoleRootUser {
+		return true
+	}
+	user, err := model.GetUserById(userID, false)
+	return err == nil && user.Role < myRole
+}
+
 func ListGouoAdminUserTasks(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || userID < 1 {
 		gouoFail(c, http.StatusBadRequest, "invalid_user", "用户 ID 无效")
+		return
+	}
+	if !gouoAdminCanAccess(c, userID) {
+		gouoFail(c, http.StatusForbidden, "user_forbidden", "无权管理同级或更高等级用户的作品")
 		return
 	}
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -781,6 +795,10 @@ func GetGouoAdminUserAssetContent(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "invalid_user", "用户 ID 无效")
 		return
 	}
+	if !gouoAdminCanAccess(c, userID) {
+		gouoFail(c, http.StatusForbidden, "user_forbidden", "无权管理同级或更高等级用户的作品")
+		return
+	}
 	asset, err := model.GetGouoAdminOutputAsset(userID, c.Param("assetId"))
 	if err != nil || asset == nil {
 		gouoFail(c, http.StatusNotFound, "asset_not_found", "生成图片不存在")
@@ -793,6 +811,10 @@ func UpdateGouoAdminStorageQuota(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || userID < 1 {
 		gouoFail(c, http.StatusBadRequest, "invalid_user", "用户 ID 无效")
+		return
+	}
+	if !gouoAdminCanAccess(c, userID) {
+		gouoFail(c, http.StatusForbidden, "user_forbidden", "无权管理同级或更高等级用户的作品")
 		return
 	}
 	var input struct {

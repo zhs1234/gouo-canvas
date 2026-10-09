@@ -73,3 +73,37 @@ func TestConsumeCodeWithKeyOnlyOnce(t *testing.T) {
 	require.True(t, common.ConsumeCodeWithKey("bind@example.invalid", "code01", common.EmailVerificationPurpose))
 	require.False(t, common.ConsumeCodeWithKey("bind@example.invalid", "code01", common.EmailVerificationPurpose))
 }
+
+func TestGouoAdminWorkEndpointsRespectRoleScope(t *testing.T) {
+	db := newAccountTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.GouoTask{}, &model.GouoTaskAsset{}, &model.GouoAsset{}, &model.GouoStorageQuota{}))
+	for _, user := range []model.User{
+		{Id: 1, Username: "root", Role: config.RoleRootUser},
+		{Id: 2, Username: "admin", Role: config.RoleAdminUser},
+		{Id: 3, Username: "admin2", Role: config.RoleAdminUser},
+		{Id: 4, Username: "common", Role: config.RoleCommonUser},
+	} {
+		user.Password, user.Status, user.AccessToken, user.AffCode = "password", config.UserStatusEnabled, user.Username+"-token", user.Username
+		require.NoError(t, db.Create(&user).Error)
+	}
+	call := func(role int, method, path, target string, handler gin.HandlerFunc, body string) int {
+		router := gin.New()
+		router.Handle(method, path, func(c *gin.Context) {
+			c.Set("role", role)
+			handler(c)
+		})
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(method, target, bytes.NewReader([]byte(body))))
+		return response.Code
+	}
+	tasks := func(role int, userID string) int {
+		return call(role, http.MethodGet, "/users/:id/tasks", "/users/"+userID+"/tasks", ListGouoAdminUserTasks, "")
+	}
+
+	require.Equal(t, http.StatusForbidden, tasks(config.RoleAdminUser, "1"))
+	require.Equal(t, http.StatusForbidden, tasks(config.RoleAdminUser, "3"))
+	require.Equal(t, http.StatusOK, tasks(config.RoleAdminUser, "4"))
+	require.Equal(t, http.StatusOK, tasks(config.RoleRootUser, "2"))
+	require.Equal(t, http.StatusForbidden, call(config.RoleAdminUser, http.MethodGet, "/users/:id/assets/:assetId/content", "/users/1/assets/x/content", GetGouoAdminUserAssetContent, ""))
+	require.Equal(t, http.StatusForbidden, call(config.RoleAdminUser, http.MethodPut, "/users/:id/quota", "/users/1/quota", UpdateGouoAdminStorageQuota, `{"quota_bytes":1}`))
+}
