@@ -1,4 +1,5 @@
 import type { AppSettings } from '../types'
+import { getLoadedStorageUserId } from './storageScope'
 
 interface BackendEnvelope<T> {
   success: boolean
@@ -197,6 +198,7 @@ export interface GouoCloudTaskMeta {
   result_meta?: Record<string, unknown>
   client_created_at?: number
   client_image_ids?: Partial<Record<GouoCloudTaskAsset['role'], string[]>>
+  client_image_positions?: Partial<Record<GouoCloudTaskAsset['role'], number[]>>
   collection_ids?: string[]
 }
 
@@ -212,12 +214,19 @@ function apiUrl(path: string): string {
   return `${configuredBaseUrl}${normalizedPath}`
 }
 
+// 告诉后端本页面加载的是哪个账号的本地数据；会话已在其他页面切换账号时，后端会拒绝请求。
+function accountHeaders(): Record<string, string> {
+  const userId = getLoadedStorageUserId()
+  return userId ? { 'X-Gouo-User': userId } : {}
+}
+
 function requestInit(init?: RequestInit): RequestInit {
   return {
     ...init,
     cache: 'no-store',
     credentials: 'include',
     headers: {
+      ...accountHeaders(),
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },
@@ -233,6 +242,12 @@ async function parseEnvelope<T>(response: Response, requireData: boolean): Promi
     throw new Error(`服务返回了无法识别的响应（HTTP ${response.status}）`)
   }
 
+  if (response.status === 409 && (payload.data as { code?: string } | undefined)?.code === 'account_mismatch') {
+    // 刷新后登录检查会切换到当前账号的本地空间
+    backendToken = ''
+    window.location.reload()
+    throw new Error(payload.message || '当前登录账号已切换，请刷新页面')
+  }
   if (response.status === 409) throw new GouoConflictError(payload.message || '云端版本冲突', payload.data)
   if (!response.ok || !payload.success || (requireData && payload.data === undefined)) {
     throw new Error(payload.message || `请求失败（HTTP ${response.status}）`)
@@ -347,7 +362,7 @@ export async function uploadCloudAsset(file: Blob, clientImageId: string, sha256
   form.append('file', file, `${clientImageId}.${file.type.split('/')[1] || 'png'}`)
   form.append('client_image_id', clientImageId)
   form.append('sha256', sha256)
-  const response = await fetch(apiUrl('/api/gouo/assets'), { method: 'POST', credentials: 'include', body: form })
+  const response = await fetch(apiUrl('/api/gouo/assets'), { method: 'POST', credentials: 'include', headers: accountHeaders(), body: form })
   return parseEnvelope<GouoCloudAsset>(response, true)
 }
 
@@ -393,8 +408,9 @@ export function hideCloudCollection(id: string): Promise<void> {
 
 export async function fetchCloudAssetContent(asset: GouoCloudAsset): Promise<Blob> {
   // 素材内容按哈希寻址，允许浏览器缓存，换设备浏览作品时不会重复下载。
-  const response = await fetch(apiUrl(asset.content_url), { credentials: 'include' })
+  const response = await fetch(apiUrl(asset.content_url), { credentials: 'include', headers: accountHeaders() })
   checkRateLimit(response)
+  if (response.status === 409) await parseEnvelope<void>(response, false)
   if (!response.ok) throw new Error(`下载云端图片失败（HTTP ${response.status}）`)
   return response.blob()
 }

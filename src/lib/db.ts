@@ -253,6 +253,19 @@ export function putCloudMeta(key: string, value: unknown): Promise<IDBValidKey> 
   return dbTransaction(STORE_CLOUD_META, 'readwrite', (s) => s.put({ key, value }))
 }
 
+// 文档与其同步记录在同一事务里读取，避免旧内容与其他标签页刚写入的新服务端版本号配对提交。
+export async function getDocumentWithCloudMeta<T>(kind: 'canvases' | 'conversations', id: string, metaKey: string): Promise<{ doc?: CanvasProject | AgentConversation; meta?: T }> {
+  const storeName = kind === 'canvases' ? STORE_CANVASES : STORE_AGENT_CONVERSATIONS
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([storeName, STORE_CLOUD_META], 'readonly')
+    const docReq = tx.objectStore(storeName).get(id)
+    const metaReq = tx.objectStore(STORE_CLOUD_META).get(metaKey)
+    tx.oncomplete = () => { db.close(); resolve({ doc: docReq.result, meta: (metaReq.result as CloudMetaItem | undefined)?.value as T | undefined }) }
+    tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
+  })
+}
+
 export function deleteImage(id: string): Promise<undefined> {
   return deleteImages([id])
 }

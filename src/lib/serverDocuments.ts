@@ -1,6 +1,6 @@
 import type { AgentConversation, CanvasProject } from '../types'
 import { useStore } from '../store'
-import { getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
+import { getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
 import { getDocumentImageIds } from './documentAssets'
 import { backendRequest, GouoConflictError, type GouoCloudAsset } from './gouoBackend'
 import { downloadAsset, uploadImage } from './serverLibrary'
@@ -42,15 +42,26 @@ const readLocal = (kind: Kind, id: string): Promise<Document | undefined> => (ki
 const inMemory = (kind: Kind, id: string): Document | undefined => (kind === 'canvases' ? useCanvasStore.getState().projects : useAgentStore.getState().conversations).find((item) => item.id === id)
 
 async function writeLocal(kind: Kind, doc: Document, expectedRevision: number, fromServer: boolean) {
+  const before = fromServer ? inMemory(kind, doc.id) : undefined
+  if (kind === 'canvases') await putCanvasProject(serializeCanvasProject(doc as CanvasProject), expectedRevision, fromServer)
+  else await putAgentConversation(doc as AgentConversation, expectedRevision, fromServer)
+  // 写库期间用户又有编辑：替换内存后把这份编辑另存为副本，不直接丢弃。
+  const current = before && inMemory(kind, doc.id)
+  const edited = current && current.revision !== before.revision ? current : undefined
   if (kind === 'canvases') {
-    await putCanvasProject(serializeCanvasProject(doc as CanvasProject), expectedRevision, fromServer)
     markCanvasPersisted(doc as CanvasProject)
     useCanvasStore.setState((state) => ({ projects: [...state.projects.filter((item) => item.id !== doc.id), doc as CanvasProject] }))
-    return
+  } else {
+    markAgentPersisted(doc as AgentConversation)
+    useAgentStore.setState((state) => ({ conversations: [...state.conversations.filter((item) => item.id !== doc.id), doc as AgentConversation] }))
   }
-  await putAgentConversation(doc as AgentConversation, expectedRevision, fromServer)
-  markAgentPersisted(doc as AgentConversation)
-  useAgentStore.setState((state) => ({ conversations: [...state.conversations.filter((item) => item.id !== doc.id), doc as AgentConversation] }))
+  if (edited) await saveConflictCopy(kind, edited)
+}
+
+async function saveConflictCopy(kind: Kind, doc: Document) {
+  const copy = { ...doc, id: crypto.randomUUID(), title: [...doc.title].length <= 192 ? `${doc.title}（本地冲突副本）` : doc.title, revision: 1, createdAt: Date.now(), updatedAt: Date.now() }
+  await writeLocal(kind, copy, 0, false)
+  useStore.getState().showToast('其他设备修改了同一份内容，本地版本已另存为副本', 'info')
 }
 
 function reportOnce(key: string, message: string) {
@@ -65,30 +76,29 @@ async function acceptRemote(kind: Kind, remote: CloudDocument) {
   if (kind === 'canvases') validateCanvasProject(raw)
   const normalized = kind === 'canvases' ? (raw as CanvasProject) : normalizeAgentConversation(raw)
   if (!normalized || normalized.id !== remote.client_id) throw new Error('云端文档格式无效')
-  const local = await readLocal(kind, remote.client_id)
-  const memory = inMemory(kind, remote.client_id)
   // 内存中还有未落库的编辑，或会话正在运行：本次跳过，下次再读取。
-  if (memory && local && memory.revision !== local.revision) return false
-  if (memory && 'status' in memory && memory.status === 'running') return false
-  const saved = await getCloudMeta<SavedState>(metaKey(kind, remote.client_id))
-  if (local && saved?.fingerprint !== documentFingerprint(local)) {
-    const copy = { ...local, id: crypto.randomUUID(), title: [...local.title].length <= 192 ? `${local.title}（本地冲突副本）` : local.title, revision: 1, createdAt: Date.now(), updatedAt: Date.now() }
-    await writeLocal(kind, copy, 0, false)
-    useStore.getState().showToast('其他设备修改了同一份内容，本地版本已另存为副本', 'info')
-  }
+  const busy = (local: Document | undefined, memory: Document | undefined) => Boolean((memory && local && memory.revision !== local.revision) || (memory && 'status' in memory && memory.status === 'running'))
+  const before = await readLocal(kind, remote.client_id)
+  if (busy(before, inMemory(kind, remote.client_id))) return false
   for (const asset of remote.assets) {
     if (!asset.client_image_id) throw new Error('云端素材映射缺失')
     await downloadAsset(asset, asset.client_image_id)
   }
   if (!isStorageScopeCurrent()) throw new Error('账号已切换')
+  // 下载素材期间用户可能继续编辑，或其他标签页已写库：重新检查，有变化就放弃本次。
+  const local = await readLocal(kind, remote.client_id)
+  if (local?.revision !== before?.revision || busy(local, inMemory(kind, remote.client_id))) return false
+  const saved = await getCloudMeta<SavedState>(metaKey(kind, remote.client_id))
+  if (local && saved?.fingerprint !== documentFingerprint(local)) await saveConflictCopy(kind, local)
   const doc = { ...normalized, revision: Math.max(normalized.revision, (local?.revision ?? 0) + 1), hiddenAt: remote.hidden_at || undefined } as Document
   await writeLocal(kind, doc, local?.revision ?? 0, true)
   await putCloudMeta(metaKey(kind, doc.id), { revision: remote.revision, fingerprint: documentFingerprint(doc) })
   return true
 }
 
-async function pushDocument(kind: Kind, doc: Document) {
-  const saved = await getCloudMeta<SavedState>(metaKey(kind, doc.id))
+async function pushDocument(kind: Kind, id: string) {
+  const { doc, meta: saved } = await getDocumentWithCloudMeta<SavedState>(kind, id, metaKey(kind, id))
+  if (!doc || ('status' in doc && doc.status === 'running')) return
   const fingerprint = documentFingerprint(doc)
   if (saved?.fingerprint === fingerprint) return
   if ([...doc.title].length > 200) throw new Error('标题超过 200 个字符，请重命名后再保存到服务器')
@@ -130,33 +140,36 @@ export function pushDocuments(): Promise<void> {
     pushAgain = true
     return pushing
   }
-  pushing = (async () => {
-    let failed = false
-    do {
-      pushAgain = false
-      for (const kind of KINDS) {
-        const records = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
-        for (const doc of records) {
-          if (!isStorageScopeCurrent()) return
-          if ('status' in doc && doc.status === 'running') continue
-          try {
-            await pushDocument(kind, doc)
-          } catch (err) {
-            failed = true
-            console.warn('文档保存到服务器失败', doc.id, err)
-            reportOnce(`${kind}:${doc.id}`, `「${doc.title}」未能保存到服务器，已保留在本地，稍后自动重试：${err instanceof Error ? err.message : String(err)}`)
-          }
-        }
-      }
-    } while (pushAgain)
-    if (failed) {
-      clearTimeout(retryTimer)
-      retryTimer = setTimeout(() => void pushDocuments(), 60_000)
-    }
-  })().finally(() => {
+  // 多个标签页共用同一份本地数据，串行推送，避免互相用对方的版本号提交。
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+  pushing = (locks ? locks.request('gouo-document-push', pushPending).then(() => {}) : pushPending()).finally(() => {
     pushing = null
   })
   return pushing
+}
+
+async function pushPending() {
+  let failed = false
+  do {
+    pushAgain = false
+    for (const kind of KINDS) {
+      const records = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
+      for (const doc of records) {
+        if (!isStorageScopeCurrent()) return
+        try {
+          await pushDocument(kind, doc.id)
+        } catch (err) {
+          failed = true
+          console.warn('文档保存到服务器失败', doc.id, err)
+          reportOnce(`${kind}:${doc.id}`, `「${doc.title}」未能保存到服务器，已保留在本地，稍后自动重试：${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  } while (pushAgain)
+  if (failed) {
+    clearTimeout(retryTimer)
+    retryTimer = setTimeout(() => void pushDocuments(), 60_000)
+  }
 }
 
 async function pullDocuments(kind: Kind) {

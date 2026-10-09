@@ -17,7 +17,15 @@ const archive = (includeImage = true) => new File([zipSync({
   ...(includeImage ? { 'images/0.png': new Uint8Array([137, 80, 78, 71]) } : {}),
 }) as BlobPart], 'canvas.zip')
 
-beforeEach(() => { mocks.write.mockReset(); mocks.setState.mockReset() })
+let changes: number
+beforeEach(() => {
+  mocks.write.mockReset()
+  mocks.setState.mockReset()
+  changes = 0
+  const target = new EventTarget()
+  target.addEventListener('gouo:documents-changed', () => { changes++ })
+  vi.stubGlobal('window', target)
+})
 
 describe('画布备份原子导入', () => {
   it('多个项目及图片一次写入，重映射图片与遮罩ID并清除旧任务关联', async () => {
@@ -30,6 +38,8 @@ describe('画布备份原子导入', () => {
     expect(result[0].nodes[0].metadata).toMatchObject({ imageId: 'hashed-image', maskImageId: 'hashed-image', maskTargetImageId: 'hashed-image', status: 'idle' })
     expect(result[0].nodes[0].metadata?.taskId).toBeUndefined()
     expect(mocks.setState).toHaveBeenCalledTimes(1)
+    // 导入后无需再编辑也要触发云同步上传
+    expect(changes).toBe(1)
   })
 
   it('缺少原图时不写入任何数据', async () => {
@@ -42,5 +52,6 @@ describe('画布备份原子导入', () => {
     mocks.write.mockRejectedValueOnce(new Error('disk quota'))
     await expect(importCanvasArchive(archive())).rejects.toThrow('disk quota')
     expect(mocks.setState).not.toHaveBeenCalled()
+    expect(changes).toBe(0)
   })
 })

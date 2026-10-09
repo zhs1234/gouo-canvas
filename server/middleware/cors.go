@@ -52,7 +52,7 @@ func CORS() gin.HandlerFunc {
 	}
 	settings := cors.DefaultConfig()
 	settings.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
-	settings.AllowHeaders = []string{"Content-Type", "Authorization", "X-Gouo-Token", "X-Gouo-Price-Version", "X-Gouo-Request-Id", "X-Gouo-Task-Id", "X-Gouo-Request-Index"}
+	settings.AllowHeaders = []string{"Content-Type", "Authorization", "X-Gouo-Token", "X-Gouo-Price-Version", "X-Gouo-Request-Id", "X-Gouo-Task-Id", "X-Gouo-Request-Index", "X-Gouo-User"}
 	settings.ExposeHeaders = []string{"X-Gouo-Charge-Id", "X-Gouo-Billing-Status", "X-Request-Id", "Retry-After"}
 	settings.AllowOriginFunc = func(origin string) bool {
 		for _, allowed := range policy.Origins {

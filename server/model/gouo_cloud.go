@@ -329,27 +329,50 @@ func UpsertGouoCollection(collection *GouoFavoriteCollection) error {
 	}).Create(collection).Error
 }
 
+// 隐藏或恢复收藏夹会改变夹内任务下发的收藏关系，同时推进这些任务的 updated_at，其他设备才能增量拉到。
 func SetGouoCollectionHidden(userID int, id string, hidden bool) error {
-	now := time.Now().UnixMilli()
-	hiddenAt := int64(0)
-	if hidden {
-		hiddenAt = now
-	}
-	return DB.Model(&GouoFavoriteCollection{}).Where("user_id = ? AND id = ?", userID, id).Updates(map[string]any{"hidden_at": hiddenAt, "updated_at": now}).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		now, err := nextGouoTaskTimestamp(tx, userID)
+		if err != nil {
+			return err
+		}
+		hiddenAt := int64(0)
+		if hidden {
+			hiddenAt = now
+		}
+		if err := tx.Model(&GouoFavoriteCollection{}).Where("user_id = ? AND id = ?", userID, id).Updates(map[string]any{"hidden_at": hiddenAt, "updated_at": now}).Error; err != nil {
+			return err
+		}
+		taskIDs := tx.Model(&GouoFavoriteItem{}).Select("task_id").Where("user_id = ? AND collection_id = ?", userID, id)
+		return tx.Model(&GouoTask{}).Where("user_id = ? AND id IN (?)", userID, taskIDs).Update("updated_at", now).Error
+	})
 }
 
+// 收藏关系随任务一起增量同步，变更时同步推进任务的 updated_at，其他设备才能拉到。
 func SetGouoFavoriteItem(userID int, collectionID, taskID string, add bool) error {
-	if !add {
-		return DB.Where("user_id = ? AND collection_id = ? AND task_id = ?", userID, collectionID, taskID).Delete(&GouoFavoriteItem{}).Error
-	}
-	now := time.Now().UnixMilli()
-	item := GouoFavoriteItem{UserID: userID, CollectionID: collectionID, TaskID: taskID, CreatedAt: now, UpdatedAt: now}
-	return DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&item).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		now, err := nextGouoTaskTimestamp(tx, userID)
+		if err != nil {
+			return err
+		}
+		if add {
+			item := GouoFavoriteItem{UserID: userID, CollectionID: collectionID, TaskID: taskID, CreatedAt: now, UpdatedAt: now}
+			err = tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&item).Error
+		} else {
+			err = tx.Where("user_id = ? AND collection_id = ? AND task_id = ?", userID, collectionID, taskID).Delete(&GouoFavoriteItem{}).Error
+		}
+		if err != nil {
+			return err
+		}
+		return tx.Model(&GouoTask{}).Where("user_id = ? AND id = ?", userID, taskID).Update("updated_at", now).Error
+	})
 }
 
+// ListGouoFavoriteItems 只返回未隐藏收藏夹中的收藏；恢复收藏夹后原有收藏随之恢复。
 func ListGouoFavoriteItems(userID int) ([]GouoFavoriteItem, error) {
 	var items []GouoFavoriteItem
-	err := DB.Where("user_id = ?", userID).Order("updated_at, collection_id, task_id").Find(&items).Error
+	visible := DB.Model(&GouoFavoriteCollection{}).Select("id").Where("user_id = ? AND hidden_at = 0", userID)
+	err := DB.Where("user_id = ? AND collection_id IN (?)", userID, visible).Order("updated_at, collection_id, task_id").Find(&items).Error
 	return items, err
 }
 
@@ -468,7 +491,9 @@ type GouoTaskMeta struct {
 	ResultMeta      datatypes.JSON
 	ClientCreatedAt int64
 	ClientImageIDs  map[string][]string
-	CollectionIDs   []string
+	// 与 ClientImageIDs 一一对应的服务端位置；批量任务部分失败时下标与位置不再相同。缺省时按下标绑定。
+	ClientImagePositions map[string][]int
+	CollectionIDs        []string
 }
 
 // UpdateGouoTaskMeta 补充只有客户端知道的信息（原始提示词、来源、本地图片编号、收藏），不改动服务端保存的图片。
@@ -499,9 +524,14 @@ func UpdateGouoTaskMeta(userID int, clientTaskID string, meta GouoTaskMeta) (*Go
 			return err
 		}
 		for role, ids := range meta.ClientImageIDs {
-			for position, id := range ids {
+			positions := meta.ClientImagePositions[role]
+			for index, id := range ids {
 				if id == "" {
 					continue
+				}
+				position := index
+				if len(positions) == len(ids) {
+					position = positions[index]
 				}
 				if err := tx.Model(&GouoTaskAsset{}).Where("task_id = ? AND role = ? AND position = ?", task.ID, role, position).Update("client_image_id", id).Error; err != nil {
 					return err

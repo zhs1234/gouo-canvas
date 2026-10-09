@@ -10,6 +10,7 @@ let meta: Map<string, unknown>
 let agentState: { conversations: AgentConversation[]; hydrate: () => Promise<void> }
 let requests: Array<{ path: string; body?: Record<string, unknown> }>
 let remotePage: unknown[]
+let downloadAsset: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.resetModules()
@@ -19,9 +20,10 @@ beforeEach(() => {
   requests = []
   remotePage = []
   agentState = { conversations: [], hydrate: async () => {} }
+  downloadAsset = vi.fn()
   vi.doMock('../store', () => ({ useStore: { getState: () => ({ showToast: vi.fn() }) } }))
   vi.doMock('./storageScope', () => ({ isStorageScopeCurrent: () => true }))
-  vi.doMock('./serverLibrary', () => ({ uploadImage: vi.fn(), downloadAsset: vi.fn() }))
+  vi.doMock('./serverLibrary', () => ({ uploadImage: vi.fn(), downloadAsset }))
   vi.doMock('../stores/canvasStore', () => ({ markCanvasPersisted: vi.fn(), useCanvasStore: { getState: () => ({ projects: [], hydrate: async () => {} }), setState: vi.fn() } }))
   vi.doMock('../stores/agentStore', () => ({
     markAgentPersisted: vi.fn(),
@@ -39,6 +41,7 @@ beforeEach(() => {
     putCanvasProject: vi.fn(),
     putAgentConversation: async (doc: AgentConversation) => { stored.set(doc.id, doc) },
     getCloudMeta: async (key: string) => meta.get(key),
+    getDocumentWithCloudMeta: async (_kind: string, id: string, key: string) => ({ doc: stored.get(id), meta: meta.get(key) }),
     putCloudMeta: async (key: string, value: unknown) => { meta.set(key, value) },
   }))
   vi.doMock('./gouoBackend', () => ({
@@ -76,5 +79,58 @@ describe('server documents', () => {
     expect(titles).toEqual(['服务端', '本地改动（本地冲突副本）'])
     expect(stored.get('conv')?.revision).toBe(5)
     expect(meta.get('documents-cursor:conversations')).toBe('next')
+  })
+
+  it('keeps a draft typed while remote assets are downloading', async () => {
+    const local = conversation({ draft: '' })
+    stored.set('conv', local)
+    agentState.conversations = [local]
+    meta.set('document:conversations:conv', { revision: 1, fingerprint: '' })
+    const docs = await import('./serverDocuments')
+    meta.set('document:conversations:conv', { revision: 1, fingerprint: docs.documentFingerprint(local) })
+    let finishDownload = () => {}
+    downloadAsset.mockImplementation(() => new Promise<void>((resolve) => { finishDownload = resolve }))
+    remotePage = [{ client_id: 'conv', title: '服务端', revision: 2, document: conversation({ title: '服务端', revision: 5 }), assets: [{ id: 'asset', client_image_id: 'image' }] }]
+    const started = docs.startServerDocuments()
+    await vi.waitFor(() => expect(downloadAsset).toHaveBeenCalled())
+    // 300 ms 防抖尚未写库：内存 revision 已经递增
+    agentState.conversations = [{ ...local, draft: '新输入', revision: 2 }]
+    finishDownload()
+    await started
+    expect(agentState.conversations[0]).toMatchObject({ draft: '新输入', revision: 2 })
+    expect(stored.get('conv')?.title).toBe('会话')
+    expect(meta.get('documents-cursor:conversations')).toBeUndefined()
+  })
+
+  it('saves edits made while the server version is written as a copy', async () => {
+    const local = conversation()
+    agentState.conversations = [local]
+    stored.set('conv', local)
+    const docs = await import('./serverDocuments')
+    meta.set('document:conversations:conv', { revision: 1, fingerprint: docs.documentFingerprint(local) })
+    const db = await import('./db')
+    const put = db.putAgentConversation
+    vi.spyOn(db, 'putAgentConversation').mockImplementation(async (doc: AgentConversation, ...rest: unknown[]) => {
+      // 写库期间用户继续输入
+      if (doc.id === 'conv') agentState.conversations = [{ ...local, draft: '写库时输入', revision: 2 }]
+      return (put as (...args: unknown[]) => Promise<void>)(doc, ...rest)
+    })
+    remotePage = [{ client_id: 'conv', title: '服务端', revision: 2, document: conversation({ title: '服务端', revision: 5 }), assets: [] }]
+    await docs.startServerDocuments()
+    expect(agentState.conversations.find((item) => item.id === 'conv')?.title).toBe('服务端')
+    expect([...stored.values()].find((doc) => doc.id !== 'conv')).toMatchObject({ draft: '写库时输入', title: '会话（本地冲突副本）' })
+  })
+
+  it('pushes the stored document with its own sync record, not an older list snapshot', async () => {
+    const docs = await import('./serverDocuments')
+    const stale = conversation({ title: '旧内容' })
+    const fresh = conversation({ title: '新内容', revision: 2 })
+    // 另一个标签页已写入并推送了新内容，这里列表读到的仍是旧快照
+    stored.set('conv', fresh)
+    meta.set('document:conversations:conv', { revision: 7, fingerprint: docs.documentFingerprint(fresh) })
+    const db = await import('./db')
+    vi.spyOn(db, 'getAllAgentConversations').mockResolvedValue([stale])
+    await docs.pushDocuments()
+    expect(requests.filter((request) => request.body)).toEqual([])
   })
 })

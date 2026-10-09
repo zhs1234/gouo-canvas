@@ -370,16 +370,21 @@ export async function recordServerTask(taskId: string) {
     const task = useStore.getState().tasks.find((item) => item.id === taskId)
     if (!task || task.status !== 'done' || !task.outputImages.length || !isStorageScopeCurrent()) return
     try {
+      const outputs = task.transparentOriginalImages?.length ? task.transparentOriginalImages : task.outputImages
+      // 并发批量中失败的请求不产出图片，服务端按原请求序号保存：成功图片依次对应未失败的序号。
+      const failed = new Set(task.outputErrors?.map((item) => item.requestIndex))
+      const positions = Array.from({ length: outputs.length + failed.size }, (_, index) => index).filter((index) => !failed.has(index))
       const meta = {
         prompt: task.prompt,
         params: task.params as unknown as Record<string, unknown>,
         result_meta: getTaskResultMeta(task),
         client_created_at: task.createdAt,
         client_image_ids: {
-          output: task.transparentOriginalImages?.length ? task.transparentOriginalImages : task.outputImages,
+          output: outputs,
           input: task.inputImageIds,
           ...(task.maskImageId ? { mask: [task.maskImageId] } : {}),
         },
+        ...(failed.size && positions.length === outputs.length ? { client_image_positions: { output: positions } } : {}),
         collection_ids: task.favoriteCollectionIds ?? [],
       }
       const cloud = await patchCloudTaskMeta(task.id, meta).catch(async (err) => {

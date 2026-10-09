@@ -237,3 +237,83 @@ func TestGouoAdminTasksOnlyExposeUserOutputs(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, loadedOther)
 }
+
+func TestGouoFavoriteChangesAdvanceTaskCursor(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	now := time.Now().UnixMilli()
+	task := GouoTask{ID: "task-a", UserID: 1, ClientTaskID: "client-a", SchemaVersion: 1, Status: "done", Operation: "generation", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, UpsertGouoTask(&task, nil, nil))
+	require.NoError(t, UpsertGouoCollection(&GouoFavoriteCollection{ID: "collection-a", UserID: 1, Name: "收藏", CreatedAt: now, UpdatedAt: now}))
+	latest := func() int64 {
+		tasks, err := ListGouoTasks(1, false, 0, "", 10)
+		require.NoError(t, err)
+		require.Len(t, tasks, 1)
+		return tasks[0].UpdatedAt
+	}
+
+	// 其他设备只拉取 updated_at 大于已见值的任务，收藏和取消收藏都必须推进它
+	seen := latest()
+	require.NoError(t, SetGouoFavoriteItem(1, "collection-a", task.ID, true))
+	require.Greater(t, latest(), seen)
+	items, err := ListGouoFavoriteItems(1)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	seen = latest()
+	require.NoError(t, SetGouoFavoriteItem(1, "collection-a", task.ID, false))
+	require.Greater(t, latest(), seen)
+	items, err = ListGouoFavoriteItems(1)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+func TestGouoTaskMetaBindsClientImagesByPosition(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	// 3 张批量生成中第 0 个请求失败，服务端只在位置 1、2 保存了图片
+	for _, index := range []int{1, 2} {
+		id := "out-" + string(rune('0'+index))
+		asset := &GouoAsset{ID: id, UserID: 1, SHA256: id, StoragePath: id, MimeType: "image/png", FileSize: 1}
+		require.NoError(t, InsertGouoAsset(asset))
+		require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "task", Index: index, Outputs: []*GouoAsset{asset}}))
+	}
+	updated, err := UpdateGouoTaskMeta(1, "task", GouoTaskMeta{
+		ClientImageIDs:       map[string][]string{"output": {"local-b", "local-c"}},
+		ClientImagePositions: map[string][]int{"output": {1, 2}},
+	})
+	require.NoError(t, err)
+	byAsset := map[string]string{}
+	for _, link := range updated.Assets {
+		byAsset[link.AssetID] = link.ClientImageID
+	}
+	require.Equal(t, map[string]string{"out-1": "local-b", "out-2": "local-c"}, byAsset)
+}
+
+func TestGouoCollectionHideAdvancesTaskCursorAndHidesFavorites(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	now := time.Now().UnixMilli()
+	inside := GouoTask{ID: "task-in", UserID: 1, ClientTaskID: "client-in", SchemaVersion: 1, Status: "done", Operation: "generation", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), CreatedAt: now, UpdatedAt: now}
+	outside := GouoTask{ID: "task-out", UserID: 1, ClientTaskID: "client-out", SchemaVersion: 1, Status: "done", Operation: "generation", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, UpsertGouoTask(&inside, nil, nil))
+	require.NoError(t, UpsertGouoTask(&outside, nil, nil))
+	require.NoError(t, UpsertGouoCollection(&GouoFavoriteCollection{ID: "album", UserID: 1, Name: "收藏", CreatedAt: now, UpdatedAt: now}))
+	require.NoError(t, SetGouoFavoriteItem(1, "album", inside.ID, true))
+	updatedAt := func(id string) int64 {
+		var task GouoTask
+		require.NoError(t, DB.First(&task, "id = ?", id).Error)
+		return task.UpdatedAt
+	}
+
+	for _, hidden := range []bool{true, false} {
+		seenIn, seenOut := updatedAt(inside.ID), updatedAt(outside.ID)
+		require.NoError(t, SetGouoCollectionHidden(1, "album", hidden))
+		require.Greater(t, updatedAt(inside.ID), seenIn)
+		require.Equal(t, seenOut, updatedAt(outside.ID))
+		items, err := ListGouoFavoriteItems(1)
+		require.NoError(t, err)
+		if hidden {
+			require.Empty(t, items)
+		} else {
+			require.Len(t, items, 1)
+		}
+	}
+}
