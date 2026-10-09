@@ -194,9 +194,10 @@ func getUserByGitHub(githubUser *GitHubUser) (user *model.User, err error) {
 		}
 	}
 
-	// 如果 GitHubIdNew 不存在，并且没有关闭 GitHubOldId登录，则检测 GitHubId
-	if user == nil && !config.GitHubOldIdCloseEnabled && model.IsGitHubIdAlreadyTaken(githubUser.Login) {
-		user, err = model.FindUserByField("github_id", githubUser.Login)
+	// 如果 GitHubIdNew 不存在，并且没有关闭 GitHubOldId登录，则按用户名匹配尚未记录数字 ID 的旧账号。
+	// GitHub 用户名可以改名后被他人注册，已记录数字 ID 的账号不能再按用户名匹配。
+	if user == nil && !config.GitHubOldIdCloseEnabled {
+		user, err = model.FindLegacyGitHubUser(githubUser.Login)
 		if err != nil {
 			return nil, err
 		}
@@ -318,6 +319,14 @@ func GitHubOAuth(c *gin.Context) {
 		// 如果用户的头像为空，则更新用户的头像
 		if user.AvatarUrl == "" {
 			user.AvatarUrl = githubUser.AvatarUrl
+		}
+		// 写回数字 ID，之后按 ID 登录，不再依赖用户名匹配
+		if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Updates(map[string]any{"github_id": user.GitHubId, "github_id_new": user.GitHubIdNew, "email": user.Email, "avatar_url": user.AvatarUrl}).Error; err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
 		}
 	}
 

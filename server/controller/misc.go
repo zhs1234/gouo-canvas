@@ -10,6 +10,7 @@ import (
 	"one-api/common/telegram"
 	"one-api/model"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -204,7 +205,7 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 
-	if req.Email == "" || req.Token == "" || len(req.NewPassword) < 8 || len(req.NewPassword) > 20 {
+	if req.Email == "" || req.Token == "" || utf8.RuneCountInString(req.NewPassword) < 8 || utf8.RuneCountInString(req.NewPassword) > 20 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "无效的参数",

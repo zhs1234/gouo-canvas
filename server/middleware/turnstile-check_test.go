@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -55,4 +56,35 @@ func TestTurnstileProtectedAccountRequests(t *testing.T) {
 	}
 	require.Equal(t, 3, accepted)
 	require.Equal(t, 6, verified)
+}
+
+func TestTurnstileSessionPassExpires(t *testing.T) {
+	oldEnabled := config.TurnstileCheckEnabled
+	t.Cleanup(func() { config.TurnstileCheckEnabled = oldEnabled })
+	config.TurnstileCheckEnabled = true
+	r := gin.New()
+	r.Use(sessions.Sessions("turnstile-test", cookie.NewStore([]byte("local-test-cookie-key"))))
+	// 模拟此前某次校验通过后写入会话的时间
+	r.GET("/seed", func(c *gin.Context) {
+		age, _ := time.ParseDuration(c.Query("age"))
+		session := sessions.Default(c)
+		session.Set("turnstile_at", time.Now().Add(-age).Unix())
+		require.NoError(t, session.Save())
+	})
+	r.GET("/register", middleware.TurnstileCheck(), func(c *gin.Context) { c.JSON(200, gin.H{"success": true}) })
+	call := func(age string) string {
+		seed := httptest.NewRecorder()
+		r.ServeHTTP(seed, httptest.NewRequest("GET", "/seed?age="+age, nil))
+		req := httptest.NewRequest("GET", "/register", nil)
+		for _, c := range seed.Result().Cookies() {
+			req.AddCookie(c)
+		}
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, req)
+		return res.Body.String()
+	}
+	// 刚通过校验：发验证码后提交注册不必再次校验
+	require.Contains(t, call("1m"), `"success":true`)
+	// 超过有效期的会话 Cookie 不能继续免校验
+	require.Contains(t, call("11m"), `"success":false`)
 }
