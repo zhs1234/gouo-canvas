@@ -8,7 +8,7 @@
 
 - v2 路线：暂时废弃。用户明确重启前，不继续验收或开发；保留分支及历史，不做删除。
 
-- 待验证：25 项（GOUO-001 至 024、GOUO-026），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全、[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13) 存储与账号（叠加在 PR #11 之上）、[PR #14](https://github.com/zhs1234/gouo-canvas/pull/14) 来源 IP 与 Agent 确认（叠加在 PR #12 之上），均未合并
+- 待验证：25 项（GOUO-001 至 024、GOUO-026），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全、[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13) 存储与账号（叠加在 PR #11 之上）、[PR #14](https://github.com/zhs1234/gouo-canvas/pull/14) 来源 IP 与 Agent 确认，均已于 2026-10-09 合并到 main（合并后提交 [0b9b54f](https://github.com/zhs1234/gouo-canvas/commit/0b9b54f)）
 
 - 待修复：0 项
 
@@ -32,9 +32,9 @@
 
 4. 完成其余 P2 问题及回归覆盖，尤其关注跨账号同步和停止后的付费派发。
 
-5. 审查并合并 PR #8 至 #12，再合并 PR #13（先将其 base 改为 main），按各条目验收检查完成验证。PR #13 上线后会立即删除回收站中已超过 3 天的内容，合并前评估是否先备份。
+5. PR #8 至 #14 已全部合并到 main（0b9b54f），合并后本地重新运行 `npm test`（452 项）、`npm run build` 及相关 `go test` 均通过。下一步部署到测试环境，按各条目验收检查完成验证后再标记为已验证修复。PR #13 上线后会立即删除回收站中已超过 3 天的内容，部署前评估是否先备份。
 
-6. 合并 PR #12 后合并 PR #14（先将其 base 改为 main）。反向代理不在本机或私有网段的部署，升级前配置 `TRUSTED_PROXIES`。
+6. 反向代理不在本机或私有网段的部署，升级前配置 `TRUSTED_PROXIES`。
 
 ## P1 待修复
 
@@ -804,3 +804,4 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 | 2026-10-09 | 用户决定不修改落地页文案，PR #13 还原落地页改动（提交 e586aa1）。GOUO-023 中"落地页承诺与实际能力不符"部分不在修复范围内，GOUO-022 中落地页仍写"可以随时恢复"，均为用户保留原文的决定；其余修复不变。 | 23 项：待验证 23 项，待修复 0 项，已验证修复 0 项 |
 | 2026-10-09 | 继续审查图片结果恢复、Agent 接口与运行、Playground 令牌、支付回调（易支付、Stripe）、兑换码、MCP、Telegram、Service Worker、会话与限流。新增 GOUO-024（伪造来源 IP 绕过限流与令牌白名单，P1，已本地复现）、GOUO-025（自定义服务商轮询不经代理，P2）、GOUO-026（Agent 付费任务无费用上限或确认，P2）。 | 26 项：待验证 23 项，待修复 3 项（P1 1 项、P2 2 项），已验证修复 0 项 |
 | 2026-10-09 | GOUO-024、026 提交修复 [PR #14](https://github.com/zhs1234/gouo-canvas/pull/14)，处理状态改为待验证；GOUO-026 按默认上限 4 张实现弹窗确认，未显示金额。GOUO-025 复核为误报（开启代理时异步自定义服务商在提交前即被拒绝），改为不适用。 | 26 项：待验证 25 项，不适用 1 项，待修复 0 项，已验证修复 0 项 |
+| 2026-10-09 | 复查 PR #13、#14 及 GOUO-017 至 019 的修复，未发现问题，仅删除清理函数中一个未使用的字段（提交 0ddf1b1）。PR #8 至 #14 按顺序合并到 main（[0b9b54f](https://github.com/zhs1234/gouo-canvas/commit/0b9b54f)），合并后测试与构建通过。各项仍为待验证，需部署后按验收检查验证。 | 26 项：待验证 25 项，不适用 1 项，待修复 0 项，已验证修复 0 项 |
