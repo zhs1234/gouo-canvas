@@ -169,3 +169,27 @@ func TestGitHubLoginIgnoresEmptyEmailAndZeroID(t *testing.T) {
 	require.NotNil(t, user)
 	require.Equal(t, bound.Id, user.Id)
 }
+
+func TestOIDCLoginDoesNotTakeOverAccountsByUsername(t *testing.T) {
+	db := setupUserTestDB(t)
+	root := model.User{Id: 1, Username: "root", Password: "password", Role: config.RoleRootUser, Status: config.UserStatusEnabled, AccessToken: "root-token", AffCode: "root"}
+	require.NoError(t, db.Create(&root).Error)
+	bound := model.User{Id: 2, Username: "bound", Password: "password", OidcId: "subject-bound", Role: config.RoleCommonUser, Status: config.UserStatusEnabled, AccessToken: "bound-token", AffCode: "bound"}
+	require.NoError(t, db.Create(&bound).Error)
+
+	// 身份提供方把用户名声明设成 root，不能因此登录 root
+	user, err := getUserByOIDC("subject-attacker", "root")
+	require.ErrorIs(t, err, errOIDCUsernameTaken)
+	require.Nil(t, user)
+	var stored model.User
+	require.NoError(t, db.First(&stored, root.Id).Error)
+	require.Empty(t, stored.OidcId)
+
+	user, err = getUserByOIDC("subject-bound", "renamed-at-idp")
+	require.NoError(t, err)
+	require.Equal(t, bound.Id, user.Id)
+
+	user, err = getUserByOIDC("subject-new", "newcomer")
+	require.NoError(t, err)
+	require.Nil(t, user)
+}
