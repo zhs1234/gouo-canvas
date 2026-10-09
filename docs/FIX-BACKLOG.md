@@ -1,6 +1,6 @@
 # 光构待修复清单
 
-截至 2026 年 10 月 9 日（北京时间），光构共登记 19 项问题：GOUO-001 至 016 已提交修复 PR、待验证；GOUO-017 至 019 为修复过程中新发现、待修复。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
+截至 2026 年 10 月 9 日（北京时间），光构共登记 23 项问题：GOUO-001 至 019 已提交修复 PR、待验证；GOUO-020 至 023 为继续审查新发现、待修复。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
 
 审查基线为 main 提交 [1f3c463](https://github.com/zhs1234/gouo-canvas/commit/1f3c463d4f5d5b51ede64622fab20cef265770b6)。原始结论均为静态代码发现；各条目的单元测试及复现情况见其"修复记录"；用户于 2026 年 10 月 9 日说明该项目没有线上运行；此部署状态为用户提供，尚未独立核实，实际部署版本及功能开关未核验。P1/P2 是修复优先级，不表示相关条件已在生产环境成立。
 
@@ -8,11 +8,11 @@
 
 - v2 路线：暂时废弃。用户明确重启前，不继续验收或开发；保留分支及历史，不做删除。
 
-- 待验证：16 项（GOUO-001 至 016），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全，均未合并
+- 待验证：19 项（GOUO-001 至 019），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全，均未合并
 
-- 待修复：3 项（GOUO-017 至 019），其中 P1 2 项、P2 1 项
+- 待修复：4 项（GOUO-020 至 023），均为 P2
 
-- 验证状态：13 项已由单元测试复现（撤掉修复后失败），GOUO-005 由脚本复现，GOUO-013、GOUO-015 待复现；均未在运行环境、支付沙箱或真实并发下复现
+- 验证状态：16 项已由单元测试复现（撤掉修复后失败），GOUO-005 由脚本复现，GOUO-013、GOUO-015 待复现；GOUO-020 至 023 仅有静态证据；均未在运行环境、支付沙箱或真实并发下复现
 
 - 已完成并验证的修复：0 项
 
@@ -30,7 +30,7 @@
 
 4. 完成其余 P2 问题及回归覆盖，尤其关注跨账号同步和停止后的付费派发。
 
-5. 审查并合并 PR #8 至 #12，按各条目验收检查完成验证；随后处理 GOUO-017 至 019。
+5. 审查并合并 PR #8 至 #12，按各条目验收检查完成验证；随后处理 GOUO-020 至 023。
 
 ## P1 待修复
 
@@ -488,7 +488,7 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 ### GOUO-017 OIDC 按用户名回退匹配本地账号
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -510,9 +510,13 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 [按用户名回退并绑定登录](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/oidc.go#L158-L171)。修复 GOUO-002 时发现。
 
+**修复记录（2026-10-09）**
+
+[PR #8](https://github.com/zhs1234/gouo-canvas/pull/8)，提交 [3867282](https://github.com/zhs1234/gouo-canvas/commit/3867282)，基于 main 1f3c463。已运行：`TestOIDCLoginDoesNotTakeOverAccountsByUsername`：用户名声明为 root 的新主体被拒绝且 root 未被绑定；已绑定主体改名后仍可登录；新用户名正常进入注册。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-018 对话图片 URL 下载可触发后端内网请求
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -534,9 +538,13 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 [GetImageFromUrl](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/common/image/image.go#L20)，调用方如 [claude/chat.go](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/providers/claude/chat.go#L325)、[gemini/type.go](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/providers/gemini/type.go#L558)。修复 GOUO-007 时发现。
 
+**修复记录（2026-10-09）**
+
+[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10)，提交 [681720c](https://github.com/zhs1234/gouo-canvas/commit/681720c)，基于 main 1f3c463。已运行：`TestGetImageFromUrlRejectsInternalAddresses`：直连及配置代理两种模式下，下载和尺寸探测都拒绝回环地址且目标未收到请求；`TestCheckPublicHost`。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-019 隐藏收藏夹不推进相关任务的同步游标
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -548,7 +556,7 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 **建议修复**
 
-隐藏或恢复收藏夹时，在同一事务内推进夹内任务的 updated_at，或建立独立的收藏夹增量记录。
+隐藏或恢复收藏夹时，在同一事务内推进夹内任务的 updated_at，或建立独立的收藏夹增量记录。下发的收藏关系同时排除已隐藏的收藏夹，否则重新拉取到的任务仍带着已删除收藏夹的编号。
 
 **验收检查**
 
@@ -557,6 +565,106 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 **代码依据**
 
 [SetGouoCollectionHidden](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo_cloud.go#L332-L339)。修复 GOUO-011 时发现。
+
+**修复记录（2026-10-09）**
+
+[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，提交 [cacb90e](https://github.com/zhs1234/gouo-canvas/commit/cacb90e)，基于 main 1f3c463。已运行：`TestGouoCollectionHideAdvancesTaskCursorAndHidesFavorites`：隐藏、恢复收藏夹均推进夹内任务 updated_at，夹外任务不变；隐藏期间不下发收藏，恢复后恢复。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
+### GOUO-020 注册验证码可重复使用，同一邮箱可注册多个账号
+
+优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+
+**触发场景**
+
+开启邮箱验证注册，且设置了新用户赠送额度或邀请奖励。发送验证码时检查过邮箱未被占用，但注册时只校验验证码，既不作废验证码，也不再次检查邮箱是否已被注册。
+
+**影响**
+
+同一个邮箱和验证码在 10 分钟有效期内可以连续注册多个账号，每个账号都领取新用户赠送额度，邀请人也重复获得奖励。邮箱重复后，按邮箱重置密码、GitHub 按邮箱匹配都会取到第一个账号，行为不可预期。邮箱绑定接口同样不作废验证码。
+
+**建议修复**
+
+注册与邮箱绑定成功后立即作废验证码；注册时在同一事务内再次检查邮箱唯一，必要时为非空邮箱建立唯一约束并清理历史重复数据。
+
+**验收检查**
+
+用同一验证码连续注册两次，第二次被拒绝；并发注册同一邮箱只成功一个；赠送额度和邀请奖励只发放一次。
+
+**代码依据**
+
+[注册只校验验证码](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/user.go#L162-L195)、[验证码校验后不删除](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/common/verification.go#L46-L55)、[邮箱字段非唯一](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/user.go#L29)、[注册赠送额度与邀请奖励](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/user.go#L150-L170)。
+
+### GOUO-021 云文档与任务记录不计入云端空间配额
+
+优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+
+**触发场景**
+
+开启云端作品库。用户反复写入不同 client_id 的画布、会话（每份最多 4 MB）或任务记录（每条最多 512 KB），数量没有上限。
+
+**影响**
+
+空间配额只统计图片素材，文档和任务记录可以无限增长，单个账号即可持续占用数据库空间。
+
+**建议修复**
+
+把文档和任务记录的体积计入用户配额，或为每个账号设置文档、任务数量与总体积上限；超限时返回明确错误。
+
+**验收检查**
+
+写入超过上限的文档或任务被拒绝且不影响已有数据；空间统计包含文档与任务；管理员调整配额后立即生效。
+
+**代码依据**
+
+[空间统计只含素材](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo_cloud.go#L113-L123)、[文档单份 4 MB 无数量限制](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/gouo_documents.go#L147-L219)。
+
+### GOUO-022 云端作品无法彻底删除，回收站一直占用空间
+
+优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+
+**触发场景**
+
+用户删除作品、画布或会话后，它们只进入回收站；服务端没有任何删除素材文件、任务或文档记录的路径，删除账号也不会清理。
+
+**影响**
+
+空间占满后，用户无法通过删除作品释放空间，后续云同步持续失败；注销或被删除的账号，其图片文件和提示词仍保留在服务器上。
+
+**建议修复**
+
+提供回收站彻底删除（可设保留期后自动清理），删除时移除不再被引用的素材文件与记录；删除账号时按策略清理或匿名化其云端数据。
+
+**验收检查**
+
+彻底删除后空间统计相应减少、文件被移除，仍被其他作品或文档引用的素材不被删除；删除账号后其云端数据按策略处理。
+
+**代码依据**
+
+[界面说明回收站仍占空间](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/components/settings/DataSettingsTab.tsx#L85)、[空间统计](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo_cloud.go#L113-L123)。服务端 model、controller 中没有删除素材文件或作品记录的代码。
+
+### GOUO-023 普通管理员可查看 root 与其他管理员的作品
+
+优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+
+**触发场景**
+
+普通管理员调用管理端作品接口，传入 root 或其他管理员的用户 ID。接口只要求管理员身份，不检查目标账号的权限等级。
+
+**影响**
+
+普通管理员可以读取 root 与同级管理员的提示词和生成图片，权限范围与用户管理接口不一致。另外落地页写明"作品、画布与会话……只有本人登录可见"，而管理员可以查看用户作品，对外承诺与实际能力不符。
+
+**建议修复**
+
+管理端作品接口与 GOUO-001 采用相同的角色范围（非 root 只能查看权限更低的账号）；修改落地页文案，如实说明管理员在何种情况下可以查看作品，或收紧管理端的查看能力。
+
+**验收检查**
+
+普通管理员查看 root、同级管理员的作品被拒绝，查看普通用户正常；root 可查看全部；落地页文案与实际权限一致。
+
+**代码依据**
+
+[管理端作品路由](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/router/api-router.go#L231-L241)、[作品列表与图片内容](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/gouo_cloud.go#L732-L775)、[落地页承诺](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/components/landing/LandingPage.tsx#L55)。
 
 ## 维护与关闭标准
 
@@ -587,3 +695,4 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 | 2026-10-09 | 建立 main 1f3c463 基线清单，登记 GOUO-001 至 GOUO-016；全部待修复、待复现。 | 16 项，P1 8 项，P2 8 项，已验证修复 0 项 |
 | 2026-10-09 | 按用户要求将 v2 路线标记为暂时废弃；后续审查以 main 及面向 main 的活跃 PR 为准，排除旧 v2 及其历史派生开发线，明确重启前不继续验收或开发。保留分支及历史，不做删除；main 1f3c463 基线的 16 项问题保持不变。 | 16 项，P1 8 项，P2 8 项，已验证修复 0 项 |
 | 2026-10-09 | GOUO-001 至 016 提交修复 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 至 [PR #12](https://github.com/zhs1234/gouo-canvas/pull/12)，处理状态改为待验证，各条目追加修复记录及已运行测试；13 项单元测试撤掉修复后失败，GOUO-005 由脚本复现，GOUO-013、GOUO-015 待复现。新增 GOUO-017（OIDC 用户名回退绑定，P1）、GOUO-018（对话图片 URL SSRF，P1）、GOUO-019（隐藏收藏夹不推进游标，P2）。 | 19 项：待验证 16 项，待修复 3 项（P1 2 项、P2 1 项），已验证修复 0 项 |
+| 2026-10-09 | GOUO-017 至 019 修复分别追加到 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8)、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10)、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，处理状态改为待验证；GOUO-019 的建议修复补充"下发收藏排除已隐藏收藏夹"。继续审查注册验证、云端存储、计费、支付、文档同步、管理端与前端渲染，新增 GOUO-020（验证码可重复注册，P2）、GOUO-021（文档与任务不计配额，P2）、GOUO-022（作品无法彻底删除，P2）、GOUO-023（管理员越级查看作品，P2）。 | 23 项：待验证 19 项，待修复 4 项（均为 P2），已验证修复 0 项 |
