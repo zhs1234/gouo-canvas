@@ -82,7 +82,7 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
           <TrashIcon className="w-4 h-4 text-red-500/90 dark:text-red-400" />
           <h4 className="text-sm font-bold text-red-500/90 dark:text-red-400">清除数据</h4>
         </div>
-        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">此处仅清理当前浏览器的所选数据。{backend ? '已同步的云端内容仍保留，后续同步可能重新下载。删除云端作品请在作品列表操作，再从作品列表的筛选菜单选择“回收站”查看或恢复；回收站中的图片仍占云端空间。' : '未备份的本地任务和图片无法恢复。'}</p>
+        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">此处仅清理当前浏览器的所选数据。{backend ? '已同步的云端内容仍保留，后续同步可能重新下载。删除云端作品请在作品列表操作，再从作品列表的筛选菜单选择“回收站”查看或恢复；回收站中的内容保留 3 天后彻底删除，期间仍占云端空间。' : '未备份的本地任务和图片无法恢复。'}</p>
         <div className="flex flex-wrap gap-x-6 gap-y-3">
           <Checkbox checked={props.clearConfig} onChange={props.setClearConfig} label="包含配置" tone="danger" />
           <Checkbox checked={props.clearTasks} onChange={props.setClearTasks} label="包含任务和图片" tone="danger" />

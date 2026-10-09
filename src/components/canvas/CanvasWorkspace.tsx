@@ -257,7 +257,7 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
         ) : (
           <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-current/10">
             <h2 className="text-xl font-medium opacity-70">{trash ? '回收站是空的' : query ? '没有找到这张画布' : '你的下一张画布，从这里开始'}</h2>
-            <p className="mt-3 text-sm opacity-40">{trash ? '移入回收站的画布可随时恢复' : '创建项目，或者导入已导出的画布备份'}</p>
+            <p className="mt-3 text-sm opacity-40">{trash ? '移入回收站的画布可在 3 天内恢复，之后彻底删除' : '创建项目，或者导入已导出的画布备份'}</p>
           </div>
         )}
         <div className="mt-10 text-xs opacity-35">

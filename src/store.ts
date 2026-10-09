@@ -2255,47 +2255,41 @@ export async function clearFailedTasks(taskIds?: string[]) {
   }
 }
 
+/** 从本地彻底删除任务，以及不再被其他任务引用的图片 */
+export async function purgeLocalTasks(taskIds: string[]) {
+  const ids = new Set(taskIds)
+  const { tasks, setTasks, inputImages } = useStore.getState()
+  const removed = tasks.filter((t) => ids.has(t.id))
+  if (!removed.length) return
+  const remaining = tasks.filter((t) => !ids.has(t.id))
+  setTasks(remaining)
+  for (const task of removed) await dbDeleteTask(task.id)
+
+  const taskImageIds = new Set<string>()
+  for (const task of removed) addTaskReferencedImageIds(taskImageIds, task)
+  const stillUsed = new Set<string>()
+  for (const t of remaining) addTaskReferencedImageIds(stillUsed, t)
+  for (const img of inputImages) stillUsed.add(img.id)
+
+  // 删除孤立图片；画布和会话仍引用的图片由 deleteImage 保留
+  for (const imgId of taskImageIds) {
+    if (stillUsed.has(imgId)) continue
+    await deleteImage(imgId)
+    imageCache.delete(imgId)
+    thumbnailCache.delete(imgId)
+  }
+}
+
 /** 删除单条任务 */
 export async function removeTask(task: TaskRecord) {
   if (task.cloudId) {
     const { hideServerTask } = await import('./lib/serverLibrary')
     await hideServerTask(task)
-    useStore.getState().showToast('任务已移入回收站', 'success')
+    useStore.getState().showToast('任务已移入回收站，3 天后彻底删除', 'success')
     return
   }
-  const { tasks, setTasks, inputImages, showToast } = useStore.getState()
-
-  // 收集此任务关联的图片
-  const taskImageIds = new Set([
-    ...(task.inputImageIds || []),
-    ...(task.maskImageId ? [task.maskImageId] : []),
-    ...(task.outputImages || []),
-    ...(task.transparentOriginalImages || []),
-    ...(task.streamPartialImageIds || []),
-  ])
-
-  // 从列表移除
-  const remaining = tasks.filter((t) => t.id !== task.id)
-  setTasks(remaining)
-  await dbDeleteTask(task.id)
-
-  // 找出其他任务仍引用的图片
-  const stillUsed = new Set<string>()
-  for (const t of remaining) {
-    addTaskReferencedImageIds(stillUsed, t)
-  }
-  for (const img of inputImages) stillUsed.add(img.id)
-
-  // 删除孤立图片
-  for (const imgId of taskImageIds) {
-    if (!stillUsed.has(imgId)) {
-      await deleteImage(imgId)
-      imageCache.delete(imgId)
-      thumbnailCache.delete(imgId)
-    }
-  }
-
-  showToast('任务已删除', 'success')
+  await purgeLocalTasks([task.id])
+  useStore.getState().showToast('任务已删除', 'success')
 }
 
 /** 清空数据选项 */

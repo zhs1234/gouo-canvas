@@ -245,6 +245,17 @@ export function putCloudAssetMapItem(item: CloudAssetMapItem): Promise<IDBValidK
   return dbTransaction(STORE_CLOUD_ASSET_MAP, 'readwrite', (s) => s.put(item))
 }
 
+export async function deleteCloudAssetMapItems(localImageIds: string[]): Promise<void> {
+  if (!localImageIds.length) return
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CLOUD_ASSET_MAP, 'readwrite')
+    for (const id of localImageIds) tx.objectStore(STORE_CLOUD_ASSET_MAP).delete(id)
+    tx.oncomplete = () => { db.close(); resolve() }
+    tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
+  })
+}
+
 export function getCloudMeta<T>(key: string): Promise<T | undefined> {
   return dbTransaction<CloudMetaItem | undefined>(STORE_CLOUD_META, 'readonly', (s) => s.get(key)).then((item) => item?.value as T | undefined)
 }
@@ -262,6 +273,22 @@ export async function getDocumentWithCloudMeta<T>(kind: 'canvases' | 'conversati
     const docReq = tx.objectStore(storeName).get(id)
     const metaReq = tx.objectStore(STORE_CLOUD_META).get(metaKey)
     tx.oncomplete = () => { db.close(); resolve({ doc: docReq.result, meta: (metaReq.result as CloudMetaItem | undefined)?.value as T | undefined }) }
+    tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
+  })
+}
+
+// 彻底删除画布或会话及其同步记录；图片由调用方按引用情况清理。
+export async function deleteDocuments(kind: 'canvases' | 'conversations', ids: string[]): Promise<void> {
+  if (!ids.length) return
+  const storeName = kind === 'canvases' ? STORE_CANVASES : STORE_AGENT_CONVERSATIONS
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([storeName, STORE_CLOUD_META], 'readwrite')
+    for (const id of ids) {
+      tx.objectStore(storeName).delete(id)
+      tx.objectStore(STORE_CLOUD_META).delete(`document:${kind}:${id}`)
+    }
+    tx.oncomplete = () => { db.close(); resolve() }
     tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
   })
 }

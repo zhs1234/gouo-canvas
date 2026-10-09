@@ -27,6 +27,15 @@ func InitCron() {
 		logger.SysError("图片账务恢复任务注册失败: " + err.Error())
 	}
 
+	// 回收站内容保留 3 天后彻底清除
+	if err := scheduler.Manager.AddJob("purge_gouo_trash", gocron.DurationJob(time.Hour), gocron.NewTask(func() {
+		if err := model.PurgeGouoTrash(time.Now()); err != nil {
+			logger.SysError("清理云端回收站失败: " + err.Error())
+		}
+	})); err != nil {
+		logger.SysError("云端回收站清理任务注册失败: " + err.Error())
+	}
+
 	// 添加每日统计任务
 	err := scheduler.Manager.AddJob(
 		"update_daily_statistics",
