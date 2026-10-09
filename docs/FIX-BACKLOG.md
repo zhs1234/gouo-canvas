@@ -652,7 +652,7 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 **修复记录（2026-10-09）**
 
-用户于 2026 年 10 月 9 日确定保留期为 3 天：回收站内容保留 3 天后彻底删除，已删除账号的云端数据同样保留 3 天后清除。[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13)（叠加在 PR #11 之上），提交 [698c196](https://github.com/zhs1234/gouo-canvas/commit/698c196)，基于 main 1f3c463。已运行：`TestPurgeGouoTrashAfterRetention`：超过 3 天的回收站作品、文档、收藏夹被删除，未过期内容、仍被引用的图片和刚上传的图片保留，未引用图片的文件被删除，已删除满 3 天的账号数据被清除，重复运行无副作用；`serverDocuments.test.ts`、`serverLibrary.test.ts`：本地过期内容同步删除，云端图片失效后清除本地映射。合并并按上方验收检查完成验证前，不标记为已验证修复。
+用户于 2026 年 10 月 9 日确定保留期为 3 天：回收站内容保留 3 天后彻底删除，已删除账号的云端数据同样保留 3 天后清除。作品库、画布、数据设置中的回收站提示已改为"3 天内可以恢复"；落地页按用户决定保留原文，仍写"可以随时恢复"。[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13)（叠加在 PR #11 之上），提交 [698c196](https://github.com/zhs1234/gouo-canvas/commit/698c196)，基于 main 1f3c463。已运行：`TestPurgeGouoTrashAfterRetention`：超过 3 天的回收站作品、文档、收藏夹被删除，未过期内容、仍被引用的图片和刚上传的图片保留，未引用图片的文件被删除，已删除满 3 天的账号数据被清除，重复运行无副作用；`serverDocuments.test.ts`、`serverLibrary.test.ts`：本地过期内容同步删除，云端图片失效后清除本地映射。合并并按上方验收检查完成验证前，不标记为已验证修复。
 
 ### GOUO-023 普通管理员可查看 root 与其他管理员的作品
 
@@ -680,7 +680,7 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 **修复记录（2026-10-09）**
 
-落地页文案已改为说明管理员可查看生成图片，措辞待用户确认。[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13)（叠加在 PR #11 之上），提交 [f3a40ed](https://github.com/zhs1234/gouo-canvas/commit/f3a40ed)，基于 main 1f3c463。已运行：`TestGouoAdminWorkEndpointsRespectRoleScope`：普通管理员访问 root 与同级管理员的作品列表、图片和配额返回 403，访问普通用户正常，root 可访问全部。合并并按上方验收检查完成验证前，不标记为已验证修复。
+用户于 2026 年 10 月 9 日决定不修改落地页文案，PR #13 已还原该改动（提交 [e586aa1](https://github.com/zhs1234/gouo-canvas/commit/e586aa1)）。"对外承诺与实际能力不符"这一部分及其验收检查不在本次修复范围内，落地页仍写"只有本人登录可见"；权限范围部分的修复不变。[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13)（叠加在 PR #11 之上），提交 [f3a40ed](https://github.com/zhs1234/gouo-canvas/commit/f3a40ed)，基于 main 1f3c463。已运行：`TestGouoAdminWorkEndpointsRespectRoleScope`：普通管理员访问 root 与同级管理员的作品列表、图片和配额返回 403，访问普通用户正常，root 可访问全部。合并并按上方验收检查完成验证前，不标记为已验证修复。
 
 ## 维护与关闭标准
 
@@ -713,3 +713,4 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 | 2026-10-09 | GOUO-001 至 016 提交修复 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 至 [PR #12](https://github.com/zhs1234/gouo-canvas/pull/12)，处理状态改为待验证，各条目追加修复记录及已运行测试；13 项单元测试撤掉修复后失败，GOUO-005 由脚本复现，GOUO-013、GOUO-015 待复现。新增 GOUO-017（OIDC 用户名回退绑定，P1）、GOUO-018（对话图片 URL SSRF，P1）、GOUO-019（隐藏收藏夹不推进游标，P2）。 | 19 项：待验证 16 项，待修复 3 项（P1 2 项、P2 1 项），已验证修复 0 项 |
 | 2026-10-09 | GOUO-017 至 019 修复分别追加到 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8)、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10)、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，处理状态改为待验证；GOUO-019 的建议修复补充"下发收藏排除已隐藏收藏夹"。继续审查注册验证、云端存储、计费、支付、文档同步、管理端与前端渲染，新增 GOUO-020（验证码可重复注册，P2）、GOUO-021（文档与任务不计配额，P2）、GOUO-022（作品无法彻底删除，P2）、GOUO-023（管理员越级查看作品，P2）。 | 23 项：待验证 19 项，待修复 4 项（均为 P2），已验证修复 0 项 |
 | 2026-10-09 | GOUO-020 至 023 提交修复 [PR #13](https://github.com/zhs1234/gouo-canvas/pull/13)，处理状态改为待验证。用户确定回收站保留期为 3 天，GOUO-022 按此实现。GOUO-020、023 单元测试撤掉修复后失败；GOUO-021、022 为新增功能，未做撤销对照。 | 23 项：待验证 23 项，待修复 0 项，已验证修复 0 项 |
+| 2026-10-09 | 用户决定不修改落地页文案，PR #13 还原落地页改动（提交 e586aa1）。GOUO-023 中"落地页承诺与实际能力不符"部分不在修复范围内，GOUO-022 中落地页仍写"可以随时恢复"，均为用户保留原文的决定；其余修复不变。 | 23 项：待验证 23 项，待修复 0 项，已验证修复 0 项 |
