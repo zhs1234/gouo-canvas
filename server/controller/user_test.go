@@ -146,3 +146,26 @@ func TestUserListAndDetailHideAccessTokens(t *testing.T) {
 	require.Contains(t, response.Body.String(), `"success":false`)
 	require.NotContains(t, response.Body.String(), "management-token")
 }
+
+func TestGitHubLoginIgnoresEmptyEmailAndZeroID(t *testing.T) {
+	db := setupUserTestDB(t)
+	// 默认 root 没有邮箱，也从未绑定 GitHub
+	root := model.User{Id: 1, Username: "root", Password: "password", Role: config.RoleRootUser, Status: config.UserStatusEnabled, AccessToken: "root-token", AffCode: "root"}
+	require.NoError(t, db.Create(&root).Error)
+	bound := model.User{Id: 2, Username: "bound", Password: "password", Email: "bound@example.invalid", Role: config.RoleCommonUser, Status: config.UserStatusEnabled, AccessToken: "bound-token", AffCode: "bound"}
+	require.NoError(t, db.Create(&bound).Error)
+
+	user, err := getUserByGitHub(&GitHubUser{Id: 987654, Login: "stranger", Email: ""})
+	require.NoError(t, err)
+	require.Nil(t, user)
+
+	user, err = getUserByGitHub(&GitHubUser{Id: 0, Login: "zero", Email: ""})
+	require.NoError(t, err)
+	require.Nil(t, user)
+
+	// 已验证邮箱的自动绑定行为保持不变
+	user, err = getUserByGitHub(&GitHubUser{Id: 123, Login: "bound-gh", Email: "bound@example.invalid"})
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, bound.Id, user.Id)
+}
