@@ -220,6 +220,12 @@ func RecoverGouoImageCharges() error {
 	return CleanupGouoImageResults()
 }
 
+func GetGouoImageCharge(id string) (*GouoImageCharge, error) {
+	var charge GouoImageCharge
+	err := DB.Where("id = ?", id).First(&charge).Error
+	return &charge, err
+}
+
 func ResolveGouoImageCharge(id, status string, actor int, note string) error {
 	note = strings.TrimSpace(note)
 	if actor < 1 || note == "" || len([]rune(note)) > 1000 {

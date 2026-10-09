@@ -83,6 +83,20 @@ func ResolveGouoImageCharge(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "invalid_resolution", "请选择结算或退款并填写核对依据")
 		return
 	}
+	charge, err := model.GetGouoImageCharge(c.Param("id"))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		gouoFail(c, http.StatusNotFound, "billing_not_found", "图片请求记录不存在")
+		return
+	}
+	if err != nil {
+		gouoFail(c, http.StatusInternalServerError, "billing_query_failed", "读取图片请求记录失败")
+		return
+	}
+	// 普通管理员只能核对权限比自己低的账号的请求，因此也不能核对自己的请求
+	if !gouoAdminCanAccess(c, charge.UserID) {
+		gouoFail(c, http.StatusForbidden, "user_forbidden", "无权核对同级或更高等级用户的请求")
+		return
+	}
 	if err := model.ResolveGouoImageCharge(c.Param("id"), input.Status, c.GetInt("id"), input.Note); err != nil {
 		code, message := http.StatusInternalServerError, "账务处理失败，请刷新核对状态后重试"
 		if errors.Is(err, model.ErrGouoChargeState) {

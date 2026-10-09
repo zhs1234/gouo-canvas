@@ -2,8 +2,8 @@ package controller
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"net/url"
 	"one-api/common"
 	"one-api/common/config"
 	"one-api/common/stmp"
@@ -167,8 +167,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 
 	code := common.GenerateVerificationCode(0)
 	common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", config.ServerAddress, email, code)
-	err := stmp.SendPasswordResetEmail(userName, email, link)
+	err := stmp.SendPasswordResetEmail(userName, email, passwordResetLink(email, code))
 
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -181,6 +180,11 @@ func SendPasswordResetEmail(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
+}
+
+// passwordResetLink 对查询参数编码：邮箱中的 "+" 不编码会被浏览器解析成空格，导致重置失败
+func passwordResetLink(email, token string) string {
+	return config.ServerAddress + "/user/reset?" + url.Values{"email": {email}, "token": {token}}.Encode()
 }
 
 type PasswordResetRequest struct {
