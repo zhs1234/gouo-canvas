@@ -338,13 +338,24 @@ func SetGouoCollectionHidden(userID int, id string, hidden bool) error {
 	return DB.Model(&GouoFavoriteCollection{}).Where("user_id = ? AND id = ?", userID, id).Updates(map[string]any{"hidden_at": hiddenAt, "updated_at": now}).Error
 }
 
+// 收藏关系随任务一起增量同步，变更时同步推进任务的 updated_at，其他设备才能拉到。
 func SetGouoFavoriteItem(userID int, collectionID, taskID string, add bool) error {
-	if !add {
-		return DB.Where("user_id = ? AND collection_id = ? AND task_id = ?", userID, collectionID, taskID).Delete(&GouoFavoriteItem{}).Error
-	}
-	now := time.Now().UnixMilli()
-	item := GouoFavoriteItem{UserID: userID, CollectionID: collectionID, TaskID: taskID, CreatedAt: now, UpdatedAt: now}
-	return DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&item).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		now, err := nextGouoTaskTimestamp(tx, userID)
+		if err != nil {
+			return err
+		}
+		if add {
+			item := GouoFavoriteItem{UserID: userID, CollectionID: collectionID, TaskID: taskID, CreatedAt: now, UpdatedAt: now}
+			err = tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&item).Error
+		} else {
+			err = tx.Where("user_id = ? AND collection_id = ? AND task_id = ?", userID, collectionID, taskID).Delete(&GouoFavoriteItem{}).Error
+		}
+		if err != nil {
+			return err
+		}
+		return tx.Model(&GouoTask{}).Where("user_id = ? AND id = ?", userID, taskID).Update("updated_at", now).Error
+	})
 }
 
 func ListGouoFavoriteItems(userID int) ([]GouoFavoriteItem, error) {

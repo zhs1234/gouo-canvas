@@ -237,3 +237,32 @@ func TestGouoAdminTasksOnlyExposeUserOutputs(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, loadedOther)
 }
+
+func TestGouoFavoriteChangesAdvanceTaskCursor(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	now := time.Now().UnixMilli()
+	task := GouoTask{ID: "task-a", UserID: 1, ClientTaskID: "client-a", SchemaVersion: 1, Status: "done", Operation: "generation", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, UpsertGouoTask(&task, nil, nil))
+	require.NoError(t, UpsertGouoCollection(&GouoFavoriteCollection{ID: "collection-a", UserID: 1, Name: "收藏", CreatedAt: now, UpdatedAt: now}))
+	latest := func() int64 {
+		tasks, err := ListGouoTasks(1, false, 0, "", 10)
+		require.NoError(t, err)
+		require.Len(t, tasks, 1)
+		return tasks[0].UpdatedAt
+	}
+
+	// 其他设备只拉取 updated_at 大于已见值的任务，收藏和取消收藏都必须推进它
+	seen := latest()
+	require.NoError(t, SetGouoFavoriteItem(1, "collection-a", task.ID, true))
+	require.Greater(t, latest(), seen)
+	items, err := ListGouoFavoriteItems(1)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	seen = latest()
+	require.NoError(t, SetGouoFavoriteItem(1, "collection-a", task.ID, false))
+	require.Greater(t, latest(), seen)
+	items, err = ListGouoFavoriteItems(1)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
