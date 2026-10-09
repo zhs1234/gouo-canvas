@@ -137,6 +137,8 @@ function buildDefaultConfigOnlySettingsFromUrlParams(currentSettings: Partial<Ap
   }
 
   if (Object.keys(patch).length === 0) return {}
+  // 换到其他服务地址却没有提供 Key 时清空旧 Key，避免把原有凭据发到新地址
+  if (patch.baseUrl !== undefined && patch.apiKey === undefined && normalizeBaseUrl(patch.baseUrl) !== normalizeBaseUrl(activeProfile.baseUrl)) patch.apiKey = ''
 
   return normalizeSettings({
     ...settings,
@@ -182,7 +184,12 @@ export function buildSettingsFromUrlParams(currentSettings: Partial<AppSettings>
       apiMode: profileApiMode,
       model: profileApiMode === 'responses' ? DEFAULT_RESPONSES_MODEL : DEFAULT_IMAGES_MODEL,
     })
-    if (apiUrlParam !== null) profile.baseUrl = normalizeBaseUrl(apiUrlParam.trim())
+    if (apiUrlParam !== null) {
+      const baseUrl = normalizeBaseUrl(apiUrlParam.trim())
+      // 部署默认的 Key 只能用于默认服务地址
+      if (baseUrl !== normalizeBaseUrl(profile.baseUrl)) profile.apiKey = ''
+      profile.baseUrl = baseUrl
+    }
     if (apiKeyParam !== null) profile.apiKey = apiKeyParam.trim()
     if (modelParam !== null && modelParam.trim()) profile.model = modelParam.trim()
     if (profileName) profile.name = profileName

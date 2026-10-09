@@ -566,4 +566,38 @@ describe('URL settings params', () => {
       apiMode: 'images',
     })
   })
+
+  describe('does not send an existing API key to a different host', () => {
+    async function importWithDefaultKey(defaultConfigOnly: boolean) {
+      vi.resetModules()
+      if (defaultConfigOnly) vi.stubEnv('VITE_SHOW_DEFAULT_CONFIG_ONLY', 'true')
+      vi.stubEnv('VITE_DEFAULT_API_URL', 'https://default.example.com/v1?apiKey=deploy-key')
+      const profiles = await import('./apiProfiles')
+      const url = await import('./urlSettings')
+      const current = profiles.normalizeSettings(profiles.DEFAULT_SETTINGS)
+      const apply = (query: string) => {
+        const next = profiles.normalizeSettings({ ...current, ...url.buildSettingsFromUrlParams(current, new URLSearchParams(query)) })
+        return next.profiles.find((profile) => profile.id === next.activeProfileId)
+      }
+      return { current, apply }
+    }
+
+    it('clears the key when only apiUrl points the active profile elsewhere', async () => {
+      const { current, apply } = await importWithDefaultKey(true)
+      expect(current.profiles[0].apiKey).toBe('deploy-key')
+      expect(apply('apiUrl=https://other.example.com/v1')).toMatchObject({ baseUrl: 'https://other.example.com/v1', apiKey: '' })
+      expect(apply('apiUrl=https://default.example.com/v1/&model=custom')).toMatchObject({ apiKey: 'deploy-key', model: 'custom' })
+      expect(apply('apiUrl=https://other.example.com/v1&apiKey=new-key')).toMatchObject({ apiKey: 'new-key' })
+      const settings = encodeURIComponent(JSON.stringify({ profiles: [{ baseUrl: 'https://other.example.com/v1' }] }))
+      expect(apply(`settings=${settings}`)).toMatchObject({ baseUrl: 'https://other.example.com/v1', apiKey: '' })
+    })
+
+    it('does not give a URL profile for another host the deployment default key', async () => {
+      const { apply } = await importWithDefaultKey(false)
+      expect(apply('apiUrl=https://other.example.com/v1')).toMatchObject({ baseUrl: 'https://other.example.com/v1', apiKey: '' })
+      expect(apply('apiUrl=https://default.example.com/v1&model=custom')).toMatchObject({ apiKey: 'deploy-key' })
+      const settings = encodeURIComponent(JSON.stringify({ profiles: [{ name: '导入', baseUrl: 'https://other.example.com/v1' }] }))
+      expect(apply(`settings=${settings}`)).toMatchObject({ baseUrl: 'https://other.example.com/v1', apiKey: '' })
+    })
+  })
 })
