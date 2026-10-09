@@ -1,6 +1,6 @@
 import type { AgentConversation, CanvasProject } from '../types'
 import { useStore } from '../store'
-import { getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
+import { getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
 import { getDocumentImageIds } from './documentAssets'
 import { backendRequest, GouoConflictError, type GouoCloudAsset } from './gouoBackend'
 import { downloadAsset, uploadImage } from './serverLibrary'
@@ -96,8 +96,9 @@ async function acceptRemote(kind: Kind, remote: CloudDocument) {
   return true
 }
 
-async function pushDocument(kind: Kind, doc: Document) {
-  const saved = await getCloudMeta<SavedState>(metaKey(kind, doc.id))
+async function pushDocument(kind: Kind, id: string) {
+  const { doc, meta: saved } = await getDocumentWithCloudMeta<SavedState>(kind, id, metaKey(kind, id))
+  if (!doc || ('status' in doc && doc.status === 'running')) return
   const fingerprint = documentFingerprint(doc)
   if (saved?.fingerprint === fingerprint) return
   if ([...doc.title].length > 200) throw new Error('标题超过 200 个字符，请重命名后再保存到服务器')
@@ -139,33 +140,36 @@ export function pushDocuments(): Promise<void> {
     pushAgain = true
     return pushing
   }
-  pushing = (async () => {
-    let failed = false
-    do {
-      pushAgain = false
-      for (const kind of KINDS) {
-        const records = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
-        for (const doc of records) {
-          if (!isStorageScopeCurrent()) return
-          if ('status' in doc && doc.status === 'running') continue
-          try {
-            await pushDocument(kind, doc)
-          } catch (err) {
-            failed = true
-            console.warn('文档保存到服务器失败', doc.id, err)
-            reportOnce(`${kind}:${doc.id}`, `「${doc.title}」未能保存到服务器，已保留在本地，稍后自动重试：${err instanceof Error ? err.message : String(err)}`)
-          }
-        }
-      }
-    } while (pushAgain)
-    if (failed) {
-      clearTimeout(retryTimer)
-      retryTimer = setTimeout(() => void pushDocuments(), 60_000)
-    }
-  })().finally(() => {
+  // 多个标签页共用同一份本地数据，串行推送，避免互相用对方的版本号提交。
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+  pushing = (locks ? locks.request('gouo-document-push', pushPending).then(() => {}) : pushPending()).finally(() => {
     pushing = null
   })
   return pushing
+}
+
+async function pushPending() {
+  let failed = false
+  do {
+    pushAgain = false
+    for (const kind of KINDS) {
+      const records = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
+      for (const doc of records) {
+        if (!isStorageScopeCurrent()) return
+        try {
+          await pushDocument(kind, doc.id)
+        } catch (err) {
+          failed = true
+          console.warn('文档保存到服务器失败', doc.id, err)
+          reportOnce(`${kind}:${doc.id}`, `「${doc.title}」未能保存到服务器，已保留在本地，稍后自动重试：${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  } while (pushAgain)
+  if (failed) {
+    clearTimeout(retryTimer)
+    retryTimer = setTimeout(() => void pushDocuments(), 60_000)
+  }
 }
 
 async function pullDocuments(kind: Kind) {

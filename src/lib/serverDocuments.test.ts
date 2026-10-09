@@ -41,6 +41,7 @@ beforeEach(() => {
     putCanvasProject: vi.fn(),
     putAgentConversation: async (doc: AgentConversation) => { stored.set(doc.id, doc) },
     getCloudMeta: async (key: string) => meta.get(key),
+    getDocumentWithCloudMeta: async (_kind: string, id: string, key: string) => ({ doc: stored.get(id), meta: meta.get(key) }),
     putCloudMeta: async (key: string, value: unknown) => { meta.set(key, value) },
   }))
   vi.doMock('./gouoBackend', () => ({
@@ -118,5 +119,18 @@ describe('server documents', () => {
     await docs.startServerDocuments()
     expect(agentState.conversations.find((item) => item.id === 'conv')?.title).toBe('服务端')
     expect([...stored.values()].find((doc) => doc.id !== 'conv')).toMatchObject({ draft: '写库时输入', title: '会话（本地冲突副本）' })
+  })
+
+  it('pushes the stored document with its own sync record, not an older list snapshot', async () => {
+    const docs = await import('./serverDocuments')
+    const stale = conversation({ title: '旧内容' })
+    const fresh = conversation({ title: '新内容', revision: 2 })
+    // 另一个标签页已写入并推送了新内容，这里列表读到的仍是旧快照
+    stored.set('conv', fresh)
+    meta.set('document:conversations:conv', { revision: 7, fingerprint: docs.documentFingerprint(fresh) })
+    const db = await import('./db')
+    vi.spyOn(db, 'getAllAgentConversations').mockResolvedValue([stale])
+    await docs.pushDocuments()
+    expect(requests.filter((request) => request.body)).toEqual([])
   })
 })

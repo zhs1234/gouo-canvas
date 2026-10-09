@@ -51,4 +51,12 @@ describe('画布数据升级和素材安全', () => {
     expect(await db.getAllCanvasProjects()).toEqual([])
     expect((await db.getImage('duplicate'))?.dataUrl).toBe('data:image/png;base64,aA==')
   })
+
+  it('在同一事务里读取文档和它的同步记录', async () => {
+    const db = await import('./db')
+    await db.putCanvasProject(project({ title: '已保存' }))
+    await db.putCloudMeta('document:canvases:canvas', { revision: 4, fingerprint: 'fp' })
+    expect(await db.getDocumentWithCloudMeta('canvases', 'canvas', 'document:canvases:canvas')).toEqual({ doc: project({ title: '已保存' }), meta: { revision: 4, fingerprint: 'fp' } })
+    expect(await db.getDocumentWithCloudMeta('conversations', 'missing', 'document:conversations:missing')).toEqual({ doc: undefined, meta: undefined })
+  })
 })
