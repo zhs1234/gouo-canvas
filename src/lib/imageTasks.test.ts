@@ -3,7 +3,7 @@ import type { TaskRecord } from '../types'
 import { DEFAULT_PARAMS } from '../types'
 import { DEFAULT_SETTINGS } from './apiProfiles'
 
-const fixtures = vi.hoisted(() => ({ state: {} as Record<string, unknown>, saved: [] as TaskRecord[], execute: vi.fn() }))
+const fixtures = vi.hoisted(() => ({ state: {} as Record<string, unknown>, saved: [] as TaskRecord[], execute: vi.fn(), backend: false, quote: vi.fn() }))
 vi.mock('../store', () => ({
   useStore: { getState: () => fixtures.state, setState: vi.fn() },
   ensureImageCached: vi.fn(async () => 'data:image/png;base64,aA=='),
@@ -12,13 +12,15 @@ vi.mock('../store', () => ({
   executeTask: fixtures.execute,
 }))
 vi.mock('./db', () => ({ putTask: vi.fn(async (task: TaskRecord) => { fixtures.saved.push(task) }), storeImage: vi.fn(async () => 'image') }))
-vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => false, getImageModelQuote: vi.fn() }))
+vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote }))
 vi.mock('./canvasImage', () => ({ validateMaskMatchesImage: vi.fn(async () => 'partial') }))
 
 import { submitImageTask } from './imageTasks'
 import { validateMaskMatchesImage } from './canvasImage'
 
 beforeEach(() => {
+  fixtures.backend = false
+  fixtures.quote.mockReset()
   fixtures.saved.length = 0
   fixtures.execute.mockClear()
   vi.mocked(validateMaskMatchesImage).mockResolvedValue('partial')
@@ -41,6 +43,19 @@ describe('统一图片任务入口', () => {
     expect(fixtures.saved[0].requestId).toBe(input.requestId)
     expect(await submitImageTask(input)).toBe(first)
     expect(fixtures.saved).toHaveLength(1)
+  })
+  it('等待报价期间被停止时不保存也不派发任务', async () => {
+    fixtures.backend = true
+    let resolveQuote = (_quote: unknown) => {}
+    fixtures.quote.mockReturnValue(new Promise((resolve) => { resolveQuote = resolve }))
+    const controller = new AbortController()
+    const submitted = submitImageTask({ prompt: '绘制一座灯塔', source: { kind: 'agent' }, requestId: 'agent:conv:call_stop', signal: controller.signal })
+    await vi.waitFor(() => expect(fixtures.quote).toHaveBeenCalled())
+    controller.abort()
+    resolveQuote({ price_version: 'v1' })
+    await expect(submitted).rejects.toThrow()
+    expect(fixtures.saved).toHaveLength(0)
+    expect(fixtures.execute).not.toHaveBeenCalled()
   })
   it('拒绝无效图片数量和空提示词，不派发付费请求', async () => {
     await expect(submitImageTask({ prompt: ' ', source: { kind: 'canvas' } })).rejects.toThrow('提示词')
