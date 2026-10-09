@@ -13,10 +13,14 @@ import (
 	providersBase "one-api/providers/base"
 	"one-api/safty"
 	"one-api/types"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// 单次对话请求允许的远程图片张数
+const maxRemoteImagesPerRequest = 32
 
 type relayChat struct {
 	relayBase
@@ -44,6 +48,19 @@ func (r *relayChat) setRequest() error {
 
 	if r.chatRequest.Tools != nil {
 		r.c.Set("skip_only_chat", true)
+	}
+
+	// Claude、Gemini 等渠道会由后端下载远程图片并转成 base64 常驻内存，张数不限时一个小请求就能占用数 GB
+	remoteImages := 0
+	for _, message := range r.chatRequest.Messages {
+		for _, part := range message.ParseContent() {
+			if part.Type == types.ContentTypeImageURL && part.ImageURL != nil && strings.HasPrefix(part.ImageURL.URL, "http") {
+				remoteImages++
+			}
+		}
+	}
+	if remoteImages > maxRemoteImagesPerRequest {
+		return fmt.Errorf("too many remote images, at most %d per request", maxRemoteImagesPerRequest)
 	}
 
 	if !r.chatRequest.Stream {

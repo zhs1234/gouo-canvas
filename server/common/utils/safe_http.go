@@ -19,7 +19,10 @@ var nonPublicNets = func() []*net.IPNet {
 		"192.0.0.0/24",
 		"198.18.0.0/15",
 		"240.0.0.0/4",
-		"64:ff9b::/96", // NAT64 可映射到任意 IPv4
+		"64:ff9b::/96",   // NAT64 可映射到任意 IPv4
+		"64:ff9b:1::/48", // 本地 NAT64
+		"::/96",          // 已废弃的 IPv4 兼容地址，如 ::7f00:1
+		"2002::/16",      // 6to4，内嵌任意 IPv4
 	} {
 		_, block, _ := net.ParseCIDR(cidr)
 		nets = append(nets, block)

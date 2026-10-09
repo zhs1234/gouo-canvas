@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"one-api/common"
 	"one-api/common/logger"
+	"one-api/common/utils"
 	"one-api/controller"
 	"one-api/model"
 	provider "one-api/providers/midjourney"
@@ -24,6 +25,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// 图片地址来自任务记录，接口无需登录即可访问；只允许下载公网地址，避免被用作内网请求代理
+var mjImageClient = utils.NewPublicHTTPClient(30 * time.Second)
+
+// ponytail: 图片代理上限 64 MB；上游返回更大的图片前需调整
+const mjImageMaxBytes = 64 * 1024 * 1024
+
 func RelayMidjourneyImage(c *gin.Context) {
 	taskId := c.Param("id")
 	midjourneyTask := model.GetByOnlyMJId(taskId)
@@ -33,7 +40,13 @@ func RelayMidjourneyImage(c *gin.Context) {
 		})
 		return
 	}
-	resp, err := http.Get(midjourneyTask.ImageUrl)
+	if !strings.HasPrefix(midjourneyTask.ImageUrl, "http://") && !strings.HasPrefix(midjourneyTask.ImageUrl, "https://") {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid_image_url",
+		})
+		return
+	}
+	resp, err := mjImageClient.Get(midjourneyTask.ImageUrl)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "http_get_image_failed",
@@ -42,7 +55,7 @@ func RelayMidjourneyImage(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		responseBody, _ := io.ReadAll(resp.Body)
+		responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		c.JSON(resp.StatusCode, gin.H{
 			"error": string(responseBody),
 		})
@@ -57,7 +70,7 @@ func RelayMidjourneyImage(c *gin.Context) {
 	// 设置响应的内容类型
 	c.Writer.Header().Set("Content-Type", contentType)
 	// 将图片流式传输到响应体
-	_, err = io.Copy(c.Writer, resp.Body)
+	_, err = io.Copy(c.Writer, io.LimitReader(resp.Body, mjImageMaxBytes))
 	if err != nil {
 		log.Println("Failed to stream image:", err)
 	}
@@ -74,7 +87,8 @@ func RelayMidjourneyNotify(c *gin.Context) *provider.MidjourneyResponse {
 			Result:      "",
 		}
 	}
-	midjourneyTask := model.GetByOnlyMJId(midjRequest.MjId)
+	// 只能更新调用者自己的任务：按任务 ID 全局查找时，任何令牌用户都能改写他人任务的图片地址
+	midjourneyTask := model.GetByMJId(c.GetInt("id"), midjRequest.MjId)
 	if midjourneyTask == nil {
 		return &provider.MidjourneyResponse{
 			Code:        4,

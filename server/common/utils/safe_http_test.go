@@ -30,6 +30,9 @@ func TestIsPublicIP(t *testing.T) {
 		"::ffff:127.0.0.1": false,
 		"::ffff:10.0.0.1":  false,
 		"64:ff9b::a00:1":   false,
+		"64:ff9b:1::a00:1": false,
+		"::7f00:1":         false,
+		"2002:7f00:1::1":   false,
 	}
 	for addr, want := range tests {
 		if got := IsPublicIP(net.ParseIP(addr)); got != want {
