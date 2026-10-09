@@ -72,8 +72,22 @@ describe('server library', () => {
       client_image_ids: { output: ['local-out'], input: [] },
       collection_ids: ['album'],
     }))
+    expect(vi.mocked(backend.patchCloudTaskMeta).mock.calls[0][1]).not.toHaveProperty('client_image_positions')
     expect(state.tasks[0].cloudId).toBe('cloud-1')
     expect(backend.putCloudTask).not.toHaveBeenCalled()
+  })
+
+  it('sends the original request positions when part of a batch failed', async () => {
+    const backend = await import('./gouoBackend')
+    const library = await import('./serverLibrary')
+    await library.startServerLibrary()
+    // 4 张中第 0、2 个请求失败（含服务端已生成但浏览器下载失败），成功图片对应位置 1、3
+    state.setTasks([localTask({ outputImages: ['local-b', 'local-d'], outputErrors: [{ requestIndex: 0, error: '失败' }, { requestIndex: 2, error: '下载失败' }] })])
+    await library.recordServerTask('task-1')
+    expect(backend.patchCloudTaskMeta).toHaveBeenCalledWith('task-1', expect.objectContaining({
+      client_image_ids: { output: ['local-b', 'local-d'], input: [] },
+      client_image_positions: { output: [1, 3] },
+    }))
   })
 
   it('uploads the whole task when the server did not keep the generation', async () => {

@@ -606,7 +606,9 @@ type gouoTaskMetaInput struct {
 	ResultMeta      json.RawMessage     `json:"result_meta"`
 	ClientCreatedAt int64               `json:"client_created_at"`
 	ClientImageIDs  map[string][]string `json:"client_image_ids"`
-	CollectionIDs   []string            `json:"collection_ids"`
+	// 批量任务部分失败时，client_image_ids 各项对应的原始请求位置
+	ClientImagePositions map[string][]int `json:"client_image_positions"`
+	CollectionIDs        []string         `json:"collection_ids"`
 }
 
 // PatchGouoTaskMeta 补充服务端无法从请求里得知的作品信息；图片本身已在生成时由服务端保存。
@@ -639,6 +641,18 @@ func PatchGouoTaskMeta(c *gin.Context) {
 			}
 		}
 	}
+	for role, positions := range input.ClientImagePositions {
+		if len(positions) != len(input.ClientImageIDs[role]) {
+			gouoFail(c, http.StatusBadRequest, "invalid_asset_link", "作品图片关系无效")
+			return
+		}
+		for _, position := range positions {
+			if position < 0 || position >= config.GouoAssetMaxTaskFiles {
+				gouoFail(c, http.StatusBadRequest, "invalid_asset_link", "作品图片关系无效")
+				return
+			}
+		}
+	}
 	var collectionIDs []string
 	if input.CollectionIDs != nil {
 		// 其他设备已删除的收藏夹直接忽略，不能让整条作品信息保存失败。
@@ -659,12 +673,13 @@ func PatchGouoTaskMeta(c *gin.Context) {
 		}
 	}
 	task, err := model.UpdateGouoTaskMeta(c.GetInt("id"), c.Param("clientTaskId"), model.GouoTaskMeta{
-		Prompt:          input.Prompt,
-		Params:          datatypes.JSON(input.Params),
-		ResultMeta:      datatypes.JSON(input.ResultMeta),
-		ClientCreatedAt: input.ClientCreatedAt,
-		ClientImageIDs:  input.ClientImageIDs,
-		CollectionIDs:   collectionIDs,
+		Prompt:               input.Prompt,
+		Params:               datatypes.JSON(input.Params),
+		ResultMeta:           datatypes.JSON(input.ResultMeta),
+		ClientCreatedAt:      input.ClientCreatedAt,
+		ClientImageIDs:       input.ClientImageIDs,
+		ClientImagePositions: input.ClientImagePositions,
+		CollectionIDs:        collectionIDs,
 	})
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		gouoFail(c, http.StatusNotFound, "task_not_found", "作品不存在")

@@ -266,3 +266,24 @@ func TestGouoFavoriteChangesAdvanceTaskCursor(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, items)
 }
+
+func TestGouoTaskMetaBindsClientImagesByPosition(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	// 3 张批量生成中第 0 个请求失败，服务端只在位置 1、2 保存了图片
+	for _, index := range []int{1, 2} {
+		id := "out-" + string(rune('0'+index))
+		asset := &GouoAsset{ID: id, UserID: 1, SHA256: id, StoragePath: id, MimeType: "image/png", FileSize: 1}
+		require.NoError(t, InsertGouoAsset(asset))
+		require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "task", Index: index, Outputs: []*GouoAsset{asset}}))
+	}
+	updated, err := UpdateGouoTaskMeta(1, "task", GouoTaskMeta{
+		ClientImageIDs:       map[string][]string{"output": {"local-b", "local-c"}},
+		ClientImagePositions: map[string][]int{"output": {1, 2}},
+	})
+	require.NoError(t, err)
+	byAsset := map[string]string{}
+	for _, link := range updated.Assets {
+		byAsset[link.AssetID] = link.ClientImageID
+	}
+	require.Equal(t, map[string]string{"out-1": "local-b", "out-2": "local-c"}, byAsset)
+}

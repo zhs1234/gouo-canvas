@@ -198,6 +198,7 @@ export interface GouoCloudTaskMeta {
   result_meta?: Record<string, unknown>
   client_created_at?: number
   client_image_ids?: Partial<Record<GouoCloudTaskAsset['role'], string[]>>
+  client_image_positions?: Partial<Record<GouoCloudTaskAsset['role'], number[]>>
   collection_ids?: string[]
 }
 

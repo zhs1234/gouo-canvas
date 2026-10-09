@@ -479,7 +479,9 @@ type GouoTaskMeta struct {
 	ResultMeta      datatypes.JSON
 	ClientCreatedAt int64
 	ClientImageIDs  map[string][]string
-	CollectionIDs   []string
+	// 与 ClientImageIDs 一一对应的服务端位置；批量任务部分失败时下标与位置不再相同。缺省时按下标绑定。
+	ClientImagePositions map[string][]int
+	CollectionIDs        []string
 }
 
 // UpdateGouoTaskMeta 补充只有客户端知道的信息（原始提示词、来源、本地图片编号、收藏），不改动服务端保存的图片。
@@ -510,9 +512,14 @@ func UpdateGouoTaskMeta(userID int, clientTaskID string, meta GouoTaskMeta) (*Go
 			return err
 		}
 		for role, ids := range meta.ClientImageIDs {
-			for position, id := range ids {
+			positions := meta.ClientImagePositions[role]
+			for index, id := range ids {
 				if id == "" {
 					continue
+				}
+				position := index
+				if len(positions) == len(ids) {
+					position = positions[index]
 				}
 				if err := tx.Model(&GouoTaskAsset{}).Where("task_id = ? AND role = ? AND position = ?", task.ID, role, position).Update("client_image_id", id).Error; err != nil {
 					return err
