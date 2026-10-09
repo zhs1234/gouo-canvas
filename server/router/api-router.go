@@ -198,7 +198,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		gouoRoute := apiRouter.Group("/gouo")
-		gouoRoute.Use(middleware.UserAuth())
+		gouoRoute.Use(middleware.UserAuth(), middleware.GouoAccountMatch())
 		{
 			gouoRoute.GET("/storage", controller.GetGouoStorage)
 			gouoRoute.GET("/models", controller.GetGouoModels)

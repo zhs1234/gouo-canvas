@@ -8,12 +8,35 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 afterEach(() => {
+  vi.doUnmock('./storageScope')
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.resetModules()
 })
 
 describe('gouoBackend', () => {
+  it('sends the loaded account on cloud requests and reloads when the session switched accounts', async () => {
+    vi.doMock('./storageScope', () => ({ getLoadedStorageUserId: () => '7' }))
+    const reload = vi.fn()
+    vi.stubGlobal('window', { location: { reload } })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { used_bytes: 0 } }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { id: 'asset' } }))
+      .mockResolvedValueOnce(new Response('png', { status: 200 }))
+      .mockResolvedValueOnce(jsonResponse({ success: false, message: '账号已切换', data: { code: 'account_mismatch' } }, 409))
+    vi.stubGlobal('fetch', fetchMock)
+    const { getCloudStorage, uploadCloudAsset, fetchCloudAssetContent, GouoConflictError } = await import('./gouoBackend')
+    await getCloudStorage()
+    await uploadCloudAsset(new Blob(['abc'], { type: 'image/png' }), 'image-1', 'abc')
+    await fetchCloudAssetContent({ id: 'asset', sha256: '', mime_type: 'image/png', file_size: 0, content_url: '/api/gouo/assets/asset/content' })
+    for (const call of fetchMock.mock.calls) expect(call[1].headers).toMatchObject({ 'X-Gouo-User': '7' })
+
+    const error = await getCloudStorage().catch((err) => err)
+    expect(error).not.toBeInstanceOf(GouoConflictError)
+    expect(error.message).toBe('账号已切换')
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
   it('sends Turnstile tokens on all protected account actions without changing unprotected payloads', async () => {
     const request = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ success: true })))
     vi.stubGlobal('fetch', request)
