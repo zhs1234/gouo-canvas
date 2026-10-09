@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"one-api/common"
 	"one-api/common/config"
@@ -56,7 +57,7 @@ func (p *OpenAIProvider) getRequestImageBody(relayMode int, ModelName string, re
 	if p.OriginalModel != request.Model {
 		var formBody bytes.Buffer
 		builder := p.Requester.CreateFormBuilder(&formBody)
-		if err := imagesEditsMultipartForm(request, builder); err != nil {
+		if err := imagesEditsMultipartForm(request, p.Context.Request.MultipartForm, builder); err != nil {
 			return nil, common.ErrorWrapper(err, "create_form_builder_failed", http.StatusInternalServerError)
 		}
 		req, err = p.Requester.NewRequest(
@@ -65,7 +66,9 @@ func (p *OpenAIProvider) getRequestImageBody(relayMode int, ModelName string, re
 			p.Requester.WithBody(&formBody),
 			p.Requester.WithHeader(headers),
 			p.Requester.WithContentType(builder.FormDataContentType()))
-		req.ContentLength = int64(formBody.Len())
+		if err == nil {
+			req.ContentLength = int64(formBody.Len())
+		}
 	} else {
 		body, exists := p.GetRawBody()
 		if !exists {
@@ -77,7 +80,9 @@ func (p *OpenAIProvider) getRequestImageBody(relayMode int, ModelName string, re
 			p.Requester.WithBody(body),
 			p.Requester.WithHeader(headers),
 			p.Requester.WithContentType(p.Context.Request.Header.Get("Content-Type")))
-		req.ContentLength = p.Context.Request.ContentLength
+		if err == nil {
+			req.ContentLength = p.Context.Request.ContentLength
+		}
 	}
 
 	if err != nil {
@@ -87,7 +92,32 @@ func (p *OpenAIProvider) getRequestImageBody(relayMode int, ModelName string, re
 	return req, nil
 }
 
-func imagesEditsMultipartForm(request *types.ImageEditRequest, b requester.FormBuilder) (err error) {
+func imagesEditsMultipartForm(request *types.ImageEditRequest, form *multipart.Form, b requester.FormBuilder) (err error) {
+	// 原始表单可用时原样转发，只替换映射后的 model，避免字段白名单漏掉 quality、output_format 等参数
+	if form != nil {
+		for name, values := range form.Value {
+			if name == "model" {
+				continue
+			}
+			for _, value := range values {
+				if err = b.WriteField(name, value); err != nil {
+					return fmt.Errorf("writing %s: %w", name, err)
+				}
+			}
+		}
+		for name, files := range form.File {
+			for _, file := range files {
+				if err = b.CreateFormFile(name, file); err != nil {
+					return fmt.Errorf("creating form %s: %w", name, err)
+				}
+			}
+		}
+		if err = b.WriteField("model", request.Model); err != nil {
+			return fmt.Errorf("writing model name: %w", err)
+		}
+		return b.Close()
+	}
+
 	if request.Image != nil {
 		err = b.CreateFormFile("image", request.Image)
 		if err != nil {
