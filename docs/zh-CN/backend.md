@@ -73,7 +73,7 @@ SESSION_COOKIE_SAME_SITE=none
 4. 验证 generations、edits 和 variations 三条路由。
 5. 核对不同模型售价、成功扣费、失败退款、价格变化确认和余额不足拒绝。
 6. 设置新用户额度、兑换码、注册策略和限流。
-7. 若计划使用在线支付，完成支付渠道、回调验签、异常订单和对账测试后再开放入口。
+7. 若计划使用在线支付，完成支付渠道、回调验签、异常订单和对账测试后再开放入口。支付回调始终按网关的当前配置验签：更换商户（app_id、商户号或平台公钥属于另一个商户）时请新建网关并停用旧网关，旧网关保留到其订单全部完成或关闭，否则改配置前创建的订单收到原商户回调时会验签失败、无法入账。
 8. 在“运营 → 光构存储”确认资产目录可写并检查用户空间。
 
 注册页按后端状态显示邮箱验证码和 Cloudflare Turnstile；状态加载失败时显示重试，不会略过必需验证。后台设置 `TurnstileCheckEnabled`、`TurnstileSiteKey`、`TurnstileSecretKey`，并在 Cloudflare 配置实际前端域名。公开 site key 用于注册、发送邮箱验证码、发送密码重置邮件和用户中心绑定邮箱的验证组件，secret key 只留在服务端；过期或失败可以重试，提交后刷新挑战。自定义 CSP 需允许 `https://challenges.cloudflare.com` 的脚本和 frame。令牌随请求交给后端现有 Siteverify 中间件校验，不能只信任前端成功回调。参见 [客户端接入](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/) 和 [服务端校验](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)。OAuth 登录入口尚不属于光构公开登录页。

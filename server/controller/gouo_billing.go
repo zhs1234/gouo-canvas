@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"one-api/common/config"
 	"one-api/common/logger"
 	"one-api/model"
 
@@ -41,6 +42,8 @@ func GetGouoImageResult(c *gin.Context) {
 
 func listGouoImageCharges(c *gin.Context, admin bool) {
 	userID := c.GetInt("id")
+	// 普通管理员只能查看权限比自己低的账号的记录
+	belowRole := 0
 	if admin {
 		userID = 0
 		if value := c.Query("user_id"); value != "" {
@@ -49,7 +52,14 @@ func listGouoImageCharges(c *gin.Context, admin bool) {
 				gouoFail(c, http.StatusBadRequest, "invalid_user", "用户 ID 无效")
 				return
 			}
+			if !gouoAdminCanAccess(c, parsed) {
+				gouoFail(c, http.StatusForbidden, "user_forbidden", "无权查看同级或更高等级用户的记录")
+				return
+			}
 			userID = parsed
+		}
+		if role := c.GetInt("role"); role != config.RoleRootUser {
+			belowRole = role
 		}
 	}
 	params := model.PaginationParams{}
@@ -65,7 +75,7 @@ func listGouoImageCharges(c *gin.Context, admin bool) {
 		}
 		requestID = model.GouoImageRequestID(userID, clientID)
 	}
-	result, err := model.ListGouoImageCharges(userID, requestID, c.Query("status"), &params)
+	result, err := model.ListGouoImageCharges(userID, belowRole, requestID, c.Query("status"), &params)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "图片账务查询失败: "+err.Error())
 		gouoFail(c, http.StatusInternalServerError, "billing_query_failed", "读取图片请求记录失败")

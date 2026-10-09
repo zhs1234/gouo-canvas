@@ -234,10 +234,14 @@ func ResolveGouoImageCharge(id, status string, actor int, note string) error {
 	return FinishGouoImageCharge(id, GouoChargeReview, status, nil, actor, note)
 }
 
-func ListGouoImageCharges(userID int, id, status string, params *PaginationParams) (*DataResult[GouoImageCharge], error) {
+// ListGouoImageCharges belowRole 大于 0 时只返回权限低于该等级的账号的记录（含已删除账号）。
+func ListGouoImageCharges(userID, belowRole int, id, status string, params *PaginationParams) (*DataResult[GouoImageCharge], error) {
 	query := DB.Model(&GouoImageCharge{})
 	if userID > 0 {
 		query = query.Where("user_id = ?", userID)
+	}
+	if belowRole > 0 {
+		query = query.Where("user_id IN (?)", DB.Unscoped().Model(&User{}).Select("id").Where("role < ?", belowRole))
 	}
 	if id != "" {
 		query = query.Where("id = ?", id)
