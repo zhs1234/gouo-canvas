@@ -105,6 +105,10 @@ func (q *Quota) PreQuotaConsumption() *types.OpenAIErrorWithStatusCode {
 		q.HandelStatus = true
 		return nil
 	}
+	// 其他入口（recraft 工具、任务、搜索等）不经过光构图片结算，不能按通用计费免费调用光构图片模型
+	if q.price.GouoEnabled {
+		return common.StringErrorWrapperLocal("此模型只能通过图片生成接口调用", "image_model_endpoint", http.StatusBadRequest)
+	}
 	if q.fixedQuota > 0 {
 		q.preConsumedQuota = q.fixedQuota
 	} else if q.price.Type == model.TimesPriceType {

@@ -94,6 +94,10 @@ func responseImageClient(c *gin.Context, response *types.ImageResponse, usage *t
 
 func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErrorWithStatusCode {
 	if !strings.HasPrefix(c.Request.URL.Path, "/v1/images/") {
+		// 光构图片模型的价格只在图片接口按目录结算；对话、recraft 等入口走通用计费，其 Price 没有设置单价，会免费放行
+		if model.PricingInstance.GetPrice(relay.getOriginalModel()).GouoEnabled {
+			return common.StringErrorWrapperLocal("此模型只能通过图片生成接口调用", "image_model_endpoint", http.StatusBadRequest)
+		}
 		return nil
 	}
 	if id := c.GetHeader("X-Gouo-Request-Id"); id != "" && !gouoImageRequestID.MatchString(id) {
@@ -193,8 +197,9 @@ var gouoImageDownloadClient = utils.NewPublicHTTPClient(60 * time.Second)
 // recordGouoGeneration 在返回图片前把结果写入用户作品库；失败只记日志，图片仍按原流程返回并保留在恢复缓存中。
 func recordGouoGeneration(c *gin.Context, capture *gouoImageCapture, response *types.ImageResponse) {
 	userID := c.GetInt("id")
-	save := func(data []byte, name string) (*model.GouoAsset, error) {
-		asset, _, err := model.SaveGouoAssetBytes(userID, data, name, false)
+	// 已付费的生成结果不受配额限制；用户上传的参考图和遮罩按普通上传处理
+	save := func(data []byte, name string, enforceQuota bool) (*model.GouoAsset, error) {
+		asset, _, err := model.SaveGouoAssetBytes(userID, data, name, enforceQuota)
 		return asset, err
 	}
 	record := model.GouoGenerationRecord{UserID: userID, ClientTaskID: capture.taskID, Index: capture.index, Prompt: capture.prompt, Model: capture.model, Operation: capture.operation}
@@ -204,7 +209,7 @@ func recordGouoGeneration(c *gin.Context, capture *gouoImageCapture, response *t
 		data, err := gouoImageBytes(item)
 		if err == nil {
 			var asset *model.GouoAsset
-			if asset, err = save(data, fmt.Sprintf("output-%d-%d", capture.index, i)); err == nil {
+			if asset, err = save(data, fmt.Sprintf("output-%d-%d", capture.index, i), false); err == nil {
 				record.Outputs = append(record.Outputs, asset)
 				continue
 			}
@@ -218,11 +223,14 @@ func recordGouoGeneration(c *gin.Context, capture *gouoImageCapture, response *t
 			return nil, err
 		}
 		defer file.Close()
-		data, err := io.ReadAll(io.LimitReader(file, gouoGeneratedImageMaxBytes))
+		data, err := io.ReadAll(io.LimitReader(file, config.GouoAssetMaxFileBytes+1))
 		if err != nil {
 			return nil, err
 		}
-		return save(data, header.Filename)
+		if int64(len(data)) > config.GouoAssetMaxFileBytes {
+			return nil, fmt.Errorf("文件超过 %d MB", config.GouoAssetMaxFileBytes/1024/1024)
+		}
+		return save(data, header.Filename, true)
 	}
 	for _, header := range capture.inputs {
 		asset, err := readUpload(header)

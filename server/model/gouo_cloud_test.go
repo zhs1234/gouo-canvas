@@ -340,6 +340,14 @@ func TestGouoDocumentsAndTasksCountTowardStorageQuota(t *testing.T) {
 	require.NoError(t, SaveGouoDocument(&doc, 1, nil))
 	// 服务端保存的付费生成结果不受配额限制
 	require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "paid", Prompt: strings.Repeat("y", 3000), Params: datatypes.JSON(`{}`)}))
+	// 客户端补充的作品信息变大时受配额限制，原内容不变；缩小不受限制
+	_, err = UpdateGouoTaskMeta(1, "client-1", GouoTaskMeta{Params: datatypes.JSON(`{"note":"` + strings.Repeat("z", 3000) + `"}`)})
+	require.ErrorIs(t, err, ErrGouoStorageQuota)
+	stored, err := GetGouoTask(1, "client-1")
+	require.NoError(t, err)
+	require.JSONEq(t, `{}`, string(stored.Params))
+	_, err = UpdateGouoTaskMeta(1, "client-1", GouoTaskMeta{Prompt: "猫"})
+	require.NoError(t, err)
 }
 
 func TestGouoContentBytesMigrationBackfillsExistingRows(t *testing.T) {

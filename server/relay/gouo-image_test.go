@@ -57,6 +57,19 @@ func TestGouoImageRequestQuoteAndCapabilities(t *testing.T) {
 	edit := NewRelayImageEdits(c)
 	edit.setOriginalModel("image-a")
 	require.NotNil(t, prepareGouoImage(c, edit))
+
+	// 其他入口不经过光构结算，按通用计费会免费放行，必须拒绝；普通模型不受影响
+	for _, path := range []string{"/recraftAI/v1/images/generations", "/v1/chat/completions", "/v1/responses"} {
+		other, _ := gin.CreateTestContext(httptest.NewRecorder())
+		other.Request = httptest.NewRequest("POST", path, nil)
+		relay := NewRelayImageGenerations(other)
+		relay.setOriginalModel("image-a")
+		errEndpoint := prepareGouoImage(other, relay)
+		require.NotNil(t, errEndpoint, path)
+		require.Equal(t, "image_model_endpoint", errEndpoint.Code)
+		relay.setOriginalModel("gpt-4o")
+		require.Nil(t, prepareGouoImage(other, relay), path)
+	}
 }
 
 func TestImageResponsePayloadValidation(t *testing.T) {

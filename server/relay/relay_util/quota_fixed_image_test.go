@@ -110,3 +110,16 @@ func TestGouoImageQuotaRetriesRefundAndSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 970, balance)
 }
+
+func TestGouoImageModelRejectedOutsideImageBilling(t *testing.T) {
+	oldPricing := model.PricingInstance
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{"gpt-image-2": {Model: "gpt-image-2", Type: model.TimesPriceType, GouoEnabled: true, GouoPriceCNY: 0.1}}}
+	t.Cleanup(func() { model.PricingInstance = oldPricing })
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/recraftAI/v1/images/vectorize", nil)
+	c.Set("id", 1)
+	// 未经过光构图片结算的入口按通用计费为 0，必须在预扣前拒绝
+	err := NewQuota(c, "gpt-image-2", 1).PreQuotaConsumption()
+	require.NotNil(t, err)
+	require.Equal(t, "image_model_endpoint", err.Code)
+}

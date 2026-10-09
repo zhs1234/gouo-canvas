@@ -1,6 +1,9 @@
 package model
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +27,7 @@ func TestPurgeGouoTrashAfterRetention(t *testing.T) {
 	asset := func(userID int, id string, createdAt int64) {
 		path := filepath.Join(config.GouoAssetDir, id+".png")
 		require.NoError(t, os.WriteFile(path, []byte(id), 0o600))
-		require.NoError(t, DB.Create(&GouoAsset{ID: id, UserID: userID, SHA256: id, StoragePath: id + ".png", MimeType: "image/png", FileSize: 1, CreatedAt: createdAt}).Error)
+		require.NoError(t, DB.Create(&GouoAsset{ID: id, UserID: userID, SHA256: id, StoragePath: id + ".png", MimeType: "image/png", FileSize: 1, CreatedAt: createdAt, UpdatedAt: createdAt}).Error)
 	}
 	task := func(userID int, id string, hiddenAt int64, assetID string) {
 		require.NoError(t, DB.Create(&GouoTask{ID: id, UserID: userID, ClientTaskID: id, Status: "done", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), HiddenAt: hiddenAt}).Error)
@@ -77,4 +80,33 @@ func TestPurgeGouoTrashAfterRetention(t *testing.T) {
 	require.NoError(t, PurgeGouoTrash(now))
 	require.NoError(t, DB.Model(&GouoAsset{}).Count(&docs).Error)
 	require.EqualValues(t, 4, docs)
+}
+
+func TestPurgeGouoTrashKeepsReuploadedAsset(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	oldDir := config.GouoAssetDir
+	config.GouoAssetDir = t.TempDir()
+	t.Cleanup(func() { config.GouoAssetDir = oldDir })
+	now := time.Now()
+	expired := now.Add(-GouoTrashRetention - time.Hour).UnixMilli()
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))))
+	asset, _, err := SaveGouoAssetBytes(1, buf.Bytes(), "a.png", false)
+	require.NoError(t, err)
+	// 很早以前上传、目前没有被引用的图片；该账号另有过期的回收站内容，会触发清理
+	require.NoError(t, DB.Model(&GouoAsset{}).Where("id = ?", asset.ID).Updates(map[string]any{"created_at": expired, "updated_at": expired}).Error)
+	require.NoError(t, DB.Create(&GouoTask{ID: "expired", UserID: 1, ClientTaskID: "expired", Status: "error", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), HiddenAt: expired}).Error)
+
+	// 用户重新上传同一张图（命中去重），在关联到作品之前清理任务运行
+	reused, deduplicated, err := SaveGouoAssetBytes(1, buf.Bytes(), "a.png", true)
+	require.NoError(t, err)
+	require.True(t, deduplicated)
+	require.Equal(t, asset.ID, reused.ID)
+	require.NoError(t, PurgeGouoTrash(now))
+
+	var count int64
+	require.NoError(t, DB.Model(&GouoAsset{}).Where("id = ?", asset.ID).Count(&count).Error)
+	require.EqualValues(t, 1, count)
+	_, err = os.Stat(filepath.Join(config.GouoAssetDir, asset.StoragePath))
+	require.NoError(t, err)
 }

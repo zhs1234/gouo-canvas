@@ -7,30 +7,34 @@ import (
 	"image/color"
 	"image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"one-api/common/config"
+	"one-api/common/logger"
 	"one-api/model"
 	"one-api/types"
 )
 
 func TestRecordGouoGenerationStoresOutputsAndReferences(t *testing.T) {
-	oldDB, oldDir := model.DB, config.GouoAssetDir
-	t.Cleanup(func() { model.DB, config.GouoAssetDir = oldDB, oldDir })
+	oldDB, oldDir, oldLogger := model.DB, config.GouoAssetDir, logger.Logger
+	t.Cleanup(func() { model.DB, config.GouoAssetDir, logger.Logger = oldDB, oldDir, oldLogger })
+	logger.Logger = zap.NewNop()
 	config.GouoAssetDir = t.TempDir()
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/capture.db"), &gorm.Config{})
 	require.NoError(t, err)
 	conn, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.Close() })
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoTask{}, &model.GouoAsset{}, &model.GouoTaskAsset{}, &model.GouoFavoriteItem{}, &model.GouoDocument{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoTask{}, &model.GouoAsset{}, &model.GouoTaskAsset{}, &model.GouoFavoriteItem{}, &model.GouoDocument{}, &model.GouoStorageQuota{}))
 	model.DB = db
 	require.NoError(t, db.Create(&model.User{Id: 1, Username: "capture"}).Error)
 
@@ -74,6 +78,40 @@ func TestRecordGouoGenerationStoresOutputsAndReferences(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 3, count)
 	require.Positive(t, used)
+
+	// 空间已满：已付费的编辑结果照常入库，用户上传的参考图和遮罩不入库
+	fileHeader := func(data []byte) *multipart.FileHeader {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		part, err := writer.CreateFormFile("image[]", "ref.png")
+		require.NoError(t, err)
+		_, err = part.Write(data)
+		require.NoError(t, err)
+		require.NoError(t, writer.Close())
+		req := httptest.NewRequest(http.MethodPost, "/", &body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		require.NoError(t, req.ParseMultipartForm(1<<20))
+		return req.MultipartForm.File["image[]"][0]
+	}
+	require.NoError(t, db.Create(&model.GouoStorageQuota{UserID: 1, QuotaBytes: used}).Error)
+	edit := &gouoImageCapture{taskID: "edit-1", prompt: "改色", model: "image-a", operation: "edit", params: map[string]any{}, inputs: []*multipart.FileHeader{fileHeader(encode(10))}, mask: fileHeader(encode(11))}
+	recordGouoGeneration(c, edit, &types.ImageResponse{Data: []types.ImageResponseDataInner{{B64JSON: base64.StdEncoding.EncodeToString(encode(12))}}})
+	task, err = model.GetGouoTask(1, "edit-1")
+	require.NoError(t, err)
+	require.Len(t, task.Assets, 1)
+	require.Equal(t, "output", task.Assets[0].Role)
+
+	// 超过单文件上限的参考图直接跳过，不截断保存
+	require.NoError(t, db.Model(&model.GouoStorageQuota{}).Where("user_id = ?", 1).Update("quota_bytes", 1<<30).Error)
+	oldMax := config.GouoAssetMaxFileBytes
+	config.GouoAssetMaxFileBytes = int64(len(encode(13)) - 1)
+	t.Cleanup(func() { config.GouoAssetMaxFileBytes = oldMax })
+	edit = &gouoImageCapture{taskID: "edit-2", prompt: "改色", model: "image-a", operation: "edit", params: map[string]any{}, inputs: []*multipart.FileHeader{fileHeader(encode(13))}}
+	recordGouoGeneration(c, edit, &types.ImageResponse{Data: []types.ImageResponseDataInner{{B64JSON: base64.StdEncoding.EncodeToString(encode(14))}}})
+	task, err = model.GetGouoTask(1, "edit-2")
+	require.NoError(t, err)
+	require.Len(t, task.Assets, 1)
+	require.Equal(t, "output", task.Assets[0].Role)
 }
 
 func TestGouoImageBytesRejectsInternalURLsAndOversizedImages(t *testing.T) {

@@ -594,7 +594,12 @@ func UpdateGouoTaskMeta(userID int, clientTaskID string, meta GouoTaskMeta) (*Go
 		if err := tx.Model(&task).Updates(updates).Error; err != nil {
 			return err
 		}
+		previousBytes := task.ContentBytes
 		if err := tx.First(&task, "id = ?", task.ID).Error; err != nil {
+			return err
+		}
+		// 提示词和参数由客户端提交，变大时同样受云端空间配额限制
+		if err := checkGouoStorageQuota(tx, userID, task.contentBytes()-previousBytes); err != nil {
 			return err
 		}
 		if err := tx.Model(&task).UpdateColumn("content_bytes", task.contentBytes()).Error; err != nil {

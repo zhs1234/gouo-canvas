@@ -68,6 +68,10 @@ func SaveGouoAssetBytes(userID int, data []byte, originalName string, enforceQuo
 		return nil, false, err
 	}
 	if existing != nil {
+		// 回收站清理按 updated_at 保护近期上传的图片，复用旧记录时刷新，避免在关联到作品或文档之前被清除
+		if err := DB.Model(existing).UpdateColumn("updated_at", time.Now().UnixMilli()).Error; err != nil {
+			return nil, false, err
+		}
 		return existing, true, nil
 	}
 	if enforceQuota {

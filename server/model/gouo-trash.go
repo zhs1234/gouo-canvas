@@ -117,7 +117,7 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool) ([]string, error) {
 			}
 		}
 
-		// 剩余作品和文档仍引用的图片保留；刚上传、尚未关联的图片在保留期内也保留。
+		// 剩余作品和文档仍引用的图片保留；刚上传或刚被去重复用、尚未关联的图片在保留期内也保留。
 		referenced := map[string]bool{}
 		var linked []string
 		if err := tx.Model(&GouoTaskAsset{}).Joins("JOIN gouo_tasks ON gouo_tasks.id = gouo_task_assets.task_id").Where("gouo_tasks.user_id = ?", userID).Distinct("gouo_task_assets.asset_id").Pluck("gouo_task_assets.asset_id", &linked).Error; err != nil {
@@ -137,7 +137,7 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool) ([]string, error) {
 		}
 		assets := tx.Where("user_id = ?", userID)
 		if !all {
-			assets = assets.Where("created_at < ?", cutoff)
+			assets = assets.Where("updated_at < ?", cutoff)
 		}
 		var candidates []GouoAsset
 		if err := assets.Select("id", "storage_path").Find(&candidates).Error; err != nil {
