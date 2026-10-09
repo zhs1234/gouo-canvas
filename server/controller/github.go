@@ -145,7 +145,7 @@ func getGitHubUserInfoByCode(code string) (*GitHubUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	if githubUser.Login == "" {
+	if githubUser.Login == "" || githubUser.Id == 0 {
 		return nil, errors.New("返回值非法，用户字段为空，请稍后重试！")
 	}
 
@@ -186,8 +186,8 @@ func getGithubEmail(githubEmails []*GithubEmail) string {
 }
 
 func getUserByGitHub(githubUser *GitHubUser) (user *model.User, err error) {
-	// 优先检测 GitHubIdNew
-	if model.IsGitHubIdNewAlreadyTaken(githubUser.Id) {
+	// 优先检测 GitHubIdNew；未绑定 GitHub 的账号 github_id_new 为 0，不能参与匹配
+	if githubUser.Id != 0 && model.IsGitHubIdNewAlreadyTaken(githubUser.Id) {
 		user, err = model.FindUserByField("github_id_new", githubUser.Id)
 		if err != nil {
 			return nil, err
@@ -202,8 +202,8 @@ func getUserByGitHub(githubUser *GitHubUser) (user *model.User, err error) {
 		}
 	}
 
-	// 如果 GitHubId 不存在，则检测 Email
-	if user == nil && model.IsEmailAlreadyTaken(githubUser.Email) {
+	// 如果 GitHubId 不存在，则检测 Email；空邮箱会匹配到所有未设置邮箱的账号（包括默认 root）
+	if user == nil && githubUser.Email != "" && model.IsEmailAlreadyTaken(githubUser.Email) {
 		user, err = model.FindUserByField("email", githubUser.Email)
 		if err != nil {
 			return nil, err

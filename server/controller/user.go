@@ -206,7 +206,7 @@ func GetUsersList(c *gin.Context) {
 		return
 	}
 
-	users, err := model.GetUsersList(&params)
+	users, err := model.GetUsersList(&params, c.GetInt("role"))
 	if err != nil {
 		common.APIRespondWithError(c, http.StatusOK, err)
 		return
@@ -243,6 +243,8 @@ func GetUser(c *gin.Context) {
 		})
 		return
 	}
+	// 管理令牌只能由本人通过 /api/user/self 或 /api/user/token 获取
+	user.AccessToken = ""
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -571,11 +573,15 @@ func DeleteUser(c *gin.Context) {
 	err = model.DeleteUserById(id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
+			"success": false,
+			"message": err.Error(),
 		})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
 }
 
 func CreateUser(c *gin.Context) {

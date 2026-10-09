@@ -117,8 +117,8 @@ func OIDCAuth(c *gin.Context) {
 	}
 
 	// 获取用户名
-	userName, ok := claims[config.OIDCUsernameClaims]
-	if !ok || userName == nil {
+	userName, ok := claims[config.OIDCUsernameClaims].(string)
+	if !ok || userName == "" {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "用户没有OIDC登录权限",
 			"success": false,
@@ -126,16 +126,20 @@ func OIDCAuth(c *gin.Context) {
 		return
 	}
 
-	// 初始化用户对象
-	user := model.User{
-		Username: userName.(string),
-		OidcId:   idToken.Subject,
+	existing, err := getUserByOIDC(idToken.Subject, userName)
+	if err != nil {
+		if !errors.Is(err, errOIDCUsernameTaken) {
+			logger.SysError("查询用户错误: " + err.Error())
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": err.Error(),
+			"success": false,
+		})
+		return
 	}
-
-	// 尝试通过OIDCid查询用户
-	if err = user.FillUserByOidcId(); err == nil {
-		if user.Status == config.UserStatusEnabled {
-			setupLogin(&user, c)
+	if existing != nil {
+		if existing.Status == config.UserStatusEnabled {
+			setupLogin(existing, c)
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
@@ -144,48 +148,7 @@ func OIDCAuth(c *gin.Context) {
 		})
 		return
 	}
-
-	// OIDCid查询失败，则尝试通过username查询
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		logger.SysError("查询用户错误: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
-		return
-	}
-
-	if err = user.FillUserByUsername(); err == nil {
-		if user.Status == config.UserStatusEnabled {
-			// 如果通过用户名查询用户成功、则补全用户OIDC ID并且登录
-			user.OidcId = idToken.Subject
-			ok := user.Update(false)
-			if ok != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"message": ok.Error(),
-					"success": false,
-				})
-				return
-			}
-			setupLogin(&user, c)
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"message": "用户已被封禁或不存在",
-			"success": false,
-		})
-		return
-	}
-
-	// 用户不存在，尝试注册
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		logger.SysError("查询用户错误: " + err.Error())
-		c.JSON(http.StatusOK, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
-		return
-	}
+	user := model.User{Username: userName, OidcId: idToken.Subject}
 
 	// 注册新用户
 	if !config.RegisterEnabled {
@@ -206,15 +169,14 @@ func OIDCAuth(c *gin.Context) {
 		user.InviterId = inviterId
 	}
 	// 填充用户信息并创建账户
-	user.Username = userName.(string)
-	if email, ok := claims["email"]; ok && email != nil {
-		user.Email = email.(string)
+	if email, ok := claims["email"].(string); ok {
+		user.Email = email
 	}
-	if displayName, ok := claims["displayName"]; ok && displayName != nil {
-		user.DisplayName = displayName.(string)
+	if displayName, ok := claims["displayName"].(string); ok {
+		user.DisplayName = displayName
 	}
-	if avatarUrl, ok := claims["avatar"]; ok && avatarUrl != nil {
-		user.AvatarUrl = avatarUrl.(string)
+	if avatarUrl, ok := claims["avatar"].(string); ok {
+		user.AvatarUrl = avatarUrl
 	}
 	user.OidcId = idToken.Subject
 	user.Role = config.RoleCommonUser
@@ -229,4 +191,23 @@ func OIDCAuth(c *gin.Context) {
 	}
 
 	setupLogin(&user, c)
+}
+
+var errOIDCUsernameTaken = errors.New("该用户名已被本地账号使用，请联系管理员处理")
+
+// getUserByOIDC 只按 OIDC subject 查找已绑定账号。用户名由身份提供方控制，
+// 同名本地账号（包括 root）不能被未绑定的 OIDC 身份静默接管。
+func getUserByOIDC(subject, username string) (*model.User, error) {
+	user := model.User{OidcId: subject}
+	err := user.FillUserByOidcId()
+	if err == nil {
+		return &user, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if model.IsUsernameAlreadyTaken(username) {
+		return nil, errOIDCUsernameTaken
+	}
+	return nil, nil
 }

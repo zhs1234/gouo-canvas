@@ -80,9 +80,13 @@ var allowedUserOrderFields = map[string]bool{
 	"last_login_ip":   true,
 }
 
-func GetUsersList(params *GenericParams) (*DataResult[User], error) {
+func GetUsersList(params *GenericParams, myRole int) (*DataResult[User], error) {
 	var users []*User
-	db := DB.Omit("password")
+	db := DB.Omit("password", "access_token")
+	// 非 root 管理员只能看到比自己权限低的账号，与 GetUser 的权限范围保持一致
+	if myRole != config.RoleRootUser {
+		db = db.Where("role < ?", myRole)
+	}
 	if params.Keyword != "" {
 		groupCol := "`group`"
 		if common.UsingPostgreSQL {
