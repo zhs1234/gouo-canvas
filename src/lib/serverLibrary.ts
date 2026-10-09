@@ -1,6 +1,7 @@
 import type { FavoriteCollection, StoredImage, TaskParams, TaskRecord } from '../types'
-import { cacheImage, useStore } from '../store'
+import { cacheImage, purgeLocalTasks, useStore } from '../store'
 import {
+  deleteCloudAssetMapItems,
   getCloudAssetMapItem,
   getCloudMeta,
   getImage,
@@ -15,6 +16,8 @@ import { removeKeyedBackgroundFromDataUrl } from './transparentImage'
 import {
   fetchCloudAssetContent,
   getCloudStorage,
+  GouoAssetMissingError,
+  GOUO_TRASH_RETENTION_MS,
   hideCloudCollection,
   isBackendAuthEnabled,
   listCloudCollections,
@@ -259,6 +262,10 @@ export function refreshServerLibrary() {
       await loadCollections()
       await loadTasks(false)
       await loadTasks(true)
+      // 回收站中的作品保留 3 天后彻底删除，与服务端清理保持一致
+      const cutoff = Date.now() - GOUO_TRASH_RETENTION_MS
+      const expired = useStore.getState().tasks.filter((task) => task.cloudHiddenAt && task.cloudHiddenAt < cutoff)
+      if (expired.length) await purgeLocalTasks(expired.map((task) => task.id))
     } catch (err) {
       showError('读取云端作品失败', err)
     } finally {
@@ -345,6 +352,10 @@ async function uploadTask(task: TaskRecord) {
     finished_at: task.finishedAt || 0,
     assets,
     collection_ids: (task.favoriteCollectionIds ?? []).filter((id) => useStore.getState().favoriteCollections.some((item) => item.id === id)),
+  }).catch(async (err) => {
+    // 服务端已清除的图片：忘掉本地记录的映射，下次重试时重新上传
+    if (err instanceof GouoAssetMissingError) await deleteCloudAssetMapItems(links.map((link) => link.imageId))
+    throw err
   })
 }
 

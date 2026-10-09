@@ -167,7 +167,23 @@ func Register(c *gin.Context) {
 			})
 			return
 		}
-		if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
+		// 先检查用户名和邮箱，再作废验证码，避免因用户名重复白白消耗验证码
+		if model.IsUsernameAlreadyTaken(user.Username) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "用户名已存在！",
+			})
+			return
+		}
+		if model.IsEmailAlreadyTaken(user.Email) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "邮箱地址已被占用",
+			})
+			return
+		}
+		// 验证码一次有效：否则同一邮箱可在有效期内反复注册，重复领取新用户和邀请奖励
+		if !common.ConsumeCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "验证码错误或已过期",
@@ -763,16 +779,16 @@ func ManageUser(c *gin.Context) {
 func EmailBind(c *gin.Context) {
 	email := c.Query("email")
 	code := c.Query("code")
-	if !common.VerifyCodeWithKey(email, code, common.EmailVerificationPurpose) {
+	id := c.GetInt("id")
+	if model.RecordExists(&model.User{}, "email", email, id) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "该邮箱已被其他账号绑定"})
+		return
+	}
+	if !common.ConsumeCodeWithKey(email, code, common.EmailVerificationPurpose) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "验证码错误或已过期",
 		})
-		return
-	}
-	id := c.GetInt("id")
-	if model.RecordExists(&model.User{}, "email", email, id) {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "该邮箱已被其他账号绑定"})
 		return
 	}
 	user := model.User{

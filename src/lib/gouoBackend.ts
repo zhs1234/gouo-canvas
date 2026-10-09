@@ -4,6 +4,7 @@ import { getLoadedStorageUserId } from './storageScope'
 interface BackendEnvelope<T> {
   success: boolean
   message?: string
+  code?: string
   data?: T
 }
 
@@ -202,6 +203,9 @@ export interface GouoCloudTaskMeta {
   collection_ids?: string[]
 }
 
+// 与服务端一致：回收站内容保留 3 天后彻底删除
+export const GOUO_TRASH_RETENTION_MS = 3 * 24 * 60 * 60 * 1000
+
 const configuredBaseUrl = (import.meta.env.VITE_GOUO_BACKEND_URL ?? '').trim().replace(/\/+$/, '')
 let backendToken = ''
 
@@ -249,6 +253,7 @@ async function parseEnvelope<T>(response: Response, requireData: boolean): Promi
     throw new Error(payload.message || '当前登录账号已切换，请刷新页面')
   }
   if (response.status === 409) throw new GouoConflictError(payload.message || '云端版本冲突', payload.data)
+  if (payload.code === 'asset_not_owned') throw new GouoAssetMissingError(payload.message || '云端图片已不存在')
   if (!response.ok || !payload.success || (requireData && payload.data === undefined)) {
     throw new Error(payload.message || `请求失败（HTTP ${response.status}）`)
   }
@@ -438,6 +443,9 @@ export function sendPasswordReset(email: string, turnstileToken?: string): Promi
 export function resetPassword(email: string, token: string, newPassword: string): Promise<void> {
   return backendAction('/api/user/reset', { email, token, new_password: newPassword })
 }
+
+// 本地记录的云端图片已被服务端清除（如回收站过期），需要重新上传
+export class GouoAssetMissingError extends Error {}
 
 export class GouoConflictError extends Error {
   constructor(message: string, public current: unknown) { super(message) }

@@ -468,6 +468,38 @@ func gouoCloudMillisecondMigration() *gormigrate.Migration {
 	}
 }
 
+// 回填作品记录和文档的字节数，旧数据也计入云端空间
+func gouoContentBytesMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202610100001",
+		Migrate: func(tx *gorm.DB) error {
+			if err := tx.AutoMigrate(&GouoTask{}, &GouoDocument{}); err != nil {
+				return err
+			}
+			var tasks []GouoTask
+			if err := tx.Select("id, prompt, model, params, result_meta, error_message").FindInBatches(&tasks, 500, func(batch *gorm.DB, _ int) error {
+				for _, task := range tasks {
+					if err := tx.Model(&GouoTask{}).Where("id = ?", task.ID).UpdateColumn("content_bytes", task.contentBytes()).Error; err != nil {
+						return err
+					}
+				}
+				return nil
+			}).Error; err != nil {
+				return err
+			}
+			var docs []GouoDocument
+			return tx.Select("id, title, document").FindInBatches(&docs, 200, func(batch *gorm.DB, _ int) error {
+				for _, doc := range docs {
+					if err := tx.Model(&GouoDocument{}).Where("id = ?", doc.ID).UpdateColumn("content_bytes", len(doc.Document)+len(doc.Title)).Error; err != nil {
+						return err
+					}
+				}
+				return nil
+			}).Error
+		},
+	}
+}
+
 func migrationAfter(db *gorm.DB) error {
 	// 从库不执行
 	if !config.IsMasterNode {
@@ -485,6 +517,7 @@ func migrationAfter(db *gorm.DB) error {
 		{ID: "202610090001", Migrate: func(tx *gorm.DB) error {
 			return tx.AutoMigrate(&GouoDocument{})
 		}},
+		gouoContentBytesMigration(),
 	})
 	return m.Migrate()
 }

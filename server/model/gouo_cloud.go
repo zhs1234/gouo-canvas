@@ -2,8 +2,10 @@ package model
 
 import (
 	"errors"
+	"sort"
 	"time"
 
+	"one-api/common/config"
 	"one-api/common/utils"
 
 	"gorm.io/datatypes"
@@ -14,23 +16,29 @@ import (
 var ErrGouoOriginalAssetConflict = errors.New("原图不能被预览图覆盖，请刷新后重新同步")
 
 type GouoTask struct {
-	ID              string          `json:"id" gorm:"type:char(32);primaryKey"`
-	UserID          int             `json:"-" gorm:"uniqueIndex:idx_gouo_task_user_client;index;index:idx_gouo_task_user_updated,priority:1"`
-	ClientTaskID    string          `json:"client_task_id" gorm:"type:varchar(128);uniqueIndex:idx_gouo_task_user_client"`
-	SchemaVersion   int             `json:"schema_version" gorm:"default:1"`
-	Status          string          `json:"status" gorm:"type:varchar(20);index"`
-	Prompt          string          `json:"prompt" gorm:"type:text"`
-	Model           string          `json:"model" gorm:"type:varchar(100);index"`
-	Operation       string          `json:"operation" gorm:"type:varchar(20)"`
-	Params          datatypes.JSON  `json:"params" gorm:"type:json"`
-	ResultMeta      datatypes.JSON  `json:"result_meta" gorm:"type:json"`
-	ErrorMessage    string          `json:"error_message" gorm:"type:text"`
-	ClientCreatedAt int64           `json:"client_created_at" gorm:"index"`
-	FinishedAt      int64           `json:"finished_at"`
-	CreatedAt       int64           `json:"created_at" gorm:"index;autoCreateTime:milli"`
-	UpdatedAt       int64           `json:"updated_at" gorm:"index;index:idx_gouo_task_user_updated,priority:2;autoUpdateTime:false"`
-	HiddenAt        int64           `json:"hidden_at" gorm:"default:0;index"`
-	Assets          []GouoTaskAsset `json:"assets" gorm:"foreignKey:TaskID;references:ID"`
+	ID              string         `json:"id" gorm:"type:char(32);primaryKey"`
+	UserID          int            `json:"-" gorm:"uniqueIndex:idx_gouo_task_user_client;index;index:idx_gouo_task_user_updated,priority:1"`
+	ClientTaskID    string         `json:"client_task_id" gorm:"type:varchar(128);uniqueIndex:idx_gouo_task_user_client"`
+	SchemaVersion   int            `json:"schema_version" gorm:"default:1"`
+	Status          string         `json:"status" gorm:"type:varchar(20);index"`
+	Prompt          string         `json:"prompt" gorm:"type:text"`
+	Model           string         `json:"model" gorm:"type:varchar(100);index"`
+	Operation       string         `json:"operation" gorm:"type:varchar(20)"`
+	Params          datatypes.JSON `json:"params" gorm:"type:json"`
+	ResultMeta      datatypes.JSON `json:"result_meta" gorm:"type:json"`
+	ErrorMessage    string         `json:"error_message" gorm:"type:text"`
+	ClientCreatedAt int64          `json:"client_created_at" gorm:"index"`
+	FinishedAt      int64          `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at" gorm:"index;autoCreateTime:milli"`
+	UpdatedAt       int64          `json:"updated_at" gorm:"index;index:idx_gouo_task_user_updated,priority:2;autoUpdateTime:false"`
+	HiddenAt        int64          `json:"hidden_at" gorm:"default:0;index"`
+	// 文本与参数的字节数，计入云端空间
+	ContentBytes int64           `json:"-" gorm:"default:0"`
+	Assets       []GouoTaskAsset `json:"assets" gorm:"foreignKey:TaskID;references:ID"`
+}
+
+func (t *GouoTask) contentBytes() int64 {
+	return int64(len(t.Prompt) + len(t.Model) + len(t.Params) + len(t.ResultMeta) + len(t.ErrorMessage))
 }
 
 type GouoAsset struct {
@@ -110,25 +118,59 @@ func CountOwnedGouoAssets(userID int, ids []string) (int64, error) {
 	return count, err
 }
 
+// GetGouoStorageUsage 返回已用空间（图片、作品记录和画布会话文档）与图片数量。
 func GetGouoStorageUsage(userID int) (int64, int64, error) {
-	var used int64
-	var count int64
-	if err := DB.Model(&GouoAsset{}).Where("user_id = ?", userID).Select("COALESCE(SUM(file_size), 0)").Scan(&used).Error; err != nil {
+	return gouoStorageUsage(DB, userID)
+}
+
+func gouoStorageUsage(db *gorm.DB, userID int) (int64, int64, error) {
+	var used, count int64
+	if err := db.Model(&GouoAsset{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
 		return 0, 0, err
 	}
-	if err := DB.Model(&GouoAsset{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
-		return 0, 0, err
+	for _, entry := range []struct {
+		model  any
+		column string
+	}{{&GouoAsset{}, "file_size"}, {&GouoTask{}, "content_bytes"}, {&GouoDocument{}, "content_bytes"}} {
+		var part int64
+		if err := db.Model(entry.model).Where("user_id = ?", userID).Select("COALESCE(SUM(" + entry.column + "), 0)").Scan(&part).Error; err != nil {
+			return 0, 0, err
+		}
+		used += part
 	}
 	return used, count, nil
 }
 
 func GetGouoUserQuota(userID int, defaultQuota int64) (int64, error) {
+	return gouoUserQuota(DB, userID, defaultQuota)
+}
+
+func gouoUserQuota(db *gorm.DB, userID int, defaultQuota int64) (int64, error) {
 	var quota GouoStorageQuota
-	err := DB.Where("user_id = ?", userID).First(&quota).Error
+	err := db.Where("user_id = ?", userID).First(&quota).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return defaultQuota, nil
 	}
 	return quota.QuotaBytes, err
+}
+
+// checkGouoStorageQuota 用户主动写入作品记录或文档时检查空间；服务端保存的付费生成结果不受限制。
+func checkGouoStorageQuota(tx *gorm.DB, userID int, added int64) error {
+	if added <= 0 {
+		return nil
+	}
+	used, _, err := gouoStorageUsage(tx, userID)
+	if err != nil {
+		return err
+	}
+	quota, err := gouoUserQuota(tx, userID, config.GouoAssetUserQuotaBytes)
+	if err != nil {
+		return err
+	}
+	if used+added > quota {
+		return ErrGouoStorageQuota
+	}
+	return nil
 }
 
 func SetGouoUserQuota(userID int, quota int64) error {
@@ -195,6 +237,10 @@ func UpsertGouoTask(task *GouoTask, assets []GouoTaskAsset, collectionIDs []stri
 				}
 			}
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		task.ContentBytes = task.contentBytes()
+		if err := checkGouoStorageQuota(tx, task.UserID, task.ContentBytes-existing.ContentBytes); err != nil {
 			return err
 		}
 
@@ -417,9 +463,33 @@ func ListGouoStorageUserUsage() ([]GouoStorageUserUsage, error) {
 		Select("gouo_assets.user_id, users.username, COALESCE(SUM(gouo_assets.file_size), 0) AS used_bytes, COUNT(gouo_assets.id) AS asset_count").
 		Joins("LEFT JOIN users ON users.id = gouo_assets.user_id").
 		Group("gouo_assets.user_id, users.username").
-		Order("used_bytes DESC").
 		Scan(&rows).Error
-	return rows, err
+	if err != nil {
+		return nil, err
+	}
+	// 作品记录和文档同样计入已用空间
+	byUser := map[int]int{}
+	for i := range rows {
+		byUser[rows[i].UserID] = i
+	}
+	for _, table := range []string{"gouo_tasks", "gouo_documents"} {
+		var parts []GouoStorageUserUsage
+		if err := DB.Table(table).Select(table + ".user_id, users.username, COALESCE(SUM(" + table + ".content_bytes), 0) AS used_bytes").
+			Joins("LEFT JOIN users ON users.id = " + table + ".user_id").
+			Group(table + ".user_id, users.username").Scan(&parts).Error; err != nil {
+			return nil, err
+		}
+		for _, part := range parts {
+			if i, ok := byUser[part.UserID]; ok {
+				rows[i].UsedBytes += part.UsedBytes
+				continue
+			}
+			byUser[part.UserID] = len(rows)
+			rows = append(rows, part)
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].UsedBytes > rows[j].UsedBytes })
+	return rows, nil
 }
 
 type GouoGenerationRecord struct {
@@ -455,6 +525,7 @@ func RecordGouoGeneration(record GouoGenerationRecord) error {
 			return err
 		}
 		task.Status, task.FinishedAt, task.UpdatedAt, task.ErrorMessage = "done", now, now, ""
+		task.ContentBytes = task.contentBytes()
 		if err := tx.Omit("Assets").Save(&task).Error; err != nil {
 			return err
 		}
@@ -521,6 +592,12 @@ func UpdateGouoTaskMeta(userID int, clientTaskID string, meta GouoTaskMeta) (*Go
 			updates["client_created_at"] = meta.ClientCreatedAt
 		}
 		if err := tx.Model(&task).Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.First(&task, "id = ?", task.ID).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&task).UpdateColumn("content_bytes", task.contentBytes()).Error; err != nil {
 			return err
 		}
 		for role, ids := range meta.ClientImageIDs {

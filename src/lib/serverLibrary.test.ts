@@ -18,6 +18,7 @@ let listeners: Array<(value: typeof state) => void>
 let meta: Map<string, unknown>
 let assetMap: Map<string, unknown>
 let pages: Record<string, GouoCloudTask[]>
+let purged: string[][]
 
 beforeEach(() => {
   vi.resetModules()
@@ -26,17 +27,19 @@ beforeEach(() => {
   meta = new Map()
   assetMap = new Map()
   pages = { visible: [], hidden: [] }
+  purged = []
   const notify = () => { for (const listener of listeners) listener(state) }
   state = {
     tasks: [], favoriteCollections: [], settings: { model: 'image' }, showToast: vi.fn(),
     setTasks: (tasks) => { state.tasks = tasks; notify() },
     setFavoriteCollections: (items) => { state.favoriteCollections = items; notify() },
   }
-  vi.doMock('../store', () => ({ cacheImage: vi.fn(), useStore: { getState: () => state, subscribe: (fn: (value: typeof state) => void) => { listeners.push(fn); return () => {} } } }))
+  vi.doMock('../store', () => ({ cacheImage: vi.fn(), purgeLocalTasks: vi.fn(async (ids: string[]) => { purged.push(ids) }), useStore: { getState: () => state, subscribe: (fn: (value: typeof state) => void) => { listeners.push(fn); return () => {} } } }))
   vi.doMock('./storageScope', () => ({ isStorageScopeCurrent: () => true }))
   vi.doMock('./serverDocuments', () => ({ startServerDocuments: vi.fn() }))
   vi.doMock('./db', () => ({
     getCloudAssetMapItem: async (id: string) => assetMap.get(id),
+    deleteCloudAssetMapItems: async (ids: string[]) => { for (const id of ids) assetMap.delete(id) },
     putCloudAssetMapItem: async (item: { localImageId: string }) => assetMap.set(item.localImageId, item),
     getCloudMeta: async (key: string) => meta.get(key),
     putCloudMeta: async (key: string, value: unknown) => meta.set(key, value),
@@ -45,6 +48,8 @@ beforeEach(() => {
     putTask: vi.fn(),
   }))
   vi.doMock('./gouoBackend', () => ({
+    GOUO_TRASH_RETENTION_MS: 3 * 24 * 60 * 60 * 1000,
+    GouoAssetMissingError: class extends Error {},
     isBackendAuthEnabled: () => true,
     getCloudStorage: vi.fn(async () => ({ enabled: true })),
     listCloudCollections: vi.fn(async () => []),
@@ -133,5 +138,27 @@ describe('server library', () => {
     state.setTasks(state.tasks.map((task) => ({ ...task, favoriteCollectionIds: ['other'] })))
     expect(backend.setCloudFavorite).toHaveBeenCalledWith('other', 'task-1', true)
     expect(backend.setCloudFavorite).toHaveBeenCalledWith('album', 'task-1', false)
+  })
+
+  it('purges local tasks that stayed in the recycle bin past the retention period', async () => {
+    const library = await import('./serverLibrary')
+    const day = 24 * 60 * 60 * 1000
+    state.tasks = [localTask({ id: 'old', cloudHiddenAt: Date.now() - 4 * day }), localTask({ id: 'recent', cloudHiddenAt: Date.now() - day }), localTask({ id: 'visible' })]
+    await library.startServerLibrary()
+    expect(purged).toEqual([['old']])
+  })
+
+  it('forgets cached cloud image ids when the server no longer has the image', async () => {
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.patchCloudTaskMeta).mockRejectedValue(new Error('作品不存在'))
+    vi.mocked(backend.putCloudTask).mockRejectedValue(new backend.GouoAssetMissingError('图片已清除'))
+    assetMap.set('local-out', { localImageId: 'local-out', cloudAssetId: 'purged', contentUrl: '', sha256: '', mimeType: 'image/png', updatedAt: 1 })
+    const library = await import('./serverLibrary')
+    await library.startServerLibrary()
+    state.setTasks([localTask()])
+    // 首次上传失败后立即清除映射，之后的重试会重新上传图片
+    void library.recordServerTask('task-1')
+    await vi.waitFor(() => expect(backend.putCloudTask).toHaveBeenCalled())
+    await vi.waitFor(() => expect(assetMap.has('local-out')).toBe(false))
   })
 })

@@ -1,8 +1,8 @@
 import type { AgentConversation, CanvasProject } from '../types'
-import { useStore } from '../store'
-import { getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
+import { deleteImageIfUnreferenced, useStore } from '../store'
+import { deleteCloudAssetMapItems, deleteDocuments, getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
 import { getDocumentImageIds } from './documentAssets'
-import { backendRequest, GouoConflictError, type GouoCloudAsset } from './gouoBackend'
+import { backendRequest, GouoAssetMissingError, GouoConflictError, GOUO_TRASH_RETENTION_MS, type GouoCloudAsset } from './gouoBackend'
 import { downloadAsset, uploadImage } from './serverLibrary'
 import { isStorageScopeCurrent } from './storageScope'
 import { serializeCanvasProject, validateCanvasProject } from './canvas/document'
@@ -122,6 +122,8 @@ async function pushDocument(kind: Kind, id: string) {
       await acceptRemote(kind, err.current as CloudDocument)
       return
     }
+    // 服务端已清除的图片：忘掉本地记录的映射，下次重试时重新上传
+    if (err instanceof GouoAssetMissingError) await deleteCloudAssetMapItems(assets.map((item) => item.imageId))
     throw err
   }
   if (Boolean(doc.hiddenAt) !== Boolean(remote.hidden_at)) {
@@ -195,9 +197,25 @@ async function pullDocuments(kind: Kind) {
   }
 }
 
+// 回收站中的画布和会话保留 3 天后彻底删除，与服务端清理保持一致。
+async function purgeExpiredDocuments() {
+  const cutoff = Date.now() - GOUO_TRASH_RETENTION_MS
+  for (const kind of KINDS) {
+    const records: Document[] = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
+    const expired = records.filter((doc) => doc.hiddenAt && doc.hiddenAt < cutoff)
+    if (!expired.length) continue
+    const ids = new Set(expired.map((doc) => doc.id))
+    await deleteDocuments(kind, [...ids])
+    if (kind === 'canvases') useCanvasStore.setState((state) => ({ projects: state.projects.filter((item) => !ids.has(item.id)) }))
+    else useAgentStore.setState((state) => ({ conversations: state.conversations.filter((item) => !ids.has(item.id)) }))
+    for (const imageId of getDocumentImageIds(expired)) await deleteImageIfUnreferenced(imageId)
+  }
+}
+
 export async function startServerDocuments() {
   try {
     await Promise.all([useCanvasStore.getState().hydrate(), useAgentStore.getState().hydrate()])
+    await purgeExpiredDocuments()
     for (const kind of KINDS) await pullDocuments(kind)
   } catch (err) {
     console.warn('读取云端画布和会话失败', err)

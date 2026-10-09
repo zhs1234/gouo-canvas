@@ -21,7 +21,7 @@ beforeEach(() => {
   remotePage = []
   agentState = { conversations: [], hydrate: async () => {} }
   downloadAsset = vi.fn()
-  vi.doMock('../store', () => ({ useStore: { getState: () => ({ showToast: vi.fn() }) } }))
+  vi.doMock('../store', () => ({ deleteImageIfUnreferenced: vi.fn(), useStore: { getState: () => ({ showToast: vi.fn() }) } }))
   vi.doMock('./storageScope', () => ({ isStorageScopeCurrent: () => true }))
   vi.doMock('./serverLibrary', () => ({ uploadImage: vi.fn(), downloadAsset }))
   vi.doMock('../stores/canvasStore', () => ({ markCanvasPersisted: vi.fn(), useCanvasStore: { getState: () => ({ projects: [], hydrate: async () => {} }), setState: vi.fn() } }))
@@ -42,9 +42,13 @@ beforeEach(() => {
     putAgentConversation: async (doc: AgentConversation) => { stored.set(doc.id, doc) },
     getCloudMeta: async (key: string) => meta.get(key),
     getDocumentWithCloudMeta: async (_kind: string, id: string, key: string) => ({ doc: stored.get(id), meta: meta.get(key) }),
+    deleteDocuments: async (_kind: string, ids: string[]) => { for (const id of ids) stored.delete(id) },
+    deleteCloudAssetMapItems: vi.fn(),
     putCloudMeta: async (key: string, value: unknown) => { meta.set(key, value) },
   }))
   vi.doMock('./gouoBackend', () => ({
+    GOUO_TRASH_RETENTION_MS: 3 * 24 * 60 * 60 * 1000,
+    GouoAssetMissingError: class extends Error {},
     GouoConflictError: class extends Error {},
     backendRequest: vi.fn(async (path: string, init?: RequestInit) => {
       requests.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined })
@@ -132,5 +136,18 @@ describe('server documents', () => {
     vi.spyOn(db, 'getAllAgentConversations').mockResolvedValue([stale])
     await docs.pushDocuments()
     expect(requests.filter((request) => request.body)).toEqual([])
+  })
+
+  it('deletes canvases and conversations kept in the recycle bin past the retention period', async () => {
+    const day = 24 * 60 * 60 * 1000
+    const old = conversation({ id: 'old', hiddenAt: Date.now() - 4 * day })
+    const recent = conversation({ id: 'recent', hiddenAt: Date.now() - day })
+    for (const item of [old, recent, conversation()]) stored.set(item.id, item)
+    agentState.conversations = [old, recent, conversation()]
+    const docs = await import('./serverDocuments')
+    for (const item of stored.values()) meta.set(`document:conversations:${item.id}`, { revision: 1, fingerprint: docs.documentFingerprint(item) })
+    await docs.startServerDocuments()
+    expect([...stored.keys()].sort()).toEqual(['conv', 'recent'])
+    expect(agentState.conversations.map((item) => item.id).sort()).toEqual(['conv', 'recent'])
   })
 })

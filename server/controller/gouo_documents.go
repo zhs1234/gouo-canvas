@@ -239,6 +239,10 @@ func gouoDocumentWriteError(c *gin.Context, kind, clientID string, err error) {
 		gouoFail(c, http.StatusForbidden, "asset_not_owned", err.Error())
 		return
 	}
+	if errors.Is(err, model.ErrGouoStorageQuota) {
+		gouoFail(c, http.StatusInsufficientStorage, "storage_quota_exceeded", "云端空间不足，本地内容不会受到影响")
+		return
+	}
 	gouoFail(c, http.StatusInternalServerError, "document_save_failed", "同步文档失败")
 }
 

@@ -54,6 +54,18 @@ func VerifyCodeWithKey(key string, code string, purpose string) bool {
 	return code == value.code
 }
 
+// ConsumeCodeWithKey 校验成功即作废验证码，同一验证码不能重复或并发使用
+func ConsumeCodeWithKey(key string, code string, purpose string) bool {
+	verificationMutex.Lock()
+	defer verificationMutex.Unlock()
+	value, okay := verificationMap[purpose+key]
+	if !okay || int(time.Since(value.time).Seconds()) >= VerificationValidMinutes*60 || code != value.code {
+		return false
+	}
+	delete(verificationMap, purpose+key)
+	return true
+}
+
 func DeleteKey(key string, purpose string) {
 	verificationMutex.Lock()
 	defer verificationMutex.Unlock()

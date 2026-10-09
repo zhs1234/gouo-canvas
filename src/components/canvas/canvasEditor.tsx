@@ -796,7 +796,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           onDeleteProject={() =>
             modal.confirm({
               title: '将画布移入回收站？',
-              content: '作品素材会保留，画布可在回收站恢复。',
+              content: '作品素材会保留，画布可在 3 天内从回收站恢复，之后彻底删除。',
               okText: '移入回收站',
               cancelText: '取消',
               onOk: async () => {

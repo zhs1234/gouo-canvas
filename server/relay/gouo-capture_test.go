@@ -30,7 +30,7 @@ func TestRecordGouoGenerationStoresOutputsAndReferences(t *testing.T) {
 	conn, err := db.DB()
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.Close() })
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoTask{}, &model.GouoAsset{}, &model.GouoTaskAsset{}, &model.GouoFavoriteItem{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoTask{}, &model.GouoAsset{}, &model.GouoTaskAsset{}, &model.GouoFavoriteItem{}, &model.GouoDocument{}))
 	model.DB = db
 	require.NoError(t, db.Create(&model.User{Id: 1, Username: "capture"}).Error)
 
