@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -57,6 +58,17 @@ func TestPublicHTTPClientRejectsLoopbackAndRedirects(t *testing.T) {
 	redirect := &http.Request{URL: mustParseURL(t, "file:///etc/passwd")}
 	if err := client.CheckRedirect(redirect, []*http.Request{{}}); err == nil {
 		t.Fatal("expected non-http redirect to be rejected")
+	}
+}
+
+func TestCheckPublicHost(t *testing.T) {
+	for _, host := range []string{"localhost", "127.0.0.1", "10.0.0.1", "::1"} {
+		if err := CheckPublicHost(context.Background(), host); err == nil {
+			t.Errorf("CheckPublicHost(%s) should fail", host)
+		}
+	}
+	if err := CheckPublicHost(context.Background(), "8.8.8.8"); err != nil {
+		t.Errorf("CheckPublicHost(8.8.8.8) = %v", err)
 	}
 }
 

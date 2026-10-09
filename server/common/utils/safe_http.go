@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -40,6 +41,21 @@ func IsPublicIP(ip net.IP) bool {
 		}
 	}
 	return true
+}
+
+// CheckPublicHost 解析主机名并要求所有地址都是公网地址。
+// 用于经代理访问、无法在建立连接时检查目标的场景；代理会自行解析，不能防住 DNS 重绑定。
+func CheckPublicHost(ctx context.Context, host string) error {
+	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return err
+	}
+	for _, addr := range addrs {
+		if !IsPublicIP(addr.IP) {
+			return fmt.Errorf("禁止访问非公网地址 %s", host)
+		}
+	}
+	return nil
 }
 
 // NewPublicHTTPClient 返回只能连接公网地址的 client，用于下载供应商等外部返回的 URL。
