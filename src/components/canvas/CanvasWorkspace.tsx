@@ -192,10 +192,10 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
                     </p>
                   </button>
                 </div>
-                {(project.cloudSyncError || [...project.title].length > 200) && (
+                {[...project.title].length > 200 && (
                   <div role="alert" className="mt-3 text-xs text-amber-600 dark:text-amber-300">
-                    <p>{project.cloudSyncError || '标题超过 200 个字符，原内容已保留，请重命名后同步'}</p>
-                    {[...project.title].length > 200 ? (
+                    <p>标题超过 200 个字符，原内容已保留在本地，请重命名后再保存到服务器</p>
+                    {(
                       <button
                         type="button"
                         className="mt-2 underline"
@@ -226,14 +226,6 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
                         }}
                       >
                         重命名
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="mt-2 underline"
-                        onClick={() => void perform(async () => (await import('../../lib/cloudSync')).triggerCloudSync())}
-                      >
-                        重新同步
                       </button>
                     )}
                   </div>

@@ -917,10 +917,10 @@ describe('data import', () => {
     const existing = task({ id: 'existing', prompt: 'current' })
     await putDbTask(existing)
     useStore.setState({ tasks: [existing] })
-    const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'existing', prompt: 'old' }), task({ id: 'new', outputImages: ['new-image'], cloudId: 'foreign', cloudSyncStatus: 'synced' })], imageFiles: { 'new-image': { path: 'images/new.png' } } }, { 'images/new.png': new Uint8Array([1, 2, 3]) }), { importTasks: true })
+    const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'existing', prompt: 'old' }), task({ id: 'new', outputImages: ['new-image'], cloudId: 'foreign' })], imageFiles: { 'new-image': { path: 'images/new.png' } } }, { 'images/new.png': new Uint8Array([1, 2, 3]) }), { importTasks: true })
     expect(result).toBe(true)
     expect((await getAllTasks()).find((item) => item.id === 'existing')).toEqual(existing)
-    expect((await getAllTasks()).find((item) => item.id === 'new')).toMatchObject({ cloudId: undefined, cloudSyncStatus: undefined, outputImages: ['new-image'] })
+    expect((await getAllTasks()).find((item) => item.id === 'new')).toMatchObject({ cloudId: undefined, outputImages: ['new-image'] })
     expect(await getImage('new-image')).toMatchObject({ dataUrl: 'data:image/png;base64,AQID' })
     expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 1 个任务，保留 1 个同 ID 的现有任务', 'success')
   })
@@ -939,12 +939,11 @@ describe('data import', () => {
   it('assigns a fresh task identity in account mode to preserve cloud records not yet downloaded', async () => {
     vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
     try {
-      const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'old-cloud-client-id', cloudId: 'old-cloud-id', cloudSyncStatus: 'synced' })], imageFiles: {} }), { importTasks: true })
+      const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'old-cloud-client-id', cloudId: 'old-cloud-id' })], imageFiles: {} }), { importTasks: true })
       expect(result).toBe(true)
       const [restored] = await getAllTasks()
       expect(restored.id).not.toBe('old-cloud-client-id')
       expect(restored.cloudId).toBeUndefined()
-      expect(restored.cloudSyncStatus).toBeUndefined()
     } finally {
       vi.unstubAllEnvs()
     }
@@ -1238,47 +1237,5 @@ describe('return to creation after reusing library work', () => {
     expect(useStore.getState().tasks).toEqual([])
     const { callImageApi } = await import('./lib/api')
     expect(callImageApi).not.toHaveBeenCalled()
-  })
-})
-
-describe('cloud sync with store persistence', () => {
-  it('preserves pending edits through favorite writes and reload', async () => {
-    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
-    vi.stubGlobal('navigator', { onLine: false })
-    vi.stubGlobal('window', new EventTarget())
-    const subscribe = useStore.subscribe
-    let unsubscribe = () => {}
-    vi.spyOn(useStore, 'subscribe').mockImplementation((listener) => {
-      unsubscribe = subscribe(listener)
-      return unsubscribe
-    })
-    try {
-      await clearTasks()
-      await clearImages()
-      const synced = task({ cloudId: 'cloud-task', cloudSyncStatus: 'synced', favoriteCollectionIds: [], isFavorite: false })
-      await putDbTask(synced)
-      useStore.setState({
-        settings: normalizeSettings({ ...DEFAULT_SETTINGS, persistInputOnRestart: false }),
-        tasks: [synced], inputImages: [], maskDraft: null,
-        favoriteCollections: [{ id: 'album', name: '收藏夹', createdAt: 1, updatedAt: 1 }],
-        defaultFavoriteCollectionId: 'album', showToast: vi.fn(),
-      })
-      const { startCloudSync } = await import('./lib/cloudSync')
-      const { updateTasksFavoriteCollections, updateTaskInStore } = await import('./store')
-      await startCloudSync()
-      await updateTasksFavoriteCollections([synced.id], ['album'])
-      expect((await getAllTasks())[0]).toMatchObject({ cloudSyncStatus: 'pending', favoriteCollectionIds: ['album'] })
-      updateTaskInStore(synced.id, { prompt: '离线修改' })
-      expect((await getAllTasks())[0]).toMatchObject({ cloudSyncStatus: 'pending', prompt: '离线修改' })
-      unsubscribe()
-      useStore.setState({ tasks: [] })
-      await initStore()
-      expect(useStore.getState().tasks[0]).toMatchObject({ cloudSyncStatus: 'pending', favoriteCollectionIds: ['album'], prompt: '离线修改' })
-    } finally {
-      unsubscribe()
-      vi.restoreAllMocks()
-      vi.unstubAllEnvs()
-      vi.unstubAllGlobals()
-    }
   })
 })

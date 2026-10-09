@@ -247,7 +247,6 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
       <h1>{started ? conversation?.title : 'Agent'}</h1>
       <div className="agent-page-actions"><details className="agent-history"><summary>历史对话</summary><div>{history.length ? history.map((item) => <button type="button" key={item.id} onClick={(event) => { onOpenConversation(item.id); event.currentTarget.closest('details')?.removeAttribute('open') }}>{item.title}<small>{new Date(item.updatedAt).toLocaleDateString('zh-CN')}</small></button>) : <p>你的对话会显示在这里</p>}</div></details><button type="button" className="agent-text-button" onClick={() => void newConversation()}><PlusIcon width={16} height={16} />新对话</button></div>
     </header>
-    {conversation?.cloudSyncError && <div role="alert" className="agent-run-error">此会话未能同步：{conversation.cloudSyncError}</div>}
     {started ? <>
       <div ref={timeline} className="agent-timeline" onScroll={() => { const el = timeline.current; if (el) followBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }}>
         <div className="agent-message-list" role="log" aria-label="会话消息">

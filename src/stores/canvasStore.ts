@@ -34,7 +34,8 @@ let saves: Promise<unknown> = Promise.resolve()
 const persisted = new Map<string, { revision: number; fingerprint: string }>()
 
 function contentFingerprint(project: CanvasProject) {
-  const { cloudRevision: _revision, cloudSyncStatus: _status, cloudSyncError: _error, ...content } = serializeCanvasProject(project)
+  // 旧版本落库的同步字段不参与内容比较
+  const { cloudRevision: _revision, cloudSyncStatus: _status, cloudSyncError: _error, ...content } = serializeCanvasProject(project) as CanvasProject & Record<string, unknown>
   return JSON.stringify(content)
 }
 
@@ -106,7 +107,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       showImageInfo: false,
       createdAt: now,
       updatedAt: now,
-      cloudSyncStatus: 'pending',
     }
     validateCanvasProject(project)
     await save(project)
@@ -125,8 +125,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       id,
       revision: current.revision + 1,
       updatedAt: Date.now(),
-      cloudSyncStatus: 'pending' as const,
-      cloudSyncError: undefined,
     }
     validateCanvasProject(project)
     if (opts.history !== false) get().checkpoint(id)

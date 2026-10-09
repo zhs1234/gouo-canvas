@@ -42,21 +42,57 @@ func TestGouoCloudTimestampMigrationAndCursor(t *testing.T) {
 		task := GouoTask{ID: id, UserID: 1, ClientTaskID: id, Status: "error", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}
 		require.NoError(t, UpsertGouoTask(&task, nil, nil))
 		require.Greater(t, task.UpdatedAt, latest.UpdatedAt)
-		changed, err := ListChangedGouoTasks(1, latest.UpdatedAt, latest.ID, 100)
-		require.NoError(t, err)
-		require.Len(t, changed, 1)
-		require.Equal(t, id, changed[0].ID)
 		latest = task
 	}
 	for _, hide := range []bool{true, false} {
 		require.NoError(t, SetGouoTaskHidden(1, old.ID, hide))
-		changed, err := ListChangedGouoTasks(1, latest.UpdatedAt, latest.ID, 100)
+		changed, err := GetGouoTask(1, old.ID)
 		require.NoError(t, err)
-		require.Len(t, changed, 1)
-		require.Equal(t, old.ID, changed[0].ID)
-		require.Equal(t, hide, changed[0].HiddenAt > 0)
-		latest = changed[0]
+		require.Greater(t, changed.UpdatedAt, latest.UpdatedAt)
+		require.Equal(t, hide, changed.HiddenAt > 0)
+		latest = *changed
 	}
+}
+
+func TestGouoGenerationRecordMergesBatchAndClientMeta(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	assets := []*GouoAsset{}
+	for _, id := range []string{"out-0", "out-1", "ref"} {
+		asset := &GouoAsset{ID: id, UserID: 1, SHA256: id, StoragePath: id, MimeType: "image/png", FileSize: 1}
+		require.NoError(t, InsertGouoAsset(asset))
+		assets = append(assets, asset)
+	}
+	// 批量生成的两个子请求以任意顺序到达，都归入同一作品。
+	for _, index := range []int{1, 0} {
+		require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "task", Index: index, Prompt: "请求提示词", Model: "image", Operation: "edit", Params: datatypes.JSON(`{"n":1}`), Outputs: []*GouoAsset{assets[index]}, Inputs: []*GouoAsset{assets[2]}}))
+	}
+	task, err := GetGouoTask(1, "task")
+	require.NoError(t, err)
+	require.Equal(t, "done", task.Status)
+	require.Len(t, task.Assets, 3)
+	collection := GouoFavoriteCollection{ID: "album", UserID: 1, Name: "收藏"}
+	require.NoError(t, UpsertGouoCollection(&collection))
+	updated, err := UpdateGouoTaskMeta(1, "task", GouoTaskMeta{Prompt: "原始提示词", ResultMeta: datatypes.JSON(`{"transparentOutput":true}`), ClientImageIDs: map[string][]string{"output": {"local-0", "local-1"}}, CollectionIDs: []string{"album"}})
+	require.NoError(t, err)
+	require.Equal(t, "原始提示词", updated.Prompt)
+	byPosition := map[int]string{}
+	for _, link := range updated.Assets {
+		if link.Role == "output" {
+			byPosition[link.Position] = link.ClientImageID
+		}
+	}
+	require.Equal(t, map[int]string{0: "local-0", 1: "local-1"}, byPosition)
+	favorites, err := ListGouoFavoriteItems(1)
+	require.NoError(t, err)
+	require.Len(t, favorites, 1)
+	// 回收站中的作品被重试请求写入时保持删除状态。
+	require.NoError(t, SetGouoTaskHidden(1, task.ID, true))
+	require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "task", Index: 0, Outputs: []*GouoAsset{assets[0]}}))
+	task, err = GetGouoTask(1, "task")
+	require.NoError(t, err)
+	require.Positive(t, task.HiddenAt)
+	_, err = UpdateGouoTaskMeta(1, "missing", GouoTaskMeta{})
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
 func TestGouoCollectionStaleUpdateDoesNotRestoreDeletedCollection(t *testing.T) {

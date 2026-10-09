@@ -16,7 +16,7 @@ func TestGouoCloudRateLimitDoesNotBlockForeground(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(GlobalAPIRateLimit())
-	for _, path := range []string{"/api/gouo/sync", "/api/gouo/assets/:id/content", "/api/gouo/models", "/api/user/self", "/api/user/topup"} {
+	for _, path := range []string{"/api/gouo/tasks", "/api/gouo/assets/:id/content", "/api/gouo/models", "/api/user/self", "/api/user/topup"} {
 		router.GET(path, func(c *gin.Context) { c.Status(http.StatusOK) })
 	}
 	request := func(path string) *httptest.ResponseRecorder {
@@ -27,8 +27,8 @@ func TestGouoCloudRateLimitDoesNotBlockForeground(t *testing.T) {
 		return w
 	}
 	for i := 0; i < GlobalApiRateLimitNum; i++ {
-		if w := request("/api/gouo/sync"); w.Code != http.StatusOK {
-			t.Fatalf("sync %d: %d", i, w.Code)
+		if w := request("/api/gouo/tasks"); w.Code != http.StatusOK {
+			t.Fatalf("tasks %d: %d", i, w.Code)
 		}
 	}
 	if w := request("/api/gouo/assets/fixture/content"); w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") != "180" {

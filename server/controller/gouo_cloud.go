@@ -1,26 +1,17 @@
 package controller
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"mime"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"one-api/common/config"
@@ -28,19 +19,9 @@ import (
 	"one-api/model"
 
 	"github.com/gin-gonic/gin"
-	_ "golang.org/x/image/webp"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
-
-var gouoAssetUploadMutex sync.Mutex
-
-var gouoAssetFormats = map[string]string{
-	"image/png":  ".png",
-	"image/jpeg": ".jpg",
-	"image/webp": ".webp",
-	"image/gif":  ".gif",
-	"image/avif": ".avif",
-}
 
 var gouoAssetRoles = map[string]bool{
 	"input":                true,
@@ -235,127 +216,21 @@ func UploadGouoAsset(c *gin.Context) {
 		return
 	}
 
-	detected := http.DetectContentType(data)
-	if len(data) >= 12 && string(data[4:8]) == "ftyp" && (string(data[8:12]) == "avif" || string(data[8:12]) == "avis") {
-		detected = "image/avif"
-	}
-	extension, allowed := gouoAssetFormats[detected]
-	if !allowed {
-		gouoFail(c, http.StatusUnsupportedMediaType, "unsupported_image", "仅支持 PNG、JPEG、WebP、GIF 和 AVIF 图片")
-		return
-	}
-	width, height := 0, 0
-	if detected != "image/avif" {
-		imageConfig, _, decodeErr := image.DecodeConfig(bytes.NewReader(data))
-		if decodeErr != nil || imageConfig.Width <= 0 || imageConfig.Height <= 0 {
-			gouoFail(c, http.StatusBadRequest, "invalid_image", "图片内容无法识别")
-			return
-		}
-		width, height = imageConfig.Width, imageConfig.Height
-	}
-
-	hashBytes := sha256.Sum256(data)
-	hash := hex.EncodeToString(hashBytes[:])
 	clientImageID := strings.TrimSpace(c.PostForm("client_image_id"))
-	userID := c.GetInt("id")
-	gouoAssetUploadMutex.Lock()
-	defer gouoAssetUploadMutex.Unlock()
-
-	existing, err := model.GetGouoAssetByHash(userID, hash)
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "asset_query_failed", "检查云端图片失败")
-		return
-	}
-	if existing != nil {
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": gouoAssetToResponse(*existing, clientImageID, true)})
-		return
-	}
-	used, _, err := model.GetGouoStorageUsage(userID)
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "storage_query_failed", "检查云端空间失败")
-		return
-	}
-	quota, err := model.GetGouoUserQuota(userID, config.GouoAssetUserQuotaBytes)
-	if err != nil || used+int64(len(data)) > quota {
-		gouoFail(c, http.StatusInsufficientStorage, "storage_quota_exceeded", "云端空间不足，本地作品不会受到影响")
-		return
-	}
-
-	relativePath := filepath.Join(strconv.Itoa(userID), hash[:2], hash+extension)
-	root, err := filepath.Abs(config.GouoAssetDir)
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "storage_path_invalid", "云端存储目录不可用")
-		return
-	}
-	target := filepath.Join(root, relativePath)
-	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
-		gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "创建云端存储目录失败")
-		return
-	}
-	temp, err := os.CreateTemp(filepath.Dir(target), ".gouo-upload-*")
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "写入云端图片失败")
-		return
-	}
-	tempName := temp.Name()
-	committed := false
-	defer func() {
-		if !committed {
-			_ = os.Remove(tempName)
-		}
-	}()
-	if _, err := temp.Write(data); err != nil {
-		_ = temp.Close()
-		gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "写入云端图片失败")
-		return
-	}
-	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
-		gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "保存云端图片失败")
-		return
-	}
-	if err := temp.Close(); err != nil {
-		gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "保存云端图片失败")
-		return
-	}
-	_, statErr := os.Stat(target)
-	if os.IsNotExist(statErr) {
-		if err := os.Rename(tempName, target); err != nil {
-			gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "保存云端图片失败")
-			return
-		}
-		committed = true
-	} else if statErr == nil {
-		_ = os.Remove(tempName)
-		committed = true
-	} else {
-		gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "检查云端图片失败")
-		return
-	}
-
-	now := time.Now().UnixMilli()
 	originalName := filepath.Base(strings.ReplaceAll(fileHeader.Filename, "\\", "/"))
-	if len([]rune(originalName)) > 120 {
-		originalName = string([]rune(originalName)[:120])
+	asset, deduplicated, err := model.SaveGouoAssetBytes(c.GetInt("id"), data, originalName, true)
+	switch {
+	case errors.Is(err, model.ErrGouoUnsupportedImage):
+		gouoFail(c, http.StatusUnsupportedMediaType, "unsupported_image", err.Error())
+	case errors.Is(err, model.ErrGouoInvalidImage):
+		gouoFail(c, http.StatusBadRequest, "invalid_image", err.Error())
+	case errors.Is(err, model.ErrGouoStorageQuota):
+		gouoFail(c, http.StatusInsufficientStorage, "storage_quota_exceeded", "云端空间不足，本地作品不会受到影响")
+	case err != nil:
+		gouoFail(c, http.StatusInternalServerError, "storage_write_failed", "保存云端图片失败")
+	default:
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": gouoAssetToResponse(*asset, clientImageID, deduplicated)})
 	}
-	asset := model.GouoAsset{
-		ID:           utils.GetUUID(),
-		UserID:       userID,
-		SHA256:       hash,
-		StoragePath:  relativePath,
-		MimeType:     detected,
-		FileSize:     int64(len(data)),
-		Width:        width,
-		Height:       height,
-		OriginalName: originalName,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := model.InsertGouoAsset(&asset); err != nil {
-		gouoFail(c, http.StatusInternalServerError, "asset_save_failed", "登记云端图片失败")
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": gouoAssetToResponse(asset, clientImageID, false)})
 }
 
 func GetGouoAssetContent(c *gin.Context) {
@@ -385,7 +260,7 @@ func serveGouoAssetContent(c *gin.Context, asset *model.GouoAsset) {
 	}
 	name := asset.OriginalName
 	if name == "" {
-		name = asset.ID + gouoAssetFormats[asset.MimeType]
+		name = asset.ID + model.GouoAssetFormats[asset.MimeType]
 	}
 	c.Header("Cache-Control", "private, max-age=86400")
 	c.Header("ETag", `"`+asset.SHA256+`"`)
@@ -725,54 +600,86 @@ func setGouoFavoriteItem(c *gin.Context, add bool) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-func GetGouoSync(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
-	if limit < 1 || limit > 100 {
-		gouoFail(c, http.StatusBadRequest, "invalid_limit", "limit 必须在 1 到 100 之间")
+type gouoTaskMetaInput struct {
+	Prompt          string              `json:"prompt"`
+	Params          json.RawMessage     `json:"params"`
+	ResultMeta      json.RawMessage     `json:"result_meta"`
+	ClientCreatedAt int64               `json:"client_created_at"`
+	ClientImageIDs  map[string][]string `json:"client_image_ids"`
+	CollectionIDs   []string            `json:"collection_ids"`
+}
+
+// PatchGouoTaskMeta 补充服务端无法从请求里得知的作品信息；图片本身已在生成时由服务端保存。
+func PatchGouoTaskMeta(c *gin.Context) {
+	var input gouoTaskMetaInput
+	if err := json.NewDecoder(io.LimitReader(c.Request.Body, 512*1024)).Decode(&input); err != nil {
+		gouoFail(c, http.StatusBadRequest, "invalid_task_meta", "作品信息无法识别")
 		return
 	}
-	updatedAt, id, err := decodeGouoCursor(c.Query("cursor"))
-	if err != nil {
-		gouoFail(c, http.StatusBadRequest, "invalid_cursor", "同步游标无效")
+	if (len(input.Params) > 0 && !json.Valid(input.Params)) || (len(input.ResultMeta) > 0 && !json.Valid(input.ResultMeta)) {
+		gouoFail(c, http.StatusBadRequest, "invalid_metadata", "作品参数不是有效 JSON")
 		return
 	}
-	tasks, err := model.ListChangedGouoTasks(c.GetInt("id"), updatedAt, id, limit)
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "sync_failed", "读取云端变化失败")
+	metadata := strings.ToLower(string(input.Params) + string(input.ResultMeta))
+	for _, forbidden := range []string{"api_key", "apikey", "authorization", "rawresponsepayload", "raw_response_payload", "data:image/"} {
+		if strings.Contains(metadata, forbidden) {
+			gouoFail(c, http.StatusBadRequest, "sensitive_metadata", "作品信息包含禁止保存的敏感或大体积字段")
+			return
+		}
+	}
+	for role, ids := range input.ClientImageIDs {
+		if !gouoAssetRoles[role] || len(ids) > config.GouoAssetMaxTaskFiles {
+			gouoFail(c, http.StatusBadRequest, "invalid_asset_link", "作品图片关系无效")
+			return
+		}
+		for _, id := range ids {
+			if len(id) > 128 {
+				gouoFail(c, http.StatusBadRequest, "invalid_asset_link", "作品图片关系无效")
+				return
+			}
+		}
+	}
+	var collectionIDs []string
+	if input.CollectionIDs != nil {
+		// 其他设备已删除的收藏夹直接忽略，不能让整条作品信息保存失败。
+		collections, err := model.ListGouoCollections(c.GetInt("id"), false)
+		if err != nil {
+			gouoFail(c, http.StatusInternalServerError, "collection_query_failed", "读取收藏夹失败")
+			return
+		}
+		visible := map[string]bool{}
+		for _, collection := range collections {
+			visible[collection.ID] = collection.HiddenAt == 0
+		}
+		collectionIDs = []string{}
+		for _, id := range uniqueStrings(input.CollectionIDs) {
+			if visible[id] {
+				collectionIDs = append(collectionIDs, id)
+			}
+		}
+	}
+	task, err := model.UpdateGouoTaskMeta(c.GetInt("id"), c.Param("clientTaskId"), model.GouoTaskMeta{
+		Prompt:          input.Prompt,
+		Params:          datatypes.JSON(input.Params),
+		ResultMeta:      datatypes.JSON(input.ResultMeta),
+		ClientCreatedAt: input.ClientCreatedAt,
+		ClientImageIDs:  input.ClientImageIDs,
+		CollectionIDs:   collectionIDs,
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		gouoFail(c, http.StatusNotFound, "task_not_found", "作品不存在")
+		return
+	}
+	if err != nil || task == nil {
+		gouoFail(c, http.StatusInternalServerError, "task_update_failed", "保存作品信息失败")
 		return
 	}
 	favorites, err := gouoFavoriteMap(c.GetInt("id"))
 	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "sync_failed", "读取云端收藏失败")
+		gouoFail(c, http.StatusInternalServerError, "favorite_query_failed", "读取收藏失败")
 		return
 	}
-	data := make([]gouoTaskResponse, 0, len(tasks))
-	for _, task := range tasks {
-		data = append(data, gouoTaskToResponse(task, favorites[task.ID]))
-	}
-	collections, err := model.ListGouoCollections(c.GetInt("id"), true)
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "sync_failed", "读取云端收藏夹失败")
-		return
-	}
-	items, err := model.ListGouoFavoriteItems(c.GetInt("id"))
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "sync_failed", "读取云端收藏失败")
-		return
-	}
-	nextCursor := c.Query("cursor")
-	if len(tasks) > 0 {
-		last := tasks[len(tasks)-1]
-		nextCursor = encodeGouoCursor(last.UpdatedAt, last.ID)
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
-		"tasks":          data,
-		"collections":    collections,
-		"favorite_items": items,
-		"next_cursor":    nextCursor,
-		"has_more":       len(tasks) == limit,
-		"server_time":    time.Now().UnixMilli(),
-	}})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gouoTaskToResponse(*task, favorites[task.ID])})
 }
 
 func GetGouoAdminStorage(c *gin.Context) {

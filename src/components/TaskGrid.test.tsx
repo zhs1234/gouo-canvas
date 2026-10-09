@@ -5,7 +5,7 @@ import TaskGrid from './TaskGrid'
 
 const state = vi.hoisted(() => ({ tasks: [] as TaskRecord[], searchQuery: '', filterStatus: 'all', filterFavorite: false, activeFavoriteCollectionId: null, selectedTaskIds: [], clearSelection: () => {} }))
 vi.mock('../store', () => ({ useStore: (select: (value: typeof state) => unknown) => select(state), ALL_FAVORITES_COLLECTION_ID: 'all', getTaskFavoriteCollectionIds: () => [], reuseConfig: vi.fn(), editOutputs: vi.fn(), removeTask: vi.fn() }))
-vi.mock('../lib/cloudSync', () => ({ restoreCloudTask: vi.fn() }))
+vi.mock('../lib/serverLibrary', () => ({ restoreServerTask: vi.fn() }))
 vi.mock('./TaskCard', () => ({ default: ({ task }: { task: TaskRecord }) => <span>{task.prompt}</span> }))
 
 it('caps a thousand-task gallery at 60 cards while searching the complete library', () => {

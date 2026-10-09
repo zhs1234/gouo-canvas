@@ -11,7 +11,7 @@ import Toast from './components/Toast'
 import ImageContextMenu from './components/ImageContextMenu'
 import OverlayLayer from './components/OverlayLayer'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
-import { startCloudSync } from './lib/cloudSync'
+import { startServerLibrary } from './lib/serverLibrary'
 import FirstGenerationGuide from './components/FirstGenerationGuide'
 import { GUIDE_FLAGS, hasGuideFlag } from './lib/userGuidance'
 
@@ -62,7 +62,7 @@ export default function App() {
           clearAppliedUrlSettings()
         })
 
-      void initStore().then(() => startCloudSync())
+      void initStore().then(() => startServerLibrary())
       return
     }
 
@@ -85,7 +85,7 @@ export default function App() {
         })
     }
 
-    void initStore().then(() => startCloudSync())
+    void initStore().then(() => startServerLibrary())
   }, [setSettings])
 
   useEffect(() => {

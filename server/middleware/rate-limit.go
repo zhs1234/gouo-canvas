@@ -114,9 +114,9 @@ func GlobalAPIRateLimit() func(c *gin.Context) {
 	api := rateLimitFactory(limit, GlobalApiRateLimitDuration, "GA")
 	cloud := rateLimitFactory(limit, GlobalApiRateLimitDuration, "GC")
 	return func(c *gin.Context) {
-		// 云库仍受同样的 IP 限流，但批量同步不能耗尽模型、账户和充值接口的额度。
+		// 云库仍受同样的 IP 限流，但作品与文档保存不能耗尽模型、账户和充值接口的额度。
 		path := c.FullPath()
-		for _, prefix := range []string{"/api/gouo/assets", "/api/gouo/tasks", "/api/gouo/collections", "/api/gouo/sync", "/api/gouo/storage"} {
+		for _, prefix := range []string{"/api/gouo/assets", "/api/gouo/tasks", "/api/gouo/collections", "/api/gouo/canvases", "/api/gouo/conversations", "/api/gouo/storage"} {
 			if path == prefix || strings.HasPrefix(path, prefix+"/") {
 				cloud(c)
 				return

@@ -1063,17 +1063,17 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
             onDelete={removeSelection}
           />
         )}
-        {(saveError || project.cloudSyncError || [...project.title].length > 200) && (
+        {(saveError || [...project.title].length > 200) && (
           <div
             role="alert"
             className="absolute left-1/2 top-20 z-[100] -translate-x-1/2 rounded-xl border border-amber-600 bg-amber-950 p-3 text-xs text-amber-200"
           >
-            {saveError || project.cloudSyncError || '标题超过 200 个字符，请重命名后继续云同步；原内容已保留'}
+            {saveError || '标题超过 200 个字符，请重命名后才能保存到服务器；原内容已保留在本地'}
             {saveError ? (
               <button className="ml-3 underline" onClick={() => run(useCanvasStore.getState().saveProject(project.id))}>
                 重试保存
               </button>
-            ) : [...project.title].length > 200 ? (
+            ) : (
               <button
                 className="ml-3 underline"
                 onClick={() => {
@@ -1082,10 +1082,6 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
                 }}
               >
                 重命名
-              </button>
-            ) : (
-              <button className="ml-3 underline" onClick={() => run(import('../../lib/cloudSync').then((module) => module.triggerCloudSync()))}>
-                重新同步
               </button>
             )}
           </div>

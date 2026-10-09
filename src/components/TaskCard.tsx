@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, type ReactNode } from 'react'
 import type { TaskRecord } from '../types'
 import { useStore, ensureImageThumbnailCached, subscribeImageThumbnail, retryTask } from '../store'
 import { formatImageRatio } from '../lib/size'
-import { useCloudSyncSnapshot } from '../lib/cloudSync'
 import { getParamDisplay, ActualValueBadge } from '../lib/paramDisplay'
 import { DEFAULT_IMAGES_MODEL, DEFAULT_FAL_MODEL } from '../lib/apiProfiles'
 import { CodeIcon, TransparentBgIcon } from './icons'
@@ -66,7 +65,6 @@ export default function TaskCard({
   isSelected,
   disableSwipe,
 }: Props) {
-  const cloudSync = useCloudSyncSnapshot()
   const [thumbSrc, setThumbSrc] = useState<string>('')
   const [coverRatio, setCoverRatio] = useState<string>('')
   const [coverSize, setCoverSize] = useState<string>('')
@@ -378,10 +376,8 @@ export default function TaskCard({
           </svg>
         </div>
       )}
-      {!isSelected && task.cloudSyncStatus && (
-        <div className={`absolute right-2 top-2 z-10 rounded-full px-2 py-1 text-[10px] font-medium shadow-sm backdrop-blur ${task.cloudHiddenAt || cloudSync.status === 'disabled' ? 'bg-gray-900/75 text-white' : task.cloudSyncStatus === 'synced' ? 'bg-emerald-500/90 text-white' : task.cloudSyncStatus === 'error' ? 'bg-red-500/90 text-white' : 'bg-blue-500/90 text-white'}`}>
-          {task.cloudHiddenAt ? '回收站' : cloudSync.status === 'disabled' ? '仅本地保存' : task.cloudSyncStatus === 'synced' ? '已同步' : task.cloudSyncStatus === 'error' ? '同步失败' : task.cloudSyncStatus === 'syncing' && cloudSync.status === 'syncing' ? '同步中' : '待同步'}
-        </div>
+      {!isSelected && task.cloudHiddenAt && (
+        <div className="absolute right-2 top-2 z-10 rounded-full bg-gray-900/75 px-2 py-1 text-[10px] font-medium text-white shadow-sm backdrop-blur">回收站</div>
       )}
       <div className="flex h-40">
         {/* 左侧图片区域 */}

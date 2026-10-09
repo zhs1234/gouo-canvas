@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"one-api/common/utils"
+
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -278,16 +280,6 @@ func GetGouoAdminOutputAsset(userID int, assetID string) (*GouoAsset, error) {
 	return &asset, err
 }
 
-func ListChangedGouoTasks(userID int, afterUpdatedAt int64, afterID string, limit int) ([]GouoTask, error) {
-	var tasks []GouoTask
-	tx := DB.Preload("Assets.Asset").Where("user_id = ?", userID)
-	if afterUpdatedAt > 0 {
-		tx = tx.Where("updated_at > ? OR (updated_at = ? AND id > ?)", afterUpdatedAt, afterUpdatedAt, afterID)
-	}
-	err := tx.Order("updated_at ASC, id ASC").Limit(limit).Find(&tasks).Error
-	return tasks, err
-}
-
 func SetGouoTaskHidden(userID int, id string, hidden bool) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
 		now, err := nextGouoTaskTimestamp(tx, userID)
@@ -405,4 +397,134 @@ func ListGouoStorageUserUsage() ([]GouoStorageUserUsage, error) {
 		Order("used_bytes DESC").
 		Scan(&rows).Error
 	return rows, err
+}
+
+type GouoGenerationRecord struct {
+	UserID       int
+	ClientTaskID string
+	Index        int
+	Prompt       string
+	Model        string
+	Operation    string
+	Params       datatypes.JSON
+	Outputs      []*GouoAsset
+	Inputs       []*GouoAsset
+	Mask         *GouoAsset
+}
+
+// RecordGouoGeneration 在服务端拿到图片时直接写入作品记录；批量生成的每个子请求按序号合并到同一作品。
+func RecordGouoGeneration(record GouoGenerationRecord) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		// 时间戳函数会锁定用户行，并发子请求在这里串行，不会重复创建作品。
+		now, err := nextGouoTaskTimestamp(tx, record.UserID)
+		if err != nil {
+			return err
+		}
+		var task GouoTask
+		err = tx.Preload("Assets").Where("user_id = ? AND client_task_id = ?", record.UserID, record.ClientTaskID).First(&task).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			task = GouoTask{
+				ID: utils.GetUUID(), UserID: record.UserID, ClientTaskID: record.ClientTaskID, SchemaVersion: 1,
+				Prompt: record.Prompt, Model: record.Model, Operation: record.Operation, Params: record.Params,
+				ResultMeta: datatypes.JSON(`{}`), ClientCreatedAt: now, CreatedAt: now,
+			}
+		} else if err != nil {
+			return err
+		}
+		task.Status, task.FinishedAt, task.UpdatedAt, task.ErrorMessage = "done", now, now, ""
+		if err := tx.Omit("Assets").Save(&task).Error; err != nil {
+			return err
+		}
+		hasRole := map[string]bool{}
+		for _, link := range task.Assets {
+			hasRole[link.Role] = true
+		}
+		links := make([]GouoTaskAsset, 0, len(record.Outputs)+len(record.Inputs)+1)
+		for i, asset := range record.Outputs {
+			links = append(links, GouoTaskAsset{TaskID: task.ID, AssetID: asset.ID, Role: "output", Position: record.Index + i})
+		}
+		// 批量请求的参考图相同，只在首次写入时保存。
+		if !hasRole["input"] {
+			for i, asset := range record.Inputs {
+				links = append(links, GouoTaskAsset{TaskID: task.ID, AssetID: asset.ID, Role: "input", Position: i})
+			}
+		}
+		if record.Mask != nil && !hasRole["mask"] {
+			links = append(links, GouoTaskAsset{TaskID: task.ID, AssetID: record.Mask.ID, Role: "mask", Position: 0})
+		}
+		if len(links) == 0 {
+			return nil
+		}
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "task_id"}, {Name: "role"}, {Name: "position"}},
+			DoUpdates: clause.AssignmentColumns([]string{"asset_id"}),
+		}).Create(&links).Error
+	})
+}
+
+type GouoTaskMeta struct {
+	Prompt          string
+	Params          datatypes.JSON
+	ResultMeta      datatypes.JSON
+	ClientCreatedAt int64
+	ClientImageIDs  map[string][]string
+	CollectionIDs   []string
+}
+
+// UpdateGouoTaskMeta 补充只有客户端知道的信息（原始提示词、来源、本地图片编号、收藏），不改动服务端保存的图片。
+func UpdateGouoTaskMeta(userID int, clientTaskID string, meta GouoTaskMeta) (*GouoTask, error) {
+	var task GouoTask
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		now, err := nextGouoTaskTimestamp(tx, userID)
+		if err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ? AND client_task_id = ?", userID, clientTaskID).First(&task).Error; err != nil {
+			return err
+		}
+		updates := map[string]any{"updated_at": now}
+		if meta.Prompt != "" {
+			updates["prompt"] = meta.Prompt
+		}
+		if len(meta.Params) > 0 {
+			updates["params"] = meta.Params
+		}
+		if len(meta.ResultMeta) > 0 {
+			updates["result_meta"] = meta.ResultMeta
+		}
+		if meta.ClientCreatedAt > 0 {
+			updates["client_created_at"] = meta.ClientCreatedAt
+		}
+		if err := tx.Model(&task).Updates(updates).Error; err != nil {
+			return err
+		}
+		for role, ids := range meta.ClientImageIDs {
+			for position, id := range ids {
+				if id == "" {
+					continue
+				}
+				if err := tx.Model(&GouoTaskAsset{}).Where("task_id = ? AND role = ? AND position = ?", task.ID, role, position).Update("client_image_id", id).Error; err != nil {
+					return err
+				}
+			}
+		}
+		if meta.CollectionIDs == nil {
+			return nil
+		}
+		if err := tx.Where("user_id = ? AND task_id = ?", userID, task.ID).Delete(&GouoFavoriteItem{}).Error; err != nil {
+			return err
+		}
+		items := make([]GouoFavoriteItem, 0, len(meta.CollectionIDs))
+		for _, id := range meta.CollectionIDs {
+			items = append(items, GouoFavoriteItem{UserID: userID, CollectionID: id, TaskID: task.ID, CreatedAt: now, UpdatedAt: now})
+		}
+		if len(items) == 0 {
+			return nil
+		}
+		return tx.Create(&items).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return GetGouoTask(userID, task.ID)
 }

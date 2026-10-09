@@ -19,3 +19,4 @@ server/data/
 .idea/
 .vscode/
 .wrangler/
+.local-runtime/

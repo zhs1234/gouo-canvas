@@ -10,7 +10,6 @@ const STORE_TASKS = 'tasks'
 const STORE_IMAGES = 'images'
 const STORE_THUMBNAILS = 'thumbnails'
 const STORE_AGENT_CONVERSATIONS = 'agentConversations'
-const STORE_CLOUD_QUEUE = 'cloudSyncQueue'
 const STORE_CLOUD_META = 'cloudSyncMeta'
 const STORE_CLOUD_ASSET_MAP = 'cloudAssetMap'
 const THUMBNAIL_MAX_SIZE = 720
@@ -41,9 +40,6 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_AGENT_CONVERSATIONS)) {
         db.createObjectStore(STORE_AGENT_CONVERSATIONS, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(STORE_CLOUD_QUEUE)) {
-        db.createObjectStore(STORE_CLOUD_QUEUE, { keyPath: 'id' })
       }
       if (!db.objectStoreNames.contains(STORE_CLOUD_META)) {
         db.createObjectStore(STORE_CLOUD_META, { keyPath: 'key' })
@@ -110,26 +106,6 @@ export function replaceTasks(tasks: TaskRecord[]): Promise<undefined> {
         tx.onabort = () => reject(tx.error)
       }),
   )
-}
-
-// 云端拉取只合并已同步记录；事务期间新增或编辑的本地任务不能被整库覆盖。
-export async function mergeSyncedTasks(tasks: TaskRecord[]): Promise<TaskRecord[]> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_TASKS, 'readwrite')
-    const store = tx.objectStore(STORE_TASKS)
-    const saved: TaskRecord[] = []
-    for (const task of tasks) {
-      const req = store.get(task.id)
-      req.onsuccess = () => {
-        if (req.result && req.result.cloudSyncStatus !== 'synced') return
-        store.put(task)
-        saved.push(task)
-      }
-    }
-    tx.oncomplete = () => { db.close(); resolve(saved) }
-    tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
-  })
 }
 
 // 整批恢复共用一个事务，冲突或空间不足时不能留下半套任务和图片。
@@ -245,39 +221,20 @@ export function putImage(image: StoredImage): Promise<IDBValidKey> {
   return dbTransaction(STORE_IMAGES, 'readwrite', (s) => s.put(image))
 }
 
-export interface CloudSyncQueueItem {
-  id: string
-  taskId: string
-  attempts: number
-  nextAttemptAt: number
-  createdAt: number
-  error?: string
-}
-
 export interface CloudAssetMapItem {
   localImageId: string
   cloudAssetId: string
   contentUrl: string
   sha256: string
   mimeType?: string
+  // 其他设备取回透明背景作品时，从原图重新去除背景得到展示图。
+  derive?: 'transparent'
   updatedAt: number
 }
 
-interface CloudSyncMetaItem {
+interface CloudMetaItem {
   key: string
   value: unknown
-}
-
-export function getCloudSyncQueue(): Promise<CloudSyncQueueItem[]> {
-  return dbTransaction(STORE_CLOUD_QUEUE, 'readonly', (s) => s.getAll())
-}
-
-export function putCloudSyncQueueItem(item: CloudSyncQueueItem): Promise<IDBValidKey> {
-  return dbTransaction(STORE_CLOUD_QUEUE, 'readwrite', (s) => s.put(item))
-}
-
-export function deleteCloudSyncQueueItem(id: string): Promise<undefined> {
-  return dbTransaction(STORE_CLOUD_QUEUE, 'readwrite', (s) => s.delete(id))
 }
 
 export function getCloudAssetMapItem(localImageId: string): Promise<CloudAssetMapItem | undefined> {
@@ -288,11 +245,11 @@ export function putCloudAssetMapItem(item: CloudAssetMapItem): Promise<IDBValidK
   return dbTransaction(STORE_CLOUD_ASSET_MAP, 'readwrite', (s) => s.put(item))
 }
 
-export function getCloudSyncMeta<T>(key: string): Promise<T | undefined> {
-  return dbTransaction<CloudSyncMetaItem | undefined>(STORE_CLOUD_META, 'readonly', (s) => s.get(key)).then((item) => item?.value as T | undefined)
+export function getCloudMeta<T>(key: string): Promise<T | undefined> {
+  return dbTransaction<CloudMetaItem | undefined>(STORE_CLOUD_META, 'readonly', (s) => s.get(key)).then((item) => item?.value as T | undefined)
 }
 
-export function putCloudSyncMeta(key: string, value: unknown): Promise<IDBValidKey> {
+export function putCloudMeta(key: string, value: unknown): Promise<IDBValidKey> {
   return dbTransaction(STORE_CLOUD_META, 'readwrite', (s) => s.put({ key, value }))
 }
 

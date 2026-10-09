@@ -18,6 +18,9 @@ export interface CallApiOptions {
   inputImageDataUrls: string[]
   maskDataUrl?: string
   requestId?: string
+  // 服务端按作品编号和批量序号保存生成结果
+  taskId?: string
+  requestIndex?: number
   recoverOnly?: boolean
   signal?: AbortSignal
   gouoPriceVersion?: string

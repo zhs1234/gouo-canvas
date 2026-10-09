@@ -2,7 +2,7 @@ import type { ChangeEvent, RefObject } from 'react'
 import { Checkbox } from '../Checkbox'
 import { ExportIcon, ImportIcon, TrashIcon } from '../icons'
 import { isBackendAuthEnabled } from '../../lib/gouoBackend'
-import { triggerCloudSync, useCloudSyncSnapshot } from '../../lib/cloudSync'
+import { isServerLibraryEnabled } from '../../lib/serverLibrary'
 
 interface DataSettingsTabProps {
   exportConfig: boolean
@@ -26,7 +26,6 @@ interface DataSettingsTabProps {
 }
 
 export default function DataSettingsTab(props: DataSettingsTabProps) {
-  const sync = useCloudSyncSnapshot()
   const backend = isBackendAuthEnabled()
   return (
     <div className="space-y-4">
@@ -35,9 +34,8 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
         <div className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-          <p>{!backend ? '配置、任务和图片保存在当前浏览器；生成请求中的提示词和参考图会发送给您配置的服务商。' : sync.storage?.enabled ? '配置和作品缓存保存在当前浏览器；已同步的作品记录、图片及收藏夹还保存在当前账号的光构服务端，其他登录设备可以恢复。未同步内容仍依赖本地数据。' : sync.storage?.enabled === false ? '当前未启用云端作品库，新作品保存在当前浏览器。此前已同步的内容可能仍在服务端，请联系管理员确认。' : '配置和作品缓存在当前浏览器；云端作品库状态尚未确认，请先检查同步状态，不能假定已完成备份。'}</p>
+          <p>{!backend ? '配置、任务和图片保存在当前浏览器；生成请求中的提示词和参考图会发送给您配置的服务商。' : isServerLibraryEnabled() ? '生成的图片在出图时即由服务端保存到当前账号，画布和会话保存后也会写到服务端，换设备登录即可看到；浏览器只保留缓存。' : '当前未启用云端作品库，作品、画布和会话只保存在当前浏览器。'}</p>
           <p className="mt-2">清理站点数据或换设备前请导出备份。含配置的备份可能包含 API 密钥，请妥善保管，勿公开分享。</p>
-          {backend && <button type="button" disabled={sync.status === 'syncing'} onClick={() => void triggerCloudSync()} className="mt-2 text-blue-500 underline disabled:opacity-50">{sync.status === 'syncing' ? sync.phase : '检查同步状态'}{sync.error ? `：${sync.error}` : ''}</button>}
         </div>
       </div>
 

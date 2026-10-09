@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react'
 import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds, useStore, reuseConfig, editOutputs, removeTask } from '../store'
 import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
 import TaskCard from './TaskCard'
-import { restoreCloudTask } from '../lib/cloudSync'
+import { restoreServerTask } from '../lib/serverLibrary'
 import { EMPTY_GALLERY_PROMPTS } from '../lib/userGuidance'
 
 const PAGE_SIZE = 60
@@ -72,7 +72,7 @@ export default function TaskGrid() {
         title: '恢复作品',
         message: '将这个作品恢复到云端画廊吗？',
         confirmText: '恢复',
-        action: () => restoreCloudTask(task),
+        action: () => restoreServerTask(task),
       })
       return
     }

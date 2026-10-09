@@ -9,7 +9,6 @@ import Header from './Header'
 import InputBar from './InputBar'
 import SearchBar from './SearchBar'
 import TaskGrid from './TaskGrid'
-import CloudSyncBanner from './CloudSyncBanner'
 import { FavoriteCollectionsView } from './favorites/FavoriteCollectionsView'
 import { useFavoriteCollectionTitle } from './favorites/useFavoriteCollectionTitle'
 import SelectionActions from './input/selectionActions'
@@ -201,7 +200,7 @@ export default function Workspace() {
         {!projects.some((item) => !item.hiddenAt) && <p>把灵感铺开，开始第一块画布</p>}
       </div>
     </aside>
-    <div className="workspace-main"><Header compact /><CloudSyncBanner /><Suspense fallback={<div className="workspace-loading" role="status">正在打开创作空间…</div>}><Routes>
+    <div className="workspace-main"><Header compact /><Suspense fallback={<div className="workspace-loading" role="status">正在打开创作空间…</div>}><Routes>
       <Route path="/generate" element={<GenerateWorkspace mode={mode} setMode={setMode} />} />
       <Route path="/works" element={<WorksWorkspace />} />
       <Route path="/favorites" element={<FavoritesWorkspace />} />

@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: []
 const api = vi.hoisted(() => ({
   getCurrentUser: vi.fn(), getBackendStatus: vi.fn(), sendEmailVerification: vi.fn(),
   sendPasswordReset: vi.fn(), updatePassword: vi.fn(), createBackendSettings: vi.fn(), bindEmail: vi.fn(),
-  showToast: vi.fn(), setSettings: vi.fn(),
+  showToast: vi.fn(), setSettings: vi.fn(), getCloudStorage: vi.fn(),
 }))
 vi.mock('react', async (load) => ({
   ...await load<typeof import('react')>(),
@@ -34,7 +34,7 @@ vi.mock('react', async (load) => ({
 vi.mock('react-dom', () => ({ createPortal: (node: unknown) => node }))
 vi.mock('../lib/gouoBackend', () => ({ ...api, isBackendAuthEnabled: () => true }))
 vi.mock('../store', () => ({ useStore: { getState: () => api } }))
-vi.mock('../lib/cloudSync', () => ({ useCloudSyncSnapshot: () => ({}) }))
+vi.mock('../lib/serverLibrary', () => ({ importLocalTasks: vi.fn() }))
 vi.mock('../hooks/useCloseOnEscape', () => ({ useCloseOnEscape: () => {} }))
 vi.mock('../hooks/usePreventBackgroundScroll', () => ({ usePreventBackgroundScroll: () => {} }))
 
@@ -81,6 +81,7 @@ beforeEach(() => {
   api.getCurrentUser.mockRejectedValue(new Error('HTTP 401'))
   api.getBackendStatus.mockResolvedValue({ email_service: true, email_verification: true })
   api.sendEmailVerification.mockResolvedValue(undefined)
+  api.getCloudStorage.mockResolvedValue({ enabled: false, used_bytes: 0, quota_bytes: 0, remaining_bytes: 0, asset_count: 0 })
 })
 afterEach(() => vi.unstubAllGlobals())
 

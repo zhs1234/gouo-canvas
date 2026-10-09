@@ -118,7 +118,6 @@ export async function importCanvasArchive(file: File): Promise<CanvasProject[]> 
       showImageInfo: original.showImageInfo,
       createdAt: now,
       updatedAt: now,
-      cloudSyncStatus: 'pending',
     }
     validateCanvasProject(project)
     imported.push(serializeCanvasProject(project))

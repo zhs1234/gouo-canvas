@@ -216,10 +216,6 @@ export interface TaskRecord {
   favoriteCollectionIds?: string[]
   /** 云端作品库任务 ID */
   cloudId?: string
-  /** 云端同步状态 */
-  cloudSyncStatus?: 'pending' | 'syncing' | 'synced' | 'error'
-  /** 最近一次同步错误 */
-  cloudSyncError?: string
   /** 云端隐藏时间，非零时显示在回收站 */
   cloudHiddenAt?: number
 }

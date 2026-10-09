@@ -94,7 +94,7 @@ describe('画布状态持久化与撤销', () => {
     expect(state.getSnapshot(project.id).title).toBe(legacy.title)
     await state.applyOperations(project.id, [{ type: 'add_node', nodeType: 'text' }])
     await state.renameProject(project.id, '恢复后的标题')
-    expect(state.getSnapshot(project.id)).toMatchObject({ title: '恢复后的标题', cloudSyncError: undefined })
+    expect(state.getSnapshot(project.id)).toMatchObject({ title: '恢复后的标题' })
   })
   it('不挂载页面也能应用Agent操作，拒绝过期版本，撤销保留图片引用', async () => {
     const state = useCanvasStore.getState()

@@ -40,9 +40,9 @@ describe('gouoBackend', () => {
   it('honors Retry-After even when the rate limiter returns an empty body', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 429, headers: { 'Retry-After': '180' } }))
     vi.stubGlobal('fetch', fetchMock)
-    const { getCloudSync, fetchCloudAssetContent, GouoRateLimitError } = await import('./gouoBackend')
+    const { listCloudTasks, fetchCloudAssetContent, GouoRateLimitError } = await import('./gouoBackend')
     const start = Date.now()
-    for (const request of [() => getCloudSync(), () => fetchCloudAssetContent({ id: 'asset', sha256: '', mime_type: 'image/png', file_size: 0, content_url: '/api/gouo/assets/asset/content' })]) {
+    for (const request of [() => listCloudTasks(false), () => fetchCloudAssetContent({ id: 'asset', sha256: '', mime_type: 'image/png', file_size: 0, content_url: '/api/gouo/assets/asset/content' })]) {
       const error = await request().catch((err) => err)
       expect(error).toBeInstanceOf(GouoRateLimitError)
       expect(error.retryAt).toBeGreaterThanOrEqual(start + 180000)
