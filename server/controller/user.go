@@ -873,6 +873,16 @@ func ChangeUserQuota(c *gin.Context) {
 		common.APIRespondWithError(c, http.StatusOK, errors.New("不能为0"))
 		return
 	}
+	// 与其他用户管理接口一致：普通管理员只能调整权限比自己低的账号，也不能调整自己
+	target, err := model.GetUserById(userId, false)
+	if err != nil {
+		common.APIRespondWithError(c, http.StatusOK, err)
+		return
+	}
+	if myRole := c.GetInt("role"); myRole <= target.Role && myRole != config.RoleRootUser {
+		common.APIRespondWithError(c, http.StatusOK, errors.New("无权调整同级或更高等级用户的额度"))
+		return
+	}
 
 	err = model.ChangeUserQuota(userId, req.Quota, false)
 	if err != nil {
