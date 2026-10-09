@@ -1,6 +1,6 @@
 # 光构待修复清单
 
-截至 2026 年 10 月 9 日（北京时间），光构共登记 42 项问题：7 项已在本地运行环境验证修复；34 项待验证，其中 16 项的修复尚未合并（PR #15 至 #19）；GOUO-025 复核为误报，不适用。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
+截至 2026 年 10 月 9 日（北京时间），光构共登记 42 项问题：7 项已在本地运行环境验证修复；34 项待验证，修复均已合并到 main（[a496a11](https://github.com/zhs1234/gouo-canvas/commit/a496a11)）；GOUO-025 复核为误报，不适用。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
 
 审查基线为 main 提交 [1f3c463](https://github.com/zhs1234/gouo-canvas/commit/1f3c463d4f5d5b51ede64622fab20cef265770b6)。原始结论均为静态代码发现；各条目的单元测试及复现情况见其"修复记录"；用户于 2026 年 10 月 9 日说明该项目没有线上运行；此部署状态为用户提供，尚未独立核实，实际部署版本及功能开关未核验。P1/P2 是修复优先级，不表示相关条件已在生产环境成立。
 
@@ -12,9 +12,9 @@
 
 - 待验证：18 项已合并（GOUO-002 至 006、008 至 014、016 至 019、024、026），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全、[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13) 存储与账号（叠加在 PR #11 之上）、[PR #14](https://github.com/zhs1234/gouo-canvas/pull/14) 来源 IP 与 Agent 确认，均已于 2026-10-09 合并到 main（合并后提交 [0b9b54f](https://github.com/zhs1234/gouo-canvas/commit/0b9b54f)）
 
-- 待验证（未合并）：4 项：GOUO-027、028（[PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)，PR 构建已在本地通过全部验收）；GOUO-029、030（[PR #16](https://github.com/zhs1234/gouo-canvas/pull/16)）。另有 GOUO-026 的费用显示（[PR #17](https://github.com/zhs1234/gouo-canvas/pull/17)）、GOUO-006 的换商户说明（PR #16 文档）未合并
+- 待验证（2026-10-09 合并到 main a496a11）：GOUO-027、028（[PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)，PR 构建已在本地通过全部验收）；GOUO-029、030 及 GOUO-006 的换商户说明（[PR #16](https://github.com/zhs1234/gouo-canvas/pull/16)）；GOUO-026 的费用显示与 GOUO-039（[PR #17](https://github.com/zhs1234/gouo-canvas/pull/17)）
 
-- 待验证（未合并，第二轮审查）：12 项，GOUO-031 至 034（[PR #18](https://github.com/zhs1234/gouo-canvas/pull/18)）、GOUO-035 至 038 和 040 至 042（[PR #19](https://github.com/zhs1234/gouo-canvas/pull/19)）、GOUO-039（[PR #17](https://github.com/zhs1234/gouo-canvas/pull/17)）
+- 待验证（第二轮审查，2026-10-09 合并到 main a496a11）：GOUO-031 至 034（[PR #18](https://github.com/zhs1234/gouo-canvas/pull/18)）、GOUO-035 至 038 和 040 至 042（[PR #19](https://github.com/zhs1234/gouo-canvas/pull/19)）
 
 - 待修复：0 项
 
@@ -1456,3 +1456,4 @@ Agent 在一条消息里请求超过 4 张图片，弹出确认框，用户点�
 | 2026-10-09 | 按用户要求在本地运行环境实际执行验收检查（main 0b9b54f，GOUO-027、028 用 PR #15 head cbfa082）：GOUO-001、007、015、020、021、022、023 全部场景通过，标记为已验证修复；GOUO-027、028 在 PR 构建上全部通过、main 上原问题复现，待合并；GOUO-006、009、010、011、014、018、019、024 记录已验证的服务端部分；其余项交给用户，新增"交给用户验证"步骤。GOUO-006 的"热更新换商户后旧订单回调"待用户决定。新增 GOUO-029（环境变量无法把 TRUSTED_PROXIES 设为空，P2）、GOUO-030（管理端两个列表不按角色过滤，P2）。 | 30 项：已验证修复 7 项，待验证 20 项（其中 2 项未合并），不适用 1 项，待修复 2 项（均为 P2） |
 | 2026-10-09 | 按用户要求修复已知问题：GOUO-029、030 提交 [PR #16](https://github.com/zhs1234/gouo-canvas/pull/16)，处理状态改为待验证；GOUO-006 按方案 (a) 在部署文档中说明换商户须新建网关（同在 PR #16）；GOUO-026 补充确认框费用显示，提交 [PR #17](https://github.com/zhs1234/gouo-canvas/pull/17)。均未合并。 | 30 项：已验证修复 7 项，待验证 22 项（其中 4 项未合并），不适用 1 项，待修复 0 项 |
 | 2026-10-09 | 按用户要求继续审查并修复。分后端计费与云端存储、前端同步与存储、画布与界面三个方向审查 main 0b9b54f，逐条核实后新增 GOUO-031 至 042（P1 3 项：光构图片模型可经其他入口免费调用，已本地复现；平台账号令牌留在本地存储和备份中；快速连续撤销丢失编辑）。均已提交修复：后端 [PR #18](https://github.com/zhs1234/gouo-canvas/pull/18)，前端 [PR #19](https://github.com/zhs1234/gouo-canvas/pull/19)，GOUO-039 并入 [PR #17](https://github.com/zhs1234/gouo-canvas/pull/17)。核实后排除 1 项误报（"清空任务和图片会删掉画布引用的图片"：底层删除已跳过画布和会话引用的图片）。另记 1 项低风险备注不单列：图片结果恢复缓存为全站共享的 4 GB 上限，单个用户大量付费请求可填满它，代价较高。 | 42 项：已验证修复 7 项，待验证 34 项（其中 16 项未合并），不适用 1 项，待修复 0 项 |
+| 2026-10-09 | 按用户要求将 [PR #15](https://github.com/zhs1234/gouo-canvas/pull/15) 至 [PR #19](https://github.com/zhs1234/gouo-canvas/pull/19) 按顺序合并到 main（[a496a11](https://github.com/zhs1234/gouo-canvas/commit/a496a11)）。合并前已试合并确认无冲突（PR #16 的新测试移到单独文件，避免与 PR #15 冲突）；合并后 `npm test`（461 项）、`npm run build` 及相关 `go test` 通过。各项仍为待验证，需按验收检查验证；GOUO-027、028 已在 PR 构建上通过全部验收。 | 42 项：已验证修复 7 项，待验证 34 项，不适用 1 项，待修复 0 项 |
