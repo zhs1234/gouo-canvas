@@ -212,6 +212,7 @@ export async function executeAgentTool(input: {
       const confirmed = await new Promise<boolean>((resolve) => {
         const finish = (ok: boolean) => {
           input.signal.removeEventListener('abort', onAbort)
+          unsubscribe()
           resolve(ok)
         }
         const dialog = {
@@ -228,6 +229,10 @@ export async function executeAgentTool(input: {
         }
         input.signal.addEventListener('abort', onAbort)
         useAppStore.getState().setConfirmDialog(dialog)
+        // 点遮罩或按 Esc 关闭弹窗时不会调用 cancelAction，按取消处理，避免 Agent 一直等到超时
+        const unsubscribe = useAppStore.subscribe((state) => {
+          if (state.confirmDialog !== dialog) finish(false)
+        })
       })
       input.signal.throwIfAborted()
       if (!confirmed) throw new Error('用户没有确认继续生成更多图片，本次未提交。')

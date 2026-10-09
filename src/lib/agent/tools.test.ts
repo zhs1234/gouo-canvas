@@ -12,8 +12,20 @@ const mocks = vi.hoisted(() => ({
   dialog: null as null | { message?: string; action?: () => void; cancelAction?: () => void },
   backend: false,
   models: vi.fn(),
+  listeners: new Set<(state: { confirmDialog: unknown }) => void>(),
 }))
-vi.mock('../../store', () => ({ useStore: { getState: () => ({ tasks: mocks.tasks, settings: {}, confirmDialog: mocks.dialog, setConfirmDialog: (dialog: typeof mocks.dialog) => { mocks.dialog = dialog } }) } }))
+vi.mock('../../store', () => ({
+  useStore: {
+    getState: () => ({ tasks: mocks.tasks, settings: {}, confirmDialog: mocks.dialog, setConfirmDialog: (dialog: typeof mocks.dialog) => {
+      mocks.dialog = dialog
+      for (const listener of [...mocks.listeners]) listener({ confirmDialog: dialog })
+    } }),
+    subscribe: (listener: (state: { confirmDialog: unknown }) => void) => {
+      mocks.listeners.add(listener)
+      return () => mocks.listeners.delete(listener)
+    },
+  },
+}))
 vi.mock('../apiProfiles', () => ({ getActiveApiProfile: () => ({ model: 'gpt-image-2' }) }))
 vi.mock('../gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getImageModels: mocks.models }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
@@ -93,6 +105,16 @@ describe('Agent tool boundary', () => {
     mocks.dialog!.cancelAction!()
     await expect(fallback).rejects.toThrow('没有确认')
     expect(mocks.submit).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats closing the confirmation without choosing as cancel', async () => {
+    const pending = run('create_image_task', { prompt: '海报', params: { n: 5 } })
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    // 点遮罩或按 Esc：弹窗直接被清掉，不经过 cancelAction
+    for (const listener of [...mocks.listeners]) listener({ confirmDialog: null })
+    await expect(pending).rejects.toThrow('没有确认')
+    expect(mocks.submit).not.toHaveBeenCalled()
+    expect(mocks.listeners.size).toBe(0)
   })
 
   it('does not submit when the run is stopped while waiting for confirmation', async () => {
