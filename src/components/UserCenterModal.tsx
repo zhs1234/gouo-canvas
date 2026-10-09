@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { bindEmail, createBackendSettings, getBackendStatus, getCurrentUser, getUsageLogs, logout, redeemCode, sendEmailVerification, updateCurrentUser, updatePassword, type GouoUsageLog, type GouoUser } from '../lib/gouoBackend'
-import { useCloudSyncSnapshot } from '../lib/cloudSync'
+import { bindEmail, createBackendSettings, getBackendStatus, getCloudStorage, getCurrentUser, getUsageLogs, logout, redeemCode, sendEmailVerification, updateCurrentUser, updatePassword, type GouoCloudStorage, type GouoUsageLog, type GouoUser } from '../lib/gouoBackend'
+import { importLocalTasks } from '../lib/serverLibrary'
 import { deactivateUserStorage } from '../lib/storageScope'
 import { useStore } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
@@ -76,7 +76,8 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [tokenRefreshError, setTokenRefreshError] = useState('')
   const [refreshingToken, setRefreshingToken] = useState(false)
   const [error, setError] = useState('')
-  const sync = useCloudSyncSnapshot()
+  const [storage, setStorage] = useState<GouoCloudStorage | null>(null)
+  const [importing, setImporting] = useState('')
   let supportUrl = ''
   try {
     const url = new URL(supportContact)
@@ -110,6 +111,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   useEffect(() => {
     void loadUser()
     void loadStatus()
+    getCloudStorage().then(setStorage).catch(() => setStorage(null))
     const requests = [userRequest.current, logsRequest.current, statusRequest.current]
     return () => { for (const request of requests) request.invalidate() }
   }, [loadUser, loadStatus])
@@ -134,6 +136,21 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
     const request = logsRequest.current
     return () => request.invalidate()
   }, [activeSection, loadLogs])
+
+  const handleImportLocal = async () => {
+    setImporting('正在检查本机作品…')
+    try {
+      const result = await importLocalTasks((done, total) => setImporting(`正在导入 ${done}/${total}`))
+      const showToast = useStore.getState().showToast
+      if (!result.total) showToast('本机没有需要导入的作品', 'info')
+      else showToast(result.failed ? `已导入 ${result.total - result.failed} 个作品，${result.failed} 个失败，可稍后重试` : `已导入 ${result.total} 个作品`, result.failed ? 'error' : 'success')
+      setStorage(await getCloudStorage())
+    } catch (err) {
+      useStore.getState().showToast(err instanceof Error ? err.message : String(err), 'error')
+    } finally {
+      setImporting('')
+    }
+  }
 
   const handleSave = async (event: FormEvent) => {
     event.preventDefault()
@@ -329,8 +346,13 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">云端空间</p>
-                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{sync.storage?.enabled === false ? '未开启' : sync.storage?.enabled ? `${(sync.storage.used_bytes / 1024 ** 2).toFixed(0)} MB` : '—'}</p>
-                  <p className="mt-1 text-xs text-gray-400">{sync.storage?.enabled === false ? '作品保存在当前浏览器' : sync.storage?.enabled ? `共 ${(sync.storage.quota_bytes / 1024 ** 3).toFixed(0)} GB` : '存储状态暂不可用'}</p>
+                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{storage?.enabled === false ? '未开启' : storage?.enabled ? `${(storage.used_bytes / 1024 ** 2).toFixed(0)} MB` : '—'}</p>
+                  <p className="mt-1 text-xs text-gray-400">{storage?.enabled === false ? '作品保存在当前浏览器' : storage?.enabled ? `共 ${(storage.quota_bytes / 1024 ** 3).toFixed(0)} GB` : '存储状态暂不可用'}</p>
+                  {storage?.enabled && (
+                    <button type="button" disabled={Boolean(importing)} onClick={() => void handleImportLocal()} className="mt-3 text-xs font-medium text-blue-500 hover:text-blue-600 disabled:opacity-60">
+                      {importing || '导入本机旧作品'}
+                    </button>
+                  )}
                 </div>
               </section>
 

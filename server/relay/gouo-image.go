@@ -1,20 +1,28 @@
 package relay
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"one-api/common"
+	"one-api/common/config"
+	"one-api/common/logger"
 	"one-api/model"
 	"one-api/relay/relay_util"
 	"one-api/types"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "golang.org/x/image/webp"
@@ -77,6 +85,9 @@ func responseImageClient(c *gin.Context, response *types.ImageResponse, usage *t
 		if err := quota.CompleteImage(c, usage); err != nil {
 			return common.ErrorWrapperLocal(err, "image_billing_unconfirmed", http.StatusInternalServerError)
 		}
+		if value, ok := c.Get("gouo_image_capture"); ok {
+			recordGouoGeneration(c, value.(*gouoImageCapture), response)
+		}
 	}
 	return responseJsonClient(c, response)
 }
@@ -130,5 +141,132 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	}
 	c.Set("gouo_image_model", entry)
 	c.Set("skip_only_chat", true)
+	if taskID := c.GetHeader("X-Gouo-Task-Id"); taskID != "" && config.GouoCloudLibraryEnabled {
+		if len(taskID) > 128 || !gouoImageRequestID.MatchString(taskID) {
+			return common.StringErrorWrapperLocal("作品编号无效", "invalid_image_task_id", http.StatusBadRequest)
+		}
+		index, err := strconv.Atoi(c.GetHeader("X-Gouo-Request-Index"))
+		if err != nil || index < 0 || index >= config.GouoAssetMaxTaskFiles {
+			index = 0
+		}
+		capture := &gouoImageCapture{taskID: taskID, index: index, operation: "generation", params: map[string]any{"n": 1}}
+		switch r := relay.(type) {
+		case *relayImageGenerations:
+			capture.prompt, capture.model = r.request.Prompt, r.request.Model
+			capture.params["size"], capture.params["quality"] = r.request.Size, r.request.Quality
+			if r.request.OutputFormat != nil {
+				capture.params["output_format"] = *r.request.OutputFormat
+			}
+		case *relayImageEdits:
+			capture.prompt, capture.model, capture.operation = r.request.Prompt, r.request.Model, "edit"
+			capture.params["size"], capture.params["quality"], capture.params["output_format"] = r.request.Size, c.PostForm("quality"), c.PostForm("output_format")
+			if r.request.Image != nil {
+				capture.inputs = append(capture.inputs, r.request.Image)
+			}
+			capture.inputs = append(capture.inputs, r.request.Images...)
+			capture.mask = r.request.Mask
+		default:
+			return nil
+		}
+		c.Set("gouo_image_capture", capture)
+	}
 	return nil
+}
+
+type gouoImageCapture struct {
+	taskID    string
+	index     int
+	prompt    string
+	model     string
+	operation string
+	params    map[string]any
+	inputs    []*multipart.FileHeader
+	mask      *multipart.FileHeader
+}
+
+// ponytail: 生成图上限 64 MB；接入更大输出前调整。
+const gouoGeneratedImageMaxBytes = 64 * 1024 * 1024
+
+var gouoImageDownloadClient = &http.Client{Timeout: 60 * time.Second}
+
+// recordGouoGeneration 在返回图片前把结果写入用户作品库；失败只记日志，图片仍按原流程返回并保留在恢复缓存中。
+func recordGouoGeneration(c *gin.Context, capture *gouoImageCapture, response *types.ImageResponse) {
+	userID := c.GetInt("id")
+	save := func(data []byte, name string) (*model.GouoAsset, error) {
+		asset, _, err := model.SaveGouoAssetBytes(userID, data, name, false)
+		return asset, err
+	}
+	record := model.GouoGenerationRecord{UserID: userID, ClientTaskID: capture.taskID, Index: capture.index, Prompt: capture.prompt, Model: capture.model, Operation: capture.operation}
+	params, _ := json.Marshal(capture.params)
+	record.Params = params
+	for i, item := range response.Data {
+		data, err := gouoImageBytes(item)
+		if err == nil {
+			var asset *model.GouoAsset
+			if asset, err = save(data, fmt.Sprintf("output-%d-%d", capture.index, i)); err == nil {
+				record.Outputs = append(record.Outputs, asset)
+				continue
+			}
+		}
+		logger.LogError(c.Request.Context(), "保存生成图片失败: "+err.Error())
+		return
+	}
+	readUpload := func(header *multipart.FileHeader) (*model.GouoAsset, error) {
+		file, err := header.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		data, err := io.ReadAll(io.LimitReader(file, gouoGeneratedImageMaxBytes))
+		if err != nil {
+			return nil, err
+		}
+		return save(data, header.Filename)
+	}
+	for _, header := range capture.inputs {
+		asset, err := readUpload(header)
+		if err != nil {
+			logger.LogError(c.Request.Context(), "保存参考图失败: "+err.Error())
+			continue
+		}
+		record.Inputs = append(record.Inputs, asset)
+	}
+	if capture.mask != nil {
+		if asset, err := readUpload(capture.mask); err == nil {
+			record.Mask = asset
+		} else {
+			logger.LogError(c.Request.Context(), "保存遮罩失败: "+err.Error())
+		}
+	}
+	if err := model.RecordGouoGeneration(record); err != nil {
+		logger.LogError(c.Request.Context(), "写入作品记录失败: "+err.Error())
+	}
+}
+
+func gouoImageBytes(item types.ImageResponseDataInner) ([]byte, error) {
+	encoded := strings.TrimSpace(item.B64JSON)
+	if encoded == "" && strings.HasPrefix(item.URL, "data:image/") {
+		encoded = item.URL
+	}
+	if encoded != "" {
+		if _, data, ok := strings.Cut(encoded, ";base64,"); ok {
+			encoded = data
+		}
+		encoding := base64.StdEncoding
+		if len(encoded)%4 != 0 {
+			encoding = base64.RawStdEncoding
+		}
+		return io.ReadAll(io.LimitReader(base64.NewDecoder(encoding, strings.NewReader(encoded)), gouoGeneratedImageMaxBytes))
+	}
+	resp, err := gouoImageDownloadClient.Get(item.URL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("下载生成图片失败：HTTP %d", resp.StatusCode)
+	}
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, io.LimitReader(resp.Body, gouoGeneratedImageMaxBytes))
+	return buf.Bytes(), err
 }

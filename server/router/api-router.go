@@ -215,6 +215,7 @@ func SetApiRouter(router *gin.Engine) {
 			gouoRoute.POST("/assets", controller.UploadGouoAsset)
 			gouoRoute.GET("/assets/:id/content", controller.GetGouoAssetContent)
 			gouoRoute.PUT("/tasks/:clientTaskId", controller.PutGouoTask)
+			gouoRoute.PATCH("/tasks/:clientTaskId/meta", controller.PatchGouoTaskMeta)
 			gouoRoute.GET("/tasks", controller.ListGouoTasks)
 			gouoRoute.GET("/tasks/:id", controller.GetGouoTask)
 			gouoRoute.POST("/tasks/:id/hide", controller.HideGouoTask)
@@ -225,7 +226,6 @@ func SetApiRouter(router *gin.Engine) {
 			gouoRoute.POST("/collections/:id/restore", controller.RestoreGouoCollection)
 			gouoRoute.PUT("/collections/:id/tasks/:taskId", controller.AddGouoFavoriteItem)
 			gouoRoute.DELETE("/collections/:id/tasks/:taskId", controller.RemoveGouoFavoriteItem)
-			gouoRoute.GET("/sync", controller.GetGouoSync)
 		}
 
 		gouoAdminRoute := apiRouter.Group("/gouo/admin")

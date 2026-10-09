@@ -191,13 +191,13 @@ export interface GouoCloudCollection {
   hidden_at?: number
 }
 
-export interface GouoCloudSyncResult {
-  tasks: GouoCloudTask[]
-  collections: GouoCloudCollection[]
-  favorite_items: Array<{ collection_id: string; task_id: string; created_at: number; updated_at: number }>
-  next_cursor: string
-  has_more: boolean
-  server_time: number
+export interface GouoCloudTaskMeta {
+  prompt?: string
+  params?: Record<string, unknown>
+  result_meta?: Record<string, unknown>
+  client_created_at?: number
+  client_image_ids?: Partial<Record<GouoCloudTaskAsset['role'], string[]>>
+  collection_ids?: string[]
 }
 
 const configuredBaseUrl = (import.meta.env.VITE_GOUO_BACKEND_URL ?? '').trim().replace(/\/+$/, '')
@@ -358,10 +358,26 @@ export function putCloudTask(clientTaskId: string, task: Record<string, unknown>
   })
 }
 
-export function getCloudSync(cursor = ''): Promise<GouoCloudSyncResult> {
+export function listCloudTasks(hidden: boolean, cursor = ''): Promise<{ data: GouoCloudTask[]; next_cursor: string }> {
   const params = new URLSearchParams({ limit: '100' })
+  if (hidden) params.set('hidden', 'true')
   if (cursor) params.set('cursor', cursor)
-  return backendRequest<GouoCloudSyncResult>(`/api/gouo/sync?${params}`)
+  return backendRequest(`/api/gouo/tasks?${params}`)
+}
+
+export function patchCloudTaskMeta(clientTaskId: string, meta: GouoCloudTaskMeta): Promise<GouoCloudTask> {
+  return backendRequest<GouoCloudTask>(`/api/gouo/tasks/${encodeURIComponent(clientTaskId)}/meta`, {
+    method: 'PATCH',
+    body: JSON.stringify(meta),
+  })
+}
+
+export function listCloudCollections(): Promise<GouoCloudCollection[]> {
+  return backendRequest<GouoCloudCollection[]>('/api/gouo/collections?hidden=true')
+}
+
+export function setCloudFavorite(collectionId: string, clientTaskId: string, add: boolean): Promise<void> {
+  return backendAction(`/api/gouo/collections/${encodeURIComponent(collectionId)}/tasks/${encodeURIComponent(clientTaskId)}`, undefined, add ? 'PUT' : 'DELETE')
 }
 
 export function putCloudCollection(id: string, name: string): Promise<GouoCloudCollection> {
@@ -376,7 +392,8 @@ export function hideCloudCollection(id: string): Promise<void> {
 }
 
 export async function fetchCloudAssetContent(asset: GouoCloudAsset): Promise<Blob> {
-  const response = await fetch(apiUrl(asset.content_url), { cache: 'no-store', credentials: 'include' })
+  // 素材内容按哈希寻址，允许浏览器缓存，换设备浏览作品时不会重复下载。
+  const response = await fetch(apiUrl(asset.content_url), { credentials: 'include' })
   checkRateLimit(response)
   if (!response.ok) throw new Error(`下载云端图片失败（HTTP ${response.status}）`)
   return response.blob()

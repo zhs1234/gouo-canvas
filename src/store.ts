@@ -179,7 +179,7 @@ export async function ensureImageCached(id: string): Promise<string | undefined>
     return rec.dataUrl
   }
   if (isBackendAuthEnabled()) {
-    const dataUrl = await import('./lib/cloudSync').then((module) => module.fetchCloudImageIfNeeded(id))
+    const dataUrl = await import('./lib/serverLibrary').then((module) => module.fetchServerImage(id))
     if (dataUrl) {
       cacheImage(id, dataUrl)
       return dataUrl
@@ -1631,6 +1631,7 @@ export async function executeTask(taskId: string, recoverOnly = false) {
       maskDataUrl,
       gouoPriceVersion: task.gouoPriceVersion,
       requestId: task.requestId ?? task.id,
+      taskId: task.id,
       ...(recoverOnly ? { recoverOnly: true } : {}),
       onFalRequestEnqueued: (request) => {
         if (taskExecutions.get(taskId) !== execution) return
@@ -1730,6 +1731,7 @@ export async function executeTask(taskId: string, recoverOnly = false) {
       customRecoverable: false,
     })
     void deleteUnreferencedImageIds(partialImageIdsToClean)
+    if (isBackendAuthEnabled()) void import('./lib/serverLibrary').then((module) => module.recordServerTask(taskId))
 
     const failedCount = result.failedRequests?.length ?? 0
     const completionMessage = failedCount > 0
@@ -2172,8 +2174,8 @@ export async function removeMultipleTasks(taskIds: string[]) {
   const initialState = useStore.getState()
   const cloudTasks = initialState.tasks.filter((task) => taskIds.includes(task.id) && task.cloudId)
   if (cloudTasks.length) {
-    const { hideCloudTask } = await import('./lib/cloudSync')
-    await Promise.all(cloudTasks.map((task) => hideCloudTask(task)))
+    const { hideServerTask } = await import('./lib/serverLibrary')
+    await Promise.all(cloudTasks.map((task) => hideServerTask(task)))
   }
   const cloudTaskIds = new Set(cloudTasks.map((task) => task.id))
   taskIds = taskIds.filter((id) => !cloudTaskIds.has(id))
@@ -2256,8 +2258,8 @@ export async function clearFailedTasks(taskIds?: string[]) {
 /** 删除单条任务 */
 export async function removeTask(task: TaskRecord) {
   if (task.cloudId) {
-    const { hideCloudTask } = await import('./lib/cloudSync')
-    await hideCloudTask(task)
+    const { hideServerTask } = await import('./lib/serverLibrary')
+    await hideServerTask(task)
     useStore.getState().showToast('任务已移入回收站', 'success')
     return
   }
@@ -2485,8 +2487,6 @@ export async function importData(file: File, options: ImportOptions = { importCo
         id: isBackendAuthEnabled() ? crypto.randomUUID() : task.id,
         params: { ...DEFAULT_PARAMS, ...task.params },
         cloudId: undefined,
-        cloudSyncStatus: undefined,
-        cloudSyncError: undefined,
         cloudHiddenAt: undefined,
         status: task.status === 'running' ? 'error' : task.status,
         error: task.status === 'running' ? '备份中的任务尚未完成，请核对账务后决定是否重新提交。' : task.error,
@@ -2506,8 +2506,8 @@ export async function importData(file: File, options: ImportOptions = { importCo
         if (key === 'conversationId') return conversationIds.get(value) ?? value
         return value
       })) as T
-      const canvases = (data.canvasProjects ?? []).map((doc) => ({ ...remapDocument(doc), id: canvasIds.get(doc.id)!, cloudRevision: undefined, cloudSyncStatus: 'pending' as const, cloudSyncError: undefined }))
-      const conversations = (data.agentConversations ?? []).map((doc) => ({ ...remapDocument(doc), id: conversationIds.get(doc.id)!, status: doc.status === 'running' ? 'interrupted' as const : doc.status, cloudRevision: undefined, cloudSyncStatus: 'pending' as const, cloudSyncError: undefined }))
+      const canvases = (data.canvasProjects ?? []).map((doc) => ({ ...remapDocument(doc), id: canvasIds.get(doc.id)! }))
+      const conversations = (data.agentConversations ?? []).map((doc) => ({ ...remapDocument(doc), id: conversationIds.get(doc.id)!, status: doc.status === 'running' ? 'interrupted' as const : doc.status }))
       for (const task of importedTasks) if (task.source) task.source = remapDocument(task.source)
       const requiredImages = new Set<string>(getDocumentImageIds([...canvases, ...conversations]))
       for (const task of importedTasks) addTaskReferencedImageIds(requiredImages, task)

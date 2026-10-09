@@ -48,9 +48,6 @@ export interface AgentConversation {
   updatedAt: number
   revision: number
   hiddenAt?: number
-  cloudRevision?: number
-  cloudSyncStatus?: 'pending' | 'syncing' | 'synced' | 'error'
-  cloudSyncError?: string
 }
 
 export interface ChatMessage {

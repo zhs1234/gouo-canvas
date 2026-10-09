@@ -63,7 +63,7 @@ function updateConversation(id: string, update: (conversation: AgentConversation
     return
   }
   useAgentStore.setState((state) => ({
-    conversations: state.conversations.map((item) => item.id === id ? { ...item, ...update(item), updatedAt: Date.now(), revision: item.revision + 1, cloudSyncStatus: 'pending' } : item),
+    conversations: state.conversations.map((item) => item.id === id ? { ...item, ...update(item), updatedAt: Date.now(), revision: item.revision + 1 } : item),
   }))
   if (!save || saveTimers.has(id)) return
   saveTimers.set(id, setTimeout(() => {
@@ -254,7 +254,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const recovered = reconcileAgentTasks(normalized, tasks)
         if (value.status !== 'running' && recovered === normalized) return [recovered]
         changed.push(recovered.id)
-        return [{ ...recovered, revision: recovered.revision + 1, updatedAt: Date.now(), cloudSyncStatus: 'pending' as const }]
+        return [{ ...recovered, revision: recovered.revision + 1, updatedAt: Date.now() }]
       })
       set({ conversations, hydrated: true })
       await Promise.all(changed.map(persistConversation))
@@ -274,7 +274,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
   createConversation: async (projectId) => {
     await get().hydrate()
-    const conversation: AgentConversation = { id: crypto.randomUUID(), schemaVersion: 1, title: '新对话', modelId: get().models[0]?.id || '', projectId, messages: [], draft: '', referenceImageIds: [], status: 'idle', createdAt: Date.now(), updatedAt: Date.now(), revision: 0, cloudSyncStatus: 'pending' }
+    const conversation: AgentConversation = { id: crypto.randomUUID(), schemaVersion: 1, title: '新对话', modelId: get().models[0]?.id || '', projectId, messages: [], draft: '', referenceImageIds: [], status: 'idle', createdAt: Date.now(), updatedAt: Date.now(), revision: 0 }
     await putAgentConversation(conversation, 0)
     markAgentPersisted(conversation)
     if (!isStorageScopeCurrent()) throw new Error('账号已切换，会话创建已停止')

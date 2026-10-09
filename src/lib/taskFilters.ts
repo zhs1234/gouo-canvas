@@ -1,6 +1,6 @@
 import type { TaskRecord } from '../types'
 
-export type TaskFilterStatus = 'all' | 'running' | 'done' | 'error' | 'pending' | 'sync_error' | 'hidden'
+export type TaskFilterStatus = 'all' | 'running' | 'done' | 'error' | 'hidden'
 
 export function taskHasOutputErrors(task: Pick<TaskRecord, 'outputErrors'>) {
   return Boolean(task.outputErrors?.length)
@@ -10,8 +10,6 @@ export function taskMatchesFilterStatus(task: TaskRecord, filterStatus: TaskFilt
   if (filterStatus === 'hidden') return Boolean(task.cloudHiddenAt)
   if (task.cloudHiddenAt) return false
   if (filterStatus === 'all') return true
-  if (filterStatus === 'pending') return task.cloudSyncStatus === 'pending' || task.cloudSyncStatus === 'syncing'
-  if (filterStatus === 'sync_error') return task.cloudSyncStatus === 'error'
   if (filterStatus === 'error') return task.status === 'error' || taskHasOutputErrors(task)
   return task.status === filterStatus
 }

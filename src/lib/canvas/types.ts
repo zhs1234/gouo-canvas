@@ -107,9 +107,6 @@ export interface CanvasProject {
   createdAt: number
   updatedAt: number
   hiddenAt?: number
-  cloudRevision?: number
-  cloudSyncStatus?: 'pending' | 'syncing' | 'synced' | 'error'
-  cloudSyncError?: string
 }
 
 export type CanvasNodeData = {

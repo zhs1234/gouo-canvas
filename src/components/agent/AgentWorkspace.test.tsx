@@ -90,13 +90,6 @@ it('shows partial failure counts and causes, with an existing details entry and 
   expect(mocks.tool).not.toHaveBeenCalled()
 })
 
-it('shows the current conversation sync error without hiding its messages', () => {
-  mocks.conversations[0].cloudSyncError = '标题超过 200 个字符，请重命名'
-  const markup = render()
-  expect(markup).toContain('此会话未能同步：标题超过 200 个字符，请重命名')
-  expect(markup).toContain('data-image-id="kept-image"')
-})
-
 it('offers read-only result recovery for a failed platform task', () => {
   mocks.backend = true
   mocks.tasks = [{ id: 'task', prompt: '海报', params: DEFAULT_PARAMS, inputImageIds: [], outputImages: [], status: 'error', error: 'Failed to fetch', gouoPriceVersion: 'quote', requestId: 'original-request', createdAt: 1, finishedAt: 2, elapsed: 1 }]

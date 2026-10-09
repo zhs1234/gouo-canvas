@@ -509,6 +509,7 @@ async function callImagesApiConcurrent(opts: CallApiOptions, profile: ApiProfile
     Array.from({ length: n }).map((_, requestIndex) => callImagesApiSingle({
       ...singleOpts,
       requestId: opts.requestId ? `${opts.requestId}:${requestIndex}` : undefined,
+      requestIndex,
       onPartialImage: opts.onPartialImage
         ? (partial) => opts.onPartialImage?.({ ...partial, requestIndex })
         : undefined,
@@ -608,6 +609,10 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile, pr
   const requestHeaders = createRequestHeaders(profile)
   if (opts.gouoPriceVersion) requestHeaders['X-Gouo-Price-Version'] = opts.gouoPriceVersion
   if (opts.requestId) requestHeaders['X-Gouo-Request-Id'] = opts.requestId
+  if (productMode && opts.taskId) {
+    requestHeaders['X-Gouo-Task-Id'] = opts.taskId
+    requestHeaders['X-Gouo-Request-Index'] = String(opts.requestIndex ?? 0)
+  }
   const paths = createOpenAICompatiblePaths()
 
   const controller = new AbortController()

@@ -65,7 +65,7 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: true,
       // 后端运行文件和数据库不参与前端热更新，Windows 文件锁会让监听进程退出。
-      watch: { ignored: ['**/artifacts/**', '**/server/data/**'] },
+      watch: { ignored: ['**/.local-runtime/**', '**/server/data/**'] },
       proxy: Object.keys(proxy).length ? proxy : undefined,
     },
   }
