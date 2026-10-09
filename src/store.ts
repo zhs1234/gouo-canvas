@@ -47,7 +47,7 @@ import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBa
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
 import { getImageModelQuote, GouoPriceChangedError, isBackendAuthEnabled } from './lib/gouoBackend'
 import { formatExportFileTime } from './lib/exportFileName'
-import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
+import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, notifyFirstGeneration, requestUserCenter } from './lib/userGuidance'
 import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus } from './lib/taskFilters'
 import { isRecord, normalizeInputImages, normalizeMaskDraft } from './lib/storeInputNormalization'
@@ -2473,6 +2473,7 @@ export interface ImportOptions {
 /** 导入 ZIP 数据 */
 export async function importData(file: File, options: ImportOptions = { importConfig: true, importTasks: true }): Promise<boolean> {
   try {
+    if (file.size > MAX_BACKUP_FILE_BYTES) throw new Error(`备份文件不能超过 ${MAX_BACKUP_FILE_BYTES / 1024 / 1024} MB`)
     const buffer = await file.arrayBuffer()
     const { manifest: data, files } = readExportZip(new Uint8Array(buffer))
     if ((!options.importTasks || !data.tasks) && (!options.importConfig || !data.settings)) throw new Error('备份不包含所选数据')

@@ -440,7 +440,7 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
 function importFile(data: ExportData, files: Record<string, Uint8Array> = {}): File {
   const zipped = zipSync({ ...files, 'manifest.json': strToU8(JSON.stringify(data)) })
   const buffer = zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength)
-  return { arrayBuffer: async () => buffer } as File
+  return { size: buffer.byteLength, arrayBuffer: async () => buffer } as File
 }
 
 describe('favorite collection deletion', () => {
@@ -897,6 +897,13 @@ describe('data import', () => {
       tasks: [],
       showToast: vi.fn(),
     })
+  })
+
+  it('rejects an oversized backup before reading it into memory', async () => {
+    const file = { size: 600 * 1024 * 1024, arrayBuffer: vi.fn() } as unknown as File
+    expect(await importData(file)).toBe(false)
+    expect(file.arrayBuffer).not.toHaveBeenCalled()
+    expect(useStore.getState().showToast).toHaveBeenCalledWith(expect.stringContaining('不能超过'), 'error')
   })
 
   it('rejects missing files without changing existing tasks, images or settings', async () => {

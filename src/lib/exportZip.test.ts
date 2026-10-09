@@ -2,9 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 
 import type { AppSettings, StoredImage, StoredImageThumbnail, TaskParams, TaskRecord } from '../types'
-import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './exportZip'
+import { buildExportZip, readExportZip, readExportZipFileAsDataUrl, unzipWithLimits } from './exportZip'
 
 describe('exportZip', () => {
+  it('rejects oversized entries before inflating and skips unexpected files', () => {
+    const manifest = strToU8(JSON.stringify({ version: 3, exportedAt: new Date().toISOString(), tasks: [] }))
+    // 高压缩比的"压缩炸弹"：压缩后很小，声明的解压体积很大
+    const bomb = zipSync({ 'manifest.json': manifest, 'images/big.png': new Uint8Array(2 * 1024 * 1024) })
+    expect(bomb.length).toBeLessThan(64 * 1024)
+    const opts = { maxEntry: 1024 * 1024, maxTotal: 4 * 1024 * 1024, allow: (name: string) => name === 'manifest.json' || name.startsWith('images/') }
+    expect(() => unzipWithLimits(bomb, opts)).toThrow('解压后的备份过大')
+    const many = zipSync({ 'manifest.json': manifest, 'images/a.png': new Uint8Array(900 * 1024), 'images/b.png': new Uint8Array(900 * 1024), 'images/c.png': new Uint8Array(900 * 1024), 'images/d.png': new Uint8Array(900 * 1024), 'images/e.png': new Uint8Array(900 * 1024) })
+    expect(() => unzipWithLimits(many, opts)).toThrow('解压后的备份过大')
+    const extra = zipSync({ 'manifest.json': manifest, 'other/huge.bin': new Uint8Array(8 * 1024 * 1024), '../escape.png': new Uint8Array(1) })
+    expect(Object.keys(unzipWithLimits(extra, opts))).toEqual(['manifest.json'])
+    expect(Object.keys(readExportZip(extra).files)).toEqual(['manifest.json'])
+  })
+
   it('rejects malformed, unsupported, or incomplete backups before import', () => {
     const base = { version: 3, exportedAt: new Date().toISOString(), tasks: [], imageFiles: {} }
     for (const data of [null, { ...base, version: 99 }, { ...base, tasks: {} }, { ...base, tasks: [{ id: 'broken' }] }, { ...base, imageFiles: { missing: { path: 'images/missing.png' } } }]) {
