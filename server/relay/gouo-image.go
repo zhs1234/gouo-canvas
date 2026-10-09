@@ -100,6 +100,17 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		}
 		return nil
 	}
+	// 表单字段重复时，校验和计费用的是第一个值，转发给上游的却是全部值（上游常取最后一个），可绕过输出数量上限等检查
+	if form := c.Request.MultipartForm; form != nil {
+		for _, values := range form.Value {
+			if len(values) > 1 {
+				return common.StringErrorWrapperLocal("请求参数重复", "duplicate_form_field", http.StatusBadRequest)
+			}
+		}
+		if len(form.File["mask"]) > 1 {
+			return common.StringErrorWrapperLocal("请求参数重复", "duplicate_form_field", http.StatusBadRequest)
+		}
+	}
 	if id := c.GetHeader("X-Gouo-Request-Id"); id != "" && !gouoImageRequestID.MatchString(id) {
 		return common.StringErrorWrapperLocal("图片请求 ID 无效", "invalid_image_request_id", http.StatusBadRequest)
 	}
