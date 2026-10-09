@@ -101,8 +101,30 @@ export function buildExportZip(params: BuildExportZipParams) {
   }
 }
 
+// 全量备份上限：导入在主线程一次性读入内存，超限的文件在分配大块内存前就拒绝
+export const MAX_BACKUP_FILE_BYTES = 512 * 1024 * 1024
+const MAX_BACKUP_ENTRY_BYTES = 100 * 1024 * 1024
+const MAX_BACKUP_TOTAL_BYTES = 1024 * 1024 * 1024
+
+// 按 ZIP 目录里声明的解压体积限制单项和累计大小；fflate 按声明体积分配输出，声明不实也不会多占内存。
+export function unzipWithLimits(bytes: Uint8Array, limits: { maxEntry: number; maxTotal: number; allow: (name: string) => boolean }) {
+  let total = 0
+  return unzipSync(bytes, {
+    filter: (entry) => {
+      if (!limits.allow(entry.name)) return false
+      total += entry.originalSize
+      if (entry.originalSize > limits.maxEntry || total > limits.maxTotal) throw new Error('解压后的备份过大')
+      return true
+    },
+  })
+}
+
 export function readExportZip(bytes: Uint8Array): ExportZipContents {
-  const files = unzipSync(bytes)
+  const files = unzipWithLimits(bytes, {
+    maxEntry: MAX_BACKUP_ENTRY_BYTES,
+    maxTotal: MAX_BACKUP_TOTAL_BYTES,
+    allow: (name) => name === 'manifest.json' || name.startsWith('images/') || name.startsWith('thumbnails/'),
+  })
   const manifestBytes = files['manifest.json']
   if (!manifestBytes) throw new Error('ZIP 中缺少 manifest.json')
 

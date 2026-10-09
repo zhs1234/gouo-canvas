@@ -41,7 +41,7 @@ describe('Agent tool boundary', () => {
 
   it('sends image work through the shared task service with a stable request ID', async () => {
     expect(await run('create_image_task', { prompt: '海报', inputImageIds: ['reference'], params: { n: 1 } })).toMatchObject({ taskIds: ['task'] })
-    expect(mocks.submit).toHaveBeenCalledWith({ prompt: '海报', inputImageIds: ['reference'], params: { n: 1 }, source: { kind: 'agent', conversationId: 'conversation', projectId: 'canvas' }, requestId: 'agent:conversation:call_1' })
+    expect(mocks.submit).toHaveBeenCalledWith({ prompt: '海报', inputImageIds: ['reference'], params: { n: 1 }, source: { kind: 'agent', conversationId: 'conversation', projectId: 'canvas' }, requestId: 'agent:conversation:call_1', signal: expect.any(AbortSignal) })
   })
 
   it.each([undefined, false, true])('ends after image submission only when explicitly requested (%s)', async (finishAfterSubmit) => {

@@ -178,7 +178,7 @@ export async function executeAgentTool(input: {
     if (values.quality !== undefined && !['auto', 'low', 'medium', 'high'].includes(values.quality as string)) throw new Error('图片质量无效')
     if (values.n !== undefined && (!Number.isInteger(values.n) || (values.n as number) < 1 || (values.n as number) > 10)) throw new Error('图片数量无效')
     if (values.output_format !== undefined && !['png', 'jpeg', 'webp'].includes(values.output_format as string)) throw new Error('图片格式无效')
-    const taskId = await submitImageTask({ prompt: args.prompt, params: values as Partial<TaskParams>, inputImageIds: refs, source: { kind: 'agent', conversationId: conversation.id, projectId: conversation.projectId }, requestId: getAgentRequestId(conversation.id, input.callId) })
+    const taskId = await submitImageTask({ prompt: args.prompt, params: values as Partial<TaskParams>, inputImageIds: refs, source: { kind: 'agent', conversationId: conversation.id, projectId: conversation.projectId }, requestId: getAgentRequestId(conversation.id, input.callId), signal: input.signal })
     const task = useAppStore.getState().tasks.find((entry) => entry.id === taskId)
     return { result: JSON.stringify({ ...(task ? getAgentTaskResult(task) : { taskId, status: 'running' }), message: '图片已提交，后台继续生成；请勿重复提交。' }), taskIds: [taskId], referenceImageIds: task?.outputImages, finishAfterSubmit: args.finishAfterSubmit === true && task?.status !== 'error' && !task?.outputErrors?.length }
   }

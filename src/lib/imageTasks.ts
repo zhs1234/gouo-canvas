@@ -21,6 +21,8 @@ export interface ImageTaskInput {
   allowFullMask?: boolean
   source: NonNullable<TaskRecord['source']>
   requestId?: string
+  // 调用方已取消（如 Agent 点了停止）时，在任务落库并派发前放弃
+  signal?: AbortSignal
 }
 
 type SubmitOptions = { allowFullMask?: boolean; useCurrentApiProfileWhenReusedMissing?: boolean }
@@ -205,6 +207,8 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
     }
 
     if (!isStorageScopeCurrent()) throw new Error('账号已切换，请刷新页面')
+    // 等待报价、读取和保存图片期间可能已被取消；落库后任务会派发并计费，不能再中断
+    input?.signal?.throwIfAborted()
     await putTask(task)
     useStore.getState().setTasks([task, ...useStore.getState().tasks])
     useStore.getState().showToast('任务已提交，可在「我的作品」查看进度', 'success')

@@ -460,7 +460,8 @@ export function normalizeApiProfile(input: unknown, fallback?: Partial<ApiProfil
     name: typeof record.name === 'string' && record.name.trim() ? record.name : defaults.name,
     provider,
     baseUrl: provider === 'fal' ? rawBaseUrl.trim().replace(/\/+$/, '') || DEFAULT_FAL_BASE_URL : rawBaseUrl,
-    apiKey: typeof record.apiKey === 'string' ? record.apiKey : defaults.apiKey,
+    // 部署默认的 Key 只能用于默认服务地址，导入的其他地址不能继承
+    apiKey: typeof record.apiKey === 'string' ? record.apiKey : rawBaseUrl.trim().replace(/\/+$/, '') === defaults.baseUrl.replace(/\/+$/, '') ? defaults.apiKey : '',
     model: typeof record.model === 'string' && record.model.trim() ? record.model : defaults.model,
     timeout: typeof record.timeout === 'number' && Number.isFinite(record.timeout) ? record.timeout : defaults.timeout,
     apiMode,

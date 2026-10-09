@@ -1,8 +1,9 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { strFromU8, strToU8, zipSync } from 'fflate'
 import { ensureImageCached } from '../../store'
 import { markCanvasPersisted, useCanvasStore } from '../../stores/canvasStore'
 import { bytesToDataUrl, dataUrlToBytes } from '../dataUrl'
 import { hashDataUrl, importTaskData } from '../db'
+import { unzipWithLimits } from '../exportZip'
 import type { StoredImage } from '../../types'
 import { isRecord, referencedCanvasImageIds, serializeCanvasProject, validateCanvasProject } from './document'
 import type { CanvasNodeData, CanvasProject } from './types'
@@ -54,13 +55,10 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], name: string) {
 
 export async function importCanvasArchive(file: File): Promise<CanvasProject[]> {
   if (file.size > 100 * 1024 * 1024) throw new Error('画布备份不能超过 100 MB')
-  let total = 0
-  const files = unzipSync(new Uint8Array(await file.arrayBuffer()), {
-    filter: (entry) => {
-      total += entry.originalSize
-      if (entry.originalSize > 100 * 1024 * 1024 || total > 300 * 1024 * 1024) throw new Error('解压后的备份过大')
-      return entry.name === 'manifest.json' || /^images\/\d+\.(png|jpg|jpeg|webp|gif)$/.test(entry.name)
-    },
+  const files = unzipWithLimits(new Uint8Array(await file.arrayBuffer()), {
+    maxEntry: 100 * 1024 * 1024,
+    maxTotal: 300 * 1024 * 1024,
+    allow: (name) => name === 'manifest.json' || /^images\/\d+\.(png|jpg|jpeg|webp|gif)$/.test(name),
   })
   if (!files['manifest.json']) throw new Error('不是光构画布备份')
   const value: unknown = JSON.parse(strFromU8(files['manifest.json']))
