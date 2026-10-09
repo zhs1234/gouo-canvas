@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"one-api/model"
 	"one-api/payment/types"
@@ -33,26 +32,31 @@ type WeChatConfig struct {
 	PayType                    PayType `json:"pay_type"`
 }
 
-var client *core.Client
-
 func (w *WeChatPay) Name() string {
 	return "微信支付"
 }
 
-func (w *WeChatPay) InitClient(config *WeChatConfig) error {
-	// 使用 utils 提供的函数从本地文件中加载商户私钥，商户私钥会用来生成请求的签名
+// newClient 每次按当前网关配置创建 client，避免进程内缓存的首个商户配置被后续订单串用
+func newClient(config *WeChatConfig) (*core.Client, error) {
 	mchPrivateKey, err := utils.LoadPrivateKey(config.MchPrivateKey)
 	if err != nil {
-		log.Fatal("load merchant private key error")
-		return err
+		return nil, fmt.Errorf("load merchant private key error: %w", err)
 	}
-	ctx := context.Background()
 	// 使用商户私钥等初始化 client，并使它具有自动定时获取微信支付平台证书的能力
-	opts := []core.ClientOption{
-		option.WithWechatPayAutoAuthCipher(config.MchID, config.MchCertificateSerialNumber, mchPrivateKey, config.MchAPIv3Key),
+	return core.NewClient(context.Background(), option.WithWechatPayAutoAuthCipher(config.MchID, config.MchCertificateSerialNumber, mchPrivateKey, config.MchAPIv3Key))
+}
+
+// ensureCertificateDownloader 保证回调验签所需的平台证书已注册；进程重启后可能先收到回调、尚未下过单
+func ensureCertificateDownloader(config *WeChatConfig) error {
+	mgr := downloader.MgrInstance()
+	if mgr.HasDownloader(context.Background(), config.MchID) {
+		return nil
 	}
-	client, err = core.NewClient(ctx, opts...)
-	return err
+	mchPrivateKey, err := utils.LoadPrivateKey(config.MchPrivateKey)
+	if err != nil {
+		return fmt.Errorf("load merchant private key error: %w", err)
+	}
+	return mgr.RegisterDownloaderWithPrivateKey(context.Background(), mchPrivateKey, config.MchCertificateSerialNumber, config.MchID, config.MchAPIv3Key)
 }
 
 func (w *WeChatPay) Pay(config *types.PayConfig, gatewayConfig string) (*types.PayRequest, error) {
@@ -61,17 +65,15 @@ func (w *WeChatPay) Pay(config *types.PayConfig, gatewayConfig string) (*types.P
 		return nil, err
 	}
 
-	if client == nil {
-		err := w.InitClient(wechatConfig)
-		if err != nil {
-			return nil, err
-		}
+	client, err := newClient(wechatConfig)
+	if err != nil {
+		return nil, err
 	}
 	switch wechatConfig.PayType {
 	case Native:
-		return w.handleNativePay(config, wechatConfig)
+		return w.handleNativePay(client, config, wechatConfig)
 	default:
-		return w.handleNativePay(config, wechatConfig)
+		return w.handleNativePay(client, config, wechatConfig)
 	}
 }
 
@@ -85,6 +87,13 @@ func (w *WeChatPay) HandleCallback(c *gin.Context, gatewayConfig string) (*types
 			Message: err.Error(),
 		})
 		return nil, fmt.Errorf("WeChat params failed: %v", err)
+	}
+	if err := ensureCertificateDownloader(wxpayConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, NotifyResponse{
+			Code:    "FAIL",
+			Message: err.Error(),
+		})
+		return nil, fmt.Errorf("WeChat certificate init failed: %v", err)
 	}
 	certificateVisitor := downloader.MgrInstance().GetCertificateVisitor(wxpayConfig.MchID)
 	handler := notify.NewNotifyHandler(wxpayConfig.MchAPIv3Key, verifiers.NewSHA256WithRSAVerifier(certificateVisitor))

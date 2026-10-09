@@ -20,21 +20,22 @@ type AlipayConfig struct {
 	PayType    PayType `json:"pay_type"`
 }
 
-var client *alipay.Client
-
 const isProduction bool = true
 
 func (a *Alipay) Name() string {
 	return "支付宝"
 }
 
-func (a *Alipay) InitClient(config *AlipayConfig) error {
-	var err error
-	client, err = alipay.New(config.AppID, config.PrivateKey, isProduction)
+// newClient 每次按当前网关配置创建 client，避免进程内缓存的首个商户配置被后续订单串用
+func newClient(config *AlipayConfig) (*alipay.Client, error) {
+	client, err := alipay.New(config.AppID, config.PrivateKey, isProduction)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return client.LoadAliPayPublicKey(config.PublicKey)
+	if err := client.LoadAliPayPublicKey(config.PublicKey); err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func (a *Alipay) Pay(config *types.PayConfig, gatewayConfig string) (*types.PayRequest, error) {
@@ -43,20 +44,18 @@ func (a *Alipay) Pay(config *types.PayConfig, gatewayConfig string) (*types.PayR
 		return nil, err
 	}
 
-	if client == nil {
-		err := a.InitClient(alipayConfig)
-		if err != nil {
-			return nil, err
-		}
+	client, err := newClient(alipayConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	switch alipayConfig.PayType {
 	case PagePay:
-		return a.handlePagePay(config)
+		return a.handlePagePay(client, config)
 	case WapPay:
-		return a.handleWapPay(config)
+		return a.handleWapPay(client, config)
 	default:
-		return a.handleTradePreCreate(config)
+		return a.handleTradePreCreate(client, config)
 	}
 }
 
@@ -66,11 +65,8 @@ func (a *Alipay) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 		return nil, err
 	}
 	// 回调可能发生在重启后，且必须使用当前网关的公钥。
-	callbackClient, err := alipay.New(config.AppID, config.PrivateKey, isProduction)
+	callbackClient, err := newClient(config)
 	if err != nil {
-		return nil, err
-	}
-	if err := callbackClient.LoadAliPayPublicKey(config.PublicKey); err != nil {
 		return nil, err
 	}
 	// 获取通知参数
