@@ -59,6 +59,8 @@ SESSION_COOKIE_SAME_SITE=none
 
 Origins must be exact `http(s)://host[:port]` values, comma-separated, without trailing slashes, paths, or wildcards. Invalid settings prevent startup; `none` requires both Secure and an origin allowlist. The reverse proxy must overwrite and correctly forward `Host` and `X-Forwarded-Proto`, with HTTPS at the browser entry point. Account API credentials are allowed only for listed origins. Cross-site requests without Origin are rejected; in `none` mode, session-bearing requests without Origin also require `Sec-Fetch-Site: same-origin`. Only existing GitHub/Lark/OIDC GET callbacks, which validate session state, are exempt. Browsers that block third-party cookies still require a same-origin proxy. Compose passes these three variables; YAML uses their lowercase equivalents.
 
+The backend rate-limits sign-in, registration and verification emails by client IP and supports per-token IP allowlists. It reads the client IP from `X-Forwarded-For` only for requests coming from `TRUSTED_PROXIES` (`trusted_proxies` in YAML). The default covers loopback and private networks, which fits Nginx on the same host or container network. If the reverse proxy runs at another public address, add its address or CIDR (comma-separated). If the backend faces the internet directly, set it to empty. Behind a platform such as Cloudflare, use `trusted_header` (for example `CF-Connecting-IP`) instead.
+
 ## 3. Initial admin setup
 
 The backend exposes the admin UI at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure.
