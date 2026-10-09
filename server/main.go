@@ -124,6 +124,9 @@ func initHttpServer() {
 	server.Use(middleware.RequestId())
 	middleware.SetUpLogger(server)
 
+	if err := middleware.SetTrustedProxies(server); err != nil {
+		logger.FatalLog("invalid trusted_proxies: " + err.Error())
+	}
 	trustedHeader := viper.GetString("trusted_header")
 	if trustedHeader != "" {
 		server.TrustedPlatform = trustedHeader

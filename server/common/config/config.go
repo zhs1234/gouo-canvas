@@ -37,6 +37,7 @@ func setEnv() {
 
 func defaultConfig() {
 	viper.SetDefault("port", "3000")
+	viper.SetDefault("trusted_proxies", []string{"127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"})
 	viper.SetDefault("gin_mode", "release")
 	viper.SetDefault("log_dir", "./logs")
 	viper.SetDefault("sqlite_path", "one-api.db")

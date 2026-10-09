@@ -59,6 +59,8 @@ SESSION_COOKIE_SAME_SITE=none
 
 来源必须是精确的 `http(s)://主机[:端口]`，多个以逗号分隔，不带末尾斜杠、路径或通配符；错误配置会阻止启动。`none` 必须同时启用 Secure 和来源名单。反向代理应覆盖并正确传递 `Host`、`X-Forwarded-Proto`，且 HTTPS 必须贯穿浏览器入口。账号 API 的跨域凭据仅授予名单中的来源；无 Origin 的跨站请求会被拒绝，`none` 模式下携带会话的无 Origin 请求必须有 `Sec-Fetch-Site: same-origin`，只有已有 state 校验的 GitHub/Lark/OIDC GET 回调例外。浏览器禁用第三方 Cookie 时仍应改用同域代理。Compose 已传递这三个环境变量，YAML 对应小写同名配置。
 
+后端按来源 IP 做登录、注册、验证码等限流，并支持令牌 IP 白名单。只有来自 `TRUSTED_PROXIES`（YAML 为 `trusted_proxies`）所列地址的请求才会读取 `X-Forwarded-For` 中的客户端 IP；默认是本机和私有网段，适用于同机或同一容器网络中的 Nginx。反向代理在其他公网地址时，把它的地址或网段加入名单（多个以逗号分隔）；后端直接对公网提供服务时设为空。经 Cloudflare 等平台访问时，可改用 `trusted_header`（如 `CF-Connecting-IP`）。
+
 ## 3. 首次管理后台配置
 
 管理后台由后端提供，默认地址为 `http://127.0.0.1:3000/panel`。空数据库首次启动会创建 `root` / `123456`，必须在开放网络访问前修改。

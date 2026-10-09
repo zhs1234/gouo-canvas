@@ -7,6 +7,9 @@ import type { TaskParams } from '../../types'
 import type { AgentConversation, AgentToolDefinition } from './types'
 import { getAgentRequestId, getAgentTaskResult } from './taskRecovery'
 
+// 单条用户消息内 Agent 无需确认即可提交的图片张数；超出时弹窗由用户确认，避免模型连续提交付费任务
+const AGENT_IMAGES_PER_MESSAGE = 4
+
 export const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference'] as const
 
 export const agentToolDefinitions: AgentToolDefinition[] = [
@@ -30,7 +33,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     type: 'function',
     function: {
       name: 'create_image_task',
-      description: '按用户要求创建图片任务，使用用户当前选择的图片模型和显示的价格，会产生图片费用。仅用户明确要求生成或修改图片时调用；不要因为聊天、规划或工具错误擅自生成。返回 taskId。每个请求只提交一次，查询状态不会重复扣费。inputImageIds 只能来自用户附件、画布或本会话生成图片。本次提交后全部任务已安排、且无需继续规划或操作画布时，设置 finishAfterSubmit:true，提交成功后直接回执并结束本轮，不再请求模型确认；它不表示图片已生成完成。有后续任务或画布操作时保持 false。',
+      description: '按用户要求创建图片任务，使用用户当前选择的图片模型和显示的价格，会产生图片费用。仅用户明确要求生成或修改图片时调用；不要因为聊天、规划或工具错误擅自生成。单条用户消息内合计超过 4 张图片（各任务 n 之和）时，系统会先请用户确认；用户取消时不要重复提交。返回 taskId。每个请求只提交一次，查询状态不会重复扣费。inputImageIds 只能来自用户附件、画布或本会话生成图片。本次提交后全部任务已安排、且无需继续规划或操作画布时，设置 finishAfterSubmit:true，提交成功后直接回执并结束本轮，不再请求模型确认；它不表示图片已生成完成。有后续任务或画布操作时保持 false。',
       parameters: {
         type: 'object', properties: {
           prompt: { type: 'string', minLength: 1, maxLength: 20000 },
@@ -178,6 +181,43 @@ export async function executeAgentTool(input: {
     if (values.quality !== undefined && !['auto', 'low', 'medium', 'high'].includes(values.quality as string)) throw new Error('图片质量无效')
     if (values.n !== undefined && (!Number.isInteger(values.n) || (values.n as number) < 1 || (values.n as number) > 10)) throw new Error('图片数量无效')
     if (values.output_format !== undefined && !['png', 'jpeg', 'webp'].includes(values.output_format as string)) throw new Error('图片格式无效')
+    // 从最近一条用户消息起累计已提交的张数
+    const start = conversation.messages.map((message) => message.role).lastIndexOf('user')
+    const submitted = conversation.messages.slice(start + 1).flatMap((message) => message.toolCalls ?? [])
+      .filter((call) => call.name === 'create_image_task' && call.status === 'done' && call.id !== input.callId)
+      .reduce((sum, call) => {
+        try {
+          return sum + (Number(JSON.parse(call.arguments)?.params?.n) || 1)
+        } catch {
+          return sum + 1
+        }
+      }, 0)
+    const requested = (values.n as number | undefined) ?? 1
+    if (submitted + requested > AGENT_IMAGES_PER_MESSAGE) {
+      // 停止运行或取消确认时都不提交
+      const confirmed = await new Promise<boolean>((resolve) => {
+        const finish = (ok: boolean) => {
+          input.signal.removeEventListener('abort', onAbort)
+          resolve(ok)
+        }
+        const dialog = {
+          title: '确认继续生成图片？',
+          message: `Agent 在本条消息中已提交 ${submitted} 张图片，现在要再生成 ${requested} 张，每张按所选图片模型的价格计费。`,
+          confirmText: '继续生成',
+          tone: 'warning' as const,
+          action: () => finish(true),
+          cancelAction: () => finish(false),
+        }
+        const onAbort = () => {
+          if (useAppStore.getState().confirmDialog === dialog) useAppStore.getState().setConfirmDialog(null)
+          finish(false)
+        }
+        input.signal.addEventListener('abort', onAbort)
+        useAppStore.getState().setConfirmDialog(dialog)
+      })
+      input.signal.throwIfAborted()
+      if (!confirmed) throw new Error('用户没有确认继续生成更多图片，本次未提交。')
+    }
     const taskId = await submitImageTask({ prompt: args.prompt, params: values as Partial<TaskParams>, inputImageIds: refs, source: { kind: 'agent', conversationId: conversation.id, projectId: conversation.projectId }, requestId: getAgentRequestId(conversation.id, input.callId), signal: input.signal })
     const task = useAppStore.getState().tasks.find((entry) => entry.id === taskId)
     return { result: JSON.stringify({ ...(task ? getAgentTaskResult(task) : { taskId, status: 'running' }), message: '图片已提交，后台继续生成；请勿重复提交。' }), taskIds: [taskId], referenceImageIds: task?.outputImages, finishAfterSubmit: args.finishAfterSubmit === true && task?.status !== 'error' && !task?.outputErrors?.length }
