@@ -129,6 +129,33 @@ describe('server library', () => {
     expect(meta.get('tasks:seen')).toBe(12)
   })
 
+  it('downloads all server works again after local tasks are cleared', async () => {
+    pages.visible = [cloudTask()]
+    const library = await import('./serverLibrary')
+    await library.startServerLibrary()
+    expect(state.tasks.map((task) => task.id)).toEqual(['task-1'])
+    // 本地清空任务：游标仍停在已见过的位置时，刷新拿不回旧作品
+    state.setTasks([])
+    await library.resetServerTaskCursors()
+    await library.refreshServerLibrary()
+    expect(state.tasks.map((task) => task.id)).toEqual(['task-1'])
+  })
+
+  it('does not recreate a collection that was purged on the server after it had been synced', async () => {
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.listCloudCollections).mockResolvedValueOnce([{ id: 'old-album', name: '旧', created_at: 1, updated_at: 1, hidden_at: 0 }] as never)
+    const library = await import('./serverLibrary')
+    await library.startServerLibrary()
+    // 之后在其他设备删除并被彻底清除；本设备还留着它，另有一个刚在本地新建、尚未上传的收藏夹
+    vi.mocked(backend.putCloudCollection).mockRejectedValue(new Error('offline'))
+    state.setFavoriteCollections([{ id: 'old-album', name: '旧', createdAt: 1, updatedAt: 1 }, { id: 'new-album', name: '新', createdAt: 2, updatedAt: 2 }])
+    vi.mocked(backend.putCloudCollection).mockReset().mockResolvedValue(undefined as never)
+    await library.refreshServerLibrary()
+    expect(backend.putCloudCollection).toHaveBeenCalledWith('new-album', '新')
+    expect(backend.putCloudCollection).not.toHaveBeenCalledWith('old-album', expect.anything())
+    expect(state.favoriteCollections.map((item) => item.id)).toEqual(['new-album'])
+  })
+
   it('writes favorite changes directly but not when applying server data', async () => {
     pages.visible = [cloudTask({ favorite_collection_ids: ['album'] })]
     const backend = await import('./gouoBackend')

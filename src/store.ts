@@ -36,6 +36,7 @@ import {
   storeImage,
   storeImageWithSize,
 } from './lib/db'
+import { addTaskReferencedImageIds } from './lib/taskImages'
 import { callImageApi } from './lib/api'
 import { showBrowserNotification } from './lib/browserNotification'
 import { IMAGE_FETCH_CORS_HINT } from './lib/imageApiShared'
@@ -83,6 +84,8 @@ const taskExecutions = new Map<string, symbol>()
 const OPENAI_INTERRUPTED_ERROR = '请求中断'
 // 执行中的任务持有的 Web Locks 名称前缀，供其他标签页判断任务仍在执行
 const TASK_LOCK_PREFIX = 'gouo-task:'
+// 每个打开的标签页持有它的共享锁，用来判断是否还有其他标签页
+const TAB_LOCK = 'gouo-tab'
 const ERROR_TOAST_MAX_LENGTH = 80
 type ToastType = 'info' | 'success' | 'error'
 
@@ -990,6 +993,24 @@ export const useStore = create<AppState>()(
   ),
 )
 
+// 其他标签页改了收藏夹时同步到本页，否则本页下次持久化会用旧列表整块覆盖。
+// 只同步收藏夹：设置和输入框各页独立，平台模式的令牌也不在持久化数据里。
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== getLoadedStorageName() || !event.newValue) return
+    try {
+      const persisted = JSON.parse(event.newValue)?.state
+      const collections = normalizeFavoriteCollections(persisted?.favoriteCollections)
+      const state = useStore.getState()
+      // 内容相同时不写回，避免两个标签页来回触发
+      if (!collections.length || JSON.stringify(collections) === JSON.stringify(state.favoriteCollections)) return
+      useStore.setState({ favoriteCollections: collections, defaultFavoriteCollectionId: resolveDefaultFavoriteCollectionId(collections, persisted.defaultFavoriteCollectionId) })
+    } catch (err) {
+      console.warn('同步其他标签页的收藏夹失败', err)
+    }
+  })
+}
+
 // ===== Actions =====
 
 function putTask(task: TaskRecord): Promise<IDBValidKey> {
@@ -1439,7 +1460,15 @@ export async function initStore() {
 
   const imageIds = await getAllImageIds()
   const referencedImageIds = imageIds.filter((id) => referencedIds.has(id))
-  await deleteImages(imageIds.filter((id) => !referencedIds.has(id)))
+  const orphanIds = imageIds.filter((id) => !referencedIds.has(id))
+  // 其他标签页的撤销历史、未保存编辑等引用不在库里，有其他标签页打开时跳过启动清理；本页之后一直持有共享锁
+  if (!locks) await deleteImages(orphanIds)
+  else {
+    await locks.request(TAB_LOCK, { ifAvailable: true }, async (lock) => {
+      if (lock) await deleteImages(orphanIds)
+    })
+    void locks.request(TAB_LOCK, { mode: 'shared' }, () => new Promise<void>(() => {}))
+  }
   scheduleThumbnailBackfill(referencedImageIds)
 
   const restoredInputImages: InputImage[] = []
@@ -1466,17 +1495,6 @@ export async function initStore() {
 
 /** 提交新任务 */
 export { submitTask } from './lib/imageTasks'
-
-function addTaskReferencedImageIds(target: Set<string>, task: TaskRecord) {
-  for (const id of task.inputImageIds || []) target.add(id)
-  if (task.maskTargetImageId) target.add(task.maskTargetImageId)
-  if (task.maskImageId) target.add(task.maskImageId)
-  for (const id of task.outputImages || []) target.add(id)
-  for (const id of task.transparentOriginalImages || []) {
-    if (id) target.add(id)
-  }
-  for (const id of task.streamPartialImageIds || []) target.add(id)
-}
 
 async function storeTaskOutputImages(task: TaskRecord, images: string[]) {
   const outputIds: string[] = []
@@ -1535,9 +1553,10 @@ async function deleteUnreferencedImageIds(imageIds: Iterable<string>) {
   for (const task of tasks) addTaskReferencedImageIds(stillUsed, task)
   for (const img of inputImages) stillUsed.add(img.id)
 
-  for (const imgId of candidates) {
-    if (stillUsed.has(imgId)) continue
-    await deleteImage(imgId)
+  // 一次删除，库里的引用只扫描一次
+  const orphanIds = candidates.filter((id) => !stillUsed.has(id))
+  await deleteImages(orphanIds)
+  for (const imgId of orphanIds) {
     imageCache.delete(imgId)
     thumbnailCache.delete(imgId)
   }
@@ -2225,13 +2244,12 @@ export async function removeMultipleTasks(taskIds: string[]) {
   }
   for (const img of inputImages) stillUsed.add(img.id)
 
-  // 删除孤立图片
-  for (const imgId of deletedImageIds) {
-    if (!stillUsed.has(imgId)) {
-      await deleteImage(imgId)
-      imageCache.delete(imgId)
-      thumbnailCache.delete(imgId)
-    }
+  // 删除孤立图片，一次删除只扫描一次库里的引用
+  const orphanIds = [...deletedImageIds].filter((id) => !stillUsed.has(id))
+  await deleteImages(orphanIds)
+  for (const imgId of orphanIds) {
+    imageCache.delete(imgId)
+    thumbnailCache.delete(imgId)
   }
 
   // 如果删除的任务在选中列表中，则移除
@@ -2285,10 +2303,10 @@ export async function purgeLocalTasks(taskIds: string[]) {
   for (const t of remaining) addTaskReferencedImageIds(stillUsed, t)
   for (const img of inputImages) stillUsed.add(img.id)
 
-  // 删除孤立图片；画布和会话仍引用的图片由 deleteImage 保留
-  for (const imgId of taskImageIds) {
-    if (stillUsed.has(imgId)) continue
-    await deleteImage(imgId)
+  // 删除孤立图片；画布、会话和库里其他任务仍引用的图片由 deleteImages 保留
+  const orphanIds = [...taskImageIds].filter((id) => !stillUsed.has(id))
+  await deleteImages(orphanIds)
+  for (const imgId of orphanIds) {
     imageCache.delete(imgId)
     thumbnailCache.delete(imgId)
   }
@@ -2323,6 +2341,11 @@ export async function clearData(options: ClearOptions = { clearConfig: true, cle
     thumbnailCache.clear()
     thumbnailBackfillIds.clear()
     setTasks([])
+    if (isBackendAuthEnabled()) {
+      const { refreshServerLibrary, resetServerTaskCursors } = await import('./lib/serverLibrary')
+      await resetServerTaskCursors()
+      void refreshServerLibrary()
+    }
     useStore.setState({ supportPromptOpen: false, supportPromptSkippedForImportedData: false })
     clearInputImages()
     clearMaskDraft()

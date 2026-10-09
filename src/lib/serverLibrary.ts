@@ -242,15 +242,23 @@ async function loadCollections() {
   const remote = await listCloudCollections()
   const remoteIds = new Set(remote.map((item) => item.id))
   const visible: FavoriteCollection[] = remote.filter((item) => !item.hidden_at).map((item) => ({ id: item.id, name: item.name, createdAt: item.created_at, updatedAt: item.updated_at }))
-  // 只在本地创建、尚未写到服务端的收藏夹补交上去。
-  const localOnly = useStore.getState().favoriteCollections.filter((item) => !remoteIds.has(item.id))
+  // 只在本地创建、尚未写到服务端的收藏夹补交上去；上次同步时服务端有、现在没有的，是在其他设备删除后已被彻底清除，不能重新创建
+  const synced = new Set(await getCloudMeta<string[]>('collections:seen') || [])
+  const localOnly = useStore.getState().favoriteCollections.filter((item) => !remoteIds.has(item.id) && !synced.has(item.id))
   for (const item of localOnly) await putCloudCollection(item.id, item.name)
+  await putCloudMeta('collections:seen', [...remoteIds, ...localOnly.map((item) => item.id)])
   applyingServer = true
   try {
     useStore.getState().setFavoriteCollections([...visible, ...localOnly])
   } finally {
     applyingServer = false
   }
+}
+
+// 本地清空任务后从头拉取云端作品，否则游标停在已见过的位置，旧作品不会再下载
+export async function resetServerTaskCursors() {
+  await putCloudMeta('tasks:seen', 0)
+  await putCloudMeta('tasks:hidden:seen', 0)
 }
 
 export function refreshServerLibrary() {

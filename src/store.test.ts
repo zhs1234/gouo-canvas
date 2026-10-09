@@ -760,13 +760,35 @@ describe('mask draft lifecycle in store actions', () => {
   })
 })
 
+describe('multi-tab favorite collections', () => {
+  it('takes favorite collections written by another tab so this tab does not overwrite them', async () => {
+    vi.resetModules()
+    vi.stubGlobal('window', new EventTarget())
+    try {
+      const { useStore: fresh } = await import('./store')
+      const { getLoadedStorageName } = await import('./lib/storageScope')
+      const collections = [{ id: 'default', name: '默认收藏', createdAt: 1, updatedAt: 1 }, { id: 'other-tab', name: '另一页新建', createdAt: 2, updatedAt: 2 }]
+      const event = Object.assign(new Event('storage'), { key: getLoadedStorageName(), newValue: JSON.stringify({ state: { favoriteCollections: collections, defaultFavoriteCollectionId: 'other-tab' }, version: 2 }) })
+      window.dispatchEvent(event)
+      expect(fresh.getState().favoriteCollections.map((item) => item.id)).toEqual(['default', 'other-tab'])
+      expect(fresh.getState().defaultFavoriteCollectionId).toBe('other-tab')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
 describe('interrupted OpenAI running tasks', () => {
   it('leaves tasks that another tab is still executing as running', async () => {
     await clearTasks()
     await putDbTask(task({ id: 'other-tab', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
     await putDbTask(task({ id: 'abandoned', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
     // 另一个标签页正在执行 other-tab，持有它的任务锁
-    vi.stubGlobal('navigator', { locks: { query: async () => ({ held: [{ name: 'gouo-task:other-tab' }] }) } })
+    vi.stubGlobal('navigator', { locks: {
+      query: async () => ({ held: [{ name: 'gouo-task:other-tab' }, { name: 'gouo-tab' }] }),
+      // 其他标签页持有共享的标签页锁：申请排他锁拿不到
+      request: async (...args: unknown[]) => (args[args.length - 1] as (lock: null) => unknown)(null),
+    } })
     try {
       await initStore()
     } finally {
