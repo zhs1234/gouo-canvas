@@ -1,0 +1,23 @@
+.inspiration-library-page { width: min(100%, 1600px); margin: 0 auto; padding: 12px 40px 70px; color: #eee; }
+.inspiration-library-page [hidden] { display: none !important; }
+.inspiration-page-header { margin-bottom: 30px; }
+.inspiration-page-header h1 { color: #f1f1f1; }
+.inspiration-page-header p { line-height: 1.75; }
+.inspiration-page-header input { background: #1c1c1c; border-color: #333; color: #eee; }
+.inspiration-page-header input:focus { background: #242424; }
+.inspiration-page-header button[aria-pressed="false"] { background: #222; color: #aaa; }
+.inspiration-page-header button[aria-pressed="false"]:hover { background: #303030; color: #ddd; }
+.inspiration-page-header button[aria-pressed="true"] { background: #e3e8e9; color: #161819; box-shadow: none; }
+.inspiration-library-page .inspiration-template-card { background: #1b1b1b; border-color: #2d2d2d; box-shadow: none; }
+.inspiration-library-page .inspiration-template-card:hover { border-color: #505050; }
+.inspiration-page-footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 30px; padding: 20px 0 0; border-top: 1px solid #2b2b2b; color: #777; font-size: 11px; }
+.inspiration-page-detail-content { max-width: 960px; padding-bottom: 24px; }
+.inspiration-page-detail-content > a > img { max-height: 440px; }
+.inspiration-page-back { display: inline-flex; align-items: center; gap: 7px; padding: 7px 0; margin: 0 0 23px; color: #aaa; font-size: 13px; }
+.inspiration-page-back:hover { color: white; }
+.inspiration-library-page button:focus-visible, .inspiration-library-page a:focus-visible { outline: 2px solid #4cbad3; outline-offset: 3px; }
+@media (max-width: 640px) {
+  .inspiration-library-page { padding: 24px 16px 32px; }
+  .inspiration-page-header { margin-bottom: 24px; }
+  .inspiration-page-footer { flex-wrap: wrap; }
+}

@@ -477,26 +477,26 @@ async function parseResponsesApiStreamResponse(
   }
 }
 
-export async function callOpenAICompatibleImageApi(opts: CallApiOptions, profile: ApiProfile, customProvider?: CustomProviderDefinition | null): Promise<CallApiResult> {
+export async function callOpenAICompatibleImageApi(opts: CallApiOptions, profile: ApiProfile, customProvider?: CustomProviderDefinition | null, productMode = false): Promise<CallApiResult> {
   if (customProvider) {
     return callCustomHttpImageApi(opts, profile, customProvider)
   }
 
   return profile.apiMode === 'responses'
     ? callResponsesImageApi(opts, profile)
-    : callImagesApi(opts, profile)
+    : callImagesApi(opts, profile, productMode)
 }
 
-async function callImagesApi(opts: CallApiOptions, profile: ApiProfile): Promise<CallApiResult> {
+async function callImagesApi(opts: CallApiOptions, profile: ApiProfile, productMode: boolean): Promise<CallApiResult> {
   const n = opts.params.n > 0 ? opts.params.n : 1
-  if ((profile.codexCli || (profile.streamImages && n > 1)) && n > 1) {
-    return callImagesApiConcurrent(opts, profile, n)
+  if ((productMode || profile.codexCli || profile.streamImages) && n > 1) {
+    return callImagesApiConcurrent(opts, profile, n, productMode)
   }
 
-  return callImagesApiSingle(opts, profile)
+  return callImagesApiSingle(opts, profile, productMode)
 }
 
-async function callImagesApiConcurrent(opts: CallApiOptions, profile: ApiProfile, n: number): Promise<CallApiResult> {
+async function callImagesApiConcurrent(opts: CallApiOptions, profile: ApiProfile, n: number, productMode: boolean): Promise<CallApiResult> {
   const singleOpts = {
     ...opts,
     params: {
@@ -508,10 +508,11 @@ async function callImagesApiConcurrent(opts: CallApiOptions, profile: ApiProfile
   const results = await Promise.allSettled(
     Array.from({ length: n }).map((_, requestIndex) => callImagesApiSingle({
       ...singleOpts,
+      requestId: opts.requestId ? `${opts.requestId}:${requestIndex}` : undefined,
       onPartialImage: opts.onPartialImage
         ? (partial) => opts.onPartialImage?.({ ...partial, requestIndex })
         : undefined,
-    }, profile)),
+    }, profile, productMode)),
   )
 
   const successfulResults = results
@@ -523,8 +524,9 @@ async function callImagesApiConcurrent(opts: CallApiOptions, profile: ApiProfile
 
   if (successfulResults.length === 0) {
     const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
-    if (firstError) throw firstError.reason
-    throw new Error('所有并发请求均失败')
+    const error = firstError?.reason instanceof Error ? firstError.reason : new Error(firstError ? getErrorMessage(firstError.reason) : '所有并发请求均失败')
+    const recovering = results.some((r) => r.status === 'rejected' && r.reason instanceof Error && 'imageResultRecovery' in r.reason)
+    throw Object.assign(error, { failedRequests, ...(recovering ? { imageResultRecovery: true } : {}) })
   }
 
   const images = successfulResults.flatMap((r) => r.images)
@@ -550,7 +552,51 @@ async function callImagesApiConcurrent(opts: CallApiOptions, profile: ApiProfile
   }
 }
 
-async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): Promise<CallApiResult> {
+async function recoverProductImageResult(opts: CallApiOptions, profile: ApiProfile, signal: AbortSignal): Promise<CallApiResult> {
+  const startedAt = Date.now()
+  const url = `${profile.baseUrl.replace(/\/v1\/?$/, '')}/api/gouo/image-results?client_request_id=${encodeURIComponent(opts.requestId!)}`
+  const mime = MIME_MAP[opts.params.output_format] || 'image/png'
+  try {
+    while (!signal.aborted) {
+      let response: Response
+      let payload: { success?: boolean; data?: { status?: string; recoverable?: boolean; result?: ImageApiResponse; reason?: string } }
+      try {
+        response = await fetch(url, { method: 'GET', credentials: 'include', cache: 'no-store', signal })
+        if ((response.status === 404 && Date.now() - startedAt < 10_000) || isRetryablePollingStatus(response.status)) {
+          await sleep(2_000, signal)
+          continue
+        }
+        if (response.status === 401 || response.status === 403) throw new Error('无法读取原图片请求结果，请重新登录后恢复作品；未重新生成')
+        if (response.status === 404) throw new Error('暂未找到原图片请求记录；未重新生成，请稍后在作品中恢复结果')
+        if (!response.ok) throw new Error(`读取原图片请求结果失败（状态码 ${response.status}）；未重新生成`)
+        payload = await response.json()
+      } catch (err) {
+        if (signal.aborted) break
+        if (!isRecoverablePollingError(err) && !(err instanceof TypeError) && !(err instanceof SyntaxError)) throw err
+        await sleep(2_000, signal)
+        continue
+      }
+      const result = payload.data
+      if (!payload.success || !result) throw new Error('原图片请求结果格式无效；未重新生成')
+      if (result.recoverable && result.result) return await parseImagesApiResponse(result.result, mime, signal)
+      if (result.reason === 'not_ready' || result.status === 'reserved' || result.status === 'dispatched') {
+        await sleep(2_000, signal)
+        continue
+      }
+      const reason = result.reason === 'result_expired' ? '保存期限已过' : result.status === 'refunded' ? '请求已退款' : '服务端未保存可恢复结果'
+      throw new Error(`原图片请求暂不可恢复：${reason}；未重新生成，请查看图片请求状态`)
+    }
+    throw new Error('等待原图片请求结果超时；未重新生成，请稍后在作品中恢复结果')
+  } catch (err) {
+    const error = opts.signal?.aborted
+      ? new DOMException('图片结果恢复已取消；未重新生成', 'AbortError')
+      : signal.aborted ? new Error('等待原图片请求结果超时；未重新生成，请稍后在作品中恢复结果') : err instanceof Error ? err : new Error(String(err))
+    // 恢复只允许读取，不能让外层令牌刷新逻辑重新提交收费请求。
+    throw Object.assign(error, { imageResultRecovery: true })
+  }
+}
+
+async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile, productMode: boolean): Promise<CallApiResult> {
   const { prompt: originalPrompt, params, inputImageDataUrls } = opts
   const prompt = profile.codexCli && !opts.settings.allowPromptRewrite
     ? `${PROMPT_REWRITE_GUARD_PREFIX}\n${originalPrompt}`
@@ -561,13 +607,23 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): P
   const useApiProxy = shouldUseApiProxy(profile.apiProxy, proxyConfig)
   const requestHeaders = createRequestHeaders(profile)
   if (opts.gouoPriceVersion) requestHeaders['X-Gouo-Price-Version'] = opts.gouoPriceVersion
+  if (opts.requestId) requestHeaders['X-Gouo-Request-Id'] = opts.requestId
   const paths = createOpenAICompatiblePaths()
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), profile.timeout * 1000)
+  const abort = () => controller.abort()
+  if (opts.signal?.aborted) controller.abort()
+  opts.signal?.addEventListener('abort', abort, { once: true })
+  const timeoutMs = (productMode ? Math.min(profile.timeout, 900) : profile.timeout) * 1000
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  let response: Response | undefined
+  let requestSent = false
 
   try {
-    let response: Response
+    if (opts.recoverOnly) {
+      if (!productMode || !opts.requestId) throw new Error('缺少平台原请求编号，不能恢复结果')
+      return await recoverProductImageResult(opts, profile, controller.signal)
+    }
 
     if (isEdit) {
       const formData = new FormData()
@@ -623,6 +679,7 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): P
         formData.append('mask', maskBlob, 'mask.png')
       }
 
+      requestSent = true
       response = await fetch(buildApiUrl(profile.baseUrl, paths.editPath, proxyConfig, useApiProxy), {
         method: 'POST',
         headers: requestHeaders,
@@ -657,6 +714,7 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): P
         body.partial_images = getStreamPartialImages(profile)
       }
 
+      requestSent = true
       response = await fetch(buildApiUrl(profile.baseUrl, paths.generationPath, proxyConfig, useApiProxy), {
         method: 'POST',
         headers: {
@@ -675,12 +733,29 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): P
     }
 
     if (profile.streamImages && isEventStreamResponse(response)) {
-      return parseImagesApiStreamResponse(response, mime, opts.onPartialImage)
+      return await parseImagesApiStreamResponse(response, mime, opts.onPartialImage)
     }
 
-    return parseImagesApiResponse(await response.json() as ImageApiResponse, mime, controller.signal)
+    return await parseImagesApiResponse(await response.json() as ImageApiResponse, mime, controller.signal)
+  } catch (err) {
+    // 超时中止也要恢复：请求可能已在服务端扣费，恢复使用独立计时，只有用户取消才放弃。
+    if (productMode && opts.requestId && requestSent && !opts.signal?.aborted && (!response || response.ok || response.status >= 500) && (isRecoverablePollingError(err) || err instanceof TypeError || err instanceof SyntaxError || (response && response.status >= 500))) {
+      clearTimeout(timeoutId)
+      const recovery = new AbortController()
+      const stop = () => recovery.abort()
+      opts.signal?.addEventListener('abort', stop, { once: true })
+      const recoveryTimer = setTimeout(stop, timeoutMs)
+      try {
+        return await recoverProductImageResult(opts, profile, recovery.signal)
+      } finally {
+        clearTimeout(recoveryTimer)
+        opts.signal?.removeEventListener('abort', stop)
+      }
+    }
+    throw err
   } finally {
     clearTimeout(timeoutId)
+    opts.signal?.removeEventListener('abort', abort)
   }
 }
 
@@ -1009,8 +1084,8 @@ async function callResponsesImageApi(opts: CallApiOptions, profile: ApiProfile):
 
   if (successfulResults.length === 0) {
     const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
-    if (firstError) throw firstError.reason
-    throw new Error('所有并发请求均失败')
+    const error = firstError?.reason instanceof Error ? firstError.reason : new Error(firstError ? getErrorMessage(firstError.reason) : '所有并发请求均失败')
+    throw Object.assign(error, { failedRequests })
   }
 
   const images = successfulResults.flatMap((r) => r.images)

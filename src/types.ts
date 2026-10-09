@@ -151,6 +151,8 @@ export interface MaskDraft {
 export type TaskStatus = 'running' | 'done' | 'error'
 
 export interface TaskRecord {
+  source?: { kind: 'generate' | 'canvas' | 'agent'; projectId?: string; nodeId?: string; conversationId?: string }
+  requestId?: string
   id: string
   prompt: string
   params: TaskParams
@@ -360,6 +362,8 @@ export interface FalApiResponse {
 
 /** ZIP manifest.json 格式 */
 export interface ExportData {
+  canvasProjects?: import('./lib/canvas/types').CanvasProject[]
+  agentConversations?: import('./lib/agent/types').AgentConversation[]
   version: number
   exportedAt: string
   settings?: AppSettings
@@ -382,3 +386,6 @@ export interface ExportData {
     thumbnailVersion?: number
   }>
 }
+
+export type { CanvasProject } from './lib/canvas/types'
+export type { AgentConversation } from './lib/agent/types'

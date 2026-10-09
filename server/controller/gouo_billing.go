@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,28 @@ import (
 
 func ListGouoImageCharges(c *gin.Context)      { listGouoImageCharges(c, false) }
 func ListGouoAdminImageCharges(c *gin.Context) { listGouoImageCharges(c, true) }
+
+var gouoResultClientID = regexp.MustCompile(`^[a-zA-Z0-9_:-]{1,512}$`)
+
+func GetGouoImageResult(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	id := c.Query("client_request_id")
+	if !gouoResultClientID.MatchString(id) {
+		gouoFail(c, http.StatusBadRequest, "invalid_request_id", "图片请求 ID 无效")
+		return
+	}
+	result, err := model.GetGouoImageResult(c.GetInt("id"), id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		gouoFail(c, http.StatusNotFound, "image_request_not_found", "未找到本账号的图片请求，不会重新生成")
+		return
+	}
+	if err != nil {
+		logger.LogError(c.Request.Context(), "读取图片恢复结果失败: "+err.Error())
+		gouoFail(c, http.StatusInternalServerError, "image_result_read_failed", "读取图片结果失败，请稍后重试，不会重新生成")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
+}
 
 func listGouoImageCharges(c *gin.Context, admin bool) {
 	userID := c.GetInt("id")
@@ -34,7 +57,15 @@ func listGouoImageCharges(c *gin.Context, admin bool) {
 		gouoFail(c, http.StatusBadRequest, "invalid_query", "分页参数无效")
 		return
 	}
-	result, err := model.ListGouoImageCharges(userID, c.Query("request_id"), c.Query("status"), &params)
+	requestID := c.Query("request_id")
+	if clientID := c.Query("client_request_id"); clientID != "" {
+		if userID < 1 || len(clientID) > 512 {
+			gouoFail(c, http.StatusBadRequest, "invalid_request_id", "按客户端请求 ID 查询时必须指定用户")
+			return
+		}
+		requestID = model.GouoImageRequestID(userID, clientID)
+	}
+	result, err := model.ListGouoImageCharges(userID, requestID, c.Query("status"), &params)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "图片账务查询失败: "+err.Error())
 		gouoFail(c, http.StatusInternalServerError, "billing_query_failed", "读取图片请求记录失败")

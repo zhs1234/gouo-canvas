@@ -75,6 +75,12 @@ func NewQuota(c *gin.Context, modelName string, promptTokens int) *Quota {
 		if id == "" {
 			id = utils.GetUUID()
 		}
+		if requestID := c.GetHeader("X-Gouo-Request-Id"); requestID != "" {
+			id = model.GouoImageRequestID(quota.userId, requestID)
+		}
+		if _, exists := c.Get("gouo_image_quota"); !exists {
+			c.Header("X-Gouo-Charge-Id", id)
+		}
 		quota.imageCharge = &model.GouoImageCharge{ID: id, UserID: quota.userId, TokenID: quota.tokenId, ModelName: quota.modelName, PriceCNY: quota.imageModel.PriceCNY, PriceVersion: quota.imageModel.PriceVersion, Quota: quota.fixedQuota}
 	}
 
@@ -89,6 +95,9 @@ func (q *Quota) PreQuotaConsumption() *types.OpenAIErrorWithStatusCode {
 		}
 		err := model.ReserveGouoQuota(q.imageCharge)
 		if err != nil {
+			if errors.Is(err, model.ErrGouoImageRequestExists) {
+				return common.ErrorWrapperLocal(err, "image_request_exists", http.StatusConflict)
+			}
 			return common.ErrorWrapperLocal(err, "insufficient_image_quota", http.StatusPaymentRequired)
 		}
 		q.preConsumedQuota = q.fixedQuota
@@ -270,6 +279,19 @@ func (q *Quota) DispatchImage(c *gin.Context) *types.OpenAIErrorWithStatusCode {
 }
 
 func (q *Quota) MarkImageFailed() { q.imageFailureKnown = true }
+
+func (q *Quota) SaveImageResult(c *gin.Context, response *types.ImageResponse) error {
+	// 只有带客户端请求 ID 的结果能被取回；其余保存只会占用缓存。
+	if c.GetHeader("X-Gouo-Request-Id") == "" {
+		return nil
+	}
+	if err := model.SaveGouoImageResult(q.imageCharge.ID, response); err != nil {
+		q.MarkImageUnknown(c, "上游已返回图片，但恢复结果保存失败，请管理员核对存储与渠道记录")
+		logger.LogError(c.Request.Context(), "图片恢复结果保存失败: "+err.Error())
+		return err
+	}
+	return nil
+}
 
 func (q *Quota) MarkImageUnknown(c *gin.Context, note string) {
 	q.imageUncertain = true

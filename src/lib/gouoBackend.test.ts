@@ -14,6 +14,29 @@ afterEach(() => {
 })
 
 describe('gouoBackend', () => {
+  it('sends Turnstile tokens on all protected account actions without changing unprotected payloads', async () => {
+    const request = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ success: true })))
+    vi.stubGlobal('fetch', request)
+    const { register, sendEmailVerification, sendPasswordReset } = await import('./gouoBackend')
+    await register({ username: 'creator', password: 'password123', turnstileToken: 'test+token&value' })
+    await sendEmailVerification('a@example.invalid', 'test+token&value')
+    await sendPasswordReset('a@example.invalid', 'test+token&value')
+    expect(request.mock.calls.map((call) => call[0])).toEqual([
+      '/api/user/register?turnstile=test%2Btoken%26value',
+      '/api/verification?email=a%40example.invalid&turnstile=test%2Btoken%26value',
+      '/api/reset_password?email=a%40example.invalid&turnstile=test%2Btoken%26value',
+    ])
+    expect(JSON.parse(request.mock.calls[0][1].body)).not.toHaveProperty('turnstileToken')
+  })
+
+  it('surfaces a rate-limited account action without promising automatic submission', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 429, headers: { 'Retry-After': '10' } })))
+    const { redeemCode, GouoRateLimitError } = await import('./gouoBackend')
+    const error = await redeemCode('local-test').catch((err) => err)
+    expect(error).toBeInstanceOf(GouoRateLimitError)
+    expect(error.message).toBe('请求过于频繁，请稍后重试')
+  })
+
   it('honors Retry-After even when the rate limiter returns an empty body', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 429, headers: { 'Retry-After': '180' } }))
     vi.stubGlobal('fetch', fetchMock)
@@ -120,16 +143,26 @@ describe('gouoBackend', () => {
     expect(await createBackendSettings()).not.toHaveProperty('model')
   })
 
-  it('validates model capabilities, output limits, availability and the displayed quote before submission', async () => {
-    const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: false, mask: false, max_outputs: 2, quota: 100 }
+  it('validates model capabilities, availability and the displayed quote while allowing batches of single-image requests', async () => {
+    const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: false, mask: false, max_outputs: 1, quota: 100 }
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(jsonResponse({ success: true, data: url.includes('/token/') ? 'user-token' : [model] }))))
     const { getImageModelQuote, GouoPriceChangedError } = await import('./gouoBackend')
     await expect(getImageModelQuote('image-b', 0, false, 2, 'version-b')).resolves.toEqual(model)
+    await expect(getImageModelQuote('image-b', 0, false, 10, 'version-b')).resolves.toEqual(model)
     await expect(getImageModelQuote('image-b', 1, false, 1, 'version-b')).rejects.toThrow('不支持当前编辑')
     await expect(getImageModelQuote('image-b', 0, true, 1, 'version-b')).rejects.toThrow('不支持当前编辑')
-    await expect(getImageModelQuote('image-b', 0, false, 3, 'version-b')).rejects.toThrow('最多支持 2 张')
+    for (const n of [0, -1, 11, 1.5, NaN, Infinity]) {
+      await expect(getImageModelQuote('image-b', 0, false, n, 'version-b')).rejects.toThrow('图片总数量必须为 1 到 10 的整数')
+    }
     await expect(getImageModelQuote('image-gone', 0, false, 1, 'version-b')).rejects.toThrow('已不可用')
     await expect(getImageModelQuote('image-b', 0, false, 1, 'old-price')).rejects.toBeInstanceOf(GouoPriceChangedError)
+  })
+
+  it.each([0, -1, 1.5])('rejects a catalog that cannot support one image per request with max_outputs %s', async (maxOutputs) => {
+    const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: true, mask: true, max_outputs: maxOutputs, quota: 100 }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(jsonResponse({ success: true, data: url.includes('/token/') ? 'user-token' : [model] }))))
+    const { getImageModelQuote } = await import('./gouoBackend')
+    await expect(getImageModelQuote('image-b', 0, false, 2, 'version-b')).rejects.toThrow('图片模型目录格式无效')
   })
 
   it('refreshes an expired catalog token once without selecting a different model', async () => {

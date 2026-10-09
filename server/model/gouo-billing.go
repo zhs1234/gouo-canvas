@@ -1,6 +1,8 @@
 package model
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -27,6 +29,12 @@ const (
 )
 
 var ErrGouoChargeState = errors.New("请求账务状态已变化，请刷新后核对")
+var ErrGouoImageRequestExists = errors.New("此图片请求已受理，请查询原任务；结果未知时请勿重新派发")
+
+func GouoImageRequestID(userID int, requestID string) string {
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", userID, requestID)))
+	return hex.EncodeToString(hash[:])
+}
 
 type GouoImageCharge struct {
 	ID             string  `json:"id" gorm:"type:varchar(64);primaryKey"`
@@ -54,6 +62,16 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 	}
 	var token Token
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		// 先取得账号写锁，避免 SQLite 的并发读事务升级锁导致幂等检查竞态。
+		if err := tx.Model(&User{}).Where("id = ?", charge.UserID).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
+			return err
+		}
+		var existing GouoImageCharge
+		if err := tx.Where("id = ? AND user_id = ?", charge.ID, charge.UserID).First(&existing).Error; err == nil {
+			return ErrGouoImageRequestExists
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 		res := tx.Model(&User{}).Where("id = ? AND status = ? AND quota >= ?", charge.UserID, config.UserStatusEnabled, charge.Quota).UpdateColumn("quota", gorm.Expr("quota - ?", charge.Quota))
 		if res.Error != nil {
 			return res.Error
@@ -78,6 +96,12 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 	})
 	if err == nil {
 		invalidateGouoQuotaCache(charge.UserID, token.Key)
+	} else {
+		// 并发首查都未命中时，主键冲突仍会回滚预扣，并统一返回可识别的幂等冲突。
+		var existing GouoImageCharge
+		if DB.Where("id = ? AND user_id = ?", charge.ID, charge.UserID).First(&existing).Error == nil {
+			return ErrGouoImageRequestExists
+		}
 	}
 	return err
 }
@@ -190,7 +214,10 @@ func RecoverGouoImageCharges() error {
 			return err
 		}
 	}
-	return DB.Model(&GouoImageCharge{}).Where("status = ? AND updated_at < ?", GouoChargeDispatched, cutoff).Updates(map[string]any{"status": GouoChargeReview, "note": "请求中断，上游结果未知，请核对渠道记录后结算或退款"}).Error
+	if err := DB.Model(&GouoImageCharge{}).Where("status = ? AND updated_at < ?", GouoChargeDispatched, cutoff).Updates(map[string]any{"status": GouoChargeReview, "note": "请求中断，上游结果未知，请核对渠道记录后结算或退款"}).Error; err != nil {
+		return err
+	}
+	return CleanupGouoImageResults()
 }
 
 func ResolveGouoImageCharge(id, status string, actor int, note string) error {

@@ -43,7 +43,7 @@ function SearchActionButton({
   )
 }
 
-export default function SearchBar() {
+export default function SearchBar({ onToggleFavorites }: { onToggleFavorites: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const searchQuery = useStore((s) => s.searchQuery)
@@ -52,7 +52,6 @@ export default function SearchBar() {
   const setFilterStatus = useStore((s) => s.setFilterStatus)
   const clearSelection = useStore((s) => s.clearSelection)
   const filterFavorite = useStore((s) => s.filterFavorite)
-  const setFilterFavorite = useStore((s) => s.setFilterFavorite)
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const setActiveFavoriteCollectionId = useStore((s) => s.setActiveFavoriteCollectionId)
   const openManageCollectionsModal = useStore((s) => s.openManageCollectionsModal)
@@ -94,7 +93,7 @@ export default function SearchBar() {
       setActiveFavoriteCollectionId(null)
       return
     }
-    setFilterFavorite(!filterFavorite)
+    onToggleFavorites()
   }
 
   const handleClearFailed = () => {

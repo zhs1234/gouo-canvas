@@ -1,9 +1,11 @@
-import type { TaskRecord, StoredImage, StoredImageThumbnail } from '../types'
+import type { TaskRecord, StoredImage, StoredImageThumbnail, CanvasProject, AgentConversation } from '../types'
 import { loadImage } from './canvasImage'
-import { getLoadedStorageName } from './storageScope'
+import { getLoadedStorageName, isStorageScopeCurrent } from './storageScope'
+import { getDocumentImageIds, getLiveDocumentImageIds } from './documentAssets'
 
 const DB_NAME = getLoadedStorageName()
-const DB_VERSION = 4
+const DB_VERSION = 5
+const STORE_CANVASES = 'canvasProjects'
 const STORE_TASKS = 'tasks'
 const STORE_IMAGES = 'images'
 const STORE_THUMBNAILS = 'thumbnails'
@@ -20,8 +22,14 @@ export const CURRENT_THUMBNAIL_VERSION = THUMBNAIL_VERSION
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
+    let blocked = false
+    req.onblocked = () => {
+      blocked = true
+      reject(new Error('数据库升级被其他标签页占用，请关闭其他光构页面后重试'))
+    }
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains(STORE_CANVASES)) db.createObjectStore(STORE_CANVASES, { keyPath: 'id' })
       if (!db.objectStoreNames.contains(STORE_TASKS)) {
         db.createObjectStore(STORE_TASKS, { keyPath: 'id' })
       }
@@ -44,7 +52,12 @@ function openDB(): Promise<IDBDatabase> {
         db.createObjectStore(STORE_CLOUD_ASSET_MAP, { keyPath: 'localImageId' })
       }
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      // 已因 blocked 拒绝的调用方拿不到连接，迟到的成功连接需立即关闭。
+      if (blocked) return req.result.close()
+      req.result.onversionchange = () => req.result.close()
+      resolve(req.result)
+    }
     req.onerror = () => reject(req.error)
   })
 }
@@ -60,8 +73,8 @@ function dbTransaction<T>(
         const tx = db.transaction(storeName, mode)
         const store = tx.objectStore(storeName)
         const req = fn(store)
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
+        tx.oncomplete = () => { db.close(); resolve(req.result) }
+        tx.onerror = tx.onabort = () => { db.close(); reject(tx.error ?? req.error) }
       }),
   )
 }
@@ -120,13 +133,15 @@ export async function mergeSyncedTasks(tasks: TaskRecord[]): Promise<TaskRecord[
 }
 
 // 整批恢复共用一个事务，冲突或空间不足时不能留下半套任务和图片。
-export async function importTaskData(tasks: TaskRecord[], images: StoredImage[], thumbnails: StoredImageThumbnail[]) {
+export async function importTaskData(tasks: TaskRecord[], images: StoredImage[], thumbnails: StoredImageThumbnail[], documents?: { canvases: CanvasProject[]; conversations: AgentConversation[] }) {
   const db = await openDB()
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction([STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_CLOUD_ASSET_MAP], 'readwrite')
+    const tx = db.transaction([STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_CLOUD_ASSET_MAP, STORE_CANVASES, STORE_AGENT_CONVERSATIONS], 'readwrite')
     tx.oncomplete = () => { db.close(); resolve() }
     tx.onerror = tx.onabort = () => { db.close(); reject(tx.error ?? new Error('导入事务已中止')) }
     try {
+      for (const doc of documents?.canvases ?? []) tx.objectStore(STORE_CANVASES).add(doc)
+      for (const doc of documents?.conversations ?? []) tx.objectStore(STORE_AGENT_CONVERSATIONS).add(doc)
       for (const task of tasks) tx.objectStore(STORE_TASKS).add(task)
       for (const image of images) {
         const store = tx.objectStore(STORE_IMAGES)
@@ -282,29 +297,99 @@ export function putCloudSyncMeta(key: string, value: unknown): Promise<IDBValidK
 }
 
 export function deleteImage(id: string): Promise<undefined> {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction([STORE_IMAGES, STORE_THUMBNAILS], 'readwrite')
-        tx.objectStore(STORE_IMAGES).delete(id)
-        tx.objectStore(STORE_THUMBNAILS).delete(id)
-        tx.oncomplete = () => resolve(undefined)
-        tx.onerror = () => reject(tx.error)
-      }),
-  )
+  return deleteImages([id])
 }
 
-export function clearImages(): Promise<undefined> {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction([STORE_IMAGES, STORE_THUMBNAILS], 'readwrite')
-        tx.objectStore(STORE_IMAGES).clear()
-        tx.objectStore(STORE_THUMBNAILS).clear()
-        tx.oncomplete = () => resolve(undefined)
-        tx.onerror = () => reject(tx.error)
-      }),
-  )
+// 批量删除只读取一次画布/对话引用，避免启动清理时逐张反序列化全部文档。
+export async function deleteImages(ids: string[]): Promise<undefined> {
+  if (!ids.length) return undefined
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_IMAGES, STORE_THUMBNAILS, STORE_CANVASES, STORE_AGENT_CONVERSATIONS], 'readwrite')
+    let remaining = 2
+    const referenced = new Set<string>()
+    for (const name of [STORE_CANVASES, STORE_AGENT_CONVERSATIONS]) {
+      const req = tx.objectStore(name).getAll()
+      req.onsuccess = () => {
+        for (const imageId of getDocumentImageIds(req.result)) referenced.add(imageId)
+        remaining--
+        if (remaining) return
+        const live = getLiveDocumentImageIds()
+        for (const id of ids) {
+          if (referenced.has(id) || live.has(id)) continue
+          tx.objectStore(STORE_IMAGES).delete(id)
+          tx.objectStore(STORE_THUMBNAILS).delete(id)
+        }
+      }
+    }
+    tx.oncomplete = () => { db.close(); resolve(undefined) }
+    tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
+  })
+}
+
+export async function clearImages(): Promise<undefined> {
+  return deleteImages(await getAllImageIds())
+}
+
+export async function getAllCanvasProjects(): Promise<CanvasProject[]> {
+  const records: CanvasProject[] = await dbTransaction(STORE_CANVASES, 'readonly', (s) => s.getAll())
+  return records.filter((item) => item.schemaVersion === 1)
+}
+
+export function getCanvasProject(id: string): Promise<CanvasProject | undefined> {
+  return dbTransaction(STORE_CANVASES, 'readonly', (s) => s.get(id))
+}
+
+export async function getAllAgentConversations(): Promise<AgentConversation[]> {
+  const records: AgentConversation[] = await dbTransaction(STORE_AGENT_CONVERSATIONS, 'readonly', (s) => s.getAll())
+  return records.filter((item) => item.schemaVersion === 1)
+}
+
+export function getAgentConversation(id: string): Promise<AgentConversation | undefined> {
+  return dbTransaction(STORE_AGENT_CONVERSATIONS, 'readonly', (s) => s.get(id))
+}
+
+async function putDocument(storeName: string, document: CanvasProject | AgentConversation, expectedRevision?: number, fromSync = false): Promise<void> {
+  if (!isStorageScopeCurrent()) throw new Error('账号已切换，请刷新页面')
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    const store = tx.objectStore(storeName)
+    const req = store.get(document.id)
+    let failure: Error | undefined
+    let changed = false
+    req.onsuccess = () => {
+      const current = req.result as CanvasProject | AgentConversation | undefined
+      if (!isStorageScopeCurrent() || (expectedRevision !== undefined && (current?.revision ?? 0) !== expectedRevision)) {
+        failure = new Error('文档已变更，请读取最新内容后重试')
+        tx.abort()
+        return
+      }
+      if (expectedRevision === undefined && current && current.revision >= document.revision) {
+        if (JSON.stringify(current) === JSON.stringify(document)) return
+        failure = new Error('文档已变更，请读取最新内容后重试')
+        tx.abort()
+        return
+      }
+      store.put(document)
+      changed = true
+    }
+    tx.oncomplete = () => {
+      db.close()
+      // fromSync 让云同步忽略自己写回的变更，界面仍需刷新。
+      if (changed) window.dispatchEvent(new CustomEvent('gouo:documents-changed', { detail: { fromSync } }))
+      resolve()
+    }
+    tx.onerror = tx.onabort = () => { db.close(); reject(failure ?? tx.error ?? new Error('文档保存失败')) }
+  })
+}
+
+export function putCanvasProject(project: CanvasProject, expectedRevision?: number, fromSync = false): Promise<void> {
+  return putDocument(STORE_CANVASES, project, expectedRevision, fromSync)
+}
+
+export function putAgentConversation(conversation: AgentConversation, expectedRevision?: number, fromSync = false): Promise<void> {
+  return putDocument(STORE_AGENT_CONVERSATIONS, conversation, expectedRevision, fromSync)
 }
 
 // ===== Image hashing & dedup =====

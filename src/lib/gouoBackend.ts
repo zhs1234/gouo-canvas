@@ -27,6 +27,7 @@ export interface RegisterInput {
   password: string
   email?: string
   verificationCode?: string
+  turnstileToken?: string
 }
 
 export interface GouoUsageLog {
@@ -71,7 +72,7 @@ export class GouoPriceChangedError extends Error {
 
 export class GouoRateLimitError extends Error {
   constructor(public retryAt: number) {
-    super('请求较多，云端同步将在限流解除后自动继续')
+    super('请求过于频繁，请稍后重试')
   }
 }
 
@@ -108,7 +109,7 @@ export async function getImageModelQuote(id: string, inputCount: number, hasMask
     throw new Error('所选模型已不可用，请重新选择模型')
   }
   if ((inputCount > 0 && !model.reference) || (hasMask && !model.mask)) throw new Error('此模型不支持当前编辑操作，请重新选择模型')
-  if (!Number.isInteger(n) || n < 1 || n > model.max_outputs) throw new Error(`此模型最多支持 ${model.max_outputs} 张图片`)
+  if (!Number.isInteger(n) || n < 1 || n > 10) throw new Error('图片总数量必须为 1 到 10 的整数')
   if (!version || version !== model.price_version) {
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('gouo-models-refresh'))
     throw new GouoPriceChangedError(model)
@@ -124,6 +125,8 @@ interface GouoUsageLogPage {
 }
 
 export interface GouoBackendStatus {
+  turnstile_check?: boolean
+  turnstile_site_key?: string
   email_service?: boolean
   email_verification?: boolean
   gouo_cloud_library?: boolean
@@ -230,13 +233,14 @@ async function parseEnvelope<T>(response: Response, requireData: boolean): Promi
     throw new Error(`服务返回了无法识别的响应（HTTP ${response.status}）`)
   }
 
+  if (response.status === 409) throw new GouoConflictError(payload.message || '云端版本冲突', payload.data)
   if (!response.ok || !payload.success || (requireData && payload.data === undefined)) {
     throw new Error(payload.message || `请求失败（HTTP ${response.status}）`)
   }
   return payload.data as T
 }
 
-async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     const response = await fetch(apiUrl(path), requestInit(init))
     return await parseEnvelope<T>(response, true)
@@ -300,7 +304,7 @@ export function getUsageLogs(page = 1, size = 20, filters?: { model?: string; ty
 }
 
 export async function register(input: RegisterInput): Promise<void> {
-  await backendAction('/api/user/register', {
+  await backendAction(`/api/user/register${input.turnstileToken ? `?turnstile=${encodeURIComponent(input.turnstileToken)}` : ''}`, {
     username: input.username.trim(),
     password: input.password,
     email: input.email?.trim() || '',
@@ -386,18 +390,22 @@ export function updatePassword(currentPassword: string, newPassword: string): Pr
   return backendAction('/api/user/password', { current_password: currentPassword, new_password: newPassword }, 'PUT')
 }
 
-export function sendEmailVerification(email: string): Promise<void> {
-  return backendAction(`/api/verification?email=${encodeURIComponent(email)}`)
+export function sendEmailVerification(email: string, turnstileToken?: string): Promise<void> {
+  return backendAction(`/api/verification?email=${encodeURIComponent(email)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ''}`)
 }
 
 export function bindEmail(email: string, code: string): Promise<void> {
   return backendAction(`/api/oauth/email/bind?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`)
 }
 
-export function sendPasswordReset(email: string): Promise<void> {
-  return backendAction(`/api/reset_password?email=${encodeURIComponent(email)}`)
+export function sendPasswordReset(email: string, turnstileToken?: string): Promise<void> {
+  return backendAction(`/api/reset_password?email=${encodeURIComponent(email)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ''}`)
 }
 
 export function resetPassword(email: string, token: string, newPassword: string): Promise<void> {
   return backendAction('/api/user/reset', { email, token, new_password: newPassword })
+}
+
+export class GouoConflictError extends Error {
+  constructor(message: string, public current: unknown) { super(message) }
 }

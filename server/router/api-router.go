@@ -11,6 +11,7 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	router.Use(middleware.CORS())
 	apiRouter := router.Group("/api")
 	apiRouter.GET("/metrics", middleware.MetricsWithBasicAuth(), gin.WrapH(promhttp.Handler()))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -201,7 +202,16 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			gouoRoute.GET("/storage", controller.GetGouoStorage)
 			gouoRoute.GET("/models", controller.GetGouoModels)
+			gouoRoute.GET("/agent/models", controller.GetGouoAgentModels)
+			for _, path := range []string{"/canvases", "/conversations"} {
+				gouoRoute.GET(path, controller.ListGouoDocuments)
+				gouoRoute.GET(path+"/:id", controller.GetGouoDocument)
+				gouoRoute.PUT(path+"/:id", controller.PutGouoDocument)
+				gouoRoute.POST(path+"/:id/hide", controller.HideGouoDocument)
+				gouoRoute.POST(path+"/:id/restore", controller.RestoreGouoDocument)
+			}
 			gouoRoute.GET("/image-charges", controller.ListGouoImageCharges)
+			gouoRoute.GET("/image-results", controller.GetGouoImageResult)
 			gouoRoute.POST("/assets", controller.UploadGouoAsset)
 			gouoRoute.GET("/assets/:id/content", controller.GetGouoAssetContent)
 			gouoRoute.PUT("/tasks/:clientTaskId", controller.PutGouoTask)

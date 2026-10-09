@@ -11,12 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func GetGouoModels(c *gin.Context) {
+func gouoModelAccess(c *gin.Context) (*model.Token, []string) {
 	key := strings.TrimPrefix(c.GetHeader("X-Gouo-Token"), "sk-")
 	token, err := model.ValidateUserToken(key)
 	if err != nil || token.UserId != c.GetInt("id") {
-		gouoFail(c, http.StatusUnauthorized, "invalid_token", "图片令牌无效，请重新登录")
-		return
+		gouoFail(c, http.StatusUnauthorized, "invalid_token", "平台令牌无效，请重新登录")
+		return nil, nil
 	}
 	setting := token.Setting.Data()
 	if setting.Limits.LimitsIPSetting.Enabled && len(setting.Limits.LimitsIPSetting.Whitelist) > 0 {
@@ -28,14 +28,14 @@ func GetGouoModels(c *gin.Context) {
 			}
 		}
 		if !allowed {
-			gouoFail(c, http.StatusForbidden, "ip_not_allowed", "当前 IP 无权使用图片令牌")
-			return
+			gouoFail(c, http.StatusForbidden, "ip_not_allowed", "当前 IP 无权使用平台令牌")
+			return nil, nil
 		}
 	}
 	group, err := model.CacheGetUserGroup(token.UserId)
 	if err != nil {
 		gouoFail(c, http.StatusInternalServerError, "group_unavailable", "读取账号分组失败")
-		return
+		return nil, nil
 	}
 	primary := token.Group
 	if primary == "" {
@@ -44,7 +44,15 @@ func GetGouoModels(c *gin.Context) {
 	if primary == "" {
 		primary = group
 	}
-	groups := []string{primary, token.BackupGroup}
+	return token, []string{primary, token.BackupGroup}
+}
+
+func GetGouoModels(c *gin.Context) {
+	token, groups := gouoModelAccess(c)
+	if token == nil {
+		return
+	}
+	setting := token.Setting.Data()
 	data := make([]*model.GouoImageModel, 0)
 	model.PricingInstance.RLock()
 	ids := make([]string, 0, len(model.PricingInstance.Prices))

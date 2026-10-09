@@ -17,6 +17,9 @@ export interface CallApiOptions {
   /** 输入图片的 data URL 列表 */
   inputImageDataUrls: string[]
   maskDataUrl?: string
+  requestId?: string
+  recoverOnly?: boolean
+  signal?: AbortSignal
   gouoPriceVersion?: string
   onFalRequestEnqueued?: (request: { requestId: string; endpoint: string }) => void
   onCustomTaskEnqueued?: (task: { taskId: string }) => void

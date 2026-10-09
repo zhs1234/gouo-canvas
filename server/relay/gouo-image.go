@@ -13,11 +13,14 @@ import (
 	"one-api/model"
 	"one-api/relay/relay_util"
 	"one-api/types"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	_ "golang.org/x/image/webp"
 )
+
+var gouoImageRequestID = regexp.MustCompile(`^[a-zA-Z0-9_:-]{1,512}$`)
 
 // 在写出成功响应之前校验，空结果和无效图片字段不能进入结算。
 func responseImageClient(c *gin.Context, response *types.ImageResponse, usage *types.Usage) *types.OpenAIErrorWithStatusCode {
@@ -67,7 +70,11 @@ func responseImageClient(c *gin.Context, response *types.ImageResponse, usage *t
 		}
 	}
 	if value, ok := c.Get("gouo_image_quota"); ok {
-		if err := value.(*relay_util.Quota).CompleteImage(c, usage); err != nil {
+		quota := value.(*relay_util.Quota)
+		if err := quota.SaveImageResult(c, response); err != nil {
+			return common.StringErrorWrapperLocal("图片已生成，但恢复结果保存失败，额度待核对，请勿重复提交", "image_result_persist_failed", http.StatusInternalServerError)
+		}
+		if err := quota.CompleteImage(c, usage); err != nil {
 			return common.ErrorWrapperLocal(err, "image_billing_unconfirmed", http.StatusInternalServerError)
 		}
 	}
@@ -77,6 +84,9 @@ func responseImageClient(c *gin.Context, response *types.ImageResponse, usage *t
 func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErrorWithStatusCode {
 	if !strings.HasPrefix(c.Request.URL.Path, "/v1/images/") {
 		return nil
+	}
+	if id := c.GetHeader("X-Gouo-Request-Id"); id != "" && !gouoImageRequestID.MatchString(id) {
+		return common.StringErrorWrapperLocal("图片请求 ID 无效", "invalid_image_request_id", http.StatusBadRequest)
 	}
 	if r, ok := relay.(*relayImageGenerations); ok && strings.Contains(r.request.Model, "#") {
 		return common.StringErrorWrapperLocal("图片模型 ID 无效", "invalid_image_model", http.StatusBadRequest)

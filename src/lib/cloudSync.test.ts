@@ -45,12 +45,13 @@ beforeEach(async () => {
   const state = { tasks, favoriteCollections: [] as FavoriteCollection[], settings: { model: 'image' }, setTasks: (next: TaskRecord[]) => { state.tasks = next; notify() }, setFavoriteCollections: (next: FavoriteCollection[]) => { state.favoriteCollections = next; notify() } }
   const listeners = new Set<(value: typeof state) => void>()
   const notify = () => { for (const listener of listeners) listener(state) }
+  vi.doMock('./documentSync', () => ({ syncDocuments: vi.fn(async () => ({ failures: [] })) }))
   vi.doMock('../store', () => ({ cacheImage: (id: string, data: string) => cache.set(id, data), useStore: {
     getState: () => state,
     setState: (patch: Partial<typeof state>) => { Object.assign(state, patch); notify() },
     subscribe: (fn: (value: typeof state) => void) => { listeners.add(fn); return () => listeners.delete(fn) },
   } }))
-  vi.doMock('./storageScope', () => ({ isLoadedStorageForUser: () => true, activateUserStorage: vi.fn() }))
+  vi.doMock('./storageScope', () => ({ isStorageScopeCurrent: () => true, isLoadedStorageForUser: () => true, activateUserStorage: vi.fn() }))
   vi.doMock('./db', () => ({
     getAllTasks: async () => tasks,
     getImage: async (id: string) => images.get(id),
@@ -75,7 +76,7 @@ beforeEach(async () => {
     GouoRateLimitError: class extends Error { constructor(public retryAt: number) { super('限流') } },
     isBackendAuthEnabled: () => true,
     getCurrentUser: async () => ({ id: 1 }),
-    getCloudStorage: async () => ({ enabled: true, used_bytes: 0, quota_bytes: 100000, remaining_bytes: 100000, asset_count: 2 }),
+    getCloudStorage: vi.fn(async () => ({ enabled: true, used_bytes: 0, quota_bytes: 100000, remaining_bytes: 100000, asset_count: 2 })),
     getCloudSync: vi.fn(async () => ({ tasks: preceding ? [preceding, cloud] : [cloud], collections, favorite_items: [], next_cursor: 'cursor', has_more: false, server_time: 1 })),
     fetchCloudAssetContent: vi.fn(async (asset: GouoCloudAsset) => asset.id === original.id ? originalBlob : previewBlob),
     uploadCloudAsset: vi.fn(async (blob: Blob) => blob.type === original.mime_type ? original : preview),
@@ -96,6 +97,101 @@ beforeEach(async () => {
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.resetModules() })
 
 describe('cloud image integrity', () => {
+  it.each([5, 6, 7, 10])('preserves every original at the cloud asset limit, transparent originals=%s', async (count) => {
+    cloud.assets = []
+    const sync = await import('./cloudSync')
+    const backend = await import('./gouoBackend')
+    const { useStore } = await import('../store')
+    await sync.triggerCloudSync()
+    const inputImageIds = Array.from({ length: 16 }, (_, index) => `input-${index}`)
+    const outputImages = Array.from({ length: 10 }, (_, index) => `output-${index}`)
+    const transparentOriginalImages = Array.from({ length: count }, (_, index) => `transparent-${index}`)
+    const imageIds = [...inputImageIds, ...outputImages, ...transparentOriginalImages]
+    const dataUrl = await blobToDataUrl(originalBlob)
+    for (const id of imageIds) {
+      images.set(id, { id, dataUrl, createdAt: 1, source: 'generated' })
+      mappings.set(id, { localImageId: id, cloudAssetId: original.id, contentUrl: original.content_url, sha256: original.sha256, mimeType: original.mime_type, updatedAt: 1 })
+    }
+    const thumbnailDataUrl = await blobToDataUrl(previewBlob)
+    for (const id of outputImages) thumbnails.set(id, { id, thumbnailDataUrl })
+    tasks = tasks.map((task) => ({ ...task, inputImageIds, outputImages, transparentOriginalImages, cloudSyncStatus: 'pending' }))
+    useStore.setState({ tasks })
+    vi.mocked(backend.uploadCloudAsset).mockClear()
+    vi.mocked(backend.putCloudTask).mockClear()
+
+    await sync.triggerCloudSync()
+
+    expect(useStore.getState().tasks[0]).toMatchObject({ inputImageIds, outputImages, transparentOriginalImages })
+    expect(imageIds.every((id) => images.get(id)?.dataUrl === dataUrl)).toBe(true)
+    if (imageIds.length > 32) {
+      expect(backend.uploadCloudAsset).not.toHaveBeenCalled()
+      expect(backend.putCloudTask).not.toHaveBeenCalled()
+      expect(tasks[0]).toMatchObject({ cloudSyncStatus: 'error', cloudSyncError: expect.stringContaining('32 个上限') })
+      expect(useStore.getState().tasks[0].cloudSyncStatus).toBe('error')
+      expect(queue.get('task:task')).toMatchObject({ taskId: 'task', attempts: 1, error: tasks[0].cloudSyncError })
+      return
+    }
+    expect(backend.putCloudTask).toHaveBeenCalledTimes(1)
+    expect(writes[0].assets).toHaveLength(32)
+    const assets = writes[0].assets as Array<{ client_image_id: string; role: string }>
+    expect(assets.filter((asset) => asset.role !== 'thumbnail').map((asset) => asset.client_image_id)).toEqual(imageIds)
+    expect(assets.filter((asset) => asset.role === 'thumbnail')).toHaveLength(32 - imageIds.length)
+    expect(useStore.getState().tasks[0].cloudSyncStatus).toBe('synced')
+    expect(queue.size).toBe(0)
+  })
+
+  it('preserves local edits while cloud storage is disabled, then uploads them when enabled', async () => {
+    cloud.assets = []
+    const backend = await import('./gouoBackend')
+    const sync = await import('./cloudSync')
+    const { useStore } = await import('../store')
+    await sync.startCloudSync()
+    const storage = await backend.getCloudStorage()
+    vi.mocked(backend.getCloudStorage).mockResolvedValue({ ...storage, enabled: false })
+    await sync.triggerCloudSync()
+    vi.mocked(backend.putCloudTask).mockClear()
+    useStore.setState({ tasks: useStore.getState().tasks.map((task) => ({ ...task, prompt: '关闭云库后的本地编辑' })) })
+    await sync.triggerCloudSync()
+    expect(sync.getCloudSyncSnapshot().status).toBe('disabled')
+    expect(useStore.getState().tasks[0]).toMatchObject({ prompt: '关闭云库后的本地编辑', cloudSyncStatus: 'pending' })
+    expect(backend.putCloudTask).not.toHaveBeenCalled()
+    vi.mocked(backend.getCloudStorage).mockResolvedValue(storage)
+    await sync.triggerCloudSync()
+    expect(backend.putCloudTask).toHaveBeenCalledWith('task', expect.objectContaining({ prompt: '关闭云库后的本地编辑' }))
+    expect(useStore.getState().tasks[0].cloudSyncStatus).toBe('synced')
+  })
+
+  it('hides the cloud copy of a task deleted during upload and drops collections hidden elsewhere', async () => {
+    cloud.assets = []
+    const backend = await import('./gouoBackend')
+    const sync = await import('./cloudSync')
+    const { useStore } = await import('../store')
+    await sync.startCloudSync()
+    useStore.setState({ favoriteCollections: [{ id: 'kept', name: '保留', createdAt: 1, updatedAt: 1 }] })
+    vi.mocked(backend.putCloudTask).mockImplementationOnce(async (_id, input) => {
+      writes.push(input as unknown as Record<string, unknown>)
+      useStore.setState({ tasks: [] })
+      return cloud
+    })
+    useStore.setState({ tasks: useStore.getState().tasks.map((task) => ({ ...task, prompt: '上传中删除', favoriteCollectionIds: ['kept', 'hidden-elsewhere'] })) })
+    await sync.triggerCloudSync()
+    expect(writes[writes.length - 1]).toMatchObject({ prompt: '上传中删除', collection_ids: ['kept'] })
+    expect(backend.setCloudTaskHidden).toHaveBeenCalledWith(cloud.id, true)
+  })
+
+  it('keeps document failures visible while still pulling works and retries them later', async () => {
+    cloud.assets = []
+    const docs = await import('./documentSync')
+    vi.mocked(docs.syncDocuments).mockResolvedValueOnce({ failures: [{ kind: 'canvases', id: 'bad-doc', title: '失败的画布', error: '保存失败' }] })
+    const sync = await import('./cloudSync')
+    await sync.startCloudSync()
+    expect(sync.getCloudSyncSnapshot()).toMatchObject({ status: 'error', error: '「失败的画布」：保存失败' })
+    expect(tasks[0]?.cloudSyncStatus).toBe('synced')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(docs.syncDocuments).toHaveBeenCalledTimes(2)
+    expect(sync.getCloudSyncSnapshot().status).toBe('synced')
+  })
+
   it.each([false, true])('keeps original bytes and MIME across pull/download/resync, reversed=%s', async (reverse) => {
     if (reverse) cloud.assets.reverse()
     const sync = await import('./cloudSync')

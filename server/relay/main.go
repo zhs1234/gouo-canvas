@@ -157,8 +157,10 @@ func RelayHandler(relay RelayBaseInterface) (err *types.OpenAIErrorWithStatusCod
 	if err != nil {
 		if _, image := relay.getContext().Get("gouo_image_model"); image {
 			code := fmt.Sprint(err.Code)
-			if code == "http_request_failed" || code == "decode_response_failed" || code == "read_response_body_failed" || err.StatusCode == http.StatusRequestTimeout || err.StatusCode == http.StatusGatewayTimeout || err.StatusCode == 524 {
-				quota.MarkImageUnknown(relay.getContext(), "请求已发送但响应未确认，请先核对渠道记录")
+			if code == "http_request_failed" || code == "decode_response_failed" || code == "read_response_body_failed" || code == "image_result_persist_failed" || err.StatusCode == http.StatusRequestTimeout || err.StatusCode == http.StatusGatewayTimeout || err.StatusCode == 524 {
+				diagnostic := imageUnknownDiagnostic(relay.getContext(), err)
+				logger.LogError(relay.getContext().Request.Context(), fmt.Sprintf("image result uncertain: channel_id=%d %s", relay.getContext().GetInt("channel_id"), diagnostic))
+				quota.MarkImageUnknown(relay.getContext(), "请求已发送但响应未确认，请先核对渠道记录；"+diagnostic)
 				err = common.StringErrorWrapperLocal("生成结果未确认，预扣额度待核对。请在使用记录中查看请求状态，避免直接重复提交", "image_result_unknown", http.StatusBadGateway)
 				done = true
 			} else {
@@ -175,6 +177,36 @@ func RelayHandler(relay RelayBaseInterface) (err *types.OpenAIErrorWithStatusCod
 	quota.Consume(relay.getContext(), usage, relay.IsStream())
 
 	return
+}
+
+func imageUnknownDiagnostic(c *gin.Context, err *types.OpenAIErrorWithStatusCode) string {
+	// 错误码、Param 也可能来自上游；只允许有限分类，绝不复制响应正文、URL 或原始消息。
+	code, stage, reason := "unrecognized", "upstream_response", "unclassified"
+	switch err.Code {
+	case "http_request_failed":
+		code, stage, reason = "http_request_failed", "request", "transport_failure"
+	case "decode_response_failed":
+		code, stage, reason = "decode_response_failed", "response_decode", "invalid_or_incomplete_response"
+	case "read_response_body_failed":
+		code, stage, reason = "read_response_body_failed", "response_read", "body_read_failure"
+	case "image_result_persist_failed":
+		code, stage, reason = "image_result_persist_failed", "result_storage", "result_save_failure"
+	case "timeout", "request_timeout", "gateway_timeout", "upstream_timeout":
+		code = err.Code.(string)
+	}
+	if err.StatusCode == http.StatusRequestTimeout || err.StatusCode == http.StatusGatewayTimeout || err.StatusCode == 524 {
+		reason = "upstream_timeout"
+	}
+	switch err.Param {
+	case "image_json_invalid", "image_sse_invalid", "image_response_incomplete", "image_response_empty", "image_response_unsupported_content_type", "image_response_too_large", "network_timeout", "request_timeout", "request_canceled":
+		reason = err.Param
+	}
+	if c.Request.Context().Err() == context.DeadlineExceeded {
+		reason = "request_deadline_exceeded"
+	} else if c.Request.Context().Err() == context.Canceled {
+		reason = "request_canceled"
+	}
+	return fmt.Sprintf("stage=%s; code=%s; status=%d; reason=%s", stage, code, err.StatusCode, reason)
 }
 
 func shouldCooldowns(c *gin.Context, channel *model.Channel, apiErr *types.OpenAIErrorWithStatusCode) {
