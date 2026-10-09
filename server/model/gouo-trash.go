@@ -26,12 +26,9 @@ func PurgeGouoTrash(now time.Time) error {
 		deleted[id] = true
 	}
 	users := map[int]bool{}
-	for _, entry := range []struct {
-		model any
-		table string
-	}{{&GouoTask{}, "gouo_tasks"}, {&GouoDocument{}, "gouo_documents"}, {&GouoFavoriteCollection{}, "gouo_favorite_collections"}} {
+	for _, model := range []any{&GouoTask{}, &GouoDocument{}, &GouoFavoriteCollection{}} {
 		var ids []int
-		if err := DB.Model(entry.model).Where("hidden_at > 0 AND hidden_at < ?", cutoff).Distinct("user_id").Pluck("user_id", &ids).Error; err != nil {
+		if err := DB.Model(model).Where("hidden_at > 0 AND hidden_at < ?", cutoff).Distinct("user_id").Pluck("user_id", &ids).Error; err != nil {
 			return err
 		}
 		for _, id := range ids {
