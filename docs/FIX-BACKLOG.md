@@ -1,20 +1,22 @@
 # 光构待修复清单
 
-截至 2026 年 10 月 9 日（北京时间），光构共有 16 项待处理问题：8 项 P1、8 项 P2。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
+截至 2026 年 10 月 9 日（北京时间），光构共登记 19 项问题：GOUO-001 至 016 已提交修复 PR、待验证；GOUO-017 至 019 为修复过程中新发现、待修复。优先处理身份权限、文档覆盖和支付入账风险，再补齐跨账号、跨标签页及部分失败场景的回归测试。
 
-审查基线为 main 提交 [1f3c463](https://github.com/zhs1234/gouo-canvas/commit/1f3c463d4f5d5b51ede64622fab20cef265770b6)。以下均为静态代码发现，尚未运行复现、构建或测试；用户于 2026 年 10 月 9 日说明该项目没有线上运行；此部署状态为用户提供，尚未独立核实，实际部署版本及功能开关未核验。P1/P2 是修复优先级，不表示相关条件已在生产环境成立。
+审查基线为 main 提交 [1f3c463](https://github.com/zhs1234/gouo-canvas/commit/1f3c463d4f5d5b51ede64622fab20cef265770b6)。原始结论均为静态代码发现；各条目的单元测试及复现情况见其"修复记录"；用户于 2026 年 10 月 9 日说明该项目没有线上运行；此部署状态为用户提供，尚未独立核实，实际部署版本及功能开关未核验。P1/P2 是修复优先级，不表示相关条件已在生产环境成立。
 
 ## 当前状态
 
 - v2 路线：暂时废弃。用户明确重启前，不继续验收或开发；保留分支及历史，不做删除。
 
-- 待修复：16 项，其中 P1 8 项、P2 8 项
+- 待验证：16 项（GOUO-001 至 016），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全，均未合并
 
-- 验证状态：16 项均待复现，仅有静态代码证据
+- 待修复：3 项（GOUO-017 至 019），其中 P1 2 项、P2 1 项
+
+- 验证状态：13 项已由单元测试复现（撤掉修复后失败），GOUO-005 由脚本复现，GOUO-013、GOUO-015 待复现；均未在运行环境、支付沙箱或真实并发下复现
 
 - 已完成并验证的修复：0 项
 
-- 本清单不代表已修改代码，也不代表 CI 或线上验证通过
+- 仓库没有在 PR 上运行的 CI；以上测试均为本地运行，不代表 CI 或线上验证通过
 
 - GOUO-003、GOUO-004、GOUO-011、GOUO-014 为既有 PR #6 问题的独立复核，其余 12 项为本轮新增
 
@@ -28,11 +30,13 @@
 
 4. 完成其余 P2 问题及回归覆盖，尤其关注跨账号同步和停止后的付费派发。
 
+5. 审查并合并 PR #8 至 #12，按各条目验收检查完成验证；随后处理 GOUO-017 至 019。
+
 ## P1 待修复
 
 ### GOUO-001 普通管理员响应暴露管理令牌
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -54,9 +58,13 @@
 
 [列表路由](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/router/api-router.go#L95-L104)、[查询字段](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/user.go#L83-L94)、[令牌序列化](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/user.go#L38)、[直接返回结果](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/user.go#L202-L218)、[Bearer 认证](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/middleware/auth.go#L41-L85)。
 
+**修复记录（2026-10-09）**
+
+[PR #8](https://github.com/zhs1234/gouo-canvas/pull/8)，提交 [719694d](https://github.com/zhs1234/gouo-canvas/commit/719694d)，基于 main 1f3c463。已运行：`TestUserListAndDetailHideAccessTokens`：admin/root 列表与详情均不含令牌，admin 只能看到更低权限账号、不能读取 root 详情。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-002 GitHub OAuth 空邮箱匹配本地账号
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -78,9 +86,13 @@
 
 [邮箱结果](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/github.go#L152-L185)、[空邮箱参与匹配](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/github.go#L188-L213)、[数据库查询](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/user.go#L339-L362)、[默认 root](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/main.go#L41-L59)、[匹配后登录](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/github.go#L308-L332)。
 
+**修复记录（2026-10-09）**
+
+[PR #8](https://github.com/zhs1234/gouo-canvas/pull/8)，提交 [e74276c](https://github.com/zhs1234/gouo-canvas/commit/e74276c)，基于 main 1f3c463。已运行：`TestGitHubLoginIgnoresEmptyEmailAndZeroID`：空邮箱新身份、id 为 0 均不匹配 root；已验证邮箱仍可匹配。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-003 远端素材下载覆盖新的 Agent 草稿
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -102,9 +114,13 @@
 
 [检查与下载间隔](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/serverDocuments.ts#L68-L85)、[替换内存](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/serverDocuments.ts#L44-L53)、[草稿防抖](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/stores/agentStore.ts#L60-L74)。
 
+**修复记录（2026-10-09）**
+
+[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，提交 [4d7fa93](https://github.com/zhs1234/gouo-canvas/commit/4d7fa93)，基于 main 1f3c463。已运行：`serverDocuments.test.ts`：素材下载期间修改草稿后草稿保留、游标不推进；写库期间的编辑另存为副本。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-004 旧标签页借用共享版本覆盖云文档
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -126,9 +142,13 @@
 
 [快照枚举](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/serverDocuments.ts#L133-L143)、[读取版本并提交](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/serverDocuments.ts#L90-L108)、[服务端版本检查](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo-document.go#L66-L73)。
 
+**修复记录（2026-10-09）**
+
+[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，提交 [7f00a53](https://github.com/zhs1234/gouo-canvas/commit/7f00a53)，基于 main 1f3c463。已运行：`serverDocuments.test.ts`：列表快照过期时不提交旧内容；`db.documents.test.ts`：同一事务读取文档与同步记录。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-005 微信支付金额截断与订单金额不一致
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（脚本确认旧写法 int64(money*100) 把 0.29、1.15、2.01、4.35、8.7、19.99 各少算一分），尚未在支付沙箱复现。
 
 **触发场景**
 
@@ -150,9 +170,13 @@
 
 [创建金额](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/payment/gateway/wxpay/client.go#L15-L28)、[回调金额](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/payment/gateway/wxpay/payment.go#L110-L119)、[严格验价](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/order.go#L82-L108)。
 
+**修复记录（2026-10-09）**
+
+[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9)，提交 [4871c52](https://github.com/zhs1234/gouo-canvas/commit/4871c52)，基于 main 1f3c463。已运行：`TestMoneyToFenRoundsDecimalAmounts`：0.01、0.29、1.15、1.29、2.01、4.35、8.7、19.99、100 换算正确。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-006 全局支付客户端串用商户配置
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -174,9 +198,13 @@
 
 [全局缓存及首次初始化](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/payment/gateway/alipay/payment.go#L23-L60)、[付款使用缓存](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/payment/gateway/alipay/client.go#L15-L55)、[回调使用当前配置](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/payment/gateway/alipay/payment.go#L63-L103)、[同类全局缓存](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/payment/gateway/wxpay/payment.go#L36-L75)。
 
+**修复记录（2026-10-09）**
+
+[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9)，提交 [cc74160](https://github.com/zhs1234/gouo-canvas/commit/cc74160)，基于 main 1f3c463。已运行：`TestPayUsesCurrentMerchantConfig`：交替使用两个支付宝商户，支付链接 app_id 各自正确。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-007 供应商图片 URL 可触发后端内网请求
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -198,9 +226,13 @@
 
 [URL 校验](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/relay/gouo-image.go#L75-L77)、[直接下载](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/relay/gouo-image.go#L246-L273)。
 
+**修复记录（2026-10-09）**
+
+[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10)，提交 [fb4c689](https://github.com/zhs1234/gouo-canvas/commit/fb4c689)，基于 main 1f3c463。已运行：`TestIsPublicIP`、`TestPublicHTTPClientRejectsLoopbackAndRedirects`、`TestGouoImageBytesRejectsInternalURLsAndOversizedImages`：回环、私网、链路本地、IPv4 映射地址及 localhost 均被拒绝且目标未收到请求。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-008 URL 换源继承已有前端 API Key
 
-优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -222,11 +254,15 @@
 
 [换源与保留 Key](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/urlSettings.ts#L119-L145)、[自动应用](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/App.tsx#L69-L73)、[Bearer Key](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/openaiCompatibleImageApi.ts#L85-L88)、[发送目标](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/openaiCompatibleImageApi.ts#L723-L731)。
 
+**修复记录（2026-10-09）**
+
+[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12)，提交 [7d54e49](https://github.com/zhs1234/gouo-canvas/commit/7d54e49)，基于 main 1f3c463。已运行：`urlSettings.test.ts`：两种模式下仅 apiUrl 跨源时 Key 清空，同源保留，显式 apiKey 生效，settings JSON 不继承默认 Key。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ## P2 待修复
 
 ### GOUO-009 面板切换账号后本地与云身份不一致
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -248,9 +284,13 @@ A 的 Gouo 页面保持打开；另一 One Hub 面板标签页退出 A 并登录
 
 [面板登录退出](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/web/src/hooks/useLogin.js#L118-L132)、[身份监听](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/components/BackendAuthGate.tsx#L71-L98)、[仅检查本地标记](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/storageScope.ts#L65-L72)、[Cookie 请求](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/gouoBackend.ts#L215-L224)、[文档上传](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/serverDocuments.ts#L90-L109)。
 
+**修复记录（2026-10-09）**
+
+[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，提交 [97907f9](https://github.com/zhs1234/gouo-canvas/commit/97907f9)，基于 main 1f3c463。已运行：`TestGouoAccountMatch`：账号头为空或一致时放行，不一致返回 409；`gouoBackend.test.ts`：请求均携带账号头，收到 account_mismatch 时刷新页面。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-010 用户删除接口返回值不准确
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -272,9 +312,13 @@ A 的 Gouo 页面保持打开；另一 One Hub 面板标签页退出 A 并登录
 
 [证据 L571–579](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/user.go#L571-L579)。
 
+**修复记录（2026-10-09）**
+
+[PR #8](https://github.com/zhs1234/gouo-canvas/pull/8)，提交 [6a80715](https://github.com/zhs1234/gouo-canvas/commit/6a80715)，基于 main 1f3c463。已运行：`TestDeleteUserResponse`：成功与数据库失败两种情况的 JSON 与剩余记录数。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-011 收藏变化被增量同步跳过
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -296,9 +340,13 @@ B 可能持续显示过期收藏关系。
 
 [增量过滤](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/serverLibrary.ts#L215-L235)、[仅修改收藏表](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo_cloud.go#L341-L347)。
 
+**修复记录（2026-10-09）**
+
+[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，提交 [498f69b](https://github.com/zhs1234/gouo-canvas/commit/498f69b)，基于 main 1f3c463。已运行：`TestGouoFavoriteChangesAdvanceTaskCursor`：收藏、取消收藏都推进任务 updated_at。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-012 专用画布导入未触发云保存
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -320,9 +368,13 @@ B 可能持续显示过期收藏关系。
 
 [导入保存](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/canvas/export.ts#L125-L128)、[推送入口](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/serverDocuments.ts#L193-L200)、[全量导入对照](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/store.ts#L2537-L2544)。
 
+**修复记录（2026-10-09）**
+
+[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，提交 [18eb5b4](https://github.com/zhs1234/gouo-canvas/commit/18eb5b4)，基于 main 1f3c463。已运行：`export.test.ts`：导入成功后发出 documents-changed 事件，事务失败时不发。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-013 全量 ZIP 导入缺少解压限制
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：待复现；修复后行为有单元测试覆盖，测试依赖新增的共享函数，未做撤销对照，尚未在浏览器中用压缩炸弹复现。
 
 **触发场景**
 
@@ -344,9 +396,13 @@ B 可能持续显示过期收藏关系。
 
 [读完整文件](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/store.ts#L2474-L2477)、[无界解压](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/exportZip.ts#L104-L110)、[画布导入已有防护](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/canvas/export.ts#L55-L63)。
 
+**修复记录（2026-10-09）**
+
+[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12)，提交 [3768f86](https://github.com/zhs1234/gouo-canvas/commit/3768f86)，基于 main 1f3c463。已运行：`exportZip.test.ts`：单项超限、累计超限报错，白名单外条目被跳过；`store.test.ts`：超大文件不读入内存。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-014 批量部分失败导致云图片 ID 错绑
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -368,9 +424,13 @@ B 可能持续显示过期收藏关系。
 
 [压缩成功数组](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/openaiCompatibleImageApi.ts#L508-L550)、[原始 Position](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo_cloud.go#L438-L461)、[按下标绑定](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo_cloud.go#L501-L508)。
 
+**修复记录（2026-10-09）**
+
+[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11)，提交 [1510a7a](https://github.com/zhs1234/gouo-canvas/commit/1510a7a)，基于 main 1f3c463。已运行：`TestGouoTaskMetaBindsClientImagesByPosition`、`serverLibrary.test.ts`：前项失败时按原始位置绑定。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-015 模型映射后图片编辑参数丢失
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：待复现；修复后行为有单元测试覆盖，旧实现函数签名不同，未做撤销对照，尚未在运行环境复现。
 
 **触发场景**
 
@@ -392,9 +452,13 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 
 [前端字段](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/openaiCompatibleImageApi.ts#L633-L656)、[缺少字段的类型](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/types/image.go#L37-L47)、[映射重建](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/providers/openai/image_edits.go#L56-L80)、[字段白名单](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/providers/openai/image_edits.go#L90-L152)。
 
+**修复记录（2026-10-09）**
+
+[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10)，提交 [6430daa](https://github.com/zhs1234/gouo-canvas/commit/6430daa)，基于 main 1f3c463。已运行：`TestImagesEditsMultipartFormKeepsFieldsWhenModelIsMapped`：映射前后除 model 外字段与文件字节一致。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
 ### GOUO-016 Agent 停止后仍可派发待提交图片任务
 
-优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
 
 **触发场景**
 
@@ -415,6 +479,84 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 **代码依据**
 
 [停止 abort](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/stores/agentStore.ts#L320-L322)、[提交不传 signal](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/agent/tools.ts#L166-L183)、[等待报价](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/imageTasks.ts#L117-L126)、[继续派发](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/src/lib/imageTasks.ts#L207-L224)。
+
+**修复记录（2026-10-09）**
+
+[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12)，提交 [deb5c27](https://github.com/zhs1234/gouo-canvas/commit/deb5c27)，基于 main 1f3c463。已运行：`imageTasks.test.ts`：等待报价期间停止，不保存也不派发任务。合并并按上方验收检查完成验证前，不标记为已验证修复。
+
+## 新增待修复（GOUO-017 起）
+
+### GOUO-017 OIDC 按用户名回退匹配本地账号
+
+优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+
+**触发场景**
+
+开启 OIDC 登录；某个 OIDC 主体尚未绑定本地账号，但其用户名声明与已有本地账号的用户名相同，例如 root。
+
+**影响**
+
+该 OIDC 身份会被直接绑定到同名本地账号并登录，可能取得 root 或管理员权限。用户名由身份提供方控制，关闭注册不能阻断。
+
+**建议修复**
+
+取消按用户名静默绑定，改为先登录本地账号再显式绑定 OIDC；修复前评估关闭该入口。
+
+**验收检查**
+
+用户名与 root、管理员、普通用户同名的新 OIDC 主体均不能登录已有账号；已绑定的 OIDC 主体仍可正常登录。
+
+**代码依据**
+
+[按用户名回退并绑定登录](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/controller/oidc.go#L158-L171)。修复 GOUO-002 时发现。
+
+### GOUO-018 对话图片 URL 下载可触发后端内网请求
+
+优先级：P1。处理状态：待修复。验证状态：待复现，仅静态证据。
+
+**触发场景**
+
+用户在对话请求中提供 `image_url`，所选渠道为 Claude、Gemini、Ollama、OpenRouter 等需要服务端先下载图片的供应商。下载没有限制目标地址。
+
+**影响**
+
+与 GOUO-007 同类，但 URL 由普通用户直接控制，服务器可能访问私网、本机或链路本地地址。
+
+**建议修复**
+
+复用 GOUO-007 引入的 `utils.NewPublicHTTPClient` 下载用户提供的图片 URL。
+
+**验收检查**
+
+使用隔离测试服务覆盖私网、IPv6、本机、重定向到内网和 DNS 重绑定；请求在接触受限目标前被拒绝，公网图片仍可正常下载。
+
+**代码依据**
+
+[GetImageFromUrl](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/common/image/image.go#L20)，调用方如 [claude/chat.go](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/providers/claude/chat.go#L325)、[gemini/type.go](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/providers/gemini/type.go#L558)。修复 GOUO-007 时发现。
+
+### GOUO-019 隐藏收藏夹不推进相关任务的同步游标
+
+优先级：P2。处理状态：待修复。验证状态：待复现，仅静态证据。
+
+**触发场景**
+
+设备 A 删除（隐藏）或恢复某个收藏夹；设备 B 已同步过夹内任务，并按任务 updated_at 增量拉取。
+
+**影响**
+
+与 GOUO-011 同类：设备 B 可能持续显示过期的收藏夹归属。
+
+**建议修复**
+
+隐藏或恢复收藏夹时，在同一事务内推进夹内任务的 updated_at，或建立独立的收藏夹增量记录。
+
+**验收检查**
+
+两设备之间隐藏、恢复收藏夹，设备 B 的增量同步准确反映夹内任务的收藏状态。
+
+**代码依据**
+
+[SetGouoCollectionHidden](https://github.com/zhs1234/gouo-canvas/blob/1f3c463d4f5d5b51ede64622fab20cef265770b6/server/model/gouo_cloud.go#L332-L339)。修复 GOUO-011 时发现。
 
 ## 维护与关闭标准
 
@@ -444,3 +586,4 @@ OpenAI 图片编辑启用公开模型名映射后重建 multipart；类型与字
 |---|---|---|
 | 2026-10-09 | 建立 main 1f3c463 基线清单，登记 GOUO-001 至 GOUO-016；全部待修复、待复现。 | 16 项，P1 8 项，P2 8 项，已验证修复 0 项 |
 | 2026-10-09 | 按用户要求将 v2 路线标记为暂时废弃；后续审查以 main 及面向 main 的活跃 PR 为准，排除旧 v2 及其历史派生开发线，明确重启前不继续验收或开发。保留分支及历史，不做删除；main 1f3c463 基线的 16 项问题保持不变。 | 16 项，P1 8 项，P2 8 项，已验证修复 0 项 |
+| 2026-10-09 | GOUO-001 至 016 提交修复 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 至 [PR #12](https://github.com/zhs1234/gouo-canvas/pull/12)，处理状态改为待验证，各条目追加修复记录及已运行测试；13 项单元测试撤掉修复后失败，GOUO-005 由脚本复现，GOUO-013、GOUO-015 待复现。新增 GOUO-017（OIDC 用户名回退绑定，P1）、GOUO-018（对话图片 URL SSRF，P1）、GOUO-019（隐藏收藏夹不推进游标，P2）。 | 19 项：待验证 16 项，待修复 3 项（P1 2 项、P2 1 项），已验证修复 0 项 |
