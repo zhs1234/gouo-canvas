@@ -125,5 +125,7 @@ export async function importCanvasArchive(file: File): Promise<CanvasProject[]> 
   await importTaskData([], images, [], { canvases: imported, conversations: [] })
   imported.forEach(markCanvasPersisted)
   useCanvasStore.setState((state) => ({ projects: [...imported, ...state.projects] }))
+  // importTaskData 直接写库，不会触发文档变更事件；需要手动通知云同步上传。
+  window.dispatchEvent(new Event('gouo:documents-changed'))
   return imported
 }
