@@ -178,16 +178,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const previous = history?.past[history.past.length - 1]
     const current = get().projects.find((item) => item.id === id)
     if (!previous || !current) return
-    await get().updateProject(id, previous, { history: false })
-    set((state) => ({ histories: { ...state.histories, [id]: { past: history.past.slice(0, -1), future: [current, ...history.future].slice(0, 50) } } }))
+    // updateProject 在保存前已同步替换画布，这里立即同步更新历史；否则连续撤销时下一次会读到旧历史，重复撤销同一步并丢掉最新状态
+    const saving = get().updateProject(id, previous, { history: false })
+    if (get().projects.find((item) => item.id === id) !== current) {
+      set((state) => ({ histories: { ...state.histories, [id]: { past: history.past.slice(0, -1), future: [current, ...history.future].slice(0, 50) } } }))
+    }
+    await saving
   },
   redo: async (id) => {
     const history = get().histories[id]
     const next = history?.future[0]
     const current = get().projects.find((item) => item.id === id)
     if (!next || !current) return
-    await get().updateProject(id, next, { history: false })
-    set((state) => ({ histories: { ...state.histories, [id]: { past: [...history.past, current].slice(-50), future: history.future.slice(1) } } }))
+    const saving = get().updateProject(id, next, { history: false })
+    if (get().projects.find((item) => item.id === id) !== current) {
+      set((state) => ({ histories: { ...state.histories, [id]: { past: [...history.past, current].slice(-50), future: history.future.slice(1) } } }))
+    }
+    await saving
   },
   getReferencedImageIds: () => {
     const state = get()

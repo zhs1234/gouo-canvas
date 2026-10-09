@@ -11,7 +11,7 @@ import type { TaskParams } from '../../types'
 
 const pending = new Map<string, Promise<string>>()
 
-export function generateCanvasNode(projectId: string, nodeId: string, prompt?: string, allowFullMask = false): Promise<string> {
+export function generateCanvasNode(projectId: string, nodeId: string, prompt?: string, allowFullMask = false, priceVersion?: string): Promise<string> {
   const key = `${projectId}:${nodeId}`
   if (pending.has(key)) return pending.get(key)!
   const run = (async () => {
@@ -80,6 +80,7 @@ export function generateCanvasNode(projectId: string, nodeId: string, prompt?: s
     try {
       const taskId = await submitImageTask({
         model: node.metadata?.model,
+        priceVersion,
         maskImageId: node.metadata?.maskImageId,
         maskTargetImageId: node.metadata?.maskTargetImageId || node.metadata?.imageId,
         allowFullMask,
@@ -164,7 +165,8 @@ export async function reconcileCanvasTasks() {
               maskImageId: images.length ? undefined : node.metadata.maskImageId,
               maskTargetImageId: images.length ? undefined : node.metadata.maskTargetImageId,
               status: task.status === 'done' || images.length ? ('success' as const) : ('error' as const),
-              errorDetails: task.error || undefined,
+              // 自定义服务商可能返回很长的错误页，超过画布元数据长度上限会让整次回填失败
+              errorDetails: task.error?.slice(0, 10000) || undefined,
               outputErrors: task.outputErrors,
             },
           }
@@ -183,6 +185,8 @@ useStore.subscribe((state, previous) => {
   if (state.tasks !== previous.tasks) void reconcileCanvasTasks()
 })
 useCanvasStore.subscribe((state, previous) => {
+  // 撤销、重做可能恢复出生成中的节点，而它的任务此时已经完成
+  if (state.hydrated && state.histories !== previous.histories) void reconcileCanvasTasks()
   if (!state.hydrated || previous.hydrated) return
   const loaded = state.projects
   void getAllTasks()

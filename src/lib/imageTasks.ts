@@ -21,6 +21,8 @@ export interface ImageTaskInput {
   allowFullMask?: boolean
   source: NonNullable<TaskRecord['source']>
   requestId?: string
+  // model 与全局模型不同时，调用方展示给用户的价格版本（如画布节点单独选择的模型）
+  priceVersion?: string
   // 调用方已取消（如 Agent 点了停止）时，在任务落库并派发前放弃
   signal?: AbortSignal
 }
@@ -119,7 +121,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
     let quote: Awaited<ReturnType<typeof getImageModelQuote>> | undefined
     if (isBackendAuthEnabled()) {
       try {
-        quote = await getImageModelQuote(activeProfile.model, inputImages.length, Boolean(maskDraft), params.n, input?.model && input.model !== settings.model ? undefined : settings.gouoPriceVersion)
+        quote = await getImageModelQuote(activeProfile.model, inputImages.length, Boolean(maskDraft), params.n, input?.model && input.model !== settings.model ? input.priceVersion : settings.gouoPriceVersion)
       } catch (err) {
         if (input) throw err
         showToast(err instanceof Error ? err.message : String(err), 'error')

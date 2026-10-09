@@ -148,6 +148,12 @@ describe('product model task snapshots', () => {
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
   })
 
+  it('does not persist the platform account token', () => {
+    const persisted = JSON.stringify(getPersistedState(useStore.getState()))
+    expect(useStore.getState().settings.apiKey).toBe('test-key')
+    expect(persisted).not.toContain('test-key')
+  })
+
   it('blocks duplicate submissions until task creation and then permits the next task', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => { release = resolve })
@@ -755,6 +761,21 @@ describe('mask draft lifecycle in store actions', () => {
 })
 
 describe('interrupted OpenAI running tasks', () => {
+  it('leaves tasks that another tab is still executing as running', async () => {
+    await clearTasks()
+    await putDbTask(task({ id: 'other-tab', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
+    await putDbTask(task({ id: 'abandoned', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
+    // 另一个标签页正在执行 other-tab，持有它的任务锁
+    vi.stubGlobal('navigator', { locks: { query: async () => ({ held: [{ name: 'gouo-task:other-tab' }] }) } })
+    try {
+      await initStore()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    const byId = Object.fromEntries(useStore.getState().tasks.map((item) => [item.id, item.status]))
+    expect(byId).toMatchObject({ 'other-tab': 'running', abandoned: 'error' })
+  })
+
   it('marks legacy and OpenAI running tasks as interrupted', () => {
     const now = 10_000
     const legacyRunning = task({ id: 'legacy-running', status: 'running', createdAt: 1_000, finishedAt: null, elapsed: null })

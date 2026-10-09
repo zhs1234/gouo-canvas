@@ -102,20 +102,25 @@ async function pushDocument(kind: Kind, id: string) {
   const fingerprint = documentFingerprint(doc)
   if (saved?.fingerprint === fingerprint) return
   if ([...doc.title].length > 200) throw new Error('标题超过 200 个字符，请重命名后再保存到服务器')
-  const assets = []
+  const assets: Array<{ asset: GouoCloudAsset; imageId: string }> = []
   for (const id of getDocumentImageIds(doc)) assets.push({ asset: await uploadImage(id), imageId: id })
+  const put = (expectedRevision: number) => backendRequest<CloudDocument>(`/api/gouo/${kind}/${encodeURIComponent(doc.id)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      client_id: doc.id,
+      title: doc.title,
+      document: JSON.parse(fingerprint),
+      asset_ids: [...new Set(assets.map((item) => item.asset.id))],
+      assets: assets.map((item) => ({ asset_id: item.asset.id, client_image_id: item.imageId })),
+      expected_revision: expectedRevision,
+    }),
+  })
   let remote: CloudDocument
   try {
-    remote = await backendRequest<CloudDocument>(`/api/gouo/${kind}/${encodeURIComponent(doc.id)}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        client_id: doc.id,
-        title: doc.title,
-        document: JSON.parse(fingerprint),
-        asset_ids: [...new Set(assets.map((item) => item.asset.id))],
-        assets: assets.map((item) => ({ asset_id: item.asset.id, client_image_id: item.imageId })),
-        expected_revision: saved?.revision ?? 0,
-      }),
+    remote = await put(saved?.revision ?? 0).catch((err) => {
+      // 冲突但云端已没有这份文档：其他设备删除后已超过回收站保留期被清除。本地仍有修改，按新文档重新创建，否则会一直保存失败
+      if (err instanceof GouoConflictError && !err.current && saved?.revision) return put(0)
+      throw err
     })
   } catch (err) {
     if (err instanceof GouoConflictError && err.current) {
