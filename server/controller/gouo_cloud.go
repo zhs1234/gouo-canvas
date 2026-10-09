@@ -689,6 +689,10 @@ func PatchGouoTaskMeta(c *gin.Context) {
 		gouoFail(c, http.StatusNotFound, "task_not_found", "作品不存在")
 		return
 	}
+	if errors.Is(err, model.ErrGouoStorageQuota) {
+		gouoFail(c, http.StatusInsufficientStorage, "storage_quota_exceeded", "云端空间不足，本地作品不会受到影响")
+		return
+	}
 	if err != nil || task == nil {
 		gouoFail(c, http.StatusInternalServerError, "task_update_failed", "保存作品信息失败")
 		return
