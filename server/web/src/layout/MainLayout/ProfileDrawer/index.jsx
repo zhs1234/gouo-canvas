@@ -54,6 +54,9 @@ const ProfileDrawer = ({ open, onClose }) => {
       onClose={onClose}
       onOpen={() => {}}
       PaperProps={{
+        role: 'dialog',
+        'aria-label': '账户菜单',
+        'aria-modal': true,
         sx: {
           width: { xs: '85%', sm: 350 },
           maxWidth: '350px',
@@ -70,7 +73,7 @@ const ProfileDrawer = ({ open, onClose }) => {
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* 顶部关闭按钮 */}
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end' }}>
-          <IconButton onClick={onClose} edge="end">
+          <IconButton aria-label="关闭账户菜单" onClick={onClose} edge="end">
             <Icon icon="material-symbols:close" />
           </IconButton>
         </Box>

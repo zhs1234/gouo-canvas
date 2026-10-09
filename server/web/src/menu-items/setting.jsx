@@ -85,6 +85,15 @@ const Setting = {
           isAdmin: true
         },
         {
+          id: 'gouo_billing',
+          title: '图片账务',
+          type: 'item',
+          url: '/panel/gouo_billing',
+          icon: icons.IconReceipt2,
+          breadcrumbs: false,
+          isAdmin: true
+        },
+        {
           id: 'gouo_storage',
           title: '光构存储',
           type: 'item',

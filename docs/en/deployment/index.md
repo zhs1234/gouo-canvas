@@ -41,7 +41,7 @@ A running service is not ready for public registration. Configure it in this ord
 2. Sign in with the bootstrap account and immediately change the `root` password from `123456`.
 3. Add the upstream channel and map `gpt-image-2`, or the model selected for your deployment.
 4. Validate generation, edit, and variation endpoints.
-5. Validate fixed price, successful charge, failure refund, and insufficient balance.
+5. Validate each model's price, output limit, price-change confirmation, successful charge, failure refund, and insufficient balance.
 6. In the Gouo storage admin view, verify asset writes, per-user quota, and artwork inspection.
 7. Configure HTTPS, backups, monitoring, firewall, and rate limits.
 8. With a regular account, test registration, sign-in, generation, synchronization, recycle bin, and cross-browser restore.

@@ -1,9 +1,8 @@
-import { useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useSelector } from 'react-redux';
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import { Avatar, Box } from '@mui/material';
+import { Avatar, ButtonBase } from '@mui/material';
 import User1 from 'assets/images/users/user-round.svg';
 
 // ==============================|| PROFILE MENU ||============================== //
@@ -11,13 +10,13 @@ import User1 from 'assets/images/users/user-round.svg';
 const Profile = ({ toggleProfileDrawer }) => {
   const theme = useTheme();
   const account = useSelector((state) => state.account);
-  const anchorRef = useRef(null);
 
   return (
     <>
       {/* 用户头像按钮 */}
-      <Box
-        component="div"
+      <ButtonBase
+        aria-label="打开账户菜单"
+        aria-haspopup="dialog"
         onClick={toggleProfileDrawer}
         sx={{
           cursor: 'pointer',
@@ -28,6 +27,7 @@ const Profile = ({ toggleProfileDrawer }) => {
           justifyContent: 'center',
           alignItems: 'center',
           borderRadius: '50%',
+          '&.Mui-focusVisible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 3 },
           background: `linear-gradient(90deg, 
             ${theme.palette.primary.main}, 
             ${theme.palette.secondary.main}, 
@@ -51,9 +51,8 @@ const Profile = ({ toggleProfileDrawer }) => {
               transform: 'scale(1.03)'
             }
           }}
-          ref={anchorRef}
         />
-      </Box>
+      </ButtonBase>
     </>
   );
 };

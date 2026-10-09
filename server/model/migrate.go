@@ -443,6 +443,31 @@ func migrateTokenLimitsStructure() *gormigrate.Migration {
 		},
 	}
 }
+func gouoCloudMillisecondMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202610080001",
+		Migrate: func(tx *gorm.DB) error {
+			for _, entry := range []struct {
+				model   any
+				columns []string
+			}{
+				{&GouoTask{}, []string{"created_at", "updated_at", "hidden_at"}},
+				{&GouoAsset{}, []string{"created_at", "updated_at"}},
+				{&GouoFavoriteCollection{}, []string{"created_at", "updated_at", "hidden_at"}},
+				{&GouoFavoriteItem{}, []string{"created_at", "updated_at"}},
+				{&GouoStorageQuota{}, []string{"updated_at"}},
+			} {
+				for _, column := range entry.columns {
+					if err := tx.Model(entry.model).Where(column+" > 0 AND "+column+" < ?", int64(1_000_000_000_000)).UpdateColumn(column, gorm.Expr(column+" * 1000")).Error; err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func migrationAfter(db *gorm.DB) error {
 	// 从库不执行
 	if !config.IsMasterNode {
@@ -456,6 +481,7 @@ func migrationAfter(db *gorm.DB) error {
 		addOldTokenMaxId(),
 		addExtraRatios(),
 		migrateTokenLimitsStructure(),
+		gouoCloudMillisecondMigration(),
 	})
 	return m.Migrate()
 }

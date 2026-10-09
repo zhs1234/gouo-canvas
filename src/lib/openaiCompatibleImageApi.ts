@@ -560,6 +560,7 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile): P
   const proxyConfig = readClientDevProxyConfig()
   const useApiProxy = shouldUseApiProxy(profile.apiProxy, proxyConfig)
   const requestHeaders = createRequestHeaders(profile)
+  if (opts.gouoPriceVersion) requestHeaders['X-Gouo-Price-Version'] = opts.gouoPriceVersion
   const paths = createOpenAICompatiblePaths()
 
   const controller = new AbortController()

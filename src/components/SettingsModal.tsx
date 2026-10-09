@@ -1587,7 +1587,7 @@ export default function SettingsModal() {
                 setClearTasks={setClearTasks}
                 onClear={() => setConfirmDialog({
                   title: '清空所选数据',
-                  message: '确定要清空所选的数据吗？此操作不可恢复。',
+                  message: isBackendAuthEnabled() ? '将清空当前浏览器的所选数据，未同步且未备份的内容无法恢复。已同步的云端内容仍保留，后续同步可能重新下载。确定清空本地数据吗？' : '确定要清空所选的数据吗？未备份的本地数据无法恢复。',
                   action: () => handleClearAllData(),
                 })}
               />

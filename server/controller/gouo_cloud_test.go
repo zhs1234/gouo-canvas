@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -32,6 +33,15 @@ func TestGouoCursorRoundTrip(t *testing.T) {
 func TestGouoCursorRejectsInvalidInput(t *testing.T) {
 	_, _, err := decodeGouoCursor("not-a-cursor")
 	require.Error(t, err)
+}
+
+func TestGouoLegacyCursorRestartsFullSync(t *testing.T) {
+	for _, value := range []string{"1791000000:0123456789abcdef0123456789abcdef", "1791000000123:0123456789abcdef0123456789abcdef"} {
+		timestamp, id, err := decodeGouoCursor(base64.RawURLEncoding.EncodeToString([]byte(value)))
+		require.NoError(t, err)
+		require.Zero(t, timestamp)
+		require.Empty(t, id)
+	}
 }
 
 func TestUniqueStrings(t *testing.T) {

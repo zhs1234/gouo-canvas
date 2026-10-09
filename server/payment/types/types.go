@@ -26,6 +26,8 @@ type PayRequestData struct {
 
 // 支付回调时的数据结构
 type PayNotify struct {
-	TradeNo   string `json:"trade_no"`
-	GatewayNo string `json:"gateway_no"`
+	TradeNo   string             `json:"trade_no"`
+	GatewayNo string             `json:"gateway_no"`
+	Amount    string             `json:"amount"`
+	Currency  model.CurrencyType `json:"currency"`
 }

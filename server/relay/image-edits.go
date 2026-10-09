@@ -61,10 +61,10 @@ func (r *relayImageEdits) send() (err *types.OpenAIErrorWithStatusCode, done boo
 	if err != nil {
 		return
 	}
-	err = responseJsonClient(r.c, response)
+	err = responseImageClient(r.c, response, provider.GetUsage())
 
 	if err != nil {
-		done = true
+		done = r.c.Writer.Written()
 	}
 
 	return

@@ -81,6 +81,9 @@ export interface ApiProfile {
 }
 
 export interface AppSettings {
+  /** 产品模式按账号记忆选择，报价只用于提交确认，最终由服务端结算。 */
+  gouoModelSelected?: boolean
+  gouoPriceVersion?: string
   /** 旧版单配置字段：保留用于导入/查询参数兼容，实际请求以 active profile 为准 */
   baseUrl: string
   apiKey: string
@@ -161,6 +164,8 @@ export interface TaskRecord {
   apiMode?: ApiMode
   /** 生成时使用的模型 ID */
   apiModel?: string
+  gouoPriceVersion?: string
+  gouoPriceCNY?: number
   /** fal.ai 队列请求 ID，用于连接断开后的结果恢复 */
   falRequestId?: string
   /** fal.ai 队列 endpoint，用于连接断开后的状态和结果查询 */

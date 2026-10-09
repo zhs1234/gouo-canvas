@@ -5,6 +5,8 @@ import TaskCard from './TaskCard'
 import { restoreCloudTask } from '../lib/cloudSync'
 import { EMPTY_GALLERY_PROMPTS } from '../lib/userGuidance'
 
+const PAGE_SIZE = 60
+
 export default function TaskGrid() {
   const tasks = useStore((s) => s.tasks)
   const searchQuery = useStore((s) => s.searchQuery)
@@ -31,12 +33,13 @@ export default function TaskGrid() {
   const startedWithCtrl = useRef(false)
   const initialSelection = useRef<string[]>([])
   const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const [pagination, setPagination] = useState({ filter: '', page: 1 })
+  const sortedTasks = useMemo(() => [...tasks].sort((a, b) => b.createdAt - a.createdAt), [tasks])
 
   const filteredTasks = useMemo(() => {
-    const sorted = [...tasks].sort((a, b) => b.createdAt - a.createdAt)
     const q = searchQuery.trim().toLowerCase()
     
-    return sorted.filter((t) => {
+    return sortedTasks.filter((t) => {
       if (filterFavorite) {
         if (!t.isFavorite) return false
         if (activeFavoriteCollectionId && activeFavoriteCollectionId !== ALL_FAVORITES_COLLECTION_ID && !getTaskFavoriteCollectionIds(t).includes(activeFavoriteCollectionId)) return false
@@ -44,7 +47,24 @@ export default function TaskGrid() {
       if (!taskMatchesFilterStatus(t, filterStatus)) return false
       return taskMatchesSearchQuery(t, q)
     })
-  }, [tasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
+  }, [sortedTasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
+  const filterKey = JSON.stringify([searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE))
+  const page = Math.min(pagination.filter === filterKey ? pagination.page : 1, pageCount)
+  const visibleTasks = filteredTasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  useEffect(() => {
+    setPagination((previous) => previous.filter !== filterKey ? { filter: filterKey, page: 1 } : previous.page > pageCount ? { ...previous, page: pageCount } : previous)
+  }, [filterKey, pageCount])
+  const changePage = (nextPage: number) => {
+    setPagination({ filter: filterKey, page: nextPage })
+    rootRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
+  }
+  const pageNavigation = pageCount > 1 && <nav aria-label="作品分页" data-no-drag-select className="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+    <span aria-live="polite">共 {filteredTasks.length} 条 · 第 {page} / {pageCount} 页</span>
+    <button type="button" disabled={page === 1} onClick={() => changePage(page - 1)} className="rounded-lg border px-3 py-1.5 disabled:opacity-40 dark:border-white/10">上一页</button>
+    <button type="button" disabled={page === pageCount} onClick={() => changePage(page + 1)} className="rounded-lg border px-3 py-1.5 disabled:opacity-40 dark:border-white/10">下一页</button>
+    <span className="text-xs">每页 {PAGE_SIZE} 条，选择可跨页保留</span>
+  </nav>
 
   const handleDelete = (task: typeof tasks[0]) => {
     if (task.cloudHiddenAt) {
@@ -316,8 +336,9 @@ export default function TaskGrid() {
       data-task-grid-root
       className="relative min-h-[50vh]"
     >
+      {pageNavigation}
       <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
-        {filteredTasks.map((task) => (
+        {visibleTasks.map((task) => (
           <div key={task.id} className="task-card-wrapper" data-task-id={task.id}>
             <TaskCard
               task={task}
@@ -343,6 +364,7 @@ export default function TaskGrid() {
           </div>
         ))}
       </div>
+      {pageNavigation}
       {selectionBox && (
         <div
           className="fixed bg-blue-500/20 border border-blue-500/50 pointer-events-none z-[30]"

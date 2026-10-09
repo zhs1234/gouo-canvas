@@ -271,7 +271,7 @@ func responseJsonClient(c *gin.Context, data interface{}) *types.OpenAIErrorWith
 	responseBody, err := json.Marshal(data)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "marshal_response_body_failed:"+err.Error())
-		return nil
+		return common.ErrorWrapperLocal(err, "marshal_response_body_failed", http.StatusBadGateway)
 	}
 
 	c.Writer.Header().Set("Content-Type", "application/json")
@@ -279,6 +279,7 @@ func responseJsonClient(c *gin.Context, data interface{}) *types.OpenAIErrorWith
 	_, err = c.Writer.Write(responseBody)
 	if err != nil {
 		logger.LogError(c.Request.Context(), "write_response_body_failed:"+err.Error())
+		return common.ErrorWrapperLocal(err, "write_response_body_failed", http.StatusBadGateway)
 	}
 
 	return nil

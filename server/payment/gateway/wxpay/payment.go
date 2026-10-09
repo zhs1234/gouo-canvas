@@ -11,6 +11,7 @@ import (
 	"one-api/payment/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
 	"github.com/wechatpay-apiv3/wechatpay-go/core/auth/verifiers"
 	"github.com/wechatpay-apiv3/wechatpay-go/core/downloader"
@@ -102,16 +103,20 @@ func (w *WeChatPay) HandleCallback(c *gin.Context, gatewayConfig string) (*types
 		c.Status(http.StatusNoContent)
 		return nil, fmt.Errorf("WeChat Transaction failed: %v", notifyReq.EventType)
 	}
-	if *transaction.TradeState != "SUCCESS" {
+	if transaction.TradeState == nil || *transaction.TradeState != "SUCCESS" {
 		c.Status(http.StatusNoContent)
 		return nil, fmt.Errorf("tradeNo: %v, TransactionId: %v, err: %v", transaction.OutTradeNo, transaction.TransactionId, err)
+	}
+	if transaction.OutTradeNo == nil || transaction.TransactionId == nil || transaction.Amount == nil || transaction.Amount.Total == nil || transaction.Amount.Currency == nil || transaction.Mchid == nil || *transaction.Mchid != wxpayConfig.MchID || transaction.Appid == nil || *transaction.Appid != wxpayConfig.AppID {
+		return nil, fmt.Errorf("WeChat transaction fields invalid")
 	}
 
 	payNotify := &types.PayNotify{
 		TradeNo:   *transaction.OutTradeNo,
 		GatewayNo: *transaction.TransactionId,
+		Amount:    decimal.NewFromInt(*transaction.Amount.Total).Shift(-2).String(),
+		Currency:  model.CurrencyType(*transaction.Amount.Currency),
 	}
-	c.Status(http.StatusNoContent)
 	return payNotify, nil
 
 }

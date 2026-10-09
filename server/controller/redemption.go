@@ -150,11 +150,15 @@ func UpdateRedemption(c *gin.Context) {
 	if statusOnly != "" {
 		cleanRedemption.Status = redemption.Status
 	} else {
+		if len(redemption.Name) == 0 || len(redemption.Name) > 20 {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "兑换码名称长度必须在1-20之间"})
+			return
+		}
 		// If you add more fields, please also update redemption.Update()
 		cleanRedemption.Name = redemption.Name
 		cleanRedemption.Quota = redemption.Quota
 	}
-	err = cleanRedemption.Update()
+	err = cleanRedemption.Update(statusOnly != "")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

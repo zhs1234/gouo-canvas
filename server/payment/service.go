@@ -3,6 +3,7 @@ package payment
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"one-api/common/config"
 	"one-api/common/logger"
 	"one-api/model"
@@ -69,6 +70,18 @@ func (s *PaymentService) HandleCallback(c *gin.Context, gatewayConfig string) (*
 	}
 
 	return payNotify, err
+}
+
+// 只在到账事务提交后确认，数据库失败时让网关继续重试。
+func (s *PaymentService) AcknowledgeCallback(c *gin.Context) {
+	switch s.Payment.Type {
+	case "epay", "alipay":
+		c.String(http.StatusOK, "success")
+	case "wxpay":
+		c.Status(http.StatusNoContent)
+	default:
+		c.Status(http.StatusOK)
+	}
 }
 
 func (s *PaymentService) getNotifyURL() string {

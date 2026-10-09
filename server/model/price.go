@@ -54,12 +54,17 @@ var defaultExtraPrice = map[string]float64{
 }
 
 type Price struct {
-	Model       string  `json:"model" gorm:"type:varchar(100)" binding:"required"`
-	Type        string  `json:"type"  gorm:"default:'tokens'" binding:"required"`
-	ChannelType int     `json:"channel_type" gorm:"default:0" binding:"gte=0"`
-	Input       float64 `json:"input" gorm:"default:0" binding:"gte=0"`
-	Output      float64 `json:"output" gorm:"default:0" binding:"gte=0"`
-	Locked      bool    `json:"locked" gorm:"default:false"` // 如果模型为locked 则覆盖模式不会更新locked的模型价格
+	Model          string  `json:"model" gorm:"type:varchar(100)" binding:"required"`
+	Type           string  `json:"type"  gorm:"default:'tokens'" binding:"required"`
+	ChannelType    int     `json:"channel_type" gorm:"default:0" binding:"gte=0"`
+	Input          float64 `json:"input" gorm:"default:0" binding:"gte=0"`
+	Output         float64 `json:"output" gorm:"default:0" binding:"gte=0"`
+	Locked         bool    `json:"locked" gorm:"default:false"` // 如果模型为locked 则覆盖模式不会更新locked的模型价格
+	GouoEnabled    bool    `json:"gouo_enabled" gorm:"default:false"`
+	GouoPriceCNY   float64 `json:"gouo_price_cny" gorm:"default:0"`
+	GouoReference  bool    `json:"gouo_reference" gorm:"default:false"`
+	GouoMask       bool    `json:"gouo_mask" gorm:"default:false"`
+	GouoMaxOutputs int     `json:"gouo_max_outputs" gorm:"default:1"`
 
 	ExtraRatios *datatypes.JSONType[map[string]float64] `json:"extra_ratios,omitempty" gorm:"type:json"`
 	ModelInfo   *ModelInfoResponse                      `json:"model_info,omitempty" gorm:"-"`
@@ -147,7 +152,7 @@ func (price *Price) FetchOutputCurrencyPrice(rate float64) string {
 }
 
 func UpdatePrices(tx *gorm.DB, models []string, prices *Price) error {
-	err := tx.Model(Price{}).Where("model IN (?)", models).Select("*").Omit("model").Updates(
+	err := tx.Model(Price{}).Where("model IN (?)", models).Select("*").Omit("model", "gouo_enabled", "gouo_price_cny", "gouo_reference", "gouo_mask", "gouo_max_outputs").Updates(
 		Price{
 			Type:        prices.Type,
 			ChannelType: prices.ChannelType,
@@ -178,13 +183,13 @@ func DeleteAllPrices(tx *gorm.DB) error {
 
 // 只删除未lock的价格
 func DeleteAllPricesNotLock(tx *gorm.DB) error {
-	err := tx.Where("locked = ?", false).Delete(&Price{}).Error
+	err := tx.Where("locked = ? AND gouo_enabled = ?", false, false).Delete(&Price{}).Error
 	return err
 }
 
 // 只删除指定的未lock的数据
 func DeletePricesByModelNameAndNotLock(tx *gorm.DB, models []string) error {
-	err := tx.Where("locked = ? and model IN (?)", false, models).Delete(&Price{}).Error
+	err := tx.Where("locked = ? AND gouo_enabled = ? AND model IN (?)", false, false, models).Delete(&Price{}).Error
 	return err
 }
 

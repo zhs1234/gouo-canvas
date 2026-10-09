@@ -34,6 +34,17 @@ describe('userGuidance', () => {
     expect(isBalanceError('network timeout')).toBe(false)
   })
 
+  it('requires billing checks for interrupted or locally failed paid requests', () => {
+    for (const message of ['Failed to fetch', '请求中断', '生成结果未确认', '生成结果已返回，但本地处理或保存失败：QuotaExceededError']) {
+      const guidance = getActionableErrorMessage(message, true)
+      expect(guidance).toContain('图片请求状态')
+      expect(guidance).toContain('不代表已退款')
+      expect(guidance).toContain('新建一次付费请求')
+      expect(guidance).not.toContain('稍后点击任务上的“重试”')
+    }
+    expect(getActionableErrorMessage('图片添加失败：Failed to fetch')).not.toContain('付费请求')
+  })
+
   it('only emits the first-generation event before the guide is completed', () => {
     const listener = vi.fn()
     window.addEventListener('gouo:first-generation-complete', listener)

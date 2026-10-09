@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -502,6 +503,10 @@ func PutGouoTask(c *gin.Context) {
 		UpdatedAt:       now,
 	}
 	if err := model.UpsertGouoTask(&task, assets, collectionIDs); err != nil {
+		if errors.Is(err, model.ErrGouoOriginalAssetConflict) {
+			gouoFail(c, http.StatusConflict, "original_asset_conflict", err.Error())
+			return
+		}
 		gouoFail(c, http.StatusInternalServerError, "task_save_failed", "同步任务失败")
 		return
 	}
@@ -530,7 +535,7 @@ func encodeGouoCursor(updatedAt int64, id string) string {
 	if updatedAt == 0 || id == "" {
 		return ""
 	}
-	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("%d:%s", updatedAt, id)))
+	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("v2:%d:%s", updatedAt, id)))
 }
 
 func decodeGouoCursor(value string) (int64, string, error) {
@@ -541,12 +546,21 @@ func decodeGouoCursor(value string) (int64, string, error) {
 	if err != nil {
 		return 0, "", err
 	}
-	parts := strings.SplitN(string(data), ":", 2)
-	if len(parts) != 2 || len(parts[1]) != 32 {
+	parts := strings.Split(string(data), ":")
+	if len(parts) == 2 && len(parts[1]) == 32 {
+		// 旧游标混合了秒和毫秒，不能用于迁移后的增量拉取。
+		if timestamp, err := strconv.ParseInt(parts[0], 10, 64); err == nil && timestamp > 0 {
+			return 0, "", nil
+		}
+	}
+	if len(parts) != 3 || parts[0] != "v2" || len(parts[2]) != 32 {
 		return 0, "", fmt.Errorf("invalid cursor")
 	}
-	timestamp, err := strconv.ParseInt(parts[0], 10, 64)
-	return timestamp, parts[1], err
+	timestamp, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || timestamp <= 0 {
+		return 0, "", fmt.Errorf("invalid cursor")
+	}
+	return timestamp, parts[2], nil
 }
 
 func gouoFavoriteMap(userID int) (map[string][]string, error) {

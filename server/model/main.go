@@ -194,7 +194,7 @@ func InitDB() (err error) {
 			return err
 		}
 
-		err = DB.AutoMigrate(&GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{})
+		err = DB.AutoMigrate(&GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}, &GouoImageCharge{})
 		if err != nil {
 			return err
 		}
@@ -211,7 +211,9 @@ func InitDB() (err error) {
 			}
 		}
 
-		migrationAfter(DB)
+		if err := migrationAfter(DB); err != nil {
+			return err
+		}
 
 		logger.SysLog("database migrated")
 		err = createRootAccountIfNeed()

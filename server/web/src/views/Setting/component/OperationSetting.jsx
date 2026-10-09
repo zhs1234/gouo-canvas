@@ -38,6 +38,8 @@ const OperationSetting = () => {
     QuotaRemindThreshold: 0,
     PreConsumedQuota: 0,
     TopUpLink: '',
+    GouoRedemptionHelp: '',
+    GouoSupportContact: '',
     ChatLink: '',
     ChatLinks: '',
     QuotaPerUnit: 0,
@@ -226,6 +228,9 @@ const OperationSetting = () => {
           if (originInputs['TopUpLink'] !== inputs.TopUpLink) {
             await updateOption('TopUpLink', inputs.TopUpLink);
           }
+          for (const key of ['GouoRedemptionHelp', 'GouoSupportContact']) {
+            if (originInputs[key] !== inputs[key]) await updateOption(key, inputs[key]);
+          }
           if (originInputs['ChatLink'] !== inputs.ChatLink) {
             await updateOption('ChatLink', inputs.ChatLink);
           }
@@ -381,6 +386,16 @@ const OperationSetting = () => {
     <Stack spacing={2}>
       <SubCard title={t('setting_index.operationSettings.generalSettings.title')}>
         <Stack justifyContent="flex-start" alignItems="flex-start" spacing={2}>
+          <TextField
+            fullWidth multiline minRows={2} label="光构兑换码获取说明" name="GouoRedemptionHelp"
+            value={inputs.GouoRedemptionHelp} onChange={handleInputChange} disabled={loading}
+            inputProps={{ maxLength: 2000 }} helperText="默认留空。填写获取方式、发放条件或处理时间，在用户中心的兑换页展示。"
+          />
+          <TextField
+            fullWidth multiline minRows={2} label="光构客服联系方式" name="GouoSupportContact"
+            value={inputs.GouoSupportContact} onChange={handleInputChange} disabled={loading}
+            inputProps={{ maxLength: 2000 }} helperText="默认留空。可填写客服网址、邮箱或微信号，用户可复制联系；单独的 HTTP(S) 网址可直接打开。"
+          />
           <Stack direction={{ sm: 'column', md: 'row' }} spacing={{ xs: 3, sm: 2, md: 4 }}>
             <FormControl fullWidth>
               <InputLabel htmlFor="TopUpLink">{t('setting_index.operationSettings.generalSettings.topUpLink.label')}</InputLabel>

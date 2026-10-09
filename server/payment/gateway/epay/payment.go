@@ -69,11 +69,12 @@ func (e *Epay) HandleCallback(c *gin.Context, gatewayConfig string) (*types.PayN
 	}
 
 	paymentResult, success := epayConfig.Verify(queryMap)
-	if paymentResult != nil && success {
-		c.Writer.Write([]byte("success"))
+	if paymentResult != nil && success && queryMap["pid"] == epayConfig.PartnerID {
 		payNotify := &types.PayNotify{
 			TradeNo:   paymentResult.OutTradeNo,
 			GatewayNo: paymentResult.TradeNo,
+			Amount:    paymentResult.Money,
+			Currency:  model.CurrencyTypeCNY,
 		}
 		return payNotify, nil
 	}

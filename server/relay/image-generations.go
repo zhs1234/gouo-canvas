@@ -1,12 +1,12 @@
 package relay
 
 import (
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"one-api/common"
 	providersBase "one-api/providers/base"
 	"one-api/types"
 	"strings"
-	"github.com/gin-gonic/gin"
 )
 
 type relayImageGenerations struct {
@@ -66,10 +66,10 @@ func (r *relayImageGenerations) send() (err *types.OpenAIErrorWithStatusCode, do
 	if err != nil {
 		return
 	}
-	err = responseJsonClient(r.c, response)
+	err = responseImageClient(r.c, response, provider.GetUsage())
 
 	if err != nil {
-		done = true
+		done = r.c.Writer.Written()
 	}
 
 	return

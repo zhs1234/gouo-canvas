@@ -51,12 +51,13 @@ export function isBalanceError(message: string) {
   return /余额不足|额度不足|配额不足|insufficient\s+(balance|quota|credit)|not enough\s+(balance|quota|credit)/i.test(message)
 }
 
-export function getActionableErrorMessage(message: string) {
+export function getActionableErrorMessage(message: string, billedRequest = false) {
   const normalized = message.trim() || '请求失败'
   if (/下一步[:：]/.test(normalized)) return normalized
   if (isBalanceError(normalized)) return `${normalized}\n下一步：打开用户中心兑换额度，然后点击任务上的“重试”。`
   if (/安全系统|safety|sexual|violence|content policy|内容审核/i.test(normalized)) return `${normalized}\n下一步：删除可能涉及敏感内容的描述，明确人物为成年人且穿着完整，再重新生成。`
   if (/无效的令牌|token.+(invalid|expired)|unauthorized|HTTP\s*401/i.test(normalized)) return `${normalized}\n下一步：重新登录以刷新生成令牌；提示词和参考图草稿会保留。`
+  if (billedRequest) return `${normalized}\n下一步：打开用户中心 → 使用记录 → 图片请求状态，先核对是否已结算或退款；待核对的请求请将请求编号提供给管理员。服务端确认失败才退款，网络中断或本地保存失败不代表已退款；重试会新建一次付费请求。`
   if (/network|fetch|连接|超时|timeout|ECONN|Failed to fetch/i.test(normalized)) return `${normalized}\n下一步：检查网络连接，稍后点击任务上的“重试”；不要重复快速提交。`
   if (/too large|文件过大|25\s*MB|payload/i.test(normalized)) return `${normalized}\n下一步：压缩参考图至 25 MB 以下，或改用 JPEG/WebP 后重新上传。`
   if (/格式|decode|解码|unsupported.*image/i.test(normalized)) return `${normalized}\n下一步：将图片转换成 PNG、JPEG 或 WebP，再重新上传。`

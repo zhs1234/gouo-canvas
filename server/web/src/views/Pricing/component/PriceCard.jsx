@@ -169,6 +169,8 @@ const PriceCard = ({ price, onEdit, onDelete, ownedby, unit = 'K' }) => {
           )}
         </Stack>
 
+        {price.gouo_enabled && <Typography variant="caption" color="primary" sx={{ display: 'block', mt: 0.5 }}>光构 ¥{price.gouo_price_cny}/次成功请求</Typography>}
+
         <Stack direction="row" spacing={0.5} mt={0.5}>
           <Chip
             label={typeLabel}

@@ -14,6 +14,18 @@ afterEach(() => {
 })
 
 describe('gouoBackend', () => {
+  it('honors Retry-After even when the rate limiter returns an empty body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 429, headers: { 'Retry-After': '180' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { getCloudSync, fetchCloudAssetContent, GouoRateLimitError } = await import('./gouoBackend')
+    const start = Date.now()
+    for (const request of [() => getCloudSync(), () => fetchCloudAssetContent({ id: 'asset', sha256: '', mime_type: 'image/png', file_size: 0, content_url: '/api/gouo/assets/asset/content' })]) {
+      const error = await request().catch((err) => err)
+      expect(error).toBeInstanceOf(GouoRateLimitError)
+      expect(error.retryAt).toBeGreaterThanOrEqual(start + 180000)
+    }
+  })
+
   it('uses the One Hub session login endpoint with credentials', async () => {
     vi.stubEnv('VITE_GOUO_BACKEND_URL', 'https://api.gouo.example/')
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
@@ -93,7 +105,7 @@ describe('gouoBackend', () => {
     )
   })
 
-  it('turns a playground token into the active image API settings', async () => {
+  it('refreshes backend authentication without replacing the selected model', async () => {
     vi.stubEnv('VITE_GOUO_IMAGE_MODEL', 'gpt-image-2')
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true, data: 'user-token' }))
     vi.stubGlobal('fetch', fetchMock)
@@ -102,10 +114,35 @@ describe('gouoBackend', () => {
     await expect(createBackendSettings()).resolves.toMatchObject({
       baseUrl: '/v1',
       apiKey: 'user-token',
-      model: 'gpt-image-2',
       apiMode: 'images',
       streamImages: false,
     })
+    expect(await createBackendSettings()).not.toHaveProperty('model')
+  })
+
+  it('validates model capabilities, output limits, availability and the displayed quote before submission', async () => {
+    const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: false, mask: false, max_outputs: 2, quota: 100 }
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(jsonResponse({ success: true, data: url.includes('/token/') ? 'user-token' : [model] }))))
+    const { getImageModelQuote, GouoPriceChangedError } = await import('./gouoBackend')
+    await expect(getImageModelQuote('image-b', 0, false, 2, 'version-b')).resolves.toEqual(model)
+    await expect(getImageModelQuote('image-b', 1, false, 1, 'version-b')).rejects.toThrow('不支持当前编辑')
+    await expect(getImageModelQuote('image-b', 0, true, 1, 'version-b')).rejects.toThrow('不支持当前编辑')
+    await expect(getImageModelQuote('image-b', 0, false, 3, 'version-b')).rejects.toThrow('最多支持 2 张')
+    await expect(getImageModelQuote('image-gone', 0, false, 1, 'version-b')).rejects.toThrow('已不可用')
+    await expect(getImageModelQuote('image-b', 0, false, 1, 'old-price')).rejects.toBeInstanceOf(GouoPriceChangedError)
+  })
+
+  it('refreshes an expired catalog token once without selecting a different model', async () => {
+    const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: false, mask: false, max_outputs: 2, quota: 100 }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: 'old-token' }))
+      .mockResolvedValueOnce(jsonResponse({ success: false, message: '图片令牌无效，请重新登录' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: 'new-token' }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: [model] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { getImageModels } = await import('./gouoBackend')
+    await expect(getImageModels()).resolves.toEqual([model])
+    expect(fetchMock.mock.calls[3][1].headers).toMatchObject({ 'X-Gouo-Token': 'new-token' })
   })
 
   it('surfaces backend business errors', async () => {

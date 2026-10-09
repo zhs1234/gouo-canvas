@@ -22,12 +22,12 @@ The backend maintains the login with a cookie. Changing `SESSION_SECRET` invalid
 New users see a three-step introduction, and an empty gallery provides starter prompts.
 
 1. Describe the subject, scene, composition, light, and constraints in the bottom prompt box.
-2. Set size, quality, output format, transparency, compression, moderation, and output count as needed.
+2. Select a model under **模型**, check its per-request price, and set size, quality, output format, and an output count within that model's limit.
 3. Optionally add reference images or draw a mask on one reference.
 4. Check the estimated charge shown near the send control, then submit.
 5. When the task finishes, open an image to download, copy, collect, or edit it.
 
-The backend checks and reserves balance when a request starts. It refunds the reservation after a confirmed failure. Treat the price displayed in the UI as authoritative; documentation examples may not match an operator's current price.
+The backend checks and reserves balance when a request starts, refunding confirmed failures. Use the model quote shown before submission. Choices are remembered per account; incompatible references, masks, or output counts block submission. If a price or capability changes, refresh and review the catalog before submitting again. Historical retries retain their original model and require confirmation of a changed price.
 
 ## 3. Write an effective prompt
 
@@ -117,21 +117,27 @@ The recycle bin is currently a recoverable hide operation, not physical asset de
 
 ## 10. Balance, redemption codes, and usage
 
+Operators can fill in redemption instructions and a support website, email, or contact handle under Settings → Operation settings. Both fields default to blank. The user center shows the instructions on the redemption screen and provides copyable support details; a standalone HTTP(S) URL is also clickable. Blank fields are shown as unconfigured and should be filled before public operation.
+
+The gallery shows 60 tasks per page. Search covers the entire library, filters reset pagination, and selections persist across pages for batch downloads. Collection renames and deletions synchronize without reviving deleted collections on stale devices. Temporary sync failures retry with backoff; HTTP 429 pauses work until the server's retry time. Sync has a separate rate-limit bucket from foreground model and recharge requests. Closed browsers resume work when opened again.
+
 The user center shows:
 
 - Current balance and cumulative usage.
-- Current per-request image price.
+- Model-specific billing information and the actual price in individual usage records.
 - Cloud storage consumption.
 - Redemption-code credit.
 - Recent usage with CSV export.
 
-The current backend charges one successful image request even when that request asks for multiple outputs. Operators can change `GOUO_IMAGE_PRICE_CNY`, so the UI price is authoritative. Do not attempt online payment unless the operator has published and tested a payment method; redemption codes or manual credit are the safe fallback.
+One request within the model's output limit costs one successful-request charge, using prices configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
 
 ## 11. Settings, import, and export
 
 Hosted product mode hides provider and API-key configuration. Regular users do not need the platform key. General settings still control submission shortcuts, clearing after submit, draft persistence, reference-image editing behavior, ZIP download routes, retry buttons, and system notifications.
 
-**设置 → 数据** (Settings → Data) exports or imports a ZIP backup and clears selected local data. Even with cloud synchronization enabled, check synchronization state and backup contents before importing or clearing data so that browser-only work is not lost.
+**设置 → 数据管理** (Settings → Data Management) exports or imports ZIP backups and clears selected local data. Export retrieves cloud originals first and fails explicitly if an original is missing. Import validates the version, task references, and image files before committing new tasks and images together. Existing local task IDs are kept; an image ID with different content rejects the whole batch. In account mode, new tasks synchronize as independent copies, avoiding overwriting cloud tasks that have not been downloaded; repeated imports may create copies. Configuration backups may contain API keys; keep them private.
+
+Clearing local data does not delete synchronized cloud content, which may download again. Unsynchronized work without a backup is lost. Deleted cloud works can be restored through the gallery filter's recycle bin and continue using cloud storage while there.
 
 ## 12. Install the app
 

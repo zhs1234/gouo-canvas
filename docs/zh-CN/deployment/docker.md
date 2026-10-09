@@ -86,8 +86,8 @@ USER_TOKEN_SECRET=替换为第二段随机值
 | --- | --- | --- |
 | `PUBLIC_PORT` | 有外层 HTTPS 代理时用 `127.0.0.1:8080`；临时局域网测试可用 `8080` | 使用 `8080` 会监听所有网卡，不应长期裸露在公网 |
 | `BACKEND_ADMIN_PORT` | 一般保持 `3000` | Compose 已固定绑定 `127.0.0.1`，不要改成公网地址 |
-| `GOUO_IMAGE_MODEL` | One Hub 渠道中实际开放的模型名 | 前端构建时写入，修改后必须重新构建 `web` |
-| `GOUO_IMAGE_PRICE_CNY` | 每次成功图片请求的人民币售价 | 修改后重启后端；上线前要确认能够覆盖上游成本 |
+| `GOUO_IMAGE_MODEL` | 首次默认模型及迁移目标 | 前端默认值修改须重建 `web`；后台迁移只执行一次，后续选择和定价由模型目录管理 |
+| `GOUO_IMAGE_PRICE_CNY` | 默认模型首次迁移的人民币售价 | 后续在后台单模型编辑中改价，重启不覆盖已保存价格；上线前核对成本和输出上限 |
 | `GOUO_ASSET_DIR` | 保持 `/data/gouo-assets` | `/data` 已挂载 `backend-data`，不要改到未挂载目录 |
 | `MYSQL_PASSWORD` | 数据库业务账号密码 | 建议使用不含换行和 DSN 歧义字符的长随机值 |
 | `SESSION_SECRET` | 第一段至少 32 字节的随机值 | 更换后所有登录 Cookie 失效 |

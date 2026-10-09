@@ -8,8 +8,10 @@ import (
 	"one-api/common/utils"
 	"one-api/model"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func GetUserTokensList(c *gin.Context) {
@@ -102,7 +104,11 @@ func GetPlaygroundToken(c *gin.Context) {
 	tokenName := "sys_playground"
 	userId := c.GetInt("id")
 	token, err := model.GetTokenByName(tokenName, userId)
-	if err != nil {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		common.APIRespondWithError(c, http.StatusInternalServerError, err)
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		cleanToken := model.Token{
 			UserId: userId,
 			Name:   tokenName,
@@ -122,7 +128,7 @@ func GetPlaygroundToken(c *gin.Context) {
 			return
 		}
 		token = &cleanToken
-	} else {
+	} else if len(token.Key) != 59 || !strings.HasPrefix(token.Key, "v2_") {
 		tokenId, tokenUserId, validateErr := common.ValidateToken(token.Key)
 		if validateErr != nil || tokenId != token.Id || tokenUserId != token.UserId {
 			if err := token.RegenerateKey(); err != nil {

@@ -103,6 +103,8 @@ const Sidebar = ({ drawerOpen, drawerToggle, window: windowProp }) => {
 
   const toggleButton = matchUpMd && (
     <IconButton
+      aria-label={isMini ? '展开导航栏' : '收起导航栏'}
+      aria-expanded={!isMini}
       size="small"
       onClick={drawerToggle}
       sx={{

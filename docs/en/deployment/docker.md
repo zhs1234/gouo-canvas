@@ -82,8 +82,8 @@ USER_TOKEN_SECRET=replace-with-the-second-random-value
 | --- | --- | --- |
 | `PUBLIC_PORT` | `127.0.0.1:8080` behind a host proxy; `8080` only for temporary private-network testing | Plain `8080` listens on every interface |
 | `BACKEND_ADMIN_PORT` | `3000` | Compose binds it to `127.0.0.1`; do not expose it publicly |
-| `GOUO_IMAGE_MODEL` | The model actually enabled in One Hub | Embedded in the web build; changing it requires rebuilding `web` |
-| `GOUO_IMAGE_PRICE_CNY` | Your price per successful request | Restart backend after changing; validate upstream cost first |
+| `GOUO_IMAGE_MODEL` | Initial frontend default and migration target | Rebuild `web` to change the frontend default; backend migration runs once and later choices/prices use the catalog |
+| `GOUO_IMAGE_PRICE_CNY` | Default model's initial migration price | Change later prices in the single-model editor; restarting preserves saved prices; validate cost and output limits |
 | `GOUO_ASSET_DIR` | `/data/gouo-assets` | `/data` is backed by `backend-data`; do not move it outside the mounted path |
 | `MYSQL_PASSWORD` | Strong application-database password | Prefer long alphanumeric text that does not create DSN parsing ambiguity |
 | `SESSION_SECRET` | First random value | Changing it invalidates all login sessions |

@@ -21,7 +21,15 @@ export default function ThemeButton() {
         }
       }}
     >
-      <ButtonBase sx={{ borderRadius: '12px' }}>
+      <ButtonBase
+        aria-label={defaultTheme === 'light' ? '切换深色模式' : '切换浅色模式'}
+        sx={{ borderRadius: '12px', '&.Mui-focusVisible': { outline: '2px solid currentColor', outlineOffset: 2 } }}
+        onClick={() => {
+          const nextTheme = defaultTheme === 'light' ? 'dark' : 'light';
+          dispatch({ type: SET_THEME, theme: nextTheme });
+          localStorage.setItem('theme', nextTheme);
+        }}
+      >
         <Avatar
           variant="rounded"
           sx={{
@@ -39,11 +47,6 @@ export default function ThemeButton() {
               backgroundColor: 'transparent',
               borderRadius: '50%'
             }
-          }}
-          onClick={() => {
-            let theme = defaultTheme === 'light' ? 'dark' : 'light';
-            dispatch({ type: SET_THEME, theme: theme });
-            localStorage.setItem('theme', theme);
           }}
           color="inherit"
         >

@@ -7,7 +7,45 @@ describe('callImageApi', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
     vi.useRealTimers()
+  })
+
+  it('keeps the task model and quoted price when refreshing a backend token', async () => {
+    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
+    vi.stubEnv('VITE_GOUO_IMAGE_MODEL', 'image-default')
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'old-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'invalid token' } }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'new-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 }))
+    const { createBackendSettings } = await import('./gouoBackend')
+    await createBackendSettings(true)
+    await callImageApi({ settings: { ...DEFAULT_SETTINGS, apiKey: 'ignored', model: 'image-selected' }, prompt: '图片', params: { ...DEFAULT_PARAMS }, inputImageDataUrls: [], gouoPriceVersion: 'price-snapshot' })
+    for (const idx of [1, 3]) {
+      const init = fetchMock.mock.calls[idx][1] as RequestInit
+      expect(JSON.parse(String(init.body)).model).toBe('image-selected')
+      expect(init.headers).toMatchObject({ 'X-Gouo-Price-Version': 'price-snapshot' })
+    }
+    expect(fetchMock.mock.calls[3][1]?.headers).toMatchObject({ Authorization: 'Bearer new-token' })
+  })
+
+  it.each(['fal', 'external-custom'])('routes an imported %s profile through the product relay without sending its token outside', async (provider) => {
+    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
+    vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } })
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'product-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 }))
+    const { createBackendSettings } = await import('./gouoBackend')
+    await createBackendSettings(true)
+    const profile = { ...DEFAULT_SETTINGS.profiles[0], provider, baseUrl: 'https://external.example/v1', apiKey: 'external-key', model: 'image-selected', apiMode: 'images' as const }
+    await callImageApi({
+      settings: { ...DEFAULT_SETTINGS, baseUrl: profile.baseUrl, apiKey: profile.apiKey, model: profile.model, profiles: [profile], activeProfileId: profile.id, customProviders: provider === 'external-custom' ? [{ id: provider, name: 'external', submit: { path: 'https://external.example/custom', result: { b64JsonPaths: ['data.*.b64_json'] } } }] : [] },
+      prompt: '图片', params: { ...DEFAULT_PARAMS }, inputImageDataUrls: [], gouoPriceVersion: 'quote',
+    })
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:5173/v1/images/generations')
+    expect(fetchMock.mock.calls[1][1]?.headers).toMatchObject({ Authorization: 'Bearer product-token' })
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).model).toBe('image-selected')
   })
 
   it.each([false, true])(

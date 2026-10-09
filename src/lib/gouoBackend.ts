@@ -39,6 +39,83 @@ export interface GouoUsageLog {
   metadata?: Record<string, unknown>
 }
 
+export interface GouoImageCharge {
+  id: string
+  model_name: string
+  price_cny: number
+  status: 'reserved' | 'dispatched' | 'needs_review' | 'settled' | 'refunded'
+  created_at: number
+  note: string
+}
+
+export function getImageCharges(page = 1) {
+  return backendRequest<{ data: GouoImageCharge[] | null; total_count: number }>(`/api/gouo/image-charges?page=${page}&size=20`)
+}
+
+export interface GouoImageModel {
+  id: string
+  name: string
+  price_cny: number
+  price_version: string
+  reference: boolean
+  mask: boolean
+  max_outputs: number
+  quota: number
+}
+
+export class GouoPriceChangedError extends Error {
+  constructor(public quote: GouoImageModel) {
+    super('模型价格或能力已更新，请核对模型价格后重新提交')
+  }
+}
+
+export class GouoRateLimitError extends Error {
+  constructor(public retryAt: number) {
+    super('请求较多，云端同步将在限流解除后自动继续')
+  }
+}
+
+function checkRateLimit(response: Response) {
+  if (response.status !== 429) return
+  const value = response.headers.get('Retry-After')
+  const seconds = value?.trim() ? Number(value) : NaN
+  const date = value ? Date.parse(value) : NaN
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Number.isFinite(date) ? date - Date.now() : 180_000
+  throw new GouoRateLimitError(Date.now() + Math.max(1000, delay))
+}
+
+export async function getImageModels(): Promise<GouoImageModel[]> {
+  if (!backendToken) await createBackendSettings()
+  let data: unknown
+  try {
+    data = await backendRequest<unknown>('/api/gouo/models', { headers: { 'X-Gouo-Token': backendToken } })
+  } catch (err) {
+    if (!isInvalidBackendTokenError(err)) throw err
+    await createBackendSettings(true)
+    data = await backendRequest<unknown>('/api/gouo/models', { headers: { 'X-Gouo-Token': backendToken } })
+  }
+  if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny <= 0 || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1)) {
+    throw new Error('图片模型目录格式无效')
+  }
+  return data as GouoImageModel[]
+}
+
+export async function getImageModelQuote(id: string, inputCount: number, hasMask: boolean, n: number, version?: string): Promise<GouoImageModel> {
+  const models = await getImageModels()
+  const model = models.find((entry) => entry.id === id)
+  if (!model) {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('gouo-models-refresh'))
+    throw new Error('所选模型已不可用，请重新选择模型')
+  }
+  if ((inputCount > 0 && !model.reference) || (hasMask && !model.mask)) throw new Error('此模型不支持当前编辑操作，请重新选择模型')
+  if (!Number.isInteger(n) || n < 1 || n > model.max_outputs) throw new Error(`此模型最多支持 ${model.max_outputs} 张图片`)
+  if (!version || version !== model.price_version) {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('gouo-models-refresh'))
+    throw new GouoPriceChangedError(model)
+  }
+  return model
+}
+
 interface GouoUsageLogPage {
   data: GouoUsageLog[]
   page: number
@@ -50,6 +127,8 @@ export interface GouoBackendStatus {
   email_service?: boolean
   email_verification?: boolean
   gouo_cloud_library?: boolean
+  gouo_redemption_help?: string
+  gouo_support_contact?: string
 }
 
 export interface GouoCloudStorage {
@@ -120,7 +199,6 @@ export interface GouoCloudSyncResult {
 
 const configuredBaseUrl = (import.meta.env.VITE_GOUO_BACKEND_URL ?? '').trim().replace(/\/+$/, '')
 let backendToken = ''
-let backendSessionReady = false
 
 export function isBackendAuthEnabled(): boolean {
   return import.meta.env.VITE_GOUO_BACKEND_ENABLED === 'true'
@@ -144,6 +222,7 @@ function requestInit(init?: RequestInit): RequestInit {
 }
 
 async function parseEnvelope<T>(response: Response, requireData: boolean): Promise<T> {
+  checkRateLimit(response)
   let payload: BackendEnvelope<T>
   try {
     payload = await response.json() as BackendEnvelope<T>
@@ -197,7 +276,6 @@ export function login(username: string, password: string): Promise<GouoUser> {
 
 export function logout(): Promise<void> {
   backendToken = ''
-  backendSessionReady = false
   return backendAction('/api/user/logout')
 }
 
@@ -236,25 +314,24 @@ export function getPlaygroundToken(): Promise<string> {
 
 export async function createBackendSettings(forceRefresh = false): Promise<Partial<AppSettings>> {
   if (!backendToken || forceRefresh) backendToken = await getPlaygroundToken()
-  backendSessionReady = true
   const sameOriginBaseUrl = typeof window === 'undefined' ? '/v1' : `${window.location.origin}/v1`
   return {
     baseUrl: configuredBaseUrl ? `${configuredBaseUrl}/v1` : sameOriginBaseUrl,
     apiKey: backendToken,
-    model: import.meta.env.VITE_GOUO_IMAGE_MODEL?.trim() || 'gpt-image-2',
     apiMode: 'images',
+    codexCli: false,
     apiProxy: false,
     streamImages: false,
   }
 }
 
-export function isBackendSessionReady(): boolean {
-  return backendSessionReady
+export function getDefaultBackendModel(): string {
+  return import.meta.env.VITE_GOUO_IMAGE_MODEL?.trim() || 'gpt-image-2'
 }
 
 export function isInvalidBackendTokenError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error)
-  return /无效的令牌|invalid.{0,8}token|token.{0,8}(invalid|expired)|HTTP 401/i.test(message)
+  return /无效的令牌|令牌无效|invalid.{0,8}token|token.{0,8}(invalid|expired)|HTTP 401/i.test(message)
 }
 
 export function getCloudStorage(): Promise<GouoCloudStorage> {
@@ -290,8 +367,13 @@ export function putCloudCollection(id: string, name: string): Promise<GouoCloudC
   })
 }
 
+export function hideCloudCollection(id: string): Promise<void> {
+  return backendAction(`/api/gouo/collections/${encodeURIComponent(id)}/hide`, {})
+}
+
 export async function fetchCloudAssetContent(asset: GouoCloudAsset): Promise<Blob> {
   const response = await fetch(apiUrl(asset.content_url), { cache: 'no-store', credentials: 'include' })
+  checkRateLimit(response)
   if (!response.ok) throw new Error(`下载云端图片失败（HTTP ${response.status}）`)
   return response.blob()
 }

@@ -6,11 +6,14 @@ import (
 	"math"
 	"one-api/model"
 	"one-api/payment/types"
+	"slices"
 	"strconv"
+	"strings"
 
 	sysconfig "one-api/common/config"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v80"
 	"github.com/stripe/stripe-go/v80/client"
 	"github.com/stripe/stripe-go/v80/webhook"
@@ -89,6 +92,7 @@ func (e *Stripe) Pay(config *types.PayConfig, gatewayConfig string) (*types.PayR
 
 func (e *Stripe) CreatedPay(notifyURL string, gatewayConfig *model.Payment) error {
 	eventName := "checkout.session.completed"
+	asyncEventName := "checkout.session.async_payment_succeeded"
 	var stripeConfig StripeConfig
 	err := json.Unmarshal([]byte(gatewayConfig.Config), &stripeConfig)
 	if err != nil {
@@ -103,7 +107,7 @@ func (e *Stripe) CreatedPay(notifyURL string, gatewayConfig *model.Payment) erro
 	var existingWebhook *stripe.WebhookEndpoint
 	for i.Next() {
 		webhook := i.WebhookEndpoint()
-		if webhook.URL == notifyURL && contains(webhook.EnabledEvents, eventName) {
+		if webhook.URL == notifyURL && slices.Contains(webhook.EnabledEvents, eventName) {
 			existingWebhook = webhook
 			break
 		}
@@ -120,6 +124,7 @@ func (e *Stripe) CreatedPay(notifyURL string, gatewayConfig *model.Payment) erro
 			URL: stripe.String(notifyURL),
 			EnabledEvents: []*string{
 				stripe.String(eventName),
+				stripe.String(asyncEventName),
 			},
 			APIVersion: stripe.String("2024-09-30.acacia"),
 		}
@@ -130,11 +135,26 @@ func (e *Stripe) CreatedPay(notifyURL string, gatewayConfig *model.Payment) erro
 		wh = newWebhook
 		fmt.Printf("Created new webhook: %s\n", newWebhook.ID)
 	} else {
-		fmt.Printf("Webhook already exists: %s\n", existingWebhook.ID)
 		wh = existingWebhook
+		if !slices.Contains(wh.EnabledEvents, asyncEventName) && !slices.Contains(wh.EnabledEvents, "*") {
+			events := make([]*string, 0, len(wh.EnabledEvents)+1)
+			for _, event := range wh.EnabledEvents {
+				events = append(events, stripe.String(event))
+			}
+			events = append(events, stripe.String(asyncEventName))
+			if _, err := webhookendpoint.Update(wh.ID, &stripe.WebhookEndpointParams{EnabledEvents: events}); err != nil {
+				return fmt.Errorf("error updating webhook: %v", err)
+			}
+		}
 	}
 
-	stripeConfig.WebhookSecret = wh.Secret
+	// Stripe 不会在查询已有端点时再次返回签名密钥。
+	if wh.Secret != "" {
+		stripeConfig.WebhookSecret = wh.Secret
+	}
+	if stripeConfig.WebhookSecret == "" {
+		return fmt.Errorf("existing webhook signing secret is missing")
+	}
 	config, err := json.Marshal(stripeConfig)
 	if err != nil {
 		return fmt.Errorf("error creating webhook: %v", err)
@@ -146,16 +166,6 @@ func (e *Stripe) CreatedPay(notifyURL string, gatewayConfig *model.Payment) erro
 		return fmt.Errorf("error creating webhook: %v", err)
 	}
 	return nil
-}
-
-// 辅助函数来检查字符串切片中是否包含特定字符串
-func contains(slice []string, str string) bool {
-	for _, v := range slice {
-		if v == str {
-			return true
-		}
-	}
-	return false
 }
 
 // HandleCallback 处理支付回调
@@ -171,9 +181,6 @@ func (e *Stripe) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 		return nil, fmt.Errorf("failed to parse gateway config: %v", err)
 	}
 
-	sc := &client.API{}
-
-	sc.Init(stripeConfig.SecretKey, nil)
 	stripeSignature := c.GetHeader("Stripe-Signature")
 	event, err := webhook.ConstructEvent(body, stripeSignature, stripeConfig.WebhookSecret)
 	if err != nil {
@@ -182,11 +189,17 @@ func (e *Stripe) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 
 	// 处理事件
 	switch event.Type {
-	case "checkout.session.completed":
+	case "checkout.session.completed", "checkout.session.async_payment_succeeded":
 		var session stripe.CheckoutSession
 		err := json.Unmarshal(event.Data.Raw, &session)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse session data: %v", err)
+		}
+		if session.PaymentStatus != stripe.CheckoutSessionPaymentStatusPaid {
+			return nil, nil
+		}
+		if session.PaymentIntent == nil || session.PaymentIntent.ID == "" {
+			return nil, fmt.Errorf("missing payment intent")
 		}
 
 		// 获取订单号
@@ -196,6 +209,8 @@ func (e *Stripe) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 		payNotify := &types.PayNotify{
 			TradeNo:   orderID,
 			GatewayNo: session.PaymentIntent.ID,
+			Amount:    decimal.NewFromInt(session.AmountTotal).Shift(-2).String(),
+			Currency:  model.CurrencyType(strings.ToUpper(string(session.Currency))),
 		}
 
 		return payNotify, nil

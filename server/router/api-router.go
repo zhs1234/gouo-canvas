@@ -200,6 +200,8 @@ func SetApiRouter(router *gin.Engine) {
 		gouoRoute.Use(middleware.UserAuth())
 		{
 			gouoRoute.GET("/storage", controller.GetGouoStorage)
+			gouoRoute.GET("/models", controller.GetGouoModels)
+			gouoRoute.GET("/image-charges", controller.ListGouoImageCharges)
 			gouoRoute.POST("/assets", controller.UploadGouoAsset)
 			gouoRoute.GET("/assets/:id/content", controller.GetGouoAssetContent)
 			gouoRoute.PUT("/tasks/:clientTaskId", controller.PutGouoTask)
@@ -220,6 +222,8 @@ func SetApiRouter(router *gin.Engine) {
 		gouoAdminRoute.Use(middleware.AdminAuth())
 		{
 			gouoAdminRoute.GET("/storage", controller.GetGouoAdminStorage)
+			gouoAdminRoute.GET("/image-charges", controller.ListGouoAdminImageCharges)
+			gouoAdminRoute.POST("/image-charges/:id/resolve", controller.ResolveGouoImageCharge)
 			gouoAdminRoute.GET("/storage/users", controller.ListGouoAdminStorageUsers)
 			gouoAdminRoute.GET("/storage/users/:id/tasks", controller.ListGouoAdminUserTasks)
 			gouoAdminRoute.GET("/storage/users/:id/assets/:assetId/content", controller.GetGouoAdminUserAssetContent)

@@ -1,0 +1,53 @@
+awesome-gpt-image-2 industrial prompt templates
+Source: https://github.com/freestylefly/awesome-gpt-image-2
+Revision: 65a9c57a1968a13f2f1997c58409cac9aa146bc7
+Files: docs/templates.md, data/style-library.json
+
+The MIT notice below covers repository software and documentation. Preview images are selected upstream case images, resized to WebP, and remain subject to original author rights. Commercial-use permission for third-party preview images has not been verified. See the upstream disclaimer:
+https://github.com/freestylefly/awesome-gpt-image-2/blob/65a9c57a1968a13f2f1997c58409cac9aa146bc7/docs/disclaimer.md
+
+MIT License
+
+Copyright (c) 2026 freestylefly
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Preview image attribution:
+case336.webp: 个人网页视觉设计 | 苍何原创实测 | https://github.com/freestylefly/awesome-gpt-image-2/blob/65a9c57a1968a13f2f1997c58409cac9aa146bc7/docs/gallery-part-2.md#case-336
+case334.webp: RAG 技术详解图 | 苍何原创实测（公众号文章《我逆向了 329 条 GPT-Image2 提示词模板，全部开源！》） | https://github.com/freestylefly/awesome-gpt-image-2/blob/main/docs/gallery-part-2.md#case-334
+case380.webp: 冠状病毒尺度缩放科学信息图 | @Gdgtify | https://x.com/Gdgtify/status/2051288232613351571
+case345.webp: 法新浪潮撕纸电影海报 | @bananaprompts | https://x.com/bananaprompts/status/2048541390900994476
+case350.webp: 足球球员数据涂鸦海报 | @ryanpp27 | https://x.com/ryanpp27/status/2048602248524214542
+case355.webp: 概念字体海报 Prompt | @dotey | https://x.com/dotey/status/2048793351290327381
+case359.webp: 水墨双重曝光人物海报 | @Goodmanprotocol | https://x.com/Goodmanprotocol/status/2049002279051895243
+case339.webp: Apple 风格自然科普海报 | @berryxia | https://x.com/berryxia/status/2048251413147644100
+case373.webp: 高端肉类海鲜品牌英雄图 | @xpg0970 | https://x.com/xpg0970/status/2050108279385419965
+case353.webp: 品牌口红推荐报告信息图 | @liyue_ai | https://x.com/liyue_ai/status/2048667226195317219
+case354.webp: Logo 与品牌身份系统提示词合集 | @wanerfu | https://x.com/wanerfu/status/2048659924822184026
+case362.webp: 抹茶品牌触点系统视觉板 | @Preda2005 | https://x.com/Preda2005/status/2049846981271699685
+case331.webp: 西安手绘水彩城市地图 | 苍何原创实测（公众号文章《我逆向了 329 条 GPT-Image2 提示词模板，全部开源！》） | https://github.com/freestylefly/awesome-gpt-image-2/blob/main/docs/gallery-part-2.md#case-331
+case377.webp: 樱花咖啡户外人像 | @xRahultripathi | https://x.com/xRahultripathi/status/2050677614168391716
+case376.webp: 泼洒抹茶街头手机照片 | @Shinning1010 | https://x.com/Shinning1010/status/2050693240253214894
+case346.webp: 立体刺绣小鸟花枝 | @dotey | https://x.com/dotey/status/2048529821706195442
+case347.webp: 4×4 动作分解参考表 | @oggii_0 | https://x.com/oggii_0/status/2048614158699217302
+case378.webp: 高端 3D 收藏玩具头像 | @Genematicai | https://x.com/Genematicai/status/2050654848216109429
+case204.webp: 智能动画分镜生成器 | @joshesye | https://x.com/joshesye/status/2046596222505361866
+case375.webp: 古希腊三哲时间轴城市图 | @ToroJushiAi | https://x.com/ToroJushiAi/status/2050713034503409874
+case222.webp: 精致模块化科普百科图鉴 | @MrLarus | https://x.com/MrLarus/status/2046231542817497392
+case370.webp: Crumple Chair 概念沙发研发板 | @ShamsAmin56 | https://x.com/ShamsAmin56/status/2050281206139461780

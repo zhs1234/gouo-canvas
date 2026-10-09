@@ -50,7 +50,7 @@ PowerShell secret generation:
 
 - [ ] Configure a working OpenAI-compatible channel and the deployment's image-model mapping.
 - [ ] Test generations, edits, and variations separately.
-- [ ] Compare `GOUO_IMAGE_PRICE_CNY` with real upstream charges across sizes and quality levels.
+- [ ] Enable and price each Gouo model with capabilities and output limits in the admin UI, then verify upstream cost; `GOUO_IMAGE_PRICE_CNY` seeds first migration only.
 - [ ] Verify successful charge, failure refund, and insufficient-balance rejection.
 - [ ] Set per-user concurrency, request-rate, and spending limits to prevent abuse and surprise bills.
 

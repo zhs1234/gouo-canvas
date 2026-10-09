@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,6 +38,20 @@ func Relay(c *gin.Context) {
 	}
 
 	c.Set("is_stream", relay.IsStream())
+	if err := prepareGouoImage(c, relay); err != nil {
+		relay.HandleJsonError(err)
+		return
+	}
+	if _, image := c.Get("gouo_image_model"); image {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), model.GouoImageRequestTimeout)
+		defer cancel()
+		c.Request = c.Request.WithContext(ctx)
+	}
+	defer func() {
+		if value, ok := c.Get("gouo_image_quota"); ok {
+			value.(*relay_util.Quota).Undo(c)
+		}
+	}()
 	if err := relay.setProvider(relay.getOriginalModel()); err != nil {
 		openaiErr := common.StringErrorWrapperLocal(err.Error(), "one_hub_error", http.StatusServiceUnavailable)
 		relay.HandleJsonError(openaiErr)
@@ -117,7 +132,18 @@ func RelayHandler(relay RelayBaseInterface) (err *types.OpenAIErrorWithStatusCod
 	relay.getProvider().SetUsage(usage)
 
 	quota := relay_util.NewQuota(relay.getContext(), relay.getModelName(), promptTokens)
+	if _, image := relay.getContext().Get("gouo_image_model"); image {
+		if value, ok := relay.getContext().Get("gouo_image_quota"); ok {
+			quota = value.(*relay_util.Quota)
+		} else {
+			relay.getContext().Set("gouo_image_quota", quota)
+		}
+	}
 	if err = quota.PreQuotaConsumption(); err != nil {
+		done = true
+		return
+	}
+	if err = quota.DispatchImage(relay.getContext()); err != nil {
 		done = true
 		return
 	}
@@ -129,7 +155,18 @@ func RelayHandler(relay RelayBaseInterface) (err *types.OpenAIErrorWithStatusCod
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 	if err != nil {
-		quota.Undo(relay.getContext())
+		if _, image := relay.getContext().Get("gouo_image_model"); image {
+			code := fmt.Sprint(err.Code)
+			if code == "http_request_failed" || code == "decode_response_failed" || code == "read_response_body_failed" || err.StatusCode == http.StatusRequestTimeout || err.StatusCode == http.StatusGatewayTimeout || err.StatusCode == 524 {
+				quota.MarkImageUnknown(relay.getContext(), "请求已发送但响应未确认，请先核对渠道记录")
+				err = common.StringErrorWrapperLocal("生成结果未确认，预扣额度待核对。请在使用记录中查看请求状态，避免直接重复提交", "image_result_unknown", http.StatusBadGateway)
+				done = true
+			} else {
+				quota.MarkImageFailed()
+			}
+		} else {
+			quota.Undo(relay.getContext())
+		}
 		return
 	}
 

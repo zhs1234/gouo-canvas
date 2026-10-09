@@ -16,6 +16,16 @@ func InitCron() {
 		logger.SysLog("Cron is disabled on slave node")
 		return
 	}
+	if err := model.RecoverGouoImageCharges(); err != nil {
+		logger.SysError("图片账务恢复失败: " + err.Error())
+	}
+	if err := scheduler.Manager.AddJob("recover_gouo_image_charges", gocron.DurationJob(time.Minute), gocron.NewTask(func() {
+		if err := model.RecoverGouoImageCharges(); err != nil {
+			logger.SysError("图片账务恢复失败: " + err.Error())
+		}
+	})); err != nil {
+		logger.SysError("图片账务恢复任务注册失败: " + err.Error())
+	}
 
 	// 添加每日统计任务
 	err := scheduler.Manager.AddJob(

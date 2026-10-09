@@ -7,6 +7,7 @@ import (
 	"one-api/common/config"
 	"one-api/common/logger"
 	"one-api/common/utils"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -33,13 +34,13 @@ type ChannelsFilterFunc func(channelId int, choice *ChannelChoice) bool
 
 func FilterChannelId(skipChannelIds []int) ChannelsFilterFunc {
 	return func(channelId int, _ *ChannelChoice) bool {
-		return utils.Contains(channelId, skipChannelIds)
+		return slices.Contains(skipChannelIds, channelId)
 	}
 }
 
 func FilterChannelTypes(channelTypes []int) ChannelsFilterFunc {
 	return func(_ int, choice *ChannelChoice) bool {
-		return !utils.Contains(choice.Channel.Type, channelTypes)
+		return !slices.Contains(channelTypes, choice.Channel.Type)
 	}
 }
 

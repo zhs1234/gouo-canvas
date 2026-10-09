@@ -84,6 +84,8 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterInt("PreConsumedQuota", &config.PreConsumedQuota)
 
 	config.GlobalOption.RegisterString("TopUpLink", &config.TopUpLink)
+	config.GlobalOption.RegisterString("GouoRedemptionHelp", &config.GouoRedemptionHelp)
+	config.GlobalOption.RegisterString("GouoSupportContact", &config.GouoSupportContact)
 	config.GlobalOption.RegisterString("ChatLink", &config.ChatLink)
 	config.GlobalOption.RegisterString("ChatLinks", &config.ChatLinks)
 	config.GlobalOption.RegisterFloat("QuotaPerUnit", &config.QuotaPerUnit)
@@ -105,7 +107,6 @@ func InitOptionMap() {
 
 	config.GlobalOption.RegisterString("CFWorkerImageUrl", &config.CFWorkerImageUrl)
 	config.GlobalOption.RegisterString("CFWorkerImageKey", &config.CFWorkerImageKey)
-	config.GlobalOption.RegisterInt("OldTokenMaxId", &config.OldTokenMaxId)
 	config.GlobalOption.RegisterBool("GitHubOldIdCloseEnabled", &config.GitHubOldIdCloseEnabled)
 
 	config.GlobalOption.RegisterBool("GeminiAPIEnabled", &config.GeminiAPIEnabled)

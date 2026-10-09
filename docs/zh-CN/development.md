@@ -65,7 +65,7 @@ VITE_GOUO_IMAGE_MODEL=gpt-image-2
 
 1. 在渠道管理中添加 OpenAI 或兼容服务商。
 2. 只在后端渠道里填写上游 API Key。
-3. 让渠道提供 `VITE_GOUO_IMAGE_MODEL` 对应的模型，必要时配置模型映射。
+3. 配置图片渠道与映射，在单模型价格编辑中启用光构并设置售价、能力和数量上限；`VITE_GOUO_IMAGE_MODEL` 仅是首次默认选择。
 4. 分别验证 generations、edits 和 variations 图片路由。
 5. 再使用普通账号从 `http://127.0.0.1:5173` 完整验证登录、生成、计费和同步。
 
@@ -121,7 +121,7 @@ Copy-Item dev-proxy.config.example.json dev-proxy.config.json
 | `VITE_GOUO_BACKEND_ENABLED` | 前端构建/开发 | 值严格等于 `true` 时启用产品登录模式 |
 | `VITE_GOUO_BACKEND_URL` | 前端构建/开发 | 跨域后端地址；同域时留空 |
 | `VITE_GOUO_BACKEND_DEV_TARGET` | Vite 开发服务器 | 本地 `/api`、`/v1` 和 `/panel` 代理目标 |
-| `VITE_GOUO_IMAGE_MODEL` | 前端构建/开发 | 产品模式使用的图片模型名 |
+| `VITE_GOUO_IMAGE_MODEL` | 前端构建/开发 | 首次默认图片模型；后续选择按账号记忆，后台须启用并定价 |
 
 ### 纯前端与兼容部署变量
 

@@ -1,6 +1,8 @@
 package model
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"one-api/common"
@@ -10,6 +12,7 @@ import (
 	"one-api/common/redis"
 	"one-api/common/stmp"
 	"one-api/common/utils"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -54,13 +57,22 @@ var allowedTokenOrderFields = map[string]bool{
 
 // 添加 AfterCreate 钩子方法
 func (token *Token) AfterCreate(tx *gorm.DB) (err error) {
-	tokenKey, err := common.GenerateToken(token.Id, token.UserId)
+	tokenKey, err := generateTokenKey()
 	if err != nil {
 		return err
 	}
 
 	// 更新 key 字段
 	return tx.Model(token).Update("key", tokenKey).Error
+}
+
+func generateTokenKey() (string, error) {
+	// 保持现有 59 字符字段，随机值保证同一条令牌每次刷新都不同。
+	var key [42]byte
+	if _, err := rand.Read(key[:]); err != nil {
+		return "", err
+	}
+	return "v2_" + base64.RawURLEncoding.EncodeToString(key[:]), nil
 }
 
 type TokenSetting struct {
@@ -184,40 +196,29 @@ func GetTokenModel(key string) (token *Token, err error) {
 
 	var userId int
 	var tokenId int
-	validUser := false
-
 	switch len(key) {
 	case 48:
-		validUser = true
-		if config.RedisEnabled {
-			exists, _ := redis.RedisSIsMember(OldUserTokensCacheKey, key)
-			if !exists {
+	case 59:
+		if !strings.HasPrefix(key, "v2_") {
+			tokenId, userId, err = common.ValidateToken(key)
+			if err != nil || userId == 0 || tokenId == 0 {
 				return nil, ErrTokenInvalid
 			}
-		}
-	case 59:
-		tokenId, userId, err = common.ValidateToken(key)
-		if err != nil || userId == 0 || tokenId == 0 {
-			return nil, ErrTokenInvalid
-		}
-		if userEnabled, err := CacheIsUserEnabled(userId); err != nil || !userEnabled {
-			return nil, ErrTokenInvalid
 		}
 	default:
 		return nil, ErrTokenInvalid
 	}
 
-	token, err = CacheGetTokenByKey(key)
+	// 撤销与封禁必须立即生效，不能使用可能被并发请求重新填充的旧缓存。
+	token, err = GetTokenByKey(key)
 	if err != nil {
 		maskedKey := key[:3] + "*********" + key[len(key)-3:]
 		logger.SysError(fmt.Sprintf("DB Not Found: userId=%d, tokenId=%d, key=%s, err=%s", userId, tokenId, maskedKey, err.Error()))
 		return nil, ErrTokenInvalid
 	}
 
-	if validUser {
-		if userEnabled, err := CacheIsUserEnabled(token.UserId); err != nil || !userEnabled {
-			return nil, ErrTokenInvalid
-		}
+	if userEnabled, err := IsUserEnabled(token.UserId); err != nil || !userEnabled {
+		return nil, ErrTokenInvalid
 	}
 
 	return token, nil
@@ -247,9 +248,8 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	if !token.UnlimitedQuota {
 		if !token.UnlimitedQuota && token.RemainQuota <= 0 {
 			if !config.RedisEnabled {
-				// in this case, we can make sure the token is exhausted
-				token.Status = config.TokenStatusExhausted
-				err := token.SelectUpdate()
+				// 读余额后可能已退款或被管理员禁用，不能用旧快照覆盖当前状态。
+				err := DB.Model(&Token{}).Where("id = ? AND status = ? AND remain_quota <= 0 AND unlimited_quota = ?", token.Id, config.TokenStatusEnabled, false).UpdateColumn("status", config.TokenStatusExhausted).Error
 				if err != nil {
 					logger.SysError("failed to update token status" + err.Error())
 				}
@@ -308,12 +308,16 @@ func (token *Token) Insert() error {
 }
 
 func (token *Token) RegenerateKey() error {
+	return token.regenerateKey(DB)
+}
+
+func (token *Token) regenerateKey(tx *gorm.DB) error {
 	oldKey := token.Key
-	key, err := common.GenerateToken(token.Id, token.UserId)
+	key, err := generateTokenKey()
 	if err != nil {
 		return err
 	}
-	if err := DB.Model(token).Update("key", key).Error; err != nil {
+	if err := tx.Model(token).Update("key", key).Error; err != nil {
 		return err
 	}
 	token.Key = key
@@ -323,15 +327,17 @@ func (token *Token) RegenerateKey() error {
 	return nil
 }
 
-func RegeneratePlaygroundToken(userID int) error {
-	token, err := GetTokenByName("sys_playground", userID)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
-	}
-	if err != nil {
+func regeneratePlaygroundTokens(tx *gorm.DB, userID int) error {
+	var tokens []Token
+	if err := tx.Where("name = ? AND user_id = ?", "sys_playground", userID).Find(&tokens).Error; err != nil {
 		return err
 	}
-	return token.RegenerateKey()
+	for i := range tokens {
+		if err := tokens[i].regenerateKey(tx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Update Make sure your token's fields is completed, because this will update non-zero values

@@ -79,6 +79,8 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
         <TableCell>{renderQuota(item.quota)}</TableCell>
         <TableCell>{timestamp2string(item.created_time)}</TableCell>
         <TableCell>{item.redeemed_time ? timestamp2string(item.redeemed_time) : t('redemptionPage.unredeemed')}</TableCell>
+        <TableCell>{item.redeemed_user_id ? `#${item.redeemed_user_id}` : item.redeemed_time ? '历史记录未留存' : '—'}</TableCell>
+        <TableCell>{item.redeemed_log_id ? `#${item.redeemed_log_id}` : '—'}</TableCell>
         <TableCell>
           <Stack direction="row" justifyContent="center" alignItems="center" spacing={1}>
             <Button
@@ -91,7 +93,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
             >
               {t('token_index.copy')}
             </Button>
-            <IconButton onClick={handleOpenMenu} sx={{ color: 'rgb(99, 115, 129)' }}>
+            <IconButton aria-label={`兑换码 ${item.name} 的操作`} aria-haspopup="menu" aria-expanded={!!open} onClick={handleOpenMenu} sx={{ color: 'rgb(99, 115, 129)' }}>
               <Icon icon="solar:menu-dots-circle-bold-duotone" />
             </IconButton>
           </Stack>
@@ -119,7 +121,7 @@ export default function RedemptionTableRow({ item, manageRedemption, handleOpenM
           <Icon icon="solar:pen-bold-duotone" style={{ marginRight: '16px' }} />
           {t('common.edit')}
         </MenuItem>
-        <MenuItem onClick={handleDeleteOpen} sx={{ color: 'error.main' }}>
+        <MenuItem disabled={item.status === 3} onClick={handleDeleteOpen} sx={{ color: 'error.main' }}>
           <Icon icon="solar:trash-bin-trash-bold-duotone" style={{ marginRight: '16px' }} />
           {t('common.delete')}
         </MenuItem>

@@ -9,9 +9,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var ErrGouoOriginalAssetConflict = errors.New("原图不能被预览图覆盖，请刷新后重新同步")
+
 type GouoTask struct {
 	ID              string          `json:"id" gorm:"type:char(32);primaryKey"`
-	UserID          int             `json:"-" gorm:"uniqueIndex:idx_gouo_task_user_client;index"`
+	UserID          int             `json:"-" gorm:"uniqueIndex:idx_gouo_task_user_client;index;index:idx_gouo_task_user_updated,priority:1"`
 	ClientTaskID    string          `json:"client_task_id" gorm:"type:varchar(128);uniqueIndex:idx_gouo_task_user_client"`
 	SchemaVersion   int             `json:"schema_version" gorm:"default:1"`
 	Status          string          `json:"status" gorm:"type:varchar(20);index"`
@@ -23,8 +25,8 @@ type GouoTask struct {
 	ErrorMessage    string          `json:"error_message" gorm:"type:text"`
 	ClientCreatedAt int64           `json:"client_created_at" gorm:"index"`
 	FinishedAt      int64           `json:"finished_at"`
-	CreatedAt       int64           `json:"created_at" gorm:"index"`
-	UpdatedAt       int64           `json:"updated_at" gorm:"index"`
+	CreatedAt       int64           `json:"created_at" gorm:"index;autoCreateTime:milli"`
+	UpdatedAt       int64           `json:"updated_at" gorm:"index;index:idx_gouo_task_user_updated,priority:2;autoUpdateTime:false"`
 	HiddenAt        int64           `json:"hidden_at" gorm:"default:0;index"`
 	Assets          []GouoTaskAsset `json:"assets" gorm:"foreignKey:TaskID;references:ID"`
 }
@@ -39,8 +41,8 @@ type GouoAsset struct {
 	Width        int    `json:"width"`
 	Height       int    `json:"height"`
 	OriginalName string `json:"original_name" gorm:"type:varchar(255)"`
-	CreatedAt    int64  `json:"created_at"`
-	UpdatedAt    int64  `json:"updated_at"`
+	CreatedAt    int64  `json:"created_at" gorm:"autoCreateTime:milli"`
+	UpdatedAt    int64  `json:"updated_at" gorm:"autoUpdateTime:milli"`
 }
 
 type GouoTaskAsset struct {
@@ -56,8 +58,8 @@ type GouoFavoriteCollection struct {
 	ID        string `json:"id" gorm:"type:varchar(128);primaryKey"`
 	UserID    int    `json:"-" gorm:"primaryKey;index"`
 	Name      string `json:"name" gorm:"type:varchar(100)"`
-	CreatedAt int64  `json:"created_at"`
-	UpdatedAt int64  `json:"updated_at" gorm:"index"`
+	CreatedAt int64  `json:"created_at" gorm:"autoCreateTime:milli"`
+	UpdatedAt int64  `json:"updated_at" gorm:"index;autoUpdateTime:milli"`
 	HiddenAt  int64  `json:"hidden_at" gorm:"default:0;index"`
 }
 
@@ -65,14 +67,14 @@ type GouoFavoriteItem struct {
 	UserID       int    `json:"-" gorm:"index"`
 	CollectionID string `json:"collection_id" gorm:"type:varchar(128);primaryKey"`
 	TaskID       string `json:"task_id" gorm:"type:char(32);primaryKey;index"`
-	CreatedAt    int64  `json:"created_at"`
-	UpdatedAt    int64  `json:"updated_at" gorm:"index"`
+	CreatedAt    int64  `json:"created_at" gorm:"autoCreateTime:milli"`
+	UpdatedAt    int64  `json:"updated_at" gorm:"index;autoUpdateTime:milli"`
 }
 
 type GouoStorageQuota struct {
 	UserID     int   `json:"user_id" gorm:"primaryKey"`
 	QuotaBytes int64 `json:"quota_bytes"`
-	UpdatedAt  int64 `json:"updated_at"`
+	UpdatedAt  int64 `json:"updated_at" gorm:"autoUpdateTime:milli"`
 }
 
 func GetGouoAssetByHash(userID int, hash string) (*GouoAsset, error) {
@@ -135,13 +137,59 @@ func SetGouoUserQuota(userID int, quota int64) error {
 	}).Create(&item).Error
 }
 
+func nextGouoTaskTimestamp(tx *gorm.DB, userID int) (int64, error) {
+	// 同账号写入先锁用户行；空更新也能让 SQLite 在读取游标前取得写锁。
+	// 取已有最大值再递增，避免同毫秒写入或系统时钟回退使变更落在游标后方。
+	if err := tx.Model(&User{}).Where("id = ?", userID).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
+		return 0, err
+	}
+	var user User
+	if err := tx.Select("id").First(&user, userID).Error; err != nil {
+		return 0, err
+	}
+	var latest int64
+	if err := tx.Model(&GouoTask{}).Where("user_id = ?", userID).Select("COALESCE(MAX(updated_at), 0)").Scan(&latest).Error; err != nil {
+		return 0, err
+	}
+	now := time.Now().UnixMilli()
+	if latest >= now {
+		return latest + 1, nil
+	}
+	return now, nil
+}
+
 func UpsertGouoTask(task *GouoTask, assets []GouoTaskAsset, collectionIDs []string) error {
 	return DB.Transaction(func(tx *gorm.DB) error {
+		now, err := nextGouoTaskTimestamp(tx, task.UserID)
+		if err != nil {
+			return err
+		}
+		task.UpdatedAt = now
 		var existing GouoTask
-		err := tx.Where("user_id = ? AND client_task_id = ?", task.UserID, task.ClientTaskID).First(&existing).Error
+		err = tx.Where("user_id = ? AND client_task_id = ?", task.UserID, task.ClientTaskID).First(&existing).Error
 		if err == nil {
 			task.ID = existing.ID
 			task.CreatedAt = existing.CreatedAt
+			var previous []GouoTaskAsset
+			if err := tx.Where("task_id = ?", existing.ID).Find(&previous).Error; err != nil {
+				return err
+			}
+			// ponytail: 关联数最多 32，直接扫描；提高上限时改为按角色和位置索引。
+			for _, link := range assets {
+				if link.Role == "thumbnail" || link.ClientImageID == "" {
+					continue
+				}
+				for _, old := range previous {
+					if old.Role != link.Role || old.Position != link.Position || old.ClientImageID != link.ClientImageID || old.AssetID == link.AssetID {
+						continue
+					}
+					for _, preview := range assets {
+						if preview.Role == "thumbnail" && preview.ClientImageID == link.ClientImageID && preview.AssetID == link.AssetID {
+							return ErrGouoOriginalAssetConflict
+						}
+					}
+				}
+			}
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
@@ -239,12 +287,17 @@ func ListChangedGouoTasks(userID int, afterUpdatedAt int64, afterID string, limi
 }
 
 func SetGouoTaskHidden(userID int, id string, hidden bool) error {
-	now := time.Now().UnixMilli()
-	hiddenAt := int64(0)
-	if hidden {
-		hiddenAt = now
-	}
-	return DB.Model(&GouoTask{}).Where("user_id = ? AND id = ?", userID, id).Updates(map[string]any{"hidden_at": hiddenAt, "updated_at": now}).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		now, err := nextGouoTaskTimestamp(tx, userID)
+		if err != nil {
+			return err
+		}
+		hiddenAt := int64(0)
+		if hidden {
+			hiddenAt = now
+		}
+		return tx.Model(&GouoTask{}).Where("user_id = ? AND id = ?", userID, id).Updates(map[string]any{"hidden_at": hiddenAt, "updated_at": now}).Error
+	})
 }
 
 func ListGouoCollections(userID int, includeHidden bool) ([]GouoFavoriteCollection, error) {
@@ -278,7 +331,7 @@ func GetGouoCollection(userID int, id string) (*GouoFavoriteCollection, error) {
 func UpsertGouoCollection(collection *GouoFavoriteCollection) error {
 	return DB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "id"}, {Name: "user_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"name", "updated_at", "hidden_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"name", "updated_at"}),
 	}).Create(collection).Error
 }
 

@@ -25,10 +25,10 @@ const getValidationSchema = (t) =>
   Yup.object().shape({
     is_edit: Yup.boolean(),
     name: Yup.string().required(t('validation.requiredName')),
-    quota: Yup.number().min(0, t('redemption_edit.requiredQuota')),
+    quota: Yup.number().required(t('redemption_edit.requiredQuota')).integer('额度必须为整数').min(1, '额度必须大于 0').max(2147483647, '额度不能超过 2147483647'),
     count: Yup.number().when('is_edit', {
       is: false,
-      then: Yup.number().min(1, t('redemption_edit.requiredCount')),
+      then: Yup.number().required(t('redemption_edit.requiredCount')).integer('个数必须为整数').min(1, t('redemption_edit.requiredCount')).max(100, '一次最多生成 100 个'),
       otherwise: Yup.number()
     })
   });
@@ -77,7 +77,9 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
         setErrors({ submit: message });
       }
     } catch (error) {
-      return;
+      showError(error.message || '兑换码保存失败，请重试');
+    } finally {
+      setSubmitting(false);
     }
   };
 

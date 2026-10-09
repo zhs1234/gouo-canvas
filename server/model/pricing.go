@@ -9,12 +9,14 @@ import (
 	"one-api/common/config"
 	"one-api/common/logger"
 	"one-api/common/utils"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 )
 
 // PricingInstance is the Pricing instance
@@ -64,6 +66,11 @@ func NewPricing() {
 		PricingInstance.SyncPricing(prices, "system")
 		logger.SysLog("Pricing initialized")
 	}
+	if err := migrateGouoImagePrice(); err != nil {
+		logger.SysError("Failed to migrate Gouo image price: " + err.Error())
+	} else if err := PricingInstance.Init(); err != nil {
+		logger.SysError("Failed to reload Gouo image price: " + err.Error())
+	}
 }
 
 // initializes the Pricing instance
@@ -71,10 +78,6 @@ func (p *Pricing) Init() error {
 	prices, err := GetAllPrices()
 	if err != nil {
 		return err
-	}
-
-	if len(prices) == 0 {
-		return nil
 	}
 
 	modelInfos, err := GetAllModelInfo()
@@ -163,15 +166,19 @@ func (p *Pricing) updateRawPrice(modelName string, price *Price) error {
 		return errors.New("model names cannot be duplicated")
 	}
 
-	if err := p.deleteRawPrice(modelName); err != nil {
-		return err
-	}
-
-	return price.Insert()
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("model = ?", modelName).Delete(&Price{}).Error; err != nil {
+			return err
+		}
+		return tx.Create(price).Error
+	})
 }
 
 // UpdatePrice updates the price of a model
 func (p *Pricing) UpdatePrice(modelName string, price *Price) error {
+	if err := ValidateGouoPrice(price); err != nil {
+		return err
+	}
 
 	if err := p.updateRawPrice(modelName, price); err != nil {
 		return err
@@ -192,6 +199,9 @@ func (p *Pricing) addRawPrice(price *Price) error {
 
 // AddPrice adds a new price to the Pricing instance
 func (p *Pricing) AddPrice(price *Price) error {
+	if err := ValidateGouoPrice(price); err != nil {
+		return err
+	}
 	if err := p.addRawPrice(price); err != nil {
 		return err
 	}
@@ -223,6 +233,11 @@ func (p *Pricing) DeletePrice(modelName string) error {
 
 // SyncPricing syncs the pricing data
 func (p *Pricing) SyncPricing(pricing []*Price, mode string) error {
+	for _, price := range pricing {
+		if err := ValidateGouoPrice(price); err != nil {
+			return err
+		}
+	}
 	logger.SysLog("prices update mode：" + mode)
 	var err error
 	switch mode {
@@ -361,13 +376,16 @@ func (p *Pricing) SyncPriceWithOverwrite(pricing []*Price) error {
 		if _, ok := p.Prices[price.Model]; !ok {
 			newPrices = append(newPrices, price)
 		} else {
-			if !p.Prices[price.Model].Locked {
+			if !p.Prices[price.Model].Locked && !p.Prices[price.Model].GouoEnabled {
 				newPrices = append(newPrices, price)
 			}
 		}
 	}
 	if len(newPrices) == 0 {
-		return nil
+		if err := tx.Commit().Error; err != nil {
+			return err
+		}
+		return p.Init()
 	}
 
 	err = InsertPrices(tx, newPrices)
@@ -377,20 +395,21 @@ func (p *Pricing) SyncPriceWithOverwrite(pricing []*Price) error {
 		return err
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
 	logger.SysLog(fmt.Sprintf("本次修改加新增 %d 个价格配置", len(newPrices)))
 	return p.Init()
 }
 
 // SyncPriceOnlyUpdate 只更新系统现有的数据 不含lock的数据
 func (p *Pricing) SyncPriceOnlyUpdate(pricing []*Price) error {
-	tx := DB.Begin()
 	logger.SysLog(fmt.Sprintf("系统内已有价格配置 %d 个(包含locked价格)", len(p.Prices)))
 	var newPrices []*Price
 	var newPricesName []string
 	//系统内存在并且非lock的模型价格加入new price
 	for _, price := range pricing {
-		if p, ok := p.Prices[price.Model]; ok && !p.Locked {
+		if p, ok := p.Prices[price.Model]; ok && !p.Locked && !p.GouoEnabled {
 			newPrices = append(newPrices, price)
 			newPricesName = append(newPricesName, price.Model)
 		}
@@ -398,6 +417,7 @@ func (p *Pricing) SyncPriceOnlyUpdate(pricing []*Price) error {
 	if len(newPrices) == 0 {
 		return nil
 	}
+	tx := DB.Begin()
 	logger.SysLog(fmt.Sprintf("系统内需要更新 %d 个模型价格", len(newPrices)))
 	// 删除需要更新的模型价格
 	err := DeletePricesByModelNameAndNotLock(tx, newPricesName)
@@ -413,7 +433,9 @@ func (p *Pricing) SyncPriceOnlyUpdate(pricing []*Price) error {
 		return err
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
 	logger.SysLog(fmt.Sprintf("本次更新修改 %d 个价格配置", len(newPrices)))
 	return p.Init()
 }
@@ -441,7 +463,9 @@ func (p *Pricing) SyncPriceWithoutOverwrite(pricing []*Price) error {
 		return err
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
 	logger.SysLog(fmt.Sprintf("本次新增 %d 个价格配置", len(newPrices)))
 	return p.Init()
 }
@@ -456,7 +480,9 @@ func (p *Pricing) BatchDeletePrices(models []string) error {
 		return err
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
 
 	p.Lock()
 	defer p.Unlock()
@@ -469,13 +495,20 @@ func (p *Pricing) BatchDeletePrices(models []string) error {
 }
 
 func (p *Pricing) BatchSetPrices(batchPrices *BatchPrices, originalModels []string) error {
+	for _, id := range batchPrices.Models {
+		price := batchPrices.Price
+		price.Model = id
+		if err := ValidateGouoPrice(&price); err != nil {
+			return err
+		}
+	}
 	// 查找需要删除的model
 	var deletePrices []string
 	var addPrices []*Price
 	var updatePrices []string
 
 	for _, model := range originalModels {
-		if !utils.Contains(model, batchPrices.Models) {
+		if !slices.Contains(batchPrices.Models, model) {
 			deletePrices = append(deletePrices, model)
 		} else {
 			updatePrices = append(updatePrices, model)
@@ -483,7 +516,7 @@ func (p *Pricing) BatchSetPrices(batchPrices *BatchPrices, originalModels []stri
 	}
 
 	for _, model := range batchPrices.Models {
-		if !utils.Contains(model, originalModels) {
+		if !slices.Contains(originalModels, model) {
 			addPrice := batchPrices.Price
 			addPrice.Model = model
 			addPrices = append(addPrices, &addPrice)
@@ -515,7 +548,9 @@ func (p *Pricing) BatchSetPrices(batchPrices *BatchPrices, originalModels []stri
 		}
 
 	}
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
 
 	return p.Init()
 }

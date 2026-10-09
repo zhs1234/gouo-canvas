@@ -1,4 +1,5 @@
 import { isEmbeddedPage } from './browserFrame'
+import { canvasToBlob } from './canvasImage'
 
 export async function copyTextToClipboard(text: string) {
   let asyncClipboardError: unknown = null
@@ -106,12 +107,7 @@ async function imageBlobToPngBlob(blob: Blob): Promise<Blob> {
     if (!ctx) throw new Error('Canvas is not available')
     ctx.drawImage(image, 0, 0)
 
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((pngBlob) => {
-        if (pngBlob) resolve(pngBlob)
-        else reject(new Error('Image conversion failed'))
-      }, 'image/png')
-    })
+    return await canvasToBlob(canvas, 'image/png')
   } finally {
     image.close()
   }

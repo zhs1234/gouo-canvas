@@ -9,6 +9,7 @@ import (
 	"one-api/common"
 	"one-api/common/config"
 	"one-api/common/limit"
+	"one-api/common/logger"
 	"one-api/common/utils"
 	"one-api/model"
 	"strconv"
@@ -66,12 +67,18 @@ func Login(c *gin.Context) {
 
 // setup session & cookies and then return user info
 func setupLogin(user *model.User, c *gin.Context) {
+	// 各种登录方式统一读取完整凭据，避免旧对象覆盖并发变更的角色或密码。
+	current, err := model.GetUserById(user.Id, true)
+	if err != nil || current.Status != config.UserStatusEnabled || (user.Password != "" && current.Password != user.Password) {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": "账号不存在或已被封禁"})
+		return
+	}
+	user = current
 	session := sessions.Default(c)
 	session.Set("id", user.Id)
 	session.Set("username", user.Username)
-	session.Set("role", user.Role)
-	session.Set("status", user.Status)
-	err := session.Save()
+	session.Set("auth_version", user.SessionVersion())
+	err = session.Save()
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "无法保存会话信息，请重试",
@@ -82,7 +89,12 @@ func setupLogin(user *model.User, c *gin.Context) {
 	user.LastLoginTime = time.Now().Unix()
 	user.LastLoginIp = c.ClientIP()
 
-	user.Update(false)
+	if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
+		"last_login_time": user.LastLoginTime,
+		"last_login_ip":   user.LastLoginIp,
+	}).Error; err != nil {
+		logger.SysError("更新登录记录失败: " + err.Error())
+	}
 
 	cleanUser := model.User{
 		Id:          user.Id,
@@ -326,7 +338,7 @@ func GenerateAccessToken(c *gin.Context) {
 		return
 	}
 
-	if err := user.Update(false); err != nil {
+	if err := model.DB.Model(&model.User{}).Where("id = ?", user.Id).Update("access_token", user.AccessToken).Error; err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -514,14 +526,19 @@ func ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "新密码不能与当前密码相同"})
 		return
 	}
-	user.Password = req.NewPassword
+	user = &model.User{Id: user.Id, Password: req.NewPassword}
 	if err := user.Update(true); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "修改密码失败"})
 		return
 	}
-	if err := model.RegeneratePlaygroundToken(user.Id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "密码已修改，但刷新用户令牌失败，请重新登录"})
-		return
+	// 仅续签发起改密的会话，其他设备及此前复制的 Cookie 立即失效。
+	session := sessions.Default(c)
+	if session.Get("id") != nil {
+		session.Set("auth_version", user.SessionVersion())
+		if err := session.Save(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "密码已修改，请重新登录"})
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }

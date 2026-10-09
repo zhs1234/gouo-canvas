@@ -44,7 +44,7 @@ export default function I18nButton() {
         }
       }}
     >
-      <ButtonBase sx={{ borderRadius: '12px' }} onClick={handleMenuOpen}>
+      <ButtonBase aria-label="选择语言" aria-haspopup="menu" aria-expanded={Boolean(anchorEl)} sx={{ borderRadius: '12px', '&.Mui-focusVisible': { outline: '2px solid currentColor', outlineOffset: 2 } }} onClick={handleMenuOpen}>
         <Avatar
           variant="rounded"
           sx={{

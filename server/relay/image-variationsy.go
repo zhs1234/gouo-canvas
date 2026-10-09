@@ -56,10 +56,10 @@ func (r *relayImageVariations) send() (err *types.OpenAIErrorWithStatusCode, don
 	if err != nil {
 		return
 	}
-	err = responseJsonClient(r.c, response)
+	err = responseImageClient(r.c, response, provider.GetUsage())
 
 	if err != nil {
-		done = true
+		done = r.c.Writer.Written()
 	}
 
 	return

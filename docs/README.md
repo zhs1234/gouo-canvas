@@ -8,6 +8,7 @@ Project documentation is maintained in matching Simplified Chinese and English t
 
 ## 简体中文
 
+- [项目概览](./zh-CN/project-overview.md)：产品范围、架构、核心数据流和当前验证边界
 - [用户指南](./zh-CN/user-guide.md)：从注册登录到生成、编辑、收藏、同步和排障
 - [开发指南](./zh-CN/development.md)：运行模式、本地环境、目录结构和开发工作流
 - [后端接入说明](./zh-CN/backend.md)：请求链路、管理后台、计费与云端作品库
@@ -19,6 +20,7 @@ Project documentation is maintained in matching Simplified Chinese and English t
 
 ## English
 
+- [Project overview](./en/project-overview.md): product scope, architecture, core data flows, and verification boundaries
 - [User guide](./en/user-guide.md): accounts, generation, editing, collections, synchronization, and troubleshooting
 - [Development guide](./en/development.md): runtime modes, local setup, repository layout, and workflow
 - [Backend integration](./en/backend.md): request flow, admin setup, billing, and cloud library

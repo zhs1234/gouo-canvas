@@ -1,8 +1,16 @@
 package model
 
 import (
+	"errors"
+	"fmt"
+	"math"
+	"one-api/common/config"
+	"one-api/common/logger"
+	"one-api/common/redis"
+	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -58,6 +66,58 @@ func (o *Order) Insert() error {
 
 func (o *Order) Update() error {
 	return DB.Save(o).Error
+}
+
+// 订单状态与到账一起提交；条件更新同时负责跨实例的回调幂等。
+func CompletePaidOrder(tradeNo, gatewayNo string, gatewayID int, amount string, currency CurrencyType) (*Order, bool, error) {
+	if len(amount) > 16 || strings.ContainsAny(amount, "eE") {
+		return nil, false, errors.New("支付金额格式无效")
+	}
+	paid, err := decimal.NewFromString(amount)
+	if err != nil || !paid.IsPositive() || tradeNo == "" || gatewayNo == "" {
+		return nil, false, errors.New("支付通知参数无效")
+	}
+	var order Order
+	credited := false
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		// 本地超时关闭不代表网关撤销付款，仍接收验签后的延迟到账。
+		res := tx.Model(&Order{}).Where("trade_no = ? AND gateway_id = ? AND status IN ?", tradeNo, gatewayID, []OrderStatus{OrderStatusPending, OrderStatusClosed}).
+			Updates(map[string]any{"status": OrderStatusSuccess, "gateway_no": gatewayNo})
+		if res.Error != nil {
+			return res.Error
+		}
+		if err := tx.Where("trade_no = ? AND gateway_id = ?", tradeNo, gatewayID).First(&order).Error; err != nil {
+			return err
+		}
+		if math.IsNaN(order.OrderAmount) || math.IsInf(order.OrderAmount, 0) || !paid.Equal(decimal.NewFromFloat(order.OrderAmount)) || currency != order.OrderCurrency || order.Quota <= 0 || order.Quota > math.MaxInt32 {
+			return errors.New("支付金额或币种与订单不符")
+		}
+		if order.Status != OrderStatusSuccess || order.GatewayNo != gatewayNo {
+			return errors.New("订单状态或支付流水不符")
+		}
+		if res.RowsAffected == 0 {
+			return nil
+		}
+		res = tx.Model(&User{}).Where("id = ? AND quota <= ?", order.UserId, math.MaxInt32-order.Quota).
+			UpdateColumn("quota", gorm.Expr("quota + ?", order.Quota))
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return errors.New("充值用户不存在或余额超出范围")
+		}
+		credited = true
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if config.RedisEnabled {
+		if err := redis.RedisDel(fmt.Sprintf(UserQuotaCacheKey, order.UserId)); err != nil {
+			logger.SysError("充值余额缓存失效失败: " + err.Error())
+		}
+	}
+	return &order, credited, nil
 }
 
 var allowedOrderFields = map[string]bool{

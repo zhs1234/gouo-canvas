@@ -15,7 +15,69 @@ func setupGouoCloudTestDB(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&User{}, &GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}))
+	oldDB := DB
 	DB = db
+	t.Cleanup(func() { DB = oldDB })
+	require.NoError(t, db.Create(&User{Id: 1, Username: "cloud-a", AccessToken: "cloud-token-a", AffCode: "cloud-aff-a"}).Error)
+	require.NoError(t, db.Create(&User{Id: 2, Username: "cloud-b", AccessToken: "cloud-token-b", AffCode: "cloud-aff-b"}).Error)
+}
+
+func TestGouoCloudTimestampMigrationAndCursor(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	old := GouoTask{ID: "old", UserID: 1, ClientTaskID: "old", Status: "error", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}
+	require.NoError(t, DB.Create(&old).Error)
+	require.NoError(t, DB.Model(&old).UpdateColumns(map[string]any{"created_at": int64(1_791_000_000), "updated_at": int64(1_791_000_000), "hidden_at": int64(1_791_000_000_123)}).Error)
+	require.NoError(t, gouoCloudMillisecondMigration().Migrate(DB))
+	require.NoError(t, DB.First(&old, "id = ?", old.ID).Error)
+	require.Equal(t, int64(1_791_000_000_000), old.CreatedAt)
+	require.Equal(t, int64(1_791_000_000_000), old.UpdatedAt)
+	require.Equal(t, int64(1_791_000_000_123), old.HiddenAt)
+	require.NoError(t, gouoCloudMillisecondMigration().Migrate(DB))
+	// 模拟时钟回退以及多次写入落在同一毫秒，后写入的较小 ID 也必须可见。
+	future := time.Now().Add(time.Hour).UnixMilli()
+	require.NoError(t, DB.Model(&old).UpdateColumn("updated_at", future).Error)
+	latest := old
+	latest.UpdatedAt = future
+	for _, id := range []string{"z", "b", "a"} {
+		task := GouoTask{ID: id, UserID: 1, ClientTaskID: id, Status: "error", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}
+		require.NoError(t, UpsertGouoTask(&task, nil, nil))
+		require.Greater(t, task.UpdatedAt, latest.UpdatedAt)
+		changed, err := ListChangedGouoTasks(1, latest.UpdatedAt, latest.ID, 100)
+		require.NoError(t, err)
+		require.Len(t, changed, 1)
+		require.Equal(t, id, changed[0].ID)
+		latest = task
+	}
+	for _, hide := range []bool{true, false} {
+		require.NoError(t, SetGouoTaskHidden(1, old.ID, hide))
+		changed, err := ListChangedGouoTasks(1, latest.UpdatedAt, latest.ID, 100)
+		require.NoError(t, err)
+		require.Len(t, changed, 1)
+		require.Equal(t, old.ID, changed[0].ID)
+		require.Equal(t, hide, changed[0].HiddenAt > 0)
+		latest = changed[0]
+	}
+}
+
+func TestGouoCollectionStaleUpdateDoesNotRestoreDeletedCollection(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	collection := GouoFavoriteCollection{ID: "album", UserID: 1, Name: "原名", CreatedAt: 1, UpdatedAt: 1}
+	require.NoError(t, UpsertGouoCollection(&collection))
+	stale := collection
+	require.NoError(t, SetGouoCollectionHidden(1, collection.ID, true))
+	stale.Name = "离线旧设备"
+	require.NoError(t, UpsertGouoCollection(&stale))
+	saved, err := GetGouoCollection(1, collection.ID)
+	require.NoError(t, err)
+	require.Greater(t, saved.HiddenAt, int64(0))
+	require.NoError(t, SetGouoCollectionHidden(2, collection.ID, false))
+	saved, err = GetGouoCollection(1, collection.ID)
+	require.NoError(t, err)
+	require.Greater(t, saved.HiddenAt, int64(0))
+	require.NoError(t, SetGouoCollectionHidden(1, collection.ID, false))
+	saved, err = GetGouoCollection(1, collection.ID)
+	require.NoError(t, err)
+	require.Zero(t, saved.HiddenAt)
 }
 
 func TestGouoTaskUpsertIsIdempotent(t *testing.T) {
@@ -48,6 +110,16 @@ func TestGouoTaskUpsertIsIdempotent(t *testing.T) {
 	require.Equal(t, "updated", loaded.Prompt)
 	require.Len(t, loaded.Assets, 1)
 	require.Equal(t, asset.ID, loaded.Assets[0].Asset.ID)
+	preview := GouoAsset{ID: "preview", UserID: 1, SHA256: "preview-sha", StoragePath: "preview.webp", MimeType: "image/webp", FileSize: 5}
+	require.NoError(t, InsertGouoAsset(&preview))
+	err = UpsertGouoTask(&task, []GouoTaskAsset{
+		{AssetID: preview.ID, Role: "output", Position: 0, ClientImageID: "image-a"},
+		{AssetID: preview.ID, Role: "thumbnail", Position: 0, ClientImageID: "image-a"},
+	}, nil)
+	require.ErrorIs(t, err, ErrGouoOriginalAssetConflict)
+	loaded, err = GetGouoTask(1, "client-a")
+	require.NoError(t, err)
+	require.Equal(t, asset.ID, loaded.Assets[0].AssetID)
 }
 
 func TestGouoStorageQuotaAndOwnership(t *testing.T) {

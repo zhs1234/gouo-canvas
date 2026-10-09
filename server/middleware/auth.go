@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/hmac"
+	"errors"
 	"fmt"
 	"net/http"
 	"one-api/common/config"
@@ -12,13 +14,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func SessionUser(c *gin.Context) (*model.User, error) {
+	session := sessions.Default(c)
+	id, ok := session.Get("id").(int)
+	version, versionOK := session.Get("auth_version").(string)
+	if !ok || id <= 0 || !versionOK || version == "" {
+		return nil, errors.New("会话已失效，请重新登录")
+	}
+	user, err := model.GetUserById(id, true)
+	if err != nil || user.Status != config.UserStatusEnabled || !hmac.Equal([]byte(version), []byte(user.SessionVersion())) {
+		return nil, errors.New("会话已失效，请重新登录")
+	}
+	return user, nil
+}
+
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
-	username := session.Get("username")
-	role := session.Get("role")
-	id := session.Get("id")
-	status := session.Get("status")
-	if username == nil {
+	var user *model.User
+	if session.Get("id") != nil {
+		var err error
+		user, err = SessionUser(c)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	} else {
 		// Check access token
 		accessToken := c.Request.Header.Get("Authorization")
 		if accessToken == "" {
@@ -33,14 +53,8 @@ func authHelper(c *gin.Context, minRole int) {
 			}
 			accessToken = fmt.Sprintf("Bearer %s", token)
 		}
-		user := model.ValidateAccessToken(accessToken)
-		if user != nil && user.Username != "" {
-			// Token is valid
-			username = user.Username
-			role = user.Role
-			id = user.Id
-			status = user.Status
-		} else {
+		user = model.ValidateAccessToken(accessToken)
+		if user == nil || user.Username == "" {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "无权进行此操作，access token 无效",
@@ -49,7 +63,7 @@ func authHelper(c *gin.Context, minRole int) {
 			return
 		}
 	}
-	if status.(int) == config.UserStatusDisabled {
+	if user.Status != config.UserStatusEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "用户已被封禁",
@@ -57,7 +71,7 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	if role.(int) < minRole {
+	if user.Role < minRole {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "无权进行此操作，权限不足",
@@ -65,31 +79,18 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	c.Set("username", username)
-	c.Set("role", role)
-	c.Set("id", id)
+	c.Set("username", user.Username)
+	c.Set("role", user.Role)
+	c.Set("id", user.Id)
 	c.Next()
 }
 
 func TrySetUserBySession() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		session := sessions.Default(c)
-		id := session.Get("id")
-		if id == nil {
-			c.Next()
-			return
-		}
-
-		idInt, ok := id.(int)
-		if !ok {
-			c.Next()
-			return
-		}
-
-		c.Set("id", idInt)
-		userGroup, err := model.CacheGetUserGroup(idInt)
+		user, err := SessionUser(c)
 		if err == nil {
-			c.Set("group", userGroup)
+			c.Set("id", user.Id)
+			c.Set("group", user.Group)
 		}
 		c.Next()
 	}

@@ -8,6 +8,7 @@ import (
 	"one-api/model"
 	"one-api/safty"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -51,6 +52,12 @@ func UpdateOption(c *gin.Context) {
 		return
 	}
 	switch option.Key {
+	case "GouoRedemptionHelp", "GouoSupportContact":
+		option.Value = strings.TrimSpace(option.Value)
+		if utf8.RuneCountInString(option.Value) > 2000 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "兑换码说明和客服信息不能超过 2000 个字符"})
+			return
+		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && config.GitHubClientId == "" {
 			c.JSON(http.StatusOK, gin.H{

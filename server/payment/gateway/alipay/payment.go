@@ -61,6 +61,18 @@ func (a *Alipay) Pay(config *types.PayConfig, gatewayConfig string) (*types.PayR
 }
 
 func (a *Alipay) HandleCallback(c *gin.Context, gatewayConfig string) (*types.PayNotify, error) {
+	config, err := getAlipayConfig(gatewayConfig)
+	if err != nil {
+		return nil, err
+	}
+	// 回调可能发生在重启后，且必须使用当前网关的公钥。
+	callbackClient, err := alipay.New(config.AppID, config.PrivateKey, isProduction)
+	if err != nil {
+		return nil, err
+	}
+	if err := callbackClient.LoadAliPayPublicKey(config.PublicKey); err != nil {
+		return nil, err
+	}
 	// 获取通知参数
 	params := c.Request.URL.Query()
 	if err := c.Request.ParseForm(); err != nil {
@@ -70,24 +82,20 @@ func (a *Alipay) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 	for k, v := range c.Request.PostForm {
 		params[k] = v
 	}
-	// 验证通知签名
-	if err := client.VerifySign(params); err != nil {
-		c.Writer.Write([]byte("failure"))
-		return nil, fmt.Errorf("Alipay Signature verification failed: %v", err)
-	}
-	//解析通知内容
-	var noti, err = client.DecodeNotification(params)
+	// SDK 在解析通知前会校验签名。
+	noti, err := callbackClient.DecodeNotification(params)
 	if err != nil {
 		c.Writer.Write([]byte("failure"))
 		return nil, fmt.Errorf("Alipay Error decoding notification: %v", err)
 	}
 
-	if noti.TradeStatus == alipay.TradeStatusSuccess {
+	if noti.AppId == config.AppID && (noti.TradeStatus == alipay.TradeStatusSuccess || noti.TradeStatus == alipay.TradeStatusFinished) {
 		payNotify := &types.PayNotify{
 			TradeNo:   noti.OutTradeNo,
 			GatewayNo: noti.TradeNo,
+			Amount:    noti.TotalAmount,
+			Currency:  model.CurrencyTypeCNY,
 		}
-		alipay.ACKNotification(c.Writer)
 		return payNotify, nil
 	}
 	c.Writer.Write([]byte("failure"))

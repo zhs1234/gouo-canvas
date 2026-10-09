@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_PARAMS } from './types'
 import { createDefaultFalProfile, createDefaultOpenAIProfile, DEFAULT_SETTINGS, normalizeSettings } from './lib/apiProfiles'
@@ -17,6 +17,14 @@ vi.mock('./lib/db', () => {
       tasks.set(task.id, task)
       return task.id
     },
+    importTaskData: vi.fn(async (addedTasks: TaskRecord[], addedImages: StoredImage[], addedThumbnails: StoredImageThumbnail[]) => {
+      for (const image of addedImages) {
+        if (images.has(image.id) && images.get(image.id)?.dataUrl !== image.dataUrl) throw new Error('图片 ID 冲突')
+      }
+      for (const task of addedTasks) tasks.set(task.id, task)
+      for (const image of addedImages) images.set(image.id, image)
+      for (const thumbnail of addedThumbnails) thumbnails.set(thumbnail.id, thumbnail)
+    }),
     deleteTask: async (id: string) => {
       tasks.delete(id)
     },
@@ -94,10 +102,179 @@ vi.mock('./lib/transparentImage', () => ({
 import { clearImages, clearTasks, getAllTasks, getImage, putImage, putTask as putDbTask } from './lib/db'
 import { getFalQueuedImageResult } from './lib/falAiImageApi'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
-import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, getTaskApiProfile, importData, initStore, markInterruptedOpenAIRunningTasks, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
+import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, getTaskApiProfile, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
 
 const imageA = { id: 'image-a', dataUrl: 'data:image/png;base64,a' }
 const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
+
+describe('product model task snapshots', () => {
+  const models = [
+    { id: 'image-a', name: '图片 A', price_cny: 0.1, price_version: 'quote-a', reference: true, mask: true, max_outputs: 2, quota: 100 },
+    { id: 'image-b', name: '图片 B', price_cny: 0.3, price_version: 'quote-b', reference: false, mask: false, max_outputs: 1, quota: 300 },
+  ]
+
+  beforeEach(async () => {
+    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
+    await clearTasks()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => new Response(JSON.stringify({ success: true, data: String(url).includes('/token/') ? 'user-token' : models }), { status: 200 }))
+    const { createBackendSettings } = await import('./lib/gouoBackend')
+    await createBackendSettings(true)
+    const { callImageApi } = await import('./lib/api')
+    vi.mocked(callImageApi).mockClear()
+    useStore.setState({
+      settings: normalizeSettings({ ...DEFAULT_SETTINGS, profiles: [], apiKey: 'test-key', model: 'image-a', gouoPriceVersion: 'quote-a', gouoModelSelected: true }),
+      tasks: [], prompt: '图片', params: { ...DEFAULT_PARAMS }, inputImages: [], maskDraft: null,
+      reusedTaskApiProfileId: null, reusedTaskApiProfileMissing: false, showToast: vi.fn(), setConfirmDialog: vi.fn(),
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  it('stores and sends the selected model and quote even after the picker changes', async () => {
+    await submitTask()
+    useStore.getState().setSettings({ model: 'image-b', gouoPriceVersion: 'quote-b' })
+    const { callImageApi } = await import('./lib/api')
+    expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ settings: { model: 'image-a' }, gouoPriceVersion: 'quote-a' })
+    expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
+  })
+
+  it('blocks duplicate submissions until task creation and then permits the next task', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    vi.mocked(fetch).mockImplementation(async () => {
+      await gate
+      return new Response(JSON.stringify({ success: true, data: models }))
+    })
+    const first = submitTask()
+    expect(useStore.getState().isSubmitting).toBe(true)
+    expect(getPersistedState(useStore.getState())).not.toHaveProperty('isSubmitting')
+    await submitTask()
+    release()
+    await first
+    const { callImageApi } = await import('./lib/api')
+    expect(useStore.getState().tasks).toHaveLength(1)
+    expect(callImageApi).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().isSubmitting).toBe(false)
+    useStore.getState().setPrompt('下一张')
+    await submitTask()
+    expect(useStore.getState().tasks).toHaveLength(2)
+    expect(callImageApi).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['quote', 'save'])('unlocks submission and preserves the draft after a %s failure', async (failure) => {
+    useStore.getState().setSettings({ clearInputAfterSubmit: true })
+    if (failure === 'quote') vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'))
+    else {
+      const db = await import('./lib/db')
+      vi.spyOn(db, 'putTask').mockRejectedValueOnce(new Error('storage full'))
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+    }
+    await submitTask()
+    expect(useStore.getState().isSubmitting).toBe(false)
+    expect(useStore.getState().tasks).toEqual([])
+    expect(useStore.getState().prompt).toBe('图片')
+    const { callImageApi } = await import('./lib/api')
+    expect(callImageApi).not.toHaveBeenCalled()
+    await submitTask()
+    expect(useStore.getState().tasks).toHaveLength(1)
+    expect(callImageApi).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().prompt).toBe('')
+  })
+
+  it.each(['prompt', 'images', 'mask'])('preserves the next draft when its %s changes during the quote', async (changed) => {
+    useStore.getState().setSettings({ clearInputAfterSubmit: true })
+    await putImage(imageA)
+    useStore.getState().setInputImages([imageA])
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    vi.mocked(fetch).mockImplementation(async () => {
+      await gate
+      return new Response(JSON.stringify({ success: true, data: models }))
+    })
+    const first = submitTask()
+    if (changed === 'prompt') useStore.getState().setPrompt('下一条草稿')
+    if (changed === 'images') useStore.getState().addInputImage(imageB)
+    if (changed === 'mask') useStore.getState().setMaskDraft({ targetImageId: imageA.id, maskDataUrl: 'data:image/png;base64,new-mask', updatedAt: Date.now() })
+    const draft = useStore.getState()
+    release()
+    await first
+    expect(useStore.getState().prompt).toBe(draft.prompt)
+    expect(useStore.getState().inputImages).toBe(draft.inputImages)
+    expect(useStore.getState().maskDraft).toBe(draft.maskDraft)
+    expect(useStore.getState().tasks[0]).toMatchObject({ prompt: '图片', inputImageIds: [imageA.id], maskImageId: null })
+    await vi.waitFor(() => expect(useStore.getState().tasks[0].status).not.toBe('running'))
+  })
+
+  it('clears an unchanged draft only after the task is saved', async () => {
+    useStore.getState().setSettings({ clearInputAfterSubmit: true })
+    await putImage(imageA)
+    useStore.getState().setInputImages([imageA])
+    await submitTask()
+    expect(useStore.getState().prompt).toBe('')
+    expect(useStore.getState().inputImages).toEqual([])
+    expect((await getAllTasks())[0]).toMatchObject({ prompt: '图片', inputImageIds: [imageA.id] })
+    await vi.waitFor(() => expect(useStore.getState().tasks[0].status).not.toBe('running'))
+  })
+
+  it('retries the original task model rather than the current picker model', async () => {
+    useStore.getState().setSettings({ model: 'image-b', gouoPriceVersion: 'quote-b' })
+    await retryTask(task({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1, status: 'error' }))
+    const { callImageApi } = await import('./lib/api')
+    expect(callImageApi).not.toHaveBeenCalled()
+    expect(useStore.getState().tasks).toEqual([])
+    const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
+    expect(confirmation).toMatchObject({ title: '确认付费重试', message: expect.stringContaining('成功后扣费 ¥0.1') })
+    await confirmation?.action?.()
+    expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ settings: { model: 'image-a' }, gouoPriceVersion: 'quote-a' })
+  })
+
+  it('requires confirmation before retrying a legacy task at the current price', async () => {
+    await retryTask(task({ apiModel: 'image-a', status: 'error' }))
+    expect(useStore.getState().tasks).toEqual([])
+    expect(useStore.getState().setConfirmDialog).toHaveBeenCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('当前价格为 ¥0.1/次成功请求。重试会新建付费请求') }))
+  })
+
+  it('rechecks the quote after the user confirms a retry', async () => {
+    await retryTask(task({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1, status: 'error' }))
+    const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ success: true, data: [{ ...models[0], price_cny: 0.5, price_version: 'changed' }] })))
+    await confirmation?.action?.()
+    const { callImageApi } = await import('./lib/api')
+    expect(callImageApi).not.toHaveBeenCalled()
+    expect(useStore.getState().tasks).toEqual([])
+    expect(useStore.getState().setConfirmDialog).toHaveBeenLastCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('¥0.5') }))
+  })
+
+  it('preserves billing guidance when a running backend task is interrupted', () => {
+    const result = markInterruptedOpenAIRunningTasks([task({ status: 'running' })])
+    expect(result.tasks[0].error).toContain('图片请求状态')
+    expect(result.tasks[0].error).toContain('不代表已退款')
+  })
+
+  it('distinguishes local save failure after a paid result from an upstream failure', async () => {
+    const { callImageApi } = await import('./lib/api')
+    const db = await import('./lib/db')
+    vi.mocked(callImageApi).mockResolvedValueOnce({ images: ['data:image/png;base64,test'], actualParams: {}, actualParamsList: [], revisedPrompts: [] })
+    vi.spyOn(db, 'storeImageWithSize').mockRejectedValueOnce(new DOMException('storage full', 'QuotaExceededError'))
+    await submitTask()
+    await vi.waitFor(() => expect(useStore.getState().tasks[0].status).toBe('error'))
+    expect(useStore.getState().tasks[0].error).toContain('生成结果已返回，但本地处理或保存失败')
+    expect(useStore.getState().tasks[0].error).toContain('不代表已退款')
+    expect(callImageApi).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks a new task when its selected model is no longer available', async () => {
+    useStore.getState().setSettings({ model: 'image-removed' })
+    await submitTask()
+    expect(useStore.getState().tasks).toEqual([])
+    expect(useStore.getState().showToast).toHaveBeenCalledWith(expect.stringContaining('已不可用'), 'error')
+  })
+})
 
 describe('error toast messages', () => {
   it('drops long error detail after the failure title', () => {
@@ -127,8 +304,8 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
   }
 }
 
-function importFile(data: ExportData): File {
-  const zipped = zipSync({ 'manifest.json': strToU8(JSON.stringify(data)) })
+function importFile(data: ExportData, files: Record<string, Uint8Array> = {}): File {
+  const zipped = zipSync({ ...files, 'manifest.json': strToU8(JSON.stringify(data)) })
   const buffer = zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength)
   return { arrayBuffer: async () => buffer } as File
 }
@@ -581,10 +758,63 @@ describe('fal task recovery', () => {
 })
 describe('data import', () => {
   beforeEach(async () => {
+    await clearTasks()
+    await clearImages()
     useStore.setState({
       tasks: [],
       showToast: vi.fn(),
     })
+  })
+
+  it('rejects missing files without changing existing tasks, images or settings', async () => {
+    const existing = task({ id: 'existing', outputImages: ['image-a'] })
+    await putDbTask(existing)
+    await putImage(imageA)
+    useStore.setState({ tasks: [existing] })
+    const settings = useStore.getState().settings
+    const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), settings: { ...settings, model: 'changed' }, tasks: [task({ outputImages: ['missing'] })], imageFiles: { missing: { path: 'images/missing.png' } } }))
+    expect(result).toBe(false)
+    expect(await getAllTasks()).toEqual([existing])
+    expect(await getImage('image-a')).toEqual(imageA)
+    expect(useStore.getState().settings).toBe(settings)
+    expect(useStore.getState().showToast).toHaveBeenCalledWith(expect.stringContaining('缺少图片文件'), 'error')
+  })
+
+  it('keeps existing task IDs and imports new tasks with their images without foreign cloud identity', async () => {
+    const existing = task({ id: 'existing', prompt: 'current' })
+    await putDbTask(existing)
+    useStore.setState({ tasks: [existing] })
+    const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'existing', prompt: 'old' }), task({ id: 'new', outputImages: ['new-image'], cloudId: 'foreign', cloudSyncStatus: 'synced' })], imageFiles: { 'new-image': { path: 'images/new.png' } } }, { 'images/new.png': new Uint8Array([1, 2, 3]) }), { importTasks: true })
+    expect(result).toBe(true)
+    expect((await getAllTasks()).find((item) => item.id === 'existing')).toEqual(existing)
+    expect((await getAllTasks()).find((item) => item.id === 'new')).toMatchObject({ cloudId: undefined, cloudSyncStatus: undefined, outputImages: ['new-image'] })
+    expect(await getImage('new-image')).toMatchObject({ dataUrl: 'data:image/png;base64,AQID' })
+    expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 1 个任务，保留 1 个同 ID 的现有任务', 'success')
+  })
+
+  it('does not change UI data or configuration when the import transaction fails', async () => {
+    const db = await import('./lib/db')
+    vi.mocked(db.importTaskData).mockRejectedValueOnce(new DOMException('storage full', 'QuotaExceededError'))
+    const settings = useStore.getState().settings
+    const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), settings: { ...settings, model: 'changed' }, tasks: [task()], imageFiles: {} }))
+    expect(result).toBe(false)
+    expect(await getAllTasks()).toEqual([])
+    expect(useStore.getState().tasks).toEqual([])
+    expect(useStore.getState().settings).toBe(settings)
+  })
+
+  it('assigns a fresh task identity in account mode to preserve cloud records not yet downloaded', async () => {
+    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
+    try {
+      const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'old-cloud-client-id', cloudId: 'old-cloud-id', cloudSyncStatus: 'synced' })], imageFiles: {} }), { importTasks: true })
+      expect(result).toBe(true)
+      const [restored] = await getAllTasks()
+      expect(restored.id).not.toBe('old-cloud-client-id')
+      expect(restored.cloudId).toBeUndefined()
+      expect(restored.cloudSyncStatus).toBeUndefined()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('restores favorite collections and default collection when importing task data', async () => {
@@ -815,5 +1045,48 @@ describe('reused task API profile', () => {
       cancelText: '放弃提交',
     }))
     expect(state.showSettings).toBe(false)
+  })
+})
+
+
+describe('cloud sync with store persistence', () => {
+  it('preserves pending edits through favorite writes and reload', async () => {
+    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
+    vi.stubGlobal('navigator', { onLine: false })
+    vi.stubGlobal('window', new EventTarget())
+    const subscribe = useStore.subscribe
+    let unsubscribe = () => {}
+    vi.spyOn(useStore, 'subscribe').mockImplementation((listener) => {
+      unsubscribe = subscribe(listener)
+      return unsubscribe
+    })
+    try {
+      await clearTasks()
+      await clearImages()
+      const synced = task({ cloudId: 'cloud-task', cloudSyncStatus: 'synced', favoriteCollectionIds: [], isFavorite: false })
+      await putDbTask(synced)
+      useStore.setState({
+        settings: normalizeSettings({ ...DEFAULT_SETTINGS, persistInputOnRestart: false }),
+        tasks: [synced], inputImages: [], maskDraft: null,
+        favoriteCollections: [{ id: 'album', name: '收藏夹', createdAt: 1, updatedAt: 1 }],
+        defaultFavoriteCollectionId: 'album', showToast: vi.fn(),
+      })
+      const { startCloudSync } = await import('./lib/cloudSync')
+      const { updateTasksFavoriteCollections, updateTaskInStore } = await import('./store')
+      await startCloudSync()
+      await updateTasksFavoriteCollections([synced.id], ['album'])
+      expect((await getAllTasks())[0]).toMatchObject({ cloudSyncStatus: 'pending', favoriteCollectionIds: ['album'] })
+      updateTaskInStore(synced.id, { prompt: '离线修改' })
+      expect((await getAllTasks())[0]).toMatchObject({ cloudSyncStatus: 'pending', prompt: '离线修改' })
+      unsubscribe()
+      useStore.setState({ tasks: [] })
+      await initStore()
+      expect(useStore.getState().tasks[0]).toMatchObject({ cloudSyncStatus: 'pending', favoriteCollectionIds: ['album'], prompt: '离线修改' })
+    } finally {
+      unsubscribe()
+      vi.restoreAllMocks()
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    }
   })
 })

@@ -513,6 +513,8 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
   const active = profiles.find((p) => p.id === activeProfileId) ?? profiles[0]
   return {
     baseUrl: active.baseUrl,
+    gouoModelSelected: record.gouoModelSelected === true,
+    gouoPriceVersion: typeof record.gouoPriceVersion === 'string' ? record.gouoPriceVersion : undefined,
     apiKey: active.apiKey,
     model: active.model,
     timeout: active.timeout,

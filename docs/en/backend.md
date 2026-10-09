@@ -14,6 +14,9 @@ Register/sign in
 Obtain the user's relay token
   GET /api/token/playground
           ↓ user-scoped token
+Read available models and quotes
+  GET /api/gouo/models (X-Gouo-Token)
+          ↓ model, capabilities, price version
 Image request
   POST /v1/images/generations
   POST /v1/images/edits
@@ -54,30 +57,37 @@ Recommended order:
 
 1. Create a separate day-to-day administrator account.
 2. Add an OpenAI or compatible image channel. Store its API key only in the channel.
-3. Configure `gpt-image-2`, or the actual model selected by `VITE_GOUO_IMAGE_MODEL`, including mappings when needed.
+3. Configure image channels and mappings. In the single-model price editor, enable Gouo and set its CNY price, reference/mask capabilities, and output limit. The client displays the public model ID used in requests; there is no separate display name.
 4. Validate generations, edits, and variations routes.
-5. Validate fixed charging, failure refunds, and insufficient-balance rejection.
+5. Validate model-specific charging, failure refunds, price-change confirmation, and insufficient-balance rejection.
 6. Configure new-user credit, redemption codes, registration policy, and rate limits.
 7. If online payment is planned, validate provider setup, callback signatures, abnormal orders, and reconciliation before exposing it.
 8. Confirm the asset directory and user storage under the Gouo storage administration view.
 
 Registration supports username/password and conditionally presents email-verification fields from backend status. Before forcing another CAPTCHA or OAuth flow, verify that the Gouo login/registration UI supplies all required parameters.
 
-## 4. Fixed image billing
+## 4. Model-specific image billing
 
-Generation, edit, and variation routes use a fixed CNY price per successful request:
+Generation, edit, and variation routes charge the public model's CNY selling price per successful HTTP request. The existing `Price` table holds its enabled state, price, capabilities, and output limit. Sizes, quality levels, generation, and editing share one price per model. Group multipliers and upstream model mappings do not change that selling price.
+
+These legacy settings seed the default model only on the first migration. Change later prices in the admin UI:
 
 ```dotenv
 GOUO_IMAGE_PRICE_CNY=0.10
+GOUO_IMAGE_MODEL=gpt-image-2
 ```
 
-- Balance is checked and reserved when a request starts.
-- A confirmed failure refunds the reservation.
-- A request asking for multiple outputs currently settles as one successful request.
-- The user center shows price, balance, and recent usage.
-- Fixed selling price is independent of upstream cost. Operators must inspect real bills across models, sizes, quality levels, output counts, and edits.
+- Migration enables only the previous default model and price, with reference/mask support and an output limit of **1 image**. Increase the limit after checking upstream costs. It preserves balances and historical artworks, never enables other models automatically, and never re-enables a removed or disabled default on restart.
+- `VITE_GOUO_IMAGE_MODEL` supplies the initial frontend choice. Subsequent choices are remembered per account and survive login/token refresh. Tasks and retries retain their original model.
+- `GET /api/gouo/models` requires the login cookie and that account's relay token in `X-Gouo-Token`. It intersects enabled models, valid prices, the actual token allowlist, and channels available to its groups. Missing prices and disabled models fail closed instead of falling back to generic pricing.
+- The client submits `X-Gouo-Price-Version`. Changed prices or capabilities return `409 image_price_changed`; refresh the catalog and confirm by submitting again. Legacy task retries and changed retry prices require a confirmation dialog. Non-product API tokens may omit the version but still use a quote captured when the request starts.
+- Quota is `ceil(CNY price / PaymentUSDRate × QuotaPerUnit)`. Conditional database updates reserve user/token balances in one transaction. Success settles the reservation, confirmed backend failure refunds it, and channel retries share one reservation. Logs preserve the public model, price, billing unit, version, and charged quota. The user center and CSV use the price snapshot; cumulative usage is consumed quota converted at the current rate.
+- Multiple outputs within the model limit cost one charge for one HTTP request. Product settings disable Codex CLI splitting and streaming. Frontend compatibility modes can split a task into separately charged requests.
+- Price synchronization and generic batch editing preserve enabled Gouo settings; change them in the single-model editor. Selling prices are independent of upstream costs, so operators must check actual upstream bills.
 
-Do not infer behavior by mixing generic One Hub multipliers with Gouo fixed pricing. Run real success, failure, and insufficient-balance regression cases.
+Image reservations create a durable ledger row in the same transaction. Upstream requests have a 15-minute deadline. At startup and every minute, the primary node refunds unsent reservations older than 20 minutes and marks dispatched requests with unknown outcomes for review. Settlement/refund, balances, statistics, and logs commit atomically; repeated resolution does not repeat the balance change.
+
+Browser timeouts, output downloads, or local storage failures do not mean a refund occurred. Users check image request status in Account → Usage; administrators reconcile upstream records in Operations → Image Billing and provide a reason before settling or refunding. Retrying creates a new paid request and does not recover the original result. Back up the database before upgrading. Historical interruptions without ledger rows require manual reconciliation against old logs.
 
 ## 5. Cloud library
 
@@ -120,7 +130,8 @@ Restoring only the database leaves library records without images. Restoring onl
 | Route | Purpose |
 | --- | --- |
 | `GET /api/status` | Backend status and enabled capabilities |
-| `GET /api/user/self` | Current user, balance, and price |
+| `GET /api/user/self` | Current user and balance; legacy image_price_cny is not a model quote |
+| `GET /api/gouo/models` | Models, prices, capabilities, output limits, and price versions available to the current image token |
 | `POST /api/user/login` | Sign in |
 | `POST /api/user/register` | Register |
 | `GET /api/token/playground` | Current user's image relay token |

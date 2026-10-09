@@ -8,32 +8,38 @@ import (
 	"one-api/common"
 	"one-api/common/config"
 	"one-api/common/logger"
+	"one-api/common/utils"
 	"one-api/model"
 	"one-api/types"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/datatypes"
 )
 
 type Quota struct {
-	modelName        string
-	promptTokens     int
-	price            model.Price
-	groupName        string
-	isBackupGroup    bool // 新增字段记录是否使用备用分组
-	backupGroupName  string
-	groupRatio       float64
-	inputRatio       float64
-	outputRatio      float64
-	preConsumedQuota int
-	cacheQuota       int
-	userId           int
-	channelId        int
-	tokenId          int
-	unlimitedQuota   bool
-	fixedQuota       int
-	HandelStatus     bool
+	modelName         string
+	promptTokens      int
+	price             model.Price
+	groupName         string
+	isBackupGroup     bool // 新增字段记录是否使用备用分组
+	backupGroupName   string
+	groupRatio        float64
+	inputRatio        float64
+	outputRatio       float64
+	preConsumedQuota  int
+	cacheQuota        int
+	userId            int
+	channelId         int
+	tokenId           int
+	unlimitedQuota    bool
+	fixedQuota        int
+	imageModel        *model.GouoImageModel
+	imageCharge       *model.GouoImageCharge
+	imageUncertain    bool
+	imageFailureKnown bool
+	imageCompleted    bool
+	HandelStatus      bool
 
 	startTime         time.Time
 	firstResponseTime time.Time
@@ -60,13 +66,36 @@ func NewQuota(c *gin.Context, modelName string, promptTokens int) *Quota {
 	quota.groupRatio = c.GetFloat64("group_ratio") // 这里的倍率已经在 common.go 中正确设置了
 	quota.inputRatio = quota.price.GetInput() * quota.groupRatio
 	quota.outputRatio = quota.price.GetOutput() * quota.groupRatio
-	quota.fixedQuota = getFixedImageQuota(c.Request.URL.Path)
+	if entry, ok := c.Get("gouo_image_model"); ok {
+		quota.imageModel = entry.(*model.GouoImageModel)
+		quota.modelName = quota.imageModel.ID
+		quota.fixedQuota = quota.imageModel.Quota
+		quota.groupRatio = 1
+		id := c.GetString(logger.RequestIdKey)
+		if id == "" {
+			id = utils.GetUUID()
+		}
+		quota.imageCharge = &model.GouoImageCharge{ID: id, UserID: quota.userId, TokenID: quota.tokenId, ModelName: quota.modelName, PriceCNY: quota.imageModel.PriceCNY, PriceVersion: quota.imageModel.PriceVersion, Quota: quota.fixedQuota}
+	}
 
 	return quota
 
 }
 
 func (q *Quota) PreQuotaConsumption() *types.OpenAIErrorWithStatusCode {
+	if q.imageModel != nil {
+		if q.HandelStatus || q.imageCompleted {
+			return nil
+		}
+		err := model.ReserveGouoQuota(q.imageCharge)
+		if err != nil {
+			return common.ErrorWrapperLocal(err, "insufficient_image_quota", http.StatusPaymentRequired)
+		}
+		q.preConsumedQuota = q.fixedQuota
+		q.unlimitedQuota = q.imageCharge.UnlimitedQuota
+		q.HandelStatus = true
+		return nil
+	}
 	if q.fixedQuota > 0 {
 		q.preConsumedQuota = q.fixedQuota
 	} else if q.price.Type == model.TimesPriceType {
@@ -184,6 +213,21 @@ func (q *Quota) completedQuotaConsumption(usage *types.Usage, tokenName string, 
 }
 
 func (q *Quota) Undo(c *gin.Context) {
+	if q.imageModel != nil {
+		if !q.HandelStatus || q.imageCompleted {
+			return
+		}
+		if q.imageUncertain || (q.imageCharge.Status == model.GouoChargeDispatched && !q.imageFailureKnown) {
+			q.MarkImageUnknown(c, "上游结果或结算未确认，请核对请求记录")
+			return
+		}
+		if err := model.FinishGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, model.GouoChargeRefunded, nil, 0, "生成失败，恢复预扣额度"); err != nil {
+			logger.LogError(c.Request.Context(), "图片预扣退款失败: "+err.Error())
+			return
+		}
+		q.HandelStatus = false
+		return
+	}
 	if q.HandelStatus {
 		go func(ctx context.Context) {
 			// return pre-consumed quota
@@ -196,6 +240,12 @@ func (q *Quota) Undo(c *gin.Context) {
 }
 
 func (q *Quota) Consume(c *gin.Context, usage *types.Usage, isStream bool) {
+	if q.imageModel != nil {
+		if err := q.CompleteImage(c, usage); err != nil {
+			logger.LogError(c.Request.Context(), err.Error())
+		}
+		return
+	}
 	tokenName := c.GetString("token_name")
 	q.startTime = c.GetTime("requestStartTime")
 	// 如果没有报错，则消费配额
@@ -205,6 +255,44 @@ func (q *Quota) Consume(c *gin.Context, usage *types.Usage, isStream bool) {
 			logger.LogError(ctx, err.Error())
 		}
 	}(c.Request.Context())
+}
+
+func (q *Quota) DispatchImage(c *gin.Context) *types.OpenAIErrorWithStatusCode {
+	if q.imageCharge == nil {
+		return nil
+	}
+	if err := model.DispatchGouoImageCharge(q.imageCharge.ID, c.GetInt("channel_id")); err != nil {
+		return common.ErrorWrapperLocal(err, "image_billing_state_changed", http.StatusConflict)
+	}
+	q.imageCharge.Status = model.GouoChargeDispatched
+	q.imageFailureKnown = false
+	return nil
+}
+
+func (q *Quota) MarkImageFailed() { q.imageFailureKnown = true }
+
+func (q *Quota) MarkImageUnknown(c *gin.Context, note string) {
+	q.imageUncertain = true
+	if err := model.ReviewGouoImageCharge(q.imageCharge.ID, note); err != nil {
+		logger.LogError(c.Request.Context(), "图片待核对状态保存失败: "+err.Error())
+	}
+	c.Header("X-Gouo-Billing-Status", model.GouoChargeReview)
+}
+
+// 上游成功后先提交账务，再回传图片；浏览器断开不能把已经成功的生成误退。
+func (q *Quota) CompleteImage(c *gin.Context, usage *types.Usage) error {
+	if q.imageCompleted || !q.HandelStatus {
+		return nil
+	}
+	q.startTime = c.GetTime("requestStartTime")
+	entry := &model.Log{PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, RequestTime: q.getRequestTime(), SourceIp: c.ClientIP(), Metadata: datatypes.NewJSONType(q.GetLogMeta(usage))}
+	if err := model.FinishGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, model.GouoChargeSettled, entry, 0, "上游已返回有效图片"); err != nil {
+		q.MarkImageUnknown(c, "上游已返回图片，但结算提交未确认，请核对数据库与渠道记录")
+		return err
+	}
+	q.imageCompleted, q.HandelStatus = true, false
+	c.Header("X-Gouo-Billing-Status", model.GouoChargeSettled)
+	return nil
 }
 
 func (q *Quota) GetInputRatio() float64 {
@@ -220,6 +308,13 @@ func (q *Quota) GetLogMeta(usage *types.Usage) map[string]any {
 		"group_ratio":       q.groupRatio,
 		"input_ratio":       q.price.GetInput(),
 		"output_ratio":      q.price.GetOutput(),
+	}
+	if q.imageModel != nil {
+		meta["price_type"] = model.TimesPriceType
+		meta["price_cny"] = q.imageModel.PriceCNY
+		meta["billing_unit"] = "successful_request"
+		meta["price_version"] = q.imageModel.PriceVersion
+		meta["charged_quota"] = q.fixedQuota
 	}
 
 	firstResponseTime := q.GetFirstResponseTime()
@@ -286,18 +381,6 @@ func (q *Quota) GetTotalQuota(promptTokens, completionTokens int, extraBilling m
 	}
 
 	return quota
-}
-
-func getFixedImageQuota(path string) int {
-	if !strings.HasPrefix(path, "/v1/images/generations") &&
-		!strings.HasPrefix(path, "/v1/images/edits") &&
-		!strings.HasPrefix(path, "/v1/images/variations") {
-		return 0
-	}
-	if config.GouoImagePriceCNY <= 0 || config.PaymentUSDRate <= 0 || config.QuotaPerUnit <= 0 {
-		return 0
-	}
-	return int(math.Ceil(config.GouoImagePriceCNY / config.PaymentUSDRate * config.QuotaPerUnit))
 }
 
 // 获取计算的 token 数

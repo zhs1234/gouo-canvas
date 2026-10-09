@@ -19,7 +19,7 @@ export function NoticeButton() {
         }
       }}
     >
-      <ButtonBase sx={{ borderRadius: '12px' }}>
+      <ButtonBase aria-label="查看公告" aria-haspopup="dialog" onClick={openNotice} sx={{ borderRadius: '12px', '&.Mui-focusVisible': { outline: '2px solid currentColor', outlineOffset: 2 } }}>
         <Avatar
           variant="rounded"
           sx={{
@@ -38,7 +38,6 @@ export function NoticeButton() {
               borderRadius: '50%'
             }
           }}
-          onClick={openNotice}
           color="inherit"
         >
           <Icon icon="lets-icons:message-duotone" width="1.6rem" />

@@ -7,6 +7,8 @@ import { useStore } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { CloseIcon, RefreshIcon, UserIcon } from './icons'
+import ImageBillingRecords from './ImageBillingRecords'
+import { copyTextToClipboard } from '../lib/clipboard'
 
 interface UserCenterModalProps {
   initialSection?: 'overview' | 'topup' | 'logs' | 'security'
@@ -15,6 +17,13 @@ interface UserCenterModalProps {
 
 function formatCNY(value?: number) {
   return `¥${Math.max(0, value ?? 0).toFixed(2)}`
+}
+
+function getLogAmount(log: GouoUsageLog, rate: number) {
+  const price = log.metadata?.price_cny
+  return (log.metadata?.billing_unit === 'successful_request' || log.metadata?.billing_unit === 'refunded_request') && typeof price === 'number' && Number.isFinite(price) && price > 0
+    ? price
+    : (log.quota ?? 0) * rate
 }
 
 function formatDate(timestamp?: number) {
@@ -57,6 +66,9 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [logStart, setLogStart] = useState('')
   const [logEnd, setLogEnd] = useState('')
   const [emailService, setEmailService] = useState(false)
+  const [redemptionHelp, setRedemptionHelp] = useState('')
+  const [supportContact, setSupportContact] = useState('')
+  const [supportCopied, setSupportCopied] = useState(false)
   const [bindEmailValue, setBindEmailValue] = useState('')
   const [emailCode, setEmailCode] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -67,6 +79,11 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [changingPassword, setChangingPassword] = useState(false)
   const [error, setError] = useState('')
   const sync = useCloudSyncSnapshot()
+  let supportUrl = ''
+  try {
+    const url = new URL(supportContact)
+    if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) supportUrl = url.href
+  } catch { /* 非网址的邮箱、微信号按文字展示并提供复制。 */ }
 
   useCloseOnEscape(true, onClose)
   usePreventBackgroundScroll(true, scrollBoundaryRef)
@@ -87,7 +104,11 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
 
   useEffect(() => {
     void loadUser()
-    void getBackendStatus().then((status) => setEmailService(Boolean(status.email_service))).catch(() => {})
+    void getBackendStatus().then((status) => {
+      setEmailService(Boolean(status.email_service))
+      setRedemptionHelp(typeof status.gouo_redemption_help === 'string' ? status.gouo_redemption_help : '')
+      setSupportContact(typeof status.gouo_support_contact === 'string' ? status.gouo_support_contact : '')
+    }).catch((err) => console.warn('读取账号服务说明失败', err))
   }, [loadUser])
 
   const loadLogs = useCallback(async () => {
@@ -213,8 +234,8 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const exportLogs = () => {
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [
-      ['时间', '类型', '模型', '金额', '耗时', 'Request ID', '内容'],
-      ...logs.map((log) => [formatTime(log.created_at), getLogLabel(log.type), log.model_name || '', ((log.quota ?? 0) * (user?.quota_cny_rate ?? 0)).toFixed(2), log.request_time || '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']),
+      ['时间', '类型', '模型', '金额', '计费单位', '单价', '实际扣费额度', '退款额度', '耗时', 'Request ID', '内容'],
+      ...logs.map((log) => [formatTime(log.created_at), log.metadata?.billing_status === 'refunded' ? '图片退款' : getLogLabel(log.type), log.model_name || '', getLogAmount(log, user?.quota_cny_rate ?? 0).toFixed(2), log.metadata?.billing_unit === 'successful_request' ? '次成功请求' : log.metadata?.billing_unit === 'refunded_request' ? '次退款请求' : '额度折合', log.metadata?.price_cny ?? '', log.metadata?.charged_quota ?? (log.type === 2 ? log.quota : 0), log.metadata?.billing_status === 'refunded' ? log.quota : 0, log.request_time || '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']),
     ]
     const blob = new Blob([`\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -277,12 +298,12 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">累计消费</p>
                   <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{formatCNY(user.used_cny)}</p>
-                  <p className="mt-1 text-xs text-gray-400">历史累计图片消费</p>
+                  <p className="mt-1 text-xs text-gray-400">已消耗额度按当前兑换率折合</p>
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">图片单价</p>
-                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{formatCNY(user.image_price_cny)}</p>
-                  <p className="mt-1 text-xs text-gray-400">每次成功生成或编辑</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">图片计费</p>
+                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">按模型定价</p>
+                  <p className="mt-1 text-xs text-gray-400">生成前确认价格，每次成功请求扣费</p>
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">云端空间</p>
@@ -324,7 +345,8 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
               {activeSection === 'topup' && (
                 <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-blue-100/60 p-5 dark:border-blue-500/15 dark:from-blue-500/[0.08] dark:to-blue-700/[0.04]">
                   <p className="font-semibold text-gray-900 dark:text-white">兑换码充值</p>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">输入从光构获得的兑换码，额度将立即充入当前账户。</p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">输入兑换码，额度将充入当前账户。每个兑换码只能使用一次。</p>
+                  <p className="mt-3 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{redemptionHelp || '兑换码获取说明暂未配置。'}</p>
                   <form onSubmit={handleRedeem} className="mt-4 flex flex-col gap-3 sm:flex-row">
                     <input value={redemptionCode} onChange={(event) => setRedemptionCode(event.target.value)} autoComplete="off" placeholder="请输入光构兑换码" className="min-w-0 flex-1 rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 dark:border-white/10 dark:bg-gray-950/60 dark:text-white" />
                     <button type="submit" disabled={redeeming || !redemptionCode.trim()} className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-800 px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45">
@@ -337,6 +359,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
 
               {activeSection === 'logs' && (
                 <section className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/[0.08]">
+                  <ImageBillingRecords />
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-white/[0.08]">
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">使用记录</p>
@@ -368,14 +391,15 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                         <div key={`${log.created_at}-${index}`} className="grid gap-2 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{getLogLabel(log.type)}</span>
+                              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{log.metadata?.billing_status === 'refunded' ? '图片退款' : getLogLabel(log.type)}</span>
                               {log.model_name && <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{log.model_name}</span>}
                             </div>
                             <p className="mt-1 truncate text-xs text-gray-400">{formatTime(log.created_at)}{log.content ? ` · ${log.content}` : ''}</p>
                             {Boolean(log.metadata?.request_id || log.metadata?.requestId) && <p className="mt-1 truncate font-mono text-[11px] text-gray-400">Request ID: {String(log.metadata?.request_id || log.metadata?.requestId)}</p>}
+                            {log.metadata?.billing_unit === 'successful_request' && <p className="mt-1 text-xs text-gray-400">单价 ¥{String(log.metadata.price_cny)}/次成功请求</p>}
                           </div>
                           <div className="text-left sm:text-right">
-                            <p className={`text-sm font-semibold ${log.type === 1 ? 'text-emerald-500' : 'text-gray-700 dark:text-gray-300'}`}>{log.type === 1 ? '+' : '-'}{formatCNY((log.quota ?? 0) * (user.quota_cny_rate ?? 0))}</p>
+                            <p className={`text-sm font-semibold ${log.type === 1 || log.metadata?.billing_status === 'refunded' ? 'text-emerald-500' : 'text-gray-700 dark:text-gray-300'}`}>{log.type === 1 || log.metadata?.billing_status === 'refunded' ? '+' : '-'}{formatCNY(getLogAmount(log, user.quota_cny_rate ?? 0))}</p>
                             {log.request_time ? <p className="mt-1 text-xs text-gray-400">{log.request_time} ms</p> : null}
                           </div>
                         </div>
@@ -439,6 +463,19 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
           ) : null}
 
           {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
+
+          <section className="rounded-xl border border-gray-100 p-4 text-sm dark:border-white/10" aria-label="充值与账务帮助">
+            <p className="font-medium text-gray-800 dark:text-gray-200">充值与账务帮助</p>
+            <p className="mt-2 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">{supportContact || '客服联系方式暂未配置。'}</p>
+            {supportContact && <div className="mt-3 flex flex-wrap items-center gap-4">
+              {supportUrl && <a href={supportUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline dark:text-blue-400">打开客服链接</a>}
+              <button type="button" className="text-blue-600 underline dark:text-blue-400" onClick={async () => {
+                try { await copyTextToClipboard(supportContact); setSupportCopied(true) }
+                catch { setError('复制失败，请手动选中并复制上方联系方式') }
+              }}>{supportCopied ? '已复制联系方式' : '复制联系方式'}</button>
+            </div>}
+            <p className="mt-2 text-xs text-gray-400">反馈时请附用户 ID、发生时间与图片请求编号。请勿发送密码、完整兑换码或 API 密钥。</p>
+          </section>
 
           <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-gray-100 pt-5 dark:border-white/[0.08] sm:flex-row sm:items-center">
             <p className="text-xs text-gray-400">账户凭据由光构后端安全托管</p>

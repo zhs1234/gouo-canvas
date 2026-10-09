@@ -1,6 +1,8 @@
 package model
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"one-api/common"
@@ -54,6 +56,13 @@ type User struct {
 }
 
 type UserUpdates func(*User)
+
+func (user *User) SessionVersion() string {
+	// Cookie 只保存密码哈希的带密钥摘要，密码改变后旧会话自动失效。
+	h := hmac.New(sha256.New, []byte(config.SessionSecret))
+	h.Write([]byte(user.Password))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
 
 func GetMaxUserId() int {
 	var user User
@@ -171,11 +180,20 @@ func (user *User) Update(updatePassword bool) error {
 		if err != nil {
 			return err
 		}
+		user.AccessToken = utils.GetUUID()
 	} else {
-		omitFields = append(omitFields, "password")
+		omitFields = append(omitFields, "password", "access_token")
 	}
 
-	err = DB.Model(user).Omit(omitFields...).Updates(user).Error
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(user).Omit(omitFields...).Updates(user).Error; err != nil {
+			return err
+		}
+		if updatePassword {
+			return regeneratePlaygroundTokens(tx, user.Id)
+		}
+		return nil
+	})
 
 	if err == nil && user.Role == config.RoleRootUser {
 		config.RootUserEmail = user.Email
@@ -367,12 +385,12 @@ func ResetUserPasswordByEmail(email string, password string) error {
 	if email == "" || password == "" {
 		return errors.New("邮箱地址或密码为空！")
 	}
-	hashedPassword, err := common.Password2Hash(password)
-	if err != nil {
+	user := User{}
+	if err := DB.Where("email = ?", email).First(&user).Error; err != nil {
 		return err
 	}
-	err = DB.Model(&User{}).Where("email = ?", email).Update("password", hashedPassword).Error
-	return err
+	updated := User{Id: user.Id, Password: password}
+	return updated.Update(true)
 }
 
 func IsAdmin(userId int) bool {

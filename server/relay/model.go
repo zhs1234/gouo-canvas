@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"one-api/common"
 	"one-api/common/config"
-	"one-api/common/utils"
 	"one-api/model"
 	"one-api/providers/claude"
 	"one-api/providers/gemini"
 	"one-api/types"
+	"slices"
 	"sort"
 	"strings"
 
@@ -251,7 +251,7 @@ func GetAvailableModels(groupName string) map[string]*AvailableModelResponse {
 func getAvailableModels(groupName string) map[string]*AvailableModelResponse {
 	publicModels := model.ChannelGroup.GetModelsGroups()
 	publicGroups := model.GlobalUserGroupRatio.GetPublicGroupList()
-	if groupName != "" && !utils.Contains(groupName, publicGroups) {
+	if groupName != "" && !slices.Contains(publicGroups, groupName) {
 		publicGroups = append(publicGroups, groupName)
 	}
 

@@ -67,7 +67,6 @@ func main() {
 	// Initialize wenauthn
 	webauthn.InitWebAuthn()
 	model.NewPricing()
-	model.HandleOldTokenMaxId()
 
 	initMemoryCache()
 	initSync()

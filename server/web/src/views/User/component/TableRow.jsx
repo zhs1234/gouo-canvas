@@ -154,7 +154,7 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
           <TableSwitch id={`switch-${item.id}`} checked={statusSwitch === 1} onChange={handleStatus} />
         </TableCell>
         <TableCell>
-          <IconButton onClick={handleOpenMenu} sx={{ color: 'rgb(99, 115, 129)' }}>
+          <IconButton aria-label={`用户 ${item.username} 的操作`} aria-haspopup="menu" aria-expanded={!!open} onClick={handleOpenMenu} sx={{ color: 'rgb(99, 115, 129)' }}>
             <Icon icon="solar:menu-dots-circle-bold-duotone" />
           </IconButton>
         </TableCell>

@@ -166,7 +166,7 @@ Requirements:
 - The environment file never enters Git.
 - `GOUO_ASSET_DIR` is absolute, writable, and included in backup.
 - Local-file assets support one backend instance. Multiple instances require a shared filesystem.
-- `GOUO_IMAGE_PRICE_CNY` is the customer price, not upstream cost.
+- `GOUO_IMAGE_PRICE_CNY` seeds the default model only on first migration. Enable and price later models in the admin UI; it does not represent upstream cost.
 
 ## 7. Build the public frontend
 

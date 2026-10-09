@@ -3,9 +3,9 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"one-api/common"
 	"one-api/common/config"
@@ -42,6 +42,11 @@ func CreateOrder(c *gin.Context) {
 
 		return
 	}
+	quota := float64(orderReq.Amount) * config.QuotaPerUnit
+	if math.IsNaN(quota) || math.IsInf(quota, 0) || quota < 1 || quota > math.MaxInt32 || quota != math.Trunc(quota) {
+		common.APIRespondWithError(c, http.StatusBadRequest, errors.New("充值额度超出范围"))
+		return
+	}
 
 	userId := c.GetInt("id")
 	user, err := model.GetUserById(userId, false)
@@ -58,15 +63,17 @@ func CreateOrder(c *gin.Context) {
 		common.APIRespondWithError(c, http.StatusOK, err)
 		return
 	}
-	// 获取手续费和支付金额
-	discount, fee, payMoney := calculateOrderAmount(paymentService.Payment, orderReq.Amount)
-	// 开始支付
-	tradeNo := utils.GenerateTradeNo()
-	payRequest, err := paymentService.Pay(tradeNo, payMoney, user)
-	if err != nil {
-		common.APIRespondWithError(c, http.StatusOK, errors.New("创建支付失败，请稍后再试"))
+	if (paymentService.Payment.Currency != model.CurrencyTypeCNY && paymentService.Payment.Currency != model.CurrencyTypeUSD) || (paymentService.Payment.Type != "stripe" && paymentService.Payment.Currency != model.CurrencyTypeCNY) {
+		common.APIRespondWithError(c, http.StatusBadRequest, errors.New("支付网关币种配置无效"))
 		return
 	}
+	// 获取手续费和支付金额
+	discount, fee, payMoney := calculateOrderAmount(paymentService.Payment, orderReq.Amount)
+	if math.IsNaN(payMoney) || math.IsInf(payMoney, 0) || payMoney <= 0 || payMoney > 99999999.99 {
+		common.APIRespondWithError(c, http.StatusBadRequest, errors.New("支付金额无效"))
+		return
+	}
+	tradeNo := utils.GenerateTradeNo()
 
 	// 创建订单
 	order := &model.Order{
@@ -79,12 +86,18 @@ func CreateOrder(c *gin.Context) {
 		Fee:           fee,
 		Discount:      discount,
 		Status:        model.OrderStatusPending,
-		Quota:         orderReq.Amount * int(config.QuotaPerUnit),
+		Quota:         int(quota),
 	}
 
 	err = order.Insert()
 	if err != nil {
 		common.APIRespondWithError(c, http.StatusOK, errors.New("创建订单失败，请稍后再试"))
+		return
+	}
+	// 先保存订单，避免快速回调找不到订单；上游超时也保留对账依据。
+	payRequest, err := paymentService.Pay(tradeNo, payMoney, user)
+	if err != nil {
+		common.APIRespondWithError(c, http.StatusOK, errors.New("创建支付失败，请稍后再试"))
 		return
 	}
 
@@ -100,76 +113,39 @@ func CreateOrder(c *gin.Context) {
 	})
 }
 
-// tradeNo lock
-var orderLocks sync.Map
-var createLock sync.Mutex
-
-// LockOrder 尝试对给定订单号加锁
-func LockOrder(tradeNo string) {
-	lock, ok := orderLocks.Load(tradeNo)
-	if !ok {
-		createLock.Lock()
-		defer createLock.Unlock()
-		lock, ok = orderLocks.Load(tradeNo)
-		if !ok {
-			lock = new(sync.Mutex)
-			orderLocks.Store(tradeNo, lock)
-		}
-	}
-	lock.(*sync.Mutex).Lock()
-}
-
-// UnlockOrder 释放给定订单号的锁
-func UnlockOrder(tradeNo string) {
-	lock, ok := orderLocks.Load(tradeNo)
-	if ok {
-		lock.(*sync.Mutex).Unlock()
-	}
-}
-
 func PaymentCallback(c *gin.Context) {
 	uuid := c.Param("uuid")
 	paymentService, err := payment.NewPaymentService(uuid)
 	if err != nil {
-		common.APIRespondWithError(c, http.StatusOK, errors.New("payment not found"))
+		c.String(http.StatusBadRequest, "payment not found")
 		return
 	}
 
 	payNotify, err := paymentService.HandleCallback(c, paymentService.Payment.Config)
 	if err != nil {
+		if !c.Writer.Written() && c.Writer.Status() == http.StatusOK {
+			c.String(http.StatusBadRequest, "invalid payment notification")
+		}
 		return
 	}
-
-	LockOrder(payNotify.GatewayNo)
-	defer UnlockOrder(payNotify.GatewayNo)
-
-	order, err := model.GetOrderByTradeNo(payNotify.TradeNo)
+	if payNotify == nil {
+		paymentService.AcknowledgeCallback(c)
+		return
+	}
+	order, credited, err := model.CompletePaidOrder(payNotify.TradeNo, payNotify.GatewayNo, paymentService.Payment.ID, payNotify.Amount, payNotify.Currency)
 	if err != nil {
-		logger.SysError(fmt.Sprintf("gateway callback failed to find order, trade_no: %s,", payNotify.TradeNo))
+		logger.SysError(fmt.Sprintf("payment settlement failed, trade_no: %s, error: %s", payNotify.TradeNo, err.Error()))
+		c.String(http.StatusInternalServerError, "payment settlement failed")
 		return
 	}
-	fmt.Println(order.Status, order.Status != model.OrderStatusPending)
-
-	if order.Status != model.OrderStatusPending {
-		return
-	}
-
-	order.GatewayNo = payNotify.GatewayNo
-	order.Status = model.OrderStatusSuccess
-	err = order.Update()
-	if err != nil {
-		logger.SysError(fmt.Sprintf("gateway callback failed to update order, trade_no: %s,", payNotify.TradeNo))
-		return
-	}
-
-	err = model.IncreaseUserQuota(order.UserId, order.Quota)
-	if err != nil {
-		logger.SysError(fmt.Sprintf("gateway callback failed to increase user quota, trade_no: %s,", payNotify.TradeNo))
+	paymentService.AcknowledgeCallback(c)
+	if !credited {
 		return
 	}
 
 	// Try to upgrade user group based on cumulative recharge amount
-	err = model.CheckAndUpgradeUserGroup(order.UserId, order.Quota)
+	// 此时余额已包含本次充值，不能再次加上充值额。
+	err = model.CheckAndUpgradeUserGroup(order.UserId, 0)
 	if err != nil {
 		logger.SysError(fmt.Sprintf("failed to check and upgrade user group, trade_no: %s, error: %s", payNotify.TradeNo, err.Error()))
 	}

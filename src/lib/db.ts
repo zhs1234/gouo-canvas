@@ -99,6 +99,60 @@ export function replaceTasks(tasks: TaskRecord[]): Promise<undefined> {
   )
 }
 
+// 云端拉取只合并已同步记录；事务期间新增或编辑的本地任务不能被整库覆盖。
+export async function mergeSyncedTasks(tasks: TaskRecord[]): Promise<TaskRecord[]> {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_TASKS, 'readwrite')
+    const store = tx.objectStore(STORE_TASKS)
+    const saved: TaskRecord[] = []
+    for (const task of tasks) {
+      const req = store.get(task.id)
+      req.onsuccess = () => {
+        if (req.result && req.result.cloudSyncStatus !== 'synced') return
+        store.put(task)
+        saved.push(task)
+      }
+    }
+    tx.oncomplete = () => { db.close(); resolve(saved) }
+    tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
+  })
+}
+
+// 整批恢复共用一个事务，冲突或空间不足时不能留下半套任务和图片。
+export async function importTaskData(tasks: TaskRecord[], images: StoredImage[], thumbnails: StoredImageThumbnail[]) {
+  const db = await openDB()
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_CLOUD_ASSET_MAP], 'readwrite')
+    tx.oncomplete = () => { db.close(); resolve() }
+    tx.onerror = tx.onabort = () => { db.close(); reject(tx.error ?? new Error('导入事务已中止')) }
+    try {
+      for (const task of tasks) tx.objectStore(STORE_TASKS).add(task)
+      for (const image of images) {
+        const store = tx.objectStore(STORE_IMAGES)
+        const req = store.get(image.id)
+        req.onsuccess = () => {
+          if (req.result && req.result.dataUrl !== image.dataUrl) {
+            reject(new Error(`图片 ID 冲突：${image.id}；保留现有图片，本批作品未导入`))
+            tx.abort()
+            return
+          }
+          if (!req.result) store.add(image)
+        }
+        tx.objectStore(STORE_CLOUD_ASSET_MAP).delete(image.id)
+      }
+      for (const thumbnail of thumbnails) {
+        const store = tx.objectStore(STORE_THUMBNAILS)
+        const req = store.get(thumbnail.id)
+        req.onsuccess = () => { if (!req.result) store.add(thumbnail) }
+      }
+    } catch (error) {
+      tx.abort()
+      reject(error)
+    }
+  })
+}
+
 // ===== Images =====
 
 export function getImage(id: string): Promise<StoredImage | undefined> {
@@ -190,6 +244,7 @@ export interface CloudAssetMapItem {
   cloudAssetId: string
   contentUrl: string
   sha256: string
+  mimeType?: string
   updatedAt: number
 }
 

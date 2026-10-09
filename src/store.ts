@@ -9,6 +9,8 @@ import type {
   MaskDraft,
   TaskRecord,
   FavoriteCollection,
+  StoredImage,
+  StoredImageThumbnail,
 } from './types'
 import { DEFAULT_PARAMS } from './types'
 import { DEFAULT_SETTINGS, getActiveApiProfile, getCustomProviderDefinition, mergeImportedSettings, normalizeSettings, validateApiProfile } from './lib/apiProfiles'
@@ -25,8 +27,7 @@ import {
   getStoredFreshImageThumbnail,
   getAllImageIds,
   getAllImages,
-  putImage,
-  putImageThumbnail,
+  importTaskData,
   deleteImage,
   clearImages,
   storeImage,
@@ -43,7 +44,7 @@ import { orderInputImagesForMask } from './lib/mask'
 import { getChangedParams, normalizeParamsForSettings } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
-import { isBackendAuthEnabled } from './lib/gouoBackend'
+import { getImageModelQuote, GouoPriceChangedError, isBackendAuthEnabled } from './lib/gouoBackend'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, notifyFirstGeneration, requestUserCenter } from './lib/userGuidance'
@@ -131,7 +132,7 @@ export function getCachedImage(id: string): string | undefined {
   return dataUrl
 }
 
-function cacheImage(id: string, dataUrl: string) {
+export function cacheImage(id: string, dataUrl: string) {
   imageCache.delete(id)
   imageCache.set(id, dataUrl)
   while (imageCache.size > MAX_IMAGE_CACHE_ENTRIES) {
@@ -559,6 +560,7 @@ interface AppState {
   setReusedTaskApiProfile: (profileId: string | null, missing?: boolean, profileName?: string | null) => void
 
   // 任务列表
+  isSubmitting: boolean
   tasks: TaskRecord[]
   setTasks: (t: TaskRecord[]) => void
   favoriteCollections: FavoriteCollection[]
@@ -827,6 +829,7 @@ export const useStore = create<AppState>()(
       }),
 
       // Tasks
+      isSubmitting: false,
       tasks: [],
       setTasks: (tasks) => set(() => ({
         tasks,
@@ -988,7 +991,8 @@ function genId(): string {
 }
 
 function putTask(task: TaskRecord): Promise<IDBValidKey> {
-  return dbPutTask(task)
+  // 同步订阅可能已更新脏标记，不能再用调用方的旧快照覆盖。
+  return dbPutTask(useStore.getState().tasks.find((item) => item.id === task.id) ?? task)
 }
 
 export function getCodexCliPromptKey(settings: AppSettings): string {
@@ -1019,7 +1023,7 @@ export function markInterruptedOpenAIRunningTasks(tasks: TaskRecord[], now = Dat
     const updated: TaskRecord = {
       ...task,
       status: 'error',
-      error: OPENAI_INTERRUPTED_ERROR,
+      error: isBackendAuthEnabled() ? getActionableErrorMessage(OPENAI_INTERRUPTED_ERROR, true) : OPENAI_INTERRUPTED_ERROR,
       falRecoverable: false,
       finishedAt: now,
       elapsed: Math.max(0, now - task.createdAt),
@@ -1043,7 +1047,7 @@ function failOpenAITaskIfStillRunning(taskId: string, error: string, now = Date.
 
   updateTaskInStore(taskId, {
     status: 'error',
-    error,
+    error: isBackendAuthEnabled() ? getActionableErrorMessage(error, true) : error,
     falRecoverable: false,
     finishedAt: now,
     elapsed: Math.max(0, now - task.createdAt),
@@ -1407,7 +1411,7 @@ export async function initStore() {
   }
   await Promise.all(tasks
     .filter((task, index) => normalizedFavorites.changed || interruptedTaskIds.has(task.id) || task.rawResponsePayload !== markedTasks[index]?.rawResponsePayload)
-    .map((task) => putTask(task)))
+    .map((task) => dbPutTask(task)))
   useStore.getState().setTasks(tasks)
   showSupportPromptForExistingLocalData(tasks)
 
@@ -1465,136 +1469,161 @@ export async function initStore() {
 
 /** 提交新任务 */
 export async function submitTask(options: { allowFullMask?: boolean; useCurrentApiProfileWhenReusedMissing?: boolean } = {}) {
-  const { settings, prompt, inputImages, maskDraft, params, reusedTaskApiProfileId, reusedTaskApiProfileName, reusedTaskApiProfileMissing, showToast, setConfirmDialog } =
-    useStore.getState()
+  if (useStore.getState().isSubmitting) return
+  useStore.setState({ isSubmitting: true })
+  try {
+    const { settings, prompt, inputImages, maskDraft, params, reusedTaskApiProfileId, reusedTaskApiProfileName, reusedTaskApiProfileMissing, showToast, setConfirmDialog } =
+      useStore.getState()
 
-  const normalizedSettings = normalizeSettings(settings)
-  let activeProfile = getActiveApiProfile(settings)
-  let requestSettings = createSettingsForApiProfile(normalizedSettings, activeProfile)
-  if (normalizedSettings.reuseTaskApiProfileTemporarily && (reusedTaskApiProfileId || reusedTaskApiProfileMissing)) {
-    const reusedProfile = getReusedTaskApiProfile(normalizedSettings, reusedTaskApiProfileId)
-    if (!reusedProfile) {
-      if (options.useCurrentApiProfileWhenReusedMissing) {
-        useStore.getState().setReusedTaskApiProfile(null)
+    const normalizedSettings = normalizeSettings(settings)
+    let activeProfile = getActiveApiProfile(settings)
+    let requestSettings = createSettingsForApiProfile(normalizedSettings, activeProfile)
+    if (normalizedSettings.reuseTaskApiProfileTemporarily && (reusedTaskApiProfileId || reusedTaskApiProfileMissing)) {
+      const reusedProfile = getReusedTaskApiProfile(normalizedSettings, reusedTaskApiProfileId)
+      if (!reusedProfile) {
+        if (options.useCurrentApiProfileWhenReusedMissing) {
+          useStore.getState().setReusedTaskApiProfile(null)
+        } else {
+          setConfirmDialog({
+            title: '找不到 API 配置',
+        message: `找不到复用任务所使用的 API 配置「${reusedTaskApiProfileName || '未知配置'}」，要使用当前的 API 配置「${activeProfile.name}」提交任务吗？`,
+        confirmText: '使用当前配置提交',
+        cancelText: '放弃提交',
+        action: () => {
+          void submitTask({ ...options, useCurrentApiProfileWhenReusedMissing: true })
+        },
+          })
+          return
+        }
       } else {
-        setConfirmDialog({
-          title: '找不到 API 配置',
-      message: `找不到复用任务所使用的 API 配置「${reusedTaskApiProfileName || '未知配置'}」，要使用当前的 API 配置「${activeProfile.name}」提交任务吗？`,
-      confirmText: '使用当前配置提交',
-      cancelText: '放弃提交',
-      action: () => {
-        void submitTask({ ...options, useCurrentApiProfileWhenReusedMissing: true })
-      },
-        })
-        return
+        activeProfile = reusedProfile
+        requestSettings = createSettingsForApiProfile(normalizedSettings, reusedProfile)
       }
-    } else {
-      activeProfile = reusedProfile
-      requestSettings = createSettingsForApiProfile(normalizedSettings, reusedProfile)
     }
-  }
 
-  if (validateApiProfile(activeProfile)) {
-    showToast(`请先完善请求 API 配置：${validateApiProfile(activeProfile)}`, 'error')
-    useStore.getState().setShowSettings(true)
-    return
-  }
-
-  if (!prompt.trim()) {
-    showToast('请输入提示词', 'error')
-    return
-  }
-
-  let orderedInputImages = inputImages
-  let maskImageId: string | null = null
-  let maskTargetImageId: string | null = null
-
-  if (maskDraft) {
-    try {
-      orderedInputImages = orderInputImagesForMask(inputImages, maskDraft.targetImageId)
-      const coverage = await validateMaskMatchesImage(maskDraft.maskDataUrl, orderedInputImages[0].dataUrl)
-      if (coverage === 'full' && !options.allowFullMask) {
-        setConfirmDialog({
-          title: '确认编辑整张图片？',
-          message: '当前遮罩覆盖了整张图片，提交后可能会重绘全部内容。是否继续？',
-          confirmText: '继续提交',
-          tone: 'warning',
-          action: () => {
-            void submitTask({ allowFullMask: true })
-          },
-        })
-        return
-      }
-      maskImageId = await storeImage(maskDraft.maskDataUrl, 'mask')
-      cacheImage(maskImageId, maskDraft.maskDataUrl)
-      maskTargetImageId = maskDraft.targetImageId
-    } catch (err) {
-      if (!inputImages.some((img) => img.id === maskDraft.targetImageId)) {
-        useStore.getState().clearMaskDraft()
-      }
-      showToast(getActionableErrorMessage(err instanceof Error ? err.message : String(err)), 'error')
+    if (validateApiProfile(activeProfile)) {
+      showToast(`请先完善请求 API 配置：${validateApiProfile(activeProfile)}`, 'error')
+      useStore.getState().setShowSettings(true)
       return
     }
+
+    if (!prompt.trim()) {
+      showToast('请输入提示词', 'error')
+      return
+    }
+
+    let quote: Awaited<ReturnType<typeof getImageModelQuote>> | undefined
+    if (isBackendAuthEnabled()) {
+      try {
+        quote = await getImageModelQuote(activeProfile.model, inputImages.length, Boolean(maskDraft), params.n, settings.gouoPriceVersion)
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err), 'error')
+        return
+      }
+    }
+
+    let orderedInputImages = inputImages
+    let maskImageId: string | null = null
+    let maskTargetImageId: string | null = null
+
+    if (maskDraft) {
+      try {
+        orderedInputImages = orderInputImagesForMask(inputImages, maskDraft.targetImageId)
+        const coverage = await validateMaskMatchesImage(maskDraft.maskDataUrl, orderedInputImages[0].dataUrl)
+        if (coverage === 'full' && !options.allowFullMask) {
+          setConfirmDialog({
+            title: '确认编辑整张图片？',
+            message: '当前遮罩覆盖了整张图片，提交后可能会重绘全部内容。是否继续？',
+            confirmText: '继续提交',
+            tone: 'warning',
+            action: () => {
+              void submitTask({ allowFullMask: true })
+            },
+          })
+          return
+        }
+        maskImageId = await storeImage(maskDraft.maskDataUrl, 'mask')
+        cacheImage(maskImageId, maskDraft.maskDataUrl)
+        maskTargetImageId = maskDraft.targetImageId
+      } catch (err) {
+        if (!inputImages.some((img) => img.id === maskDraft.targetImageId)) {
+          useStore.getState().clearMaskDraft()
+        }
+        showToast(getActionableErrorMessage(err instanceof Error ? err.message : String(err)), 'error')
+        return
+      }
+    }
+
+    // 持久化输入图片到 IndexedDB（此前只在内存缓存中）
+    for (const img of orderedInputImages) {
+      await storeImage(img.dataUrl)
+    }
+
+    const normalizedParams = normalizeParamsForSettings(params, requestSettings, { hasInputImages: orderedInputImages.length > 0 })
+    const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
+    const taskParams = shouldUseTransparentOutput
+      ? getTransparentRequestParams(normalizedParams)
+      : { ...normalizedParams, transparent_output: false }
+    const transparentMeta = taskParams.transparent_output
+      ? createTransparentOutputMeta(prompt.trim())
+      : null
+    const normalizedParamPatch = getChangedParams(params, taskParams)
+    if (useStore.getState().params === params && Object.keys(normalizedParamPatch).length) {
+      useStore.getState().setParams(normalizedParamPatch)
+    }
+
+    const taskId = genId()
+    const task: TaskRecord = {
+      id: taskId,
+      prompt: prompt.trim(),
+      params: taskParams,
+      apiProvider: activeProfile.provider,
+      apiProfileId: activeProfile.id,
+      apiProfileName: activeProfile.name,
+      apiMode: activeProfile.apiMode,
+      apiModel: activeProfile.model,
+      gouoPriceVersion: quote?.price_version,
+      gouoPriceCNY: quote?.price_cny,
+      inputImageIds: orderedInputImages.map((i) => i.id),
+      maskTargetImageId,
+      maskImageId,
+      transparentOutput: transparentMeta?.transparentOutput,
+      transparentPrompt: transparentMeta?.effectivePrompt,
+      outputImages: [],
+      status: 'running',
+      error: null,
+      createdAt: Date.now(),
+      finishedAt: null,
+      elapsed: null,
+    }
+
+    await putTask(task)
+    useStore.getState().setTasks([task, ...useStore.getState().tasks])
+    useStore.getState().showToast('任务已提交', 'success')
+
+    const latest = useStore.getState()
+    // 等待报价或保存期间编辑的新草稿不能随旧任务一起清空。
+    if (latest.prompt === prompt && latest.inputImages === inputImages && latest.maskDraft === maskDraft) {
+      if (settings.clearInputAfterSubmit) {
+        latest.setPrompt('')
+        latest.clearInputImages()
+      }
+      if (latest.reusedTaskApiProfileId === reusedTaskApiProfileId) latest.setReusedTaskApiProfile(null)
+    }
+
+    // 异步调用 API
+    executeTask(taskId)
+  } catch (err) {
+    console.warn('提交任务失败', err)
+    useStore.getState().showToast(`提交失败：${err instanceof Error ? err.message : String(err)}`, 'error')
+  } finally {
+    useStore.setState({ isSubmitting: false })
   }
-
-  // 持久化输入图片到 IndexedDB（此前只在内存缓存中）
-  for (const img of orderedInputImages) {
-    await storeImage(img.dataUrl)
-  }
-
-  const normalizedParams = normalizeParamsForSettings(params, requestSettings, { hasInputImages: orderedInputImages.length > 0 })
-  const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
-  const taskParams = shouldUseTransparentOutput
-    ? getTransparentRequestParams(normalizedParams)
-    : { ...normalizedParams, transparent_output: false }
-  const transparentMeta = taskParams.transparent_output
-    ? createTransparentOutputMeta(prompt.trim())
-    : null
-  const normalizedParamPatch = getChangedParams(params, taskParams)
-  if (Object.keys(normalizedParamPatch).length) {
-    useStore.getState().setParams(normalizedParamPatch)
-  }
-
-  const taskId = genId()
-  const task: TaskRecord = {
-    id: taskId,
-    prompt: prompt.trim(),
-    params: taskParams,
-    apiProvider: activeProfile.provider,
-    apiProfileId: activeProfile.id,
-    apiProfileName: activeProfile.name,
-    apiMode: activeProfile.apiMode,
-    apiModel: activeProfile.model,
-    inputImageIds: orderedInputImages.map((i) => i.id),
-    maskTargetImageId,
-    maskImageId,
-    transparentOutput: transparentMeta?.transparentOutput,
-    transparentPrompt: transparentMeta?.effectivePrompt,
-    outputImages: [],
-    status: 'running',
-    error: null,
-    createdAt: Date.now(),
-    finishedAt: null,
-    elapsed: null,
-  }
-
-  const latestTasks = useStore.getState().tasks
-  useStore.getState().setTasks([task, ...latestTasks])
-  await putTask(task)
-  useStore.getState().showToast('任务已提交', 'success')
-
-  if (settings.clearInputAfterSubmit) {
-    useStore.getState().setPrompt('')
-    useStore.getState().clearInputImages()
-  }
-  useStore.getState().setReusedTaskApiProfile(null)
-
-  // 异步调用 API
-  executeTask(taskId)
 }
 
 function addTaskReferencedImageIds(target: Set<string>, task: TaskRecord) {
   for (const id of task.inputImageIds || []) target.add(id)
+  if (task.maskTargetImageId) target.add(task.maskTargetImageId)
   if (task.maskImageId) target.add(task.maskImageId)
   for (const id of task.outputImages || []) target.add(id)
   for (const id of task.transparentOriginalImages || []) {
@@ -1703,7 +1732,8 @@ async function executeTask(taskId: string) {
     })
     return
   }
-  const activeProfile = taskProfile ?? getActiveApiProfile(settings)
+  const baseProfile = taskProfile ?? getActiveApiProfile(settings)
+  const activeProfile = isBackendAuthEnabled() && task.apiModel ? { ...baseProfile, model: task.apiModel } : baseProfile
   const requestSettings = createSettingsForApiProfile(settings, activeProfile)
   const taskProvider = task.apiProvider ?? activeProfile.provider
   let falRequestInfo: { requestId: string; endpoint: string } | null = task.falRequestId && task.falEndpoint
@@ -1712,6 +1742,8 @@ async function executeTask(taskId: string) {
   let customTaskInfo: { taskId: string } | null = task.customTaskId
     ? { taskId: task.customTaskId }
     : null
+  let requestStarted = false
+  let receivedResult = false
 
   if (
     taskProvider !== 'fal' &&
@@ -1739,12 +1771,14 @@ async function executeTask(taskId: string) {
       ? task.transparentPrompt
       : task.prompt
 
+    requestStarted = true
     const result = await callImageApi({
       settings: requestSettings,
       prompt: replaceImageMentionsForApi(requestPrompt, inputDataUrls.length),
       params: task.params,
       inputImageDataUrls: inputDataUrls,
       maskDataUrl,
+      gouoPriceVersion: task.gouoPriceVersion,
       onFalRequestEnqueued: (request) => {
         falRequestInfo = request
         updateTaskInStore(taskId, {
@@ -1766,6 +1800,7 @@ async function executeTask(taskId: string) {
       },
     })
 
+    receivedResult = true
     const latestBeforeSuccess = useStore.getState().tasks.find((t) => t.id === taskId)
     if (!latestBeforeSuccess || latestBeforeSuccess.status !== 'running') {
       useStore.getState().setTaskStreamPreview(taskId)
@@ -1883,6 +1918,7 @@ async function executeTask(taskId: string) {
       scheduleCustomRecovery(taskId)
     } else {
       let errorMessage = err instanceof Error ? err.message : String(err)
+      if (receivedResult) errorMessage = `生成结果已返回，但本地处理或保存失败：${errorMessage}`
       const settings = useStore.getState().settings
       const profile = getTaskApiProfile(settings, latestTask)
       const usesApiProxy = profile?.apiProxy ?? settings.apiProxy
@@ -1898,7 +1934,7 @@ async function executeTask(taskId: string) {
         errorMessage += `\n${networkErrorHint}`
       }
       const balanceError = isBalanceError(errorMessage)
-      errorMessage = getActionableErrorMessage(errorMessage)
+      errorMessage = getActionableErrorMessage(errorMessage, requestStarted && isBackendAuthEnabled())
       updateTaskInStore(taskId, {
         status: 'error',
         error: errorMessage,
@@ -2104,9 +2140,37 @@ export async function deleteFavoriteCollection(collectionId: string, deleteTasks
 }
 
 /** 重试失败的任务：创建新任务并执行 */
-export async function retryTask(task: TaskRecord) {
+export async function retryTask(task: TaskRecord, priceConfirmed = false) {
   const { settings } = useStore.getState()
-  const activeProfile = getActiveApiProfile(settings)
+  const currentProfile = getActiveApiProfile(settings)
+  const activeProfile = isBackendAuthEnabled() && task.apiModel ? { ...currentProfile, model: task.apiModel } : currentProfile
+  let quote: Awaited<ReturnType<typeof getImageModelQuote>> | undefined
+  if (isBackendAuthEnabled()) {
+    try {
+      quote = await getImageModelQuote(activeProfile.model, task.inputImageIds.length, Boolean(task.maskImageId), task.params.n, task.gouoPriceVersion)
+    } catch (err) {
+      if (err instanceof GouoPriceChangedError) {
+        useStore.getState().setConfirmDialog({
+          title: '确认重试价格',
+          message: `模型「${err.quote.id}」当前价格为 ¥${err.quote.price_cny}/次成功请求。重试会新建付费请求，原任务可能已扣费，请先在用户中心的使用记录核对。是否按此价格重试？`,
+          confirmText: '按当前价格重试',
+          action: () => retryTask({ ...task, gouoPriceVersion: err.quote.price_version, gouoPriceCNY: err.quote.price_cny }, true),
+        })
+        return
+      }
+      useStore.getState().showToast(err instanceof Error ? err.message : String(err), 'error')
+      return
+    }
+    if (!priceConfirmed) {
+      useStore.getState().setConfirmDialog({
+        title: '确认付费重试',
+        message: `将新建一次图片请求，成功后扣费 ¥${quote.price_cny}。原任务可能已扣费，请先在用户中心的使用记录核对；本次重试不会恢复原任务结果。`,
+        confirmText: '新建付费请求',
+        action: () => retryTask(task, true),
+      })
+      return
+    }
+  }
   const normalizedParams = normalizeParamsForSettings(task.params, settings, { hasInputImages: task.inputImageIds.length > 0 })
   const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
   const taskParams = shouldUseTransparentOutput
@@ -2125,6 +2189,8 @@ export async function retryTask(task: TaskRecord) {
     apiProfileName: activeProfile.name,
     apiMode: activeProfile.apiMode,
     apiModel: activeProfile.model,
+    gouoPriceVersion: quote?.price_version,
+    gouoPriceCNY: quote?.price_cny,
     inputImageIds: [...task.inputImageIds],
     maskTargetImageId: task.maskTargetImageId ?? null,
     maskImageId: task.maskImageId ?? null,
@@ -2149,6 +2215,10 @@ export async function retryTask(task: TaskRecord) {
 export async function reuseConfig(task: TaskRecord) {
   const { settings, setPrompt, setParams, setInputImages, setMaskDraft, clearMaskDraft, showToast, setConfirmDialog, setReusedTaskApiProfile } = useStore.getState()
   const normalizedSettings = normalizeSettings(settings)
+  if (isBackendAuthEnabled() && task.apiModel) {
+    useStore.getState().setSettings({ model: task.apiModel, gouoModelSelected: true, gouoPriceVersion: task.gouoPriceVersion })
+    window.dispatchEvent(new Event('gouo-models-refresh'))
+  }
   const currentProfile = getActiveApiProfile(settings)
   const matchedProfile = normalizedSettings.reuseTaskApiProfileTemporarily ? getTaskApiProfile(normalizedSettings, task) : null
   const shouldTemporarilyReuseProfile = Boolean(matchedProfile && matchedProfile.id !== currentProfile.id)
@@ -2458,6 +2528,11 @@ export interface ExportOptions {
 export async function exportData(options: ExportOptions = { exportConfig: true, exportTasks: true }) {
   try {
     const tasks = options.exportTasks ? (await getAllTasks()).filter((task) => !isLegacyAgentTask(task)) : []
+    const requiredImages = new Set<string>()
+    for (const task of tasks) addTaskReferencedImageIds(requiredImages, task)
+    for (const id of requiredImages) {
+      if (id && !await ensureImageCached(id)) throw new Error(`备份缺少原图 ${id}，请恢复原图后重试`)
+    }
     const images = options.exportTasks ? await getAllImages() : []
     const { settings, favoriteCollections, defaultFavoriteCollectionId } = useStore.getState()
     const exportedAt = Date.now()
@@ -2497,6 +2572,8 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     URL.revokeObjectURL(url)
     useStore.getState().showToast('数据已导出', 'success')
   } catch (e) {
+    console.warn('备份导出失败', e)
+    useStore.getState().setConfirmDialog({ title: '导出失败', message: e instanceof Error ? e.message : String(e), showCancel: false, confirmText: '知道了' })
     useStore
       .getState()
       .showToast(
@@ -2517,48 +2594,44 @@ export async function importData(file: File, options: ImportOptions = { importCo
   try {
     const buffer = await file.arrayBuffer()
     const { manifest: data, files } = readExportZip(new Uint8Array(buffer))
-
-    const importedImageIds: string[] = []
-    if (options.importTasks && data.tasks && data.imageFiles) {
-      // 还原图片
-      for (const [id, info] of Object.entries(data.imageFiles)) {
+    if ((!options.importTasks || !data.tasks) && (!options.importConfig || !data.settings)) throw new Error('备份不包含所选数据')
+    const settings = options.importConfig && data.settings ? mergeImportedSettings(useStore.getState().settings, data.settings) : undefined
+    let importedCount = 0
+    let skippedCount = 0
+    if (options.importTasks && data.tasks) {
+      const existingIds = new Set((await getAllTasks()).map((task) => task.id))
+      const importedTasks = data.tasks.filter((task) => !existingIds.has(task.id)).map((task): TaskRecord => ({
+        ...task,
+        // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它。
+        id: isBackendAuthEnabled() ? genId() : task.id,
+        params: { ...DEFAULT_PARAMS, ...task.params },
+        cloudId: undefined,
+        cloudSyncStatus: undefined,
+        cloudSyncError: undefined,
+        cloudHiddenAt: undefined,
+        status: task.status === 'running' ? 'error' : task.status,
+        error: task.status === 'running' ? '备份中的任务尚未完成，请核对账务后决定是否重新提交。' : task.error,
+        falRecoverable: false,
+        customRecoverable: false,
+      }))
+      importedCount = importedTasks.length
+      skippedCount = data.tasks.length - importedCount
+      const requiredImages = new Set<string>()
+      for (const task of importedTasks) addTaskReferencedImageIds(requiredImages, task)
+      const images: StoredImage[] = []
+      const thumbnails: StoredImageThumbnail[] = []
+      for (const [id, info] of Object.entries(data.imageFiles ?? {})) {
+        if (!requiredImages.has(id)) continue
         const dataUrl = readExportZipFileAsDataUrl(files, info.path)
-        if (!dataUrl) continue
-        await putImage({
-          id,
-          dataUrl,
-          createdAt: info.createdAt,
-          source: info.source,
-          width: info.width,
-          height: info.height,
-        })
-        cacheImage(id, dataUrl)
-        importedImageIds.push(id)
+        if (!dataUrl) throw new Error(`备份缺少图片文件：${info.path}`)
+        images.push({ id, dataUrl, createdAt: info.createdAt, source: info.source, width: info.width, height: info.height })
       }
-
       for (const [id, info] of Object.entries(data.thumbnailFiles ?? {})) {
+        if (!requiredImages.has(id)) continue
         const thumbnailDataUrl = readExportZipFileAsDataUrl(files, info.path)
-        if (!thumbnailDataUrl) continue
-        await putImageThumbnail({
-          id,
-          thumbnailDataUrl,
-          width: info.width,
-          height: info.height,
-          thumbnailVersion: info.thumbnailVersion,
-        })
-        cacheThumbnail(id, {
-          dataUrl: thumbnailDataUrl,
-          width: info.width,
-          height: info.height,
-          thumbnailVersion: info.thumbnailVersion,
-        })
+        if (!thumbnailDataUrl) throw new Error(`备份缺少缩略图文件：${info.path}`)
+        thumbnails.push({ id, thumbnailDataUrl, width: info.width, height: info.height, thumbnailVersion: info.thumbnailVersion })
       }
-
-      for (const task of data.tasks) {
-        await putTask(task)
-      }
-
-      const tasks = (await getAllTasks()).filter((task) => !isLegacyAgentTask(task))
       const state = useStore.getState()
       const importedCollections = normalizeFavoriteCollections(data.favoriteCollections)
       const favoriteCollections = importedCollections.length
@@ -2567,25 +2640,24 @@ export async function importData(file: File, options: ImportOptions = { importCo
       const defaultFavoriteCollectionId = importedCollections.length
         ? resolveDefaultFavoriteCollectionId(favoriteCollections, data.defaultFavoriteCollectionId)
         : state.defaultFavoriteCollectionId
-      const normalizedFavorites = normalizeLoadedFavoriteState(tasks, favoriteCollections, defaultFavoriteCollectionId)
+      const normalizedFavorites = normalizeLoadedFavoriteState(importedTasks, favoriteCollections, defaultFavoriteCollectionId)
+      await importTaskData(normalizedFavorites.tasks, images, thumbnails)
+      const tasks = (await getAllTasks()).filter((task) => !isLegacyAgentTask(task))
       useStore.setState({
-        tasks: normalizedFavorites.tasks,
+        tasks,
         favoriteCollections: normalizedFavorites.collections,
         defaultFavoriteCollectionId: normalizedFavorites.defaultFavoriteCollectionId,
       })
-      if (normalizedFavorites.changed) await Promise.all(normalizedFavorites.tasks.map((task) => putTask(task)))
+      for (const image of images) cacheImage(image.id, image.dataUrl)
       skipSupportPromptForImportedData(tasks)
-      scheduleThumbnailBackfill(importedImageIds)
+      scheduleThumbnailBackfill(images.map((image) => image.id))
     }
 
-    if (options.importConfig && data.settings) {
-      const state = useStore.getState()
-      state.setSettings(mergeImportedSettings(state.settings, data.settings))
-    }
+    if (settings) useStore.getState().setSettings(settings)
 
     let msg = '数据已成功导入'
     if (options.importTasks && data.tasks) {
-      msg = `已导入 ${data.tasks.length} 个任务`
+      msg = `已导入 ${importedCount} 个任务${skippedCount ? `，保留 ${skippedCount} 个同 ID 的现有任务` : ''}`
     } else if (options.importConfig && data.settings) {
       msg = '配置已成功导入'
     }
@@ -2593,6 +2665,8 @@ export async function importData(file: File, options: ImportOptions = { importCo
     useStore.getState().showToast(msg, 'success')
     return true
   } catch (e) {
+    console.warn('备份导入失败', e)
+    useStore.getState().setConfirmDialog({ title: '导入失败', message: e instanceof Error ? e.message : String(e), showCancel: false, confirmText: '知道了' })
     useStore
       .getState()
       .showToast(

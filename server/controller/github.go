@@ -13,7 +13,9 @@ import (
 	"one-api/common/config"
 	"one-api/common/logger"
 	"one-api/common/utils"
+	"one-api/middleware"
 	"one-api/model"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -119,7 +121,7 @@ func getGitHubUserInfoByCode(code string) (*GitHubUser, error) {
 
 	scopes := strings.Split(oAuthResponse.Scope, ",")
 	hasUserEmailScope := false
-	if utils.Contains("user:email", scopes) {
+	if slices.Contains(scopes, "user:email") {
 		hasUserEmailScope = true
 	}
 
@@ -331,6 +333,11 @@ func GitHubOAuth(c *gin.Context) {
 }
 
 func GitHubBind(c *gin.Context) {
+	user, err := middleware.SessionUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	if !config.GitHubOAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -347,25 +354,10 @@ func GitHubBind(c *gin.Context) {
 		})
 		return
 	}
-	user := model.User{
-		GitHubId: githubUser.Login,
-	}
-	if model.IsGitHubIdAlreadyTaken(user.GitHubId) {
+	if model.IsGitHubIdAlreadyTaken(githubUser.Login) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "该 GitHub 账户已被绑定",
-		})
-		return
-	}
-	session := sessions.Default(c)
-	id := session.Get("id")
-	// id := c.GetInt("id")  // critical bug!
-	user.Id = id.(int)
-	err = user.FillUserById()
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
 		})
 		return
 	}

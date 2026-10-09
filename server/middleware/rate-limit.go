@@ -7,6 +7,8 @@ import (
 	"one-api/common/config"
 	"one-api/common/redis"
 	"one-api/common/utils"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -67,6 +69,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
 			rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
+			c.Header("Retry-After", strconv.FormatInt(duration, 10))
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return
@@ -81,6 +84,7 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
 	key := mark + c.ClientIP()
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
+		c.Header("Retry-After", strconv.FormatInt(duration, 10))
 		c.Status(http.StatusTooManyRequests)
 		c.Abort()
 		return
@@ -106,7 +110,20 @@ func GlobalWebRateLimit() func(c *gin.Context) {
 }
 
 func GlobalAPIRateLimit() func(c *gin.Context) {
-	return rateLimitFactory(utils.GetOrDefault("global.api_rate_limit", GlobalApiRateLimitNum), GlobalApiRateLimitDuration, "GA")
+	limit := utils.GetOrDefault("global.api_rate_limit", GlobalApiRateLimitNum)
+	api := rateLimitFactory(limit, GlobalApiRateLimitDuration, "GA")
+	cloud := rateLimitFactory(limit, GlobalApiRateLimitDuration, "GC")
+	return func(c *gin.Context) {
+		// 云库仍受同样的 IP 限流，但批量同步不能耗尽模型、账户和充值接口的额度。
+		path := c.FullPath()
+		for _, prefix := range []string{"/api/gouo/assets", "/api/gouo/tasks", "/api/gouo/collections", "/api/gouo/sync", "/api/gouo/storage"} {
+			if path == prefix || strings.HasPrefix(path, prefix+"/") {
+				cloud(c)
+				return
+			}
+		}
+		api(c)
+	}
 }
 
 func CriticalRateLimit() func(c *gin.Context) {

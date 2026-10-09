@@ -55,6 +55,8 @@ const Header = ({ handleLeftDrawerToggle, toggleProfileDrawer }) => {
         </Box>
         {!matchUpMd && (
           <IconButton
+            aria-label={leftDrawerOpened ? '关闭导航菜单' : '打开导航菜单'}
+            aria-expanded={leftDrawerOpened}
             size="medium"
             edge="start"
             color="inherit"

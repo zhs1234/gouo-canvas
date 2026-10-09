@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"one-api/common/config"
 	"one-api/common/logger"
+	"one-api/middleware"
 	"one-api/model"
 	"strconv"
 	"time"
@@ -228,6 +229,11 @@ func LarkOAuth(c *gin.Context) {
 }
 
 func LarkBind(c *gin.Context) {
+	user, err := middleware.SessionUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	if !config.LarkAuthEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "管理员未开启通过飞书登录以及注册",
@@ -244,24 +250,10 @@ func LarkBind(c *gin.Context) {
 		})
 		return
 	}
-	user := model.User{
-		LarkId: larkUser.Data.OpenID,
-	}
-	if model.IsLarkIdAlreadyTaken(user.LarkId) {
+	if model.IsLarkIdAlreadyTaken(larkUser.Data.OpenID) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": "该飞书账户已被绑定",
-		})
-		return
-	}
-	session := sessions.Default(c)
-	id := session.Get("id")
-	user.Id = id.(int)
-	err = user.FillUserById()
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
 		})
 		return
 	}

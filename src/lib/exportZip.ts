@@ -3,6 +3,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import type { AppSettings, ExportData, FavoriteCollection, StoredImage, StoredImageThumbnail, TaskRecord } from '../types'
 import { bytesToDataUrl, dataUrlToBytes } from './dataUrl'
 import { getNumberedFileNameBase, sanitizeFileNamePart } from './exportFileName'
+import { isRecord } from './storeInputNormalization'
 
 type ZipFiles = Record<string, Uint8Array | [Uint8Array, { mtime: Date }]>
 
@@ -37,6 +38,10 @@ export function buildExportZip(params: BuildExportZipParams) {
   const usedImagePaths = new Set<string>()
 
   if (params.options.exportTasks) {
+    const imageIds = new Set(params.images.map((image) => image.id))
+    for (const id of getImageCreatedAtFallback(params.tasks).keys()) {
+      if (!imageIds.has(id)) throw new Error(`备份缺少原图 ${id}，请恢复原图后重试`)
+    }
     for (const img of params.images) {
       const { ext, bytes } = dataUrlToBytes(img.dataUrl)
       const path = getUniqueImagePath(imageFileNameBases.get(img.id) || `image-${img.id}`, ext, usedImagePaths)
@@ -95,10 +100,46 @@ export function readExportZip(bytes: Uint8Array): ExportZipContents {
   const manifestBytes = files['manifest.json']
   if (!manifestBytes) throw new Error('ZIP 中缺少 manifest.json')
 
-  return {
-    manifest: JSON.parse(strFromU8(manifestBytes)) as ExportData,
-    files,
+  const data: unknown = JSON.parse(strFromU8(manifestBytes))
+  if (!isRecord(data) || ![2, 3].includes(Number(data.version)) || typeof data.version !== 'number') throw new Error('不支持的备份版本，仅支持 ZIP 版本 2、3')
+  if (data.exportedAt !== undefined && (typeof data.exportedAt !== 'string' || !Number.isFinite(Date.parse(data.exportedAt)))) throw new Error('备份导出时间无效')
+  if (data.settings !== undefined && !isRecord(data.settings)) throw new Error('备份配置格式无效')
+  if (data.tasks !== undefined && !Array.isArray(data.tasks)) throw new Error('备份任务列表格式无效')
+  if (!data.settings && !data.tasks) throw new Error('备份不包含配置或任务')
+  for (const field of ['imageFiles', 'thumbnailFiles']) {
+    const entries = data[field]
+    if (entries === undefined) continue
+    if (!isRecord(entries)) throw new Error(`备份 ${field} 格式无效`)
+    for (const [id, info] of Object.entries(entries)) {
+      if (!id || !isRecord(info) || typeof info.path !== 'string' || /(^\/|\\|(^|\/)\.\.($|\/))/.test(info.path)) throw new Error(`图片 ${id} 的文件路径无效`)
+      if (!Object.prototype.hasOwnProperty.call(files, info.path) || !files[info.path].length) throw new Error(`备份缺少图片文件：${info.path}`)
+      for (const key of ['width', 'height', 'createdAt', 'thumbnailVersion']) {
+        if (info[key] !== undefined && (typeof info[key] !== 'number' || !Number.isFinite(info[key]) || info[key] < 0)) throw new Error(`图片 ${id} 的 ${key} 无效`)
+      }
+    }
   }
+  const taskIds = new Set<string>()
+  for (const task of (data.tasks ?? []) as unknown[]) {
+    if (!isRecord(task) || typeof task.id !== 'string' || !task.id || taskIds.has(task.id) || typeof task.prompt !== 'string' || !isRecord(task.params) || !['running', 'done', 'error'].includes(String(task.status)) || typeof task.createdAt !== 'number' || !Number.isFinite(task.createdAt)) throw new Error('备份任务字段无效或 ID 重复')
+    taskIds.add(task.id)
+    const imageIds: string[] = []
+    for (const key of ['inputImageIds', 'outputImages', 'streamPartialImageIds', 'transparentOriginalImages', 'favoriteCollectionIds']) {
+      const ids = task[key]
+      if (ids === undefined && key !== 'inputImageIds' && key !== 'outputImages') continue
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || (!id && key !== 'transparentOriginalImages'))) throw new Error(`任务 ${task.id} 的 ${key} 无效`)
+      if (key !== 'favoriteCollectionIds') imageIds.push(...ids)
+    }
+    for (const key of ['maskImageId', 'maskTargetImageId']) {
+      if (task[key] == null) continue
+      if (typeof task[key] !== 'string') throw new Error(`任务 ${task.id} 的 ${key} 无效`)
+      imageIds.push(task[key])
+    }
+    for (const id of imageIds.filter(Boolean)) {
+      if (!isRecord(data.imageFiles) || !Object.prototype.hasOwnProperty.call(data.imageFiles, id)) throw new Error(`任务 ${task.id} 缺少原图 ${id}`)
+    }
+  }
+  if (data.favoriteCollections !== undefined && (!Array.isArray(data.favoriteCollections) || data.favoriteCollections.some((collection) => !isRecord(collection) || typeof collection.id !== 'string' || !collection.id || typeof collection.name !== 'string' || !collection.name.trim()))) throw new Error('备份收藏夹格式无效')
+  return { manifest: data as unknown as ExportData, files }
 }
 
 export function readExportZipFileAsDataUrl(files: Record<string, Uint8Array>, path: string): string | null {
@@ -113,6 +154,7 @@ function getImageCreatedAtFallback(tasks: TaskRecord[]) {
   for (const task of tasks) {
     for (const id of [
       ...(task.inputImageIds || []),
+      ...(task.maskTargetImageId ? [task.maskTargetImageId] : []),
       ...(task.maskImageId ? [task.maskImageId] : []),
       ...(task.outputImages || []),
       ...(task.transparentOriginalImages || []),

@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
+import { strToU8, zipSync } from 'fflate'
 
 import type { AppSettings, StoredImage, StoredImageThumbnail, TaskParams, TaskRecord } from '../types'
 import { buildExportZip, readExportZip, readExportZipFileAsDataUrl } from './exportZip'
 
 describe('exportZip', () => {
+  it('rejects malformed, unsupported, or incomplete backups before import', () => {
+    const base = { version: 3, exportedAt: new Date().toISOString(), tasks: [], imageFiles: {} }
+    for (const data of [null, { ...base, version: 99 }, { ...base, tasks: {} }, { ...base, tasks: [{ id: 'broken' }] }, { ...base, imageFiles: { missing: { path: 'images/missing.png' } } }]) {
+      expect(() => readExportZip(zipSync({ 'manifest.json': strToU8(JSON.stringify(data)) }))).toThrow()
+    }
+    expect(() => readExportZip(zipSync({ 'manifest.json': strToU8('{') }))).toThrow()
+    expect(readExportZip(zipSync({ 'manifest.json': strToU8(JSON.stringify({ ...base, version: 2 })) })).manifest.version).toBe(2)
+    const task = { id: 'test', prompt: '', params: {}, inputImageIds: [], outputImages: ['missing'], status: 'done', createdAt: 1 }
+    expect(() => readExportZip(zipSync({ 'manifest.json': strToU8(JSON.stringify({ ...base, tasks: [task] })) }))).toThrow('缺少原图')
+  })
   it('builds and reads backup zip entries without changing manifest shape', () => {
     const task: TaskRecord = {
       id: 'task-1',

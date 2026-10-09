@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { INSPIRATION_CATEGORIES, INSPIRATION_PROMPTS, type InspirationCategory, type InspirationPrompt } from '../lib/inspirationPrompts'
+import { INSPIRATION_CATEGORIES, INSPIRATION_PROMPTS, INSPIRATION_SOURCE, type InspirationCategory, type InspirationPrompt } from '../lib/inspirationPrompts'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
@@ -15,6 +15,7 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
   const [category, setCategory] = useState<'全部' | InspirationCategory>('全部')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<InspirationPrompt | null>(null)
+  const [failedPreviews, setFailedPreviews] = useState<string[]>([])
   const libraryRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLDivElement>(null)
   const setPrompt = useStore((s) => s.setPrompt)
@@ -28,15 +29,35 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
     return INSPIRATION_PROMPTS.filter((item) => {
       if (category !== '全部' && item.category !== category) return false
       if (!keyword) return true
-      return [item.title, item.description, item.category, item.prompt, ...item.tags].some((value) => value.toLocaleLowerCase('zh-CN').includes(keyword))
+      return [item.title, item.description, item.category, item.sourceCategory, item.prompt, ...item.tags, ...item.guidance, ...item.pitfalls].some((value) => value.toLocaleLowerCase('zh-CN').includes(keyword))
     })
   }, [category, query])
 
-  const usePrompt = (item: InspirationPrompt) => {
-    setPrompt(item.prompt)
-    showToast(`已应用「${item.title}」`, 'success')
+  const applyPrompt = (item: InspirationPrompt, append = false) => {
+    const current = useStore.getState().prompt
+    setPrompt(append && current.trim() ? `${current.trimEnd()}\n\n${item.prompt}` : item.prompt)
+    showToast(`已填入「${item.title}」，请替换占位内容${item.referenceCount ? '并上传参考图' : ''}`, 'success')
     onClose()
     window.setTimeout(() => document.querySelector<HTMLElement>('[contenteditable="true"]')?.focus(), 0)
+  }
+
+  const usePrompt = (item: InspirationPrompt) => {
+    const current = useStore.getState().prompt
+    if (!current.trim() || current === item.prompt) {
+      applyPrompt(item)
+      return
+    }
+    // 使用现有确认弹窗，关闭灵感库后避免详情层遮住草稿选择。
+    onClose()
+    useStore.getState().setConfirmDialog({
+      title: '输入框已有提示词',
+      message: `如何填入「${item.title}」？当前模型、参数和参考图保持不变。`,
+      buttons: [
+        { label: '取消', tone: 'secondary', action: () => {} },
+        { label: '追加', tone: 'secondary', action: () => applyPrompt(item, true) },
+        { label: '替换', action: () => applyPrompt(item) },
+      ],
+    })
   }
 
   const copyPrompt = async (item: InspirationPrompt) => {
@@ -57,7 +78,7 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
             <div>
               <p className="text-[11px] font-bold tracking-[0.2em] text-blue-600">GOUO INSPIRATION</p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">灵感库</h2>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">精选可直接生成的中文提示词，也可以替换主体、色彩和场景后再创作。</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">来自 awesome-gpt-image-2 的 22 套工业模板。填入后替换方括号中的内容，再用当前模型创作。</p>
             </div>
             <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-white" aria-label="关闭灵感库">
               <CloseIcon className="h-5 w-5" />
@@ -69,11 +90,11 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
                 <circle cx="11" cy="11" r="7" strokeWidth="2" />
                 <path d="m20 20-3.5-3.5" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索风格、场景或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
+              <input autoFocus aria-label="搜索灵感" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模板、风格、场景或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1 lg:max-w-[66%] lg:pb-0">
               {INSPIRATION_CATEGORIES.map((item) => (
-                <button key={item} type="button" onClick={() => setCategory(item)} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition ${category === item ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.09]'}`}>
+                <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition ${category === item ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.09]'}`}>
                   {item}
                 </button>
               ))}
@@ -89,17 +110,19 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
           {prompts.length ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {prompts.map((item) => (
-                <article key={item.id} className="group overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-900/5 dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-blue-500/30">
+                <article key={item.id} className="group overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-900/5 dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-blue-500/30">
                   <button type="button" onClick={() => setSelected(item)} className="block w-full text-left">
-                    <div className="relative h-28 overflow-hidden" style={{ background: item.accent }}>
-                      <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 75% 20%, white 0, transparent 28%), linear-gradient(115deg, transparent 35%, rgba(255,255,255,.28) 50%, transparent 65%)' }} />
-                      <span className="absolute left-3 top-3 rounded-full border border-white/20 bg-black/20 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur">{item.category}</span>
-                      {item.featured && <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold text-blue-700 shadow-sm">精选</span>}
-                      <div className="absolute bottom-3 left-4 h-7 w-7 rotate-12 rounded-lg border border-white/50 bg-white/20 shadow-lg backdrop-blur-sm transition group-hover:rotate-45" />
+                    <div className="relative h-48 overflow-hidden bg-slate-900 text-slate-200">
+                      {failedPreviews.includes(item.id)
+                        ? <p className="p-4 pt-14 line-clamp-5 whitespace-pre-line font-mono text-[11px] leading-5 opacity-75">{item.prompt}</p>
+                        : <img src={`${import.meta.env.BASE_URL}${item.previewImage}`} alt={`${item.title}风格示例`} loading="lazy" decoding="async" onError={() => setFailedPreviews((ids) => [...ids, item.id])} className="h-full w-full object-cover" />}
+                      <span className="absolute left-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-semibold text-white">{item.category}</span>
+                      <span className="absolute bottom-2 right-2 rounded-md bg-black/65 px-2 py-1 text-[10px] text-white">{failedPreviews.includes(item.id) ? '文字模板' : '风格示例'}</span>
                     </div>
                     <div className="p-4">
                       <h3 className="font-semibold text-gray-900 dark:text-white">{item.title}</h3>
                       <p className="mt-1.5 line-clamp-2 min-h-10 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
+                      {item.referenceCount > 0 && <p className="mt-2 text-[11px] font-medium text-amber-600 dark:text-amber-400">需上传 {item.referenceCount} 张参考图</p>}
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {item.tags.slice(0, 3).map((tag) => <span key={tag} className="rounded-md bg-gray-100 px-2 py-1 text-[10px] text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{tag}</span>)}
                       </div>
@@ -107,7 +130,7 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
                   </button>
                   <div className="flex gap-2 border-t border-gray-100 p-3 dark:border-white/[0.06]">
                     <button type="button" onClick={() => void copyPrompt(item)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition hover:border-blue-200 hover:text-blue-600 dark:border-white/10" aria-label={`复制${item.title}提示词`}><CopyIcon className="h-4 w-4" /></button>
-                    <button type="button" onClick={() => usePrompt(item)} className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 dark:bg-white dark:text-gray-950 dark:hover:bg-blue-500 dark:hover:text-white">立即使用</button>
+                    <button type="button" onClick={() => usePrompt(item)} className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 dark:bg-white dark:text-gray-950 dark:hover:bg-blue-500 dark:hover:text-white">填入提示词</button>
                   </div>
                 </article>
               ))}
@@ -121,8 +144,8 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
         </div>
 
         <footer className="flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-5 py-3 text-[11px] text-gray-400 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7">
-          <span>提示词由光构重新编写，可按需自由修改</span>
-          <a href="https://github.com/freestylefly/awesome-gpt-image-2" target="_blank" rel="noreferrer" className="shrink-0 transition hover:text-blue-600">开源灵感参考 ↗</a>
+          <span>来源：{INSPIRATION_SOURCE.author} · <a href={`${import.meta.env.BASE_URL}inspiration-license.txt`} target="_blank" rel="noreferrer" className="underline hover:text-blue-600">许可与图片署名</a></span>
+          <a href={INSPIRATION_SOURCE.url} target="_blank" rel="noreferrer" className="shrink-0 transition hover:text-blue-600">更多案例 ↗</a>
         </footer>
       </div>
 
@@ -135,12 +158,33 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
                 <h3 className="mt-1 text-xl font-bold text-gray-950 dark:text-white">{selected.title}</h3>
                 <p className="mt-1 text-sm text-gray-500">{selected.description}</p>
               </div>
-              <button type="button" onClick={() => setSelected(null)} className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]" aria-label="关闭详情"><CloseIcon className="h-5 w-5" /></button>
+              <button autoFocus type="button" onClick={() => setSelected(null)} className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]" aria-label="关闭详情"><CloseIcon className="h-5 w-5" /></button>
             </div>
-            <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-7 text-gray-700 dark:border-white/10 dark:bg-white/[0.035] dark:text-gray-300">{selected.prompt}</div>
+            {!failedPreviews.includes(selected.id) && (
+              <a href={`${import.meta.env.BASE_URL}${selected.previewImage}`} target="_blank" rel="noreferrer" className="mt-4 block rounded-xl bg-gray-50 dark:bg-white/[0.035]" aria-label={`查看${selected.title}示例大图`}>
+                <img src={`${import.meta.env.BASE_URL}${selected.previewImage}`} alt={`${selected.title}风格示例`} decoding="async" onError={() => setFailedPreviews((ids) => [...ids, selected.id])} className="max-h-80 w-full rounded-xl object-contain" />
+              </a>
+            )}
+            <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">示例图：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.exampleUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原案例 ↗</a>。仅展示风格，非本模板生成记录；商用请核对原作者许可。</p>
+            <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原始模板 · {INSPIRATION_SOURCE.author} ↗</a>
+              <span>版本 {INSPIRATION_SOURCE.revision.slice(0, 7)}</span>
+            </div>
+            <p className="mt-4 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">请替换方括号中的内容。{selected.referenceCount > 0 ? `此模板需要 ${selected.referenceCount} 张参考图，请在输入区上传。` : '可直接填写主体和场景。'}模板不会切换模型、修改参数或自动生成，不同模型的效果可能不同。</p>
+            <div className="mt-4 whitespace-pre-wrap break-words rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-7 text-gray-700 dark:border-white/10 dark:bg-white/[0.035] dark:text-gray-300">{selected.prompt}</div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <section className="rounded-xl bg-gray-50 p-4 dark:bg-white/[0.035]">
+                <h4 className="text-xs font-semibold text-gray-900 dark:text-white">使用建议</h4>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-gray-500 dark:text-gray-400">{selected.guidance.map((line) => <li key={line}>{line}</li>)}</ul>
+              </section>
+              <section className="rounded-xl bg-gray-50 p-4 dark:bg-white/[0.035]">
+                <h4 className="text-xs font-semibold text-gray-900 dark:text-white">注意事项</h4>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-gray-500 dark:text-gray-400">{selected.pitfalls.map((line) => <li key={line}>{line}</li>)}</ul>
+              </section>
+            </div>
             <div className="mt-5 flex gap-3">
               <button type="button" onClick={() => void copyPrompt(selected)} className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-600 transition hover:border-blue-300 hover:text-blue-600 dark:border-white/10 dark:text-gray-300"><CopyIcon className="h-4 w-4" />复制</button>
-              <button type="button" onClick={() => usePrompt(selected)} className="flex-1 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700">使用这个灵感</button>
+              <button type="button" onClick={() => usePrompt(selected)} className="flex-1 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700">填入提示词</button>
             </div>
           </div>
         </div>

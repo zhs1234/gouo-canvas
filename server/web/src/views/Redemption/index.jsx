@@ -172,7 +172,7 @@ export default function Redemption() {
       </Stack>
       <Card>
         <Box component="form" onSubmit={searchRedemptions} noValidate>
-          <TableToolBar placeholder={t('redemptionPage.searchPlaceholder')} />
+          <TableToolBar placeholder="搜索兑换码、名称、编号或兑换用户 ID" />
         </Box>
         <Toolbar
           sx={{
@@ -206,6 +206,8 @@ export default function Redemption() {
                   { id: 'quota', label: t('redemptionPage.headLabels.quota'), disableSort: false },
                   { id: 'created_time', label: t('redemptionPage.headLabels.createdTime'), disableSort: false },
                   { id: 'redeemed_time', label: t('redemptionPage.headLabels.redeemedTime'), disableSort: false },
+                  { id: 'redeemed_user_id', label: '兑换用户 ID', disableSort: true },
+                  { id: 'redeemed_log_id', label: '到账日志 ID', disableSort: true },
                   { id: 'action', label: t('redemptionPage.headLabels.action'), disableSort: true }
                 ]}
               />

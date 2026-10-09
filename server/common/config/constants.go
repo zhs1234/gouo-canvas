@@ -14,12 +14,12 @@ var SystemName = "光构"
 var ServerAddress = "http://localhost:3000"
 var Debug = false
 
-var OldTokenMaxId = 0
-
 var Language = ""
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
+var GouoRedemptionHelp = ""
+var GouoSupportContact = ""
 var ChatLink = ""
 var ChatLinks = ""
 var AnalyticsCode = ""

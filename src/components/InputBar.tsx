@@ -8,7 +8,8 @@ import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, 
 import { normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
-import { getCurrentUser, isBackendAuthEnabled } from '../lib/gouoBackend'
+import { isBackendAuthEnabled } from '../lib/gouoBackend'
+import BackendModelSelector from './BackendModelSelector'
 import { getActionableErrorMessage, GUIDE_FLAGS, hasGuideFlag, setGuideFlag } from '../lib/userGuidance'
 import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
 import { useHintTooltip } from '../hooks/useHintTooltip'
@@ -344,6 +345,7 @@ function delay(ms: number) {
 
 export default function InputBar() {
   const prompt = useStore((s) => s.prompt)
+  const isSubmitting = useStore((s) => s.isSubmitting)
   const setPrompt = useStore((s) => s.setPrompt)
   const inputImages = useStore((s) => s.inputImages)
   const replaceInputImage = useStore((s) => s.replaceInputImage)
@@ -582,7 +584,7 @@ export default function InputBar() {
   const [mobileCollapsed, setMobileCollapsed] = useState(false)
   const [showSizePicker, setShowSizePicker] = useState(false)
   const [showMobileUploadMenu, setShowMobileUploadMenu] = useState(false)
-  const [generationPrice, setGenerationPrice] = useState(0.1)
+  const [backendModelReady, setBackendModelReady] = useState(!isBackendAuthEnabled())
   const [maskPreviewUrl, setMaskPreviewUrl] = useState('')
   const [imageDragIndex, setImageDragIndex] = useState<number | null>(null)
   const [imageDragOverIndex, setImageDragOverIndex] = useState<number | null>(null)
@@ -645,13 +647,6 @@ export default function InputBar() {
   const dragCounter = useRef(0)
   const isMobile = useIsMobile()
 
-  useEffect(() => {
-    if (!isBackendAuthEnabled()) return
-    void getCurrentUser()
-      .then((user) => setGenerationPrice(user.image_price_cny ?? 0.1))
-      .catch(() => {})
-  }, [])
-
   const settingsActiveProfile = useMemo(() => getActiveApiProfile(settings), [settings])
   const activeProfile = useMemo(() => (
     settings.reuseTaskApiProfileTemporarily && reusedTaskApiProfileId
@@ -664,8 +659,8 @@ export default function InputBar() {
       : normalizeSettings({ ...settings, activeProfileId: activeProfile.id })
   ), [activeProfile.id, settingsActiveProfile.id, settings])
   const hasSubmitApiConfig = Boolean(activeProfile.apiKey)
-  const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig)
-  const submitButtonAriaLabel = hasSubmitApiConfig
+  const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig && backendModelReady && !isSubmitting)
+  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : hasSubmitApiConfig
     ? maskDraft ? '遮罩编辑' : '生成图像'
     : '请先配置 API'
   const submitTooltipText = '尚未完成 API 配置，请在右上角设置中进行'
@@ -1982,11 +1977,7 @@ export default function InputBar() {
           {/* 参数 + 按钮 */}
           <div className="mt-3">
             {isBackendAuthEnabled() && (
-              <div className="mb-2 flex items-center justify-end gap-1.5 px-1 text-[11px] text-gray-400 dark:text-gray-500">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                <span>预计扣费 ¥{generationPrice.toFixed(2)}/次</span>
-                <span>· 失败自动退回</span>
-              </div>
+              <BackendModelSelector onReady={setBackendModelReady} />
             )}
             {/* 桌面端布局 */}
             <div className="hidden sm:flex items-end justify-between gap-3">
@@ -2028,10 +2019,11 @@ export default function InputBar() {
                         : 'bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
                     aria-label={submitButtonAriaLabel}
+                    aria-busy={isSubmitting}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {isSubmitting ? <span className="text-sm" role="status">提交中…</span> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
+                    </svg>}
                   </button>
                 </div>
               </div>
@@ -2122,6 +2114,7 @@ export default function InputBar() {
                     onClick={() => hasSubmitApiConfig ? submitCurrentMode() : setShowSettings(true)}
                     disabled={hasSubmitApiConfig ? !canSubmit : false}
                     aria-label={submitButtonAriaLabel}
+                    aria-busy={isSubmitting}
                     className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm ${
                       !hasSubmitApiConfig
                         ? 'bg-gray-300 dark:bg-white/[0.06] text-white cursor-pointer'
@@ -2131,7 +2124,7 @@ export default function InputBar() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                    {maskDraft ? '遮罩编辑' : '生成图像'}
+                    <span role={isSubmitting ? 'status' : undefined}>{isSubmitting ? '提交中…' : maskDraft ? '遮罩编辑' : '生成图像'}</span>
                   </button>
                 </div>
               </div>
