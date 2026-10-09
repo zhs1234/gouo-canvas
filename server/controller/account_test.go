@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"one-api/common"
@@ -106,4 +107,17 @@ func TestGouoAdminWorkEndpointsRespectRoleScope(t *testing.T) {
 	require.Equal(t, http.StatusOK, tasks(config.RoleRootUser, "2"))
 	require.Equal(t, http.StatusForbidden, call(config.RoleAdminUser, http.MethodGet, "/users/:id/assets/:assetId/content", "/users/1/assets/x/content", GetGouoAdminUserAssetContent, ""))
 	require.Equal(t, http.StatusForbidden, call(config.RoleAdminUser, http.MethodPut, "/users/:id/quota", "/users/1/quota", UpdateGouoAdminStorageQuota, `{"quota_bytes":1}`))
+}
+
+func TestPasswordResetLinkEncodesEmail(t *testing.T) {
+	oldAddress := config.ServerAddress
+	t.Cleanup(func() { config.ServerAddress = oldAddress })
+	config.ServerAddress = "https://canvas.example.com"
+	link := passwordResetLink("name+tag@example.com", "token&1")
+	parsed, err := url.Parse(link)
+	require.NoError(t, err)
+	require.Equal(t, "/user/reset", parsed.Path)
+	// 浏览器按查询参数解析后必须得到原邮箱，"+" 不能变成空格
+	require.Equal(t, "name+tag@example.com", parsed.Query().Get("email"))
+	require.Equal(t, "token&1", parsed.Query().Get("token"))
 }
