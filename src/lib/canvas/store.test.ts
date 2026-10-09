@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CanvasProject } from './types'
 
-const db = vi.hoisted(() => ({ projects: new Map<string, CanvasProject>(), fail: false }))
+const db = vi.hoisted(() => ({ projects: new Map<string, CanvasProject>(), fail: false, delay: 0 }))
 vi.mock('../db', () => ({
   getAllCanvasProjects: async () => [...db.projects.values()],
   putCanvasProject: async (project: CanvasProject, expectedRevision?: number) => {
     if (db.fail) throw new Error('quota')
+    if (db.delay) await new Promise((resolve) => setTimeout(resolve, db.delay))
     if ((db.projects.get(project.id)?.revision ?? 0) !== expectedRevision) throw new Error('revision conflict')
     db.projects.set(project.id, structuredClone(project))
   },
@@ -18,10 +19,26 @@ import { createCanvasViewportPersistence } from './viewport'
 beforeEach(() => {
   db.projects.clear()
   db.fail = false
+  db.delay = 0
   useCanvasStore.setState({ projects: [], hydrated: false, histories: {}, selectedNodeIds: {}, error: null })
 })
 
 describe('画布状态持久化与撤销', () => {
+  it('连续撤销不等上一次保存完成时，仍能逐步重做回最新状态', async () => {
+    const state = useCanvasStore.getState()
+    const project = await state.createProject()
+    for (const title of ['A', 'B', 'C']) await state.updateProject(project.id, { title })
+    db.delay = 20
+    await Promise.all([state.undo(project.id), state.undo(project.id)])
+    expect(state.getSnapshot(project.id).title).toBe('A')
+    const titles = []
+    for (let i = 0; i < 2; i++) {
+      await state.redo(project.id)
+      titles.push(state.getSnapshot(project.id).title)
+    }
+    expect(titles).toEqual(['B', 'C'])
+  })
+
   it.each(['拖动', '尺寸调整'])('待存视口在%s开始前提交，交互期间的视口变更不使文档版本过期', async () => {
     vi.useFakeTimers()
     const writes: Promise<unknown>[] = []

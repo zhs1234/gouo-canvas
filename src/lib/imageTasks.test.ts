@@ -32,6 +32,14 @@ beforeEach(() => {
 })
 
 describe('统一图片任务入口', () => {
+  it('平台模式下与全局模型不同的模型使用调用方提供的价格版本', async () => {
+    fixtures.backend = true
+    fixtures.quote.mockResolvedValue({ id: 'image-b', price_cny: 0.3, price_version: 'quote-b' })
+    await submitImageTask({ prompt: '海报', model: 'image-b', priceVersion: 'quote-b', source: { kind: 'canvas' } })
+    expect(fixtures.quote).toHaveBeenCalledWith('image-b', 0, false, 1, 'quote-b')
+    expect(fixtures.saved[0]).toMatchObject({ gouoPriceVersion: 'quote-b' })
+  })
+
   it('并发相同 requestId 只提交一次，保留首页草稿', async () => {
     const input = { prompt: '绘制一座灯塔', source: { kind: 'agent' as const, conversationId: '7c2d0d72-25c5-4e3e-8401-625c36d42b94' }, requestId: 'agent:7c2d0d72-25c5-4e3e-8401-625c36d42b94:call_1' }
     const [first, second] = await Promise.all([submitImageTask(input), submitImageTask(input)])

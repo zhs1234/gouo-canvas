@@ -97,6 +97,28 @@ describe('画布生成任务闭环', () => {
     expect(metadata?.images).toHaveLength(2)
     expect(metadata?.outputErrors).toEqual(errors)
   })
+  it('撤销恢复出生成中的节点时，按已完成的任务重新回填结果', async () => {
+    const state = useCanvasStore.getState()
+    const project = await state.createProject()
+    await state.applyOperations(project.id, [{ type: 'add_node', id: 'out', nodeType: 'image', metadata: { status: 'loading', requestId: 'request-1' } }])
+    useStore.setState({ tasks: [{ id: 'task-1', requestId: 'request-1', status: 'running', outputImages: [], params: { output_format: 'png' } } as unknown as TaskRecord] })
+    // 生成期间做了别的编辑，撤销点里的 out 仍是生成中
+    await state.applyOperations(project.id, [{ type: 'add_node', id: 'note', nodeType: 'text' }])
+    useStore.setState({ tasks: [{ id: 'task-1', requestId: 'request-1', status: 'done', outputImages: ['result'], params: { output_format: 'png' } } as unknown as TaskRecord] })
+    await vi.waitFor(() => expect(state.getSnapshot(project.id).nodes.find((node) => node.id === 'out')?.metadata?.status).toBe('success'))
+    await state.undo(project.id)
+    await vi.waitFor(() => expect(state.getSnapshot(project.id).nodes.find((node) => node.id === 'out')?.metadata).toMatchObject({ status: 'success', imageId: 'result' }))
+  })
+
+  it('节点单独选择的模型带上画布展示的价格版本提交', async () => {
+    const state = useCanvasStore.getState()
+    const project = await state.createProject()
+    await state.applyOperations(project.id, [{ type: 'add_node', id: 'config', nodeType: 'config', metadata: { prompt: '海报', model: 'image-b' } }])
+    mocks.submit.mockResolvedValue('task')
+    await generateCanvasNode(project.id, 'config', undefined, false, 'quote-b')
+    expect(mocks.submit.mock.calls[0][0]).toMatchObject({ model: 'image-b', priceVersion: 'quote-b' })
+  })
+
   it('共用任务入口、传递模型与上游引用、运行中重复点击不重复提交', async () => {
     const state = useCanvasStore.getState()
     const project = await state.createProject()

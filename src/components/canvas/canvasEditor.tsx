@@ -563,22 +563,40 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
       )}
     </div>
   )
-  const generate = async (id: string, prompt?: string) => {
-    try {
-      await generateCanvasNode(project.id, id, prompt)
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('确认全图重绘')) {
-        modal.confirm({
-          title: '确认编辑整张图片？',
-          content: '当前遮罩覆盖整张图片，继续后可能重绘全部内容。',
-          okText: '继续生成',
-          cancelText: '取消',
-          onOk: () => generateCanvasNode(project.id, id, prompt, true),
-        })
-        return
+  const generate = async (id: string, prompt?: string, retry = false) => {
+    const target = project.nodes.find((item) => item.id === id)
+    // 节点单独选择的模型按画布上显示的价格版本提交
+    const quote = models.find((model) => model.id === (target?.metadata?.model || settings.model))
+    const submit = async () => {
+      try {
+        await generateCanvasNode(project.id, id, prompt, false, quote?.price_version)
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('确认全图重绘')) {
+          modal.confirm({
+            title: '确认编辑整张图片？',
+            content: '当前遮罩覆盖整张图片，继续后可能重绘全部内容。',
+            okText: '继续生成',
+            cancelText: '取消',
+            onOk: () => generateCanvasNode(project.id, id, prompt, true, quote?.price_version),
+          })
+          return
+        }
+        throw err
       }
-      throw err
     }
+    // 重试会新建付费请求，原请求可能已扣费；与作品列表的重试一样先确认
+    if (retry && isBackendAuthEnabled()) {
+      const count = target?.metadata?.count || 1
+      modal.confirm({
+        title: '确认重新生成？',
+        content: `将新建 ${count} 次单图请求${quote ? `，全部成功预计扣费 ¥${(quote.price_cny * count).toFixed(2)}` : ''}。原请求可能已扣费，请先在用户中心的使用记录核对。`,
+        okText: '重新生成',
+        cancelText: '取消',
+        onOk: () => run(submit()),
+      })
+      return
+    }
+    await submit()
   }
   const confirmMask = async (payload: CanvasImageMaskEditPayload) => {
     if (!mask) return
@@ -956,8 +974,8 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
                   }),
                 )
               }}
-              onRetry={(item) => run(generate(item.id))}
-              onRetryBatchImage={() => run(generate(node.id))}
+              onRetry={(item) => run(generate(item.id, undefined, true))}
+              onRetryBatchImage={() => run(generate(node.id, undefined, true))}
               onViewImage={(item, imageId) => run(previewImage(item, imageId))}
               onContextMenu={(event, nodeId) => {
                 event.stopPropagation()

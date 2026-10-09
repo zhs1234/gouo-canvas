@@ -125,6 +125,23 @@ describe('server documents', () => {
     expect([...stored.values()].find((doc) => doc.id !== 'conv')).toMatchObject({ draft: '写库时输入', title: '会话（本地冲突副本）' })
   })
 
+  it('recreates a locally edited document that was purged from the server', async () => {
+    stored.set('conv', conversation({ title: '离线期间的修改' }))
+    meta.set('document:conversations:conv', { revision: 4, fingerprint: 'older-content' })
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.backendRequest).mockImplementation(async (path: string, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined
+      requests.push({ path, body })
+      // 云端记录已被回收站清理删除：冲突且没有当前版本
+      if (body?.expected_revision === 4) throw new backend.GouoConflictError('conflict', null)
+      return { client_id: 'conv', title: '离线期间的修改', revision: 1, document: {}, assets: [] }
+    })
+    const docs = await import('./serverDocuments')
+    await docs.pushDocuments()
+    expect(requests.filter((request) => request.body).map((request) => request.body?.expected_revision)).toEqual([4, 0])
+    expect(meta.get('document:conversations:conv')).toMatchObject({ revision: 1 })
+  })
+
   it('pushes the stored document with its own sync record, not an older list snapshot', async () => {
     const docs = await import('./serverDocuments')
     const stale = conversation({ title: '旧内容' })

@@ -81,6 +81,8 @@ const customRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const openAIWatchdogTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const taskExecutions = new Map<string, symbol>()
 const OPENAI_INTERRUPTED_ERROR = '请求中断'
+// 执行中的任务持有的 Web Locks 名称前缀，供其他标签页判断任务仍在执行
+const TASK_LOCK_PREFIX = 'gouo-task:'
 const ERROR_TOAST_MAX_LENGTH = 80
 type ToastType = 'info' | 'success' | 'error'
 
@@ -474,8 +476,9 @@ function resolveDefaultFavoriteCollectionId(collections: FavoriteCollection[], p
 
 export function getPersistedState(state: AppState) {
   const normalizedSettings = normalizeSettings(state.settings)
+  // 平台模式的 Key 是登录后下发的账号令牌，不写入本地存储，每次登录重新获取
   const settings = isBackendAuthEnabled()
-    ? { ...normalizedSettings, profiles: normalizedSettings.profiles.map((profile) => ({ ...profile, apiKey: '' })) }
+    ? { ...normalizedSettings, apiKey: '', profiles: normalizedSettings.profiles.map((profile) => ({ ...profile, apiKey: '' })) }
     : normalizedSettings
   return {
     settings,
@@ -1014,10 +1017,10 @@ function isAsyncCustomProviderTask(settings: AppSettings, provider: string, hasI
   return Boolean(submitMapping.taskIdPath)
 }
 
-export function markInterruptedOpenAIRunningTasks(tasks: TaskRecord[], now = Date.now()) {
+export function markInterruptedOpenAIRunningTasks(tasks: TaskRecord[], now = Date.now(), runningElsewhere = new Set<string>()) {
   const interruptedTasks: TaskRecord[] = []
   const updatedTasks = tasks.map((task) => {
-    if (!isRunningOpenAITask(task) || task.customTaskId) return task
+    if (!isRunningOpenAITask(task) || task.customTaskId || runningElsewhere.has(task.id)) return task
 
     const updated: TaskRecord = {
       ...task,
@@ -1393,7 +1396,11 @@ async function recoverFalTask(taskId: string) {
 export async function initStore() {
   const storedTasks = await getAllTasks()
   const visibleStoredTasks = storedTasks.filter((task) => !isLegacyAgentTask(task))
-  const { tasks: markedTasks, interruptedTasks } = markInterruptedOpenAIRunningTasks(visibleStoredTasks)
+  // 同一账号的其他标签页仍在执行的任务持有任务锁，不能标为中断，否则会诱导重复付费重试
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+  const held = ((await locks?.query())?.held ?? []).map((lock) => lock.name ?? '')
+  const runningElsewhere = new Set(held.filter((name) => name.startsWith(TASK_LOCK_PREFIX)).map((name) => name.slice(TASK_LOCK_PREFIX.length)))
+  const { tasks: markedTasks, interruptedTasks } = markInterruptedOpenAIRunningTasks(visibleStoredTasks, Date.now(), runningElsewhere)
   const interruptedTaskIds = new Set(interruptedTasks.map((task) => task.id))
   const favoriteState = useStore.getState()
   const normalizedFavorites = normalizeLoadedFavoriteState(markedTasks, favoriteState.favoriteCollections, favoriteState.defaultFavoriteCollectionId)
@@ -1555,7 +1562,14 @@ async function persistTaskStreamPartialImage(taskId: string, dataUrl: string) {
   }
 }
 
-export async function executeTask(taskId: string, recoverOnly = false) {
+export function executeTask(taskId: string, recoverOnly = false) {
+  // 执行期间持有任务锁，其他标签页启动时据此判断任务仍在执行
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+  if (!locks) return runTask(taskId, recoverOnly)
+  return locks.request(TASK_LOCK_PREFIX + taskId, { ifAvailable: true }, () => runTask(taskId, recoverOnly))
+}
+
+async function runTask(taskId: string, recoverOnly: boolean) {
   const { settings } = useStore.getState()
   const task = useStore.getState().tasks.find((t) => t.id === taskId)
   if (!task) return
@@ -2429,7 +2443,8 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     const { bytes: zipped } = buildExportZip({
       options,
       exportedAt,
-      settings,
+      // 平台模式下不把账号令牌打包进备份文件
+      settings: isBackendAuthEnabled() ? getPersistedState(useStore.getState()).settings : settings,
       tasks,
       images,
       thumbnailsByImageId,
