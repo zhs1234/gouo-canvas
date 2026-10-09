@@ -125,10 +125,13 @@ type TokenWithOwner struct {
 	OwnerName string `json:"owner_name"` // 用户名称（优先显示 display_name，其次 username）
 }
 
-// GetTokensListByAdmin 管理员查询令牌列表（可按用户ID或令牌ID查询）
-func GetTokensListByAdmin(params *AdminSearchTokensParams) (*DataResult[TokenWithOwner], error) {
+// GetTokensListByAdmin 管理员查询令牌列表（可按用户ID或令牌ID查询）；belowRole 大于 0 时只返回权限低于该等级的账号的令牌
+func GetTokensListByAdmin(params *AdminSearchTokensParams, belowRole int) (*DataResult[TokenWithOwner], error) {
 	var tokens []*Token
 	db := DB.Model(&Token{})
+	if belowRole > 0 {
+		db = db.Where("user_id IN (?)", DB.Unscoped().Model(&User{}).Select("id").Where("role < ?", belowRole))
+	}
 
 	// 按用户ID筛选
 	if params.UserId > 0 {

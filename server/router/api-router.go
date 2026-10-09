@@ -256,7 +256,8 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetLogsList)
-		logRoute.DELETE("/", middleware.AdminAuth(), controller.DeleteHistoryLogs)
+		// 日志包含额度调整等审计记录，批量删除只允许 root
+		logRoute.DELETE("/", middleware.RootAuth(), controller.DeleteHistoryLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		// logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
@@ -291,9 +292,10 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		paymentRoute := apiRouter.Group("/payment")
-		paymentRoute.Use(middleware.AdminAuth())
+		paymentRoute.GET("/order", middleware.AdminAuth(), controller.GetOrderList)
+		// 网关配置含商户私钥和回调密钥，改配置还能把收款改到别的商户，只允许 root
+		paymentRoute.Use(middleware.RootAuth())
 		{
-			paymentRoute.GET("/order", controller.GetOrderList)
 			paymentRoute.GET("/", controller.GetPaymentList)
 			paymentRoute.GET("/:id", controller.GetPayment)
 			paymentRoute.POST("/", controller.AddPayment)
