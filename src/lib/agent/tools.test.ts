@@ -9,9 +9,25 @@ const mocks = vi.hoisted(() => ({
   getImage: vi.fn(),
   projects: [] as Pick<CanvasProject, 'id' | 'nodes' | 'hiddenAt'>[],
   tasks: [] as Array<{ id: string; status: string; outputImages: string[]; prompt: string; error: string | null; params: { n: number } }>,
-  dialog: null as null | { action?: () => void; cancelAction?: () => void },
+  dialog: null as null | { message?: string; action?: () => void; cancelAction?: () => void },
+  backend: false,
+  models: vi.fn(),
+  listeners: new Set<(state: { confirmDialog: unknown }) => void>(),
 }))
-vi.mock('../../store', () => ({ useStore: { getState: () => ({ tasks: mocks.tasks, confirmDialog: mocks.dialog, setConfirmDialog: (dialog: typeof mocks.dialog) => { mocks.dialog = dialog } }) } }))
+vi.mock('../../store', () => ({
+  useStore: {
+    getState: () => ({ tasks: mocks.tasks, settings: {}, confirmDialog: mocks.dialog, setConfirmDialog: (dialog: typeof mocks.dialog) => {
+      mocks.dialog = dialog
+      for (const listener of [...mocks.listeners]) listener({ confirmDialog: dialog })
+    } }),
+    subscribe: (listener: (state: { confirmDialog: unknown }) => void) => {
+      mocks.listeners.add(listener)
+      return () => mocks.listeners.delete(listener)
+    },
+  },
+}))
+vi.mock('../apiProfiles', () => ({ getActiveApiProfile: () => ({ model: 'gpt-image-2' }) }))
+vi.mock('../gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getImageModels: mocks.models }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))
@@ -27,6 +43,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.tasks = []
   mocks.dialog = null
+  mocks.backend = false
   mocks.projects = [{ id: 'canvas', nodes: [{ id: 'canvas-image', type: 'image', title: '参考图', position: { x: 0, y: 0 }, width: 100, height: 100, metadata: { imageId: 'canvas-reference' } }] }]
   mocks.snapshot.mockReturnValue({ id: 'canvas', nodes: [], revision: 2 })
   mocks.apply.mockResolvedValue({ id: 'canvas', nodes: [], revision: 3 })
@@ -67,6 +84,37 @@ describe('Agent tool boundary', () => {
     mocks.dialog!.action!()
     await expect(confirmed).resolves.toMatchObject({ taskIds: ['task'] })
     expect(mocks.submit).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows the expected charge from the current model price in the confirmation', async () => {
+    mocks.backend = true
+    mocks.models.mockResolvedValue([{ id: 'gpt-image-2', price_cny: 0.15 }])
+    const pending = run('create_image_task', { prompt: '海报', params: { n: 5 } })
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    expect(mocks.dialog!.message).toContain('每张 ¥0.15')
+    expect(mocks.dialog!.message).toContain('预计扣费 ¥0.75')
+    mocks.dialog!.action!()
+    await expect(pending).resolves.toMatchObject({ taskIds: ['task'] })
+
+    // 读取价格失败时仍要求确认，只是不显示金额
+    mocks.dialog = null
+    mocks.models.mockRejectedValue(new Error('offline'))
+    const fallback = run('create_image_task', { prompt: '海报', params: { n: 5 } })
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    expect(mocks.dialog!.message).toContain('按所选图片模型的价格计费')
+    mocks.dialog!.cancelAction!()
+    await expect(fallback).rejects.toThrow('没有确认')
+    expect(mocks.submit).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats closing the confirmation without choosing as cancel', async () => {
+    const pending = run('create_image_task', { prompt: '海报', params: { n: 5 } })
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    // 点遮罩或按 Esc：弹窗直接被清掉，不经过 cancelAction
+    for (const listener of [...mocks.listeners]) listener({ confirmDialog: null })
+    await expect(pending).rejects.toThrow('没有确认')
+    expect(mocks.submit).not.toHaveBeenCalled()
+    expect(mocks.listeners.size).toBe(0)
   })
 
   it('does not submit when the run is stopped while waiting for confirmation', async () => {
