@@ -38,7 +38,7 @@ import {
   type GouoCloudTask,
   type GouoCloudTaskAsset,
 } from './gouoBackend'
-import { activateUserStorage, isLoadedStorageForUser } from './storageScope'
+import { activateUserStorage, isLoadedStorageForUser, isStorageScopeCurrent } from './storageScope'
 
 export interface CloudSyncSnapshot {
   status: 'idle' | 'syncing' | 'synced' | 'error' | 'disabled'
@@ -115,10 +115,8 @@ function queueId(taskId: string) {
   return `task:${taskId}`
 }
 
-async function enqueueTask(task: TaskRecord) {
-  if (!isGalleryTask(task) || task.status === 'running' || task.cloudHiddenAt) return
-  const current = (await getCloudSyncQueue()).find((item) => item.taskId === task.id)
-  if (current) return
+async function enqueueTask(task: TaskRecord, queuedTaskIds: Set<string>) {
+  if (!isGalleryTask(task) || task.status === 'running' || task.cloudHiddenAt || queuedTaskIds.has(task.id)) return
   await putCloudSyncQueueItem({
     id: queueId(task.id),
     taskId: task.id,
@@ -170,7 +168,8 @@ async function hashBlob(blob: Blob) {
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, '0')).join('')
 }
 
-async function uploadImage(imageId: string, forceUpload = false): Promise<GouoCloudAsset> {
+export async function uploadImage(imageId: string, forceUpload = false): Promise<GouoCloudAsset> {
+  if (!isStorageScopeCurrent()) throw new Error('账号已切换')
   const mapped = await getCloudAssetMapItem(imageId)
   // 旧映射可能指向缩略图，只有带真实 MIME 的新版原图映射才能复用。
   if (mapped?.mimeType && !forceUpload) {
@@ -187,7 +186,10 @@ async function uploadImage(imageId: string, forceUpload = false): Promise<GouoCl
   const image = await getImage(imageId)
   if (!image?.dataUrl) throw new Error(`本地图片 ${imageId} 不存在`)
   const blob = await dataUrlToBlob(image.dataUrl)
-  const asset = await uploadCloudAsset(blob, imageId, await hashBlob(blob))
+  const hash = await hashBlob(blob)
+  if (!isStorageScopeCurrent()) throw new Error('账号已切换')
+  const asset = await uploadCloudAsset(blob, imageId, hash)
+  if (!isStorageScopeCurrent()) throw new Error('账号已切换')
   await putCloudAssetMapItem({
     localImageId: imageId,
     cloudAssetId: asset.id,
@@ -207,7 +209,10 @@ function taskImageRelations(task: TaskRecord) {
   task.outputImages.forEach((imageId, position) => relations.push({ imageId, role: 'output', position }))
   task.streamPartialImageIds?.forEach((imageId, position) => relations.push({ imageId, role: 'partial', position }))
   task.transparentOriginalImages?.forEach((imageId, position) => relations.push({ imageId, role: 'transparent_original', position }))
-  return relations.slice(0, 32)
+  // 流式预览图只是过程产物，超限时优先舍弃，避免多图流式作品永久无法同步。
+  const kept = relations.length > 32 ? relations.filter((item) => item.role !== 'partial') : relations
+  if (kept.length > 32) throw new Error(`作品包含 ${kept.length} 个素材关联，超过云端单作品 32 个上限。完整素材仍保留在本地，请先导出备份或减少该作品素材后重试`)
+  return kept
 }
 
 async function uploadTaskAssets(task: TaskRecord) {
@@ -246,6 +251,8 @@ function getTaskOperation(task: TaskRecord): 'generation' | 'edit' | 'variation'
 
 function getTaskResultMeta(task: TaskRecord) {
   return {
+    source: task.source,
+    requestId: task.requestId,
     apiProvider: task.apiProvider,
     apiProfileName: task.apiProfileName,
     gouoPriceVersion: task.gouoPriceVersion,
@@ -292,11 +299,16 @@ async function syncTask(item: CloudSyncQueueItem, task: TaskRecord) {
     client_created_at: task.createdAt,
     finished_at: task.finishedAt || 0,
     assets,
-    collection_ids: task.favoriteCollectionIds || [],
+    // 其他设备已删除的收藏夹会被服务端拒绝，只提交本地仍存在的收藏夹，避免作品永久同步失败。
+    collection_ids: (task.favoriteCollectionIds || []).filter((id) => useStore.getState().favoriteCollections.some((collection) => collection.id === id)),
   })
   await deleteCloudSyncQueueItem(item.id)
   const latest = useStore.getState().tasks.find((entry) => entry.id === task.id)
-  if (!latest) return
+  // 上传期间作品已在本地删除：同步隐藏云端副本，否则下次全量拉取会把它恢复回来。
+  if (!latest) {
+    await setCloudTaskHidden(cloudTask.id, true)
+    return
+  }
   const changed = taskFingerprint(latest) !== taskFingerprint(task)
   await updateLocalTask(task.id, {
     cloudId: cloudTask.id,
@@ -335,7 +347,7 @@ async function processQueue() {
   }
 }
 
-async function downloadAsset(asset: GouoCloudAsset, imageId: string, replacePreview = false): Promise<StoredImage> {
+export async function downloadAsset(asset: GouoCloudAsset, imageId: string, replacePreview = false): Promise<StoredImage> {
   const existing = await getImage(imageId)
   if (existing && !replacePreview) return existing
   const blob = await fetchCloudAssetContent(asset)
@@ -348,6 +360,7 @@ async function downloadAsset(asset: GouoCloudAsset, imageId: string, replacePrev
     width: asset.width,
     height: asset.height,
   }
+  if (!isStorageScopeCurrent()) throw new Error('账号已切换')
   await putImage(image)
   cacheImage(imageId, image.dataUrl)
   return image
@@ -410,6 +423,8 @@ function cloudTaskToLocal(task: GouoCloudTask): TaskRecord {
   return {
     id: task.client_task_id,
     prompt: task.prompt,
+    source: meta.source && typeof meta.source === 'object' && ['generate', 'canvas', 'agent'].includes(String((meta.source as Record<string, unknown>).kind)) ? meta.source as TaskRecord['source'] : undefined,
+    requestId: typeof meta.requestId === 'string' ? meta.requestId : undefined,
     params: task.params as unknown as TaskParams,
     apiProvider: meta.apiProvider as TaskRecord['apiProvider'],
     apiProfileName: typeof meta.apiProfileName === 'string' ? meta.apiProfileName : undefined,
@@ -518,10 +533,12 @@ async function pullCloudState() {
 
 async function queueHistoricalTasks() {
   const tasks = useStore.getState().tasks.filter((task) => isGalleryTask(task) && task.status !== 'running' && !task.cloudHiddenAt)
+  // 队列只读一次，避免首次迁移大量作品时逐个全量读取队列。
+  const queuedTaskIds = new Set((await getCloudSyncQueue()).map((item) => item.taskId))
   for (let start = 0; start < tasks.length; start += 20) {
     const batch = tasks.slice(start, start + 20)
     for (const task of batch) {
-      if (task.cloudSyncStatus !== 'synced') await enqueueTask(task)
+      if (task.cloudSyncStatus !== 'synced') await enqueueTask(task, queuedTaskIds)
     }
     await putCloudSyncMeta('migration', { completed: Math.min(start + 20, tasks.length), total: tasks.length, updatedAt: Date.now() })
   }
@@ -556,12 +573,19 @@ async function runCloudSync() {
     await syncCollections(useStore.getState().favoriteCollections)
     await queueHistoricalTasks()
     await processQueue()
+    const documents = await (await import('./documentSync')).syncDocuments()
     await pullCloudState()
     const remaining = await getCloudSyncQueue()
     failures = 0
     if (remaining.length) {
       retryAt = Math.max(Date.now() + 1000, Math.min(...remaining.map((item) => item.nextAttemptAt)))
       setSnapshot({ status: 'error', phase: '部分作品同步失败', storage: await getCloudStorage(), error: remaining[0].error || '稍后将自动重试' })
+      return
+    }
+    if (documents.failures.length) {
+      retryAt = Date.now() + 60_000
+      const failed = documents.failures[0]
+      setSnapshot({ status: 'error', phase: `${documents.failures.length} 个文档同步失败，稍后自动重试`, error: `「${failed.title}」：${failed.error}` })
       return
     }
     setSnapshot({ status: 'synced', phase: '云端作品已同步', storage: await getCloudStorage(), error: '' })
@@ -598,10 +622,19 @@ export function triggerCloudSync() {
 }
 
 export async function startCloudSync() {
-  if (!isBackendAuthEnabled()) return
+  if (!isBackendAuthEnabled()) {
+    setSnapshot({ status: 'disabled', phase: '仅本地保存', error: '' })
+    return
+  }
   installStoreSubscription()
   if (!focusHandlerInstalled) {
     focusHandlerInstalled = true
+    let documentTimer: ReturnType<typeof setTimeout>
+    window.addEventListener('gouo:documents-changed', (event) => {
+      if ((event as CustomEvent<{ fromSync?: boolean }>).detail?.fromSync) return
+      clearTimeout(documentTimer)
+      documentTimer = setTimeout(() => void triggerCloudSync(), 1500)
+    })
     window.addEventListener('online', () => void triggerCloudSync())
     window.addEventListener('focus', () => void triggerCloudSync())
   }

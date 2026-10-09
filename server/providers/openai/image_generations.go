@@ -14,9 +14,7 @@ func (p *OpenAIProvider) CreateImageGenerations(request *types.ImageRequest) (*t
 	}
 	defer req.Body.Close()
 
-	response := &OpenAIProviderImageResponse{}
-	// 发送请求
-	_, errWithCode = p.Requester.SendRequest(req, response, false)
+	response, errWithCode := p.requestImageResponse(req)
 	if errWithCode != nil {
 		return nil, errWithCode
 	}

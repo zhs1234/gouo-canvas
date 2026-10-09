@@ -49,6 +49,16 @@ VITE_GOUO_IMAGE_MODEL=gpt-image-2
 
 Local Vite and production Nginx preserve the same routing semantics: `/api` handles accounts and the library; `/v1` handles model relay. Prefer one origin in production. Set `VITE_GOUO_BACKEND_URL` only for an intentional cross-origin design, together with correct cookie, CORS, and HTTPS configuration.
 
+Same-origin sessions default to `HttpOnly; SameSite=Strict`. For a frontend at `https://app.example.com` and a backend on a separate site, build the frontend with `VITE_GOUO_BACKEND_URL=https://api.example.net` and configure the backend:
+
+```dotenv
+GOUO_ALLOWED_ORIGINS=https://app.example.com
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_SAME_SITE=none
+```
+
+Origins must be exact `http(s)://host[:port]` values, comma-separated, without trailing slashes, paths, or wildcards. Invalid settings prevent startup; `none` requires both Secure and an origin allowlist. The reverse proxy must overwrite and correctly forward `Host` and `X-Forwarded-Proto`, with HTTPS at the browser entry point. Account API credentials are allowed only for listed origins. Cross-site requests without Origin are rejected; in `none` mode, session-bearing requests without Origin also require `Sec-Fetch-Site: same-origin`. Only existing GitHub/Lark/OIDC GET callbacks, which validate session state, are exempt. Browsers that block third-party cookies still require a same-origin proxy. Compose passes these three variables; YAML uses their lowercase equivalents.
+
 ## 3. Initial admin setup
 
 The backend exposes the admin UI at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure.
@@ -64,7 +74,9 @@ Recommended order:
 7. If online payment is planned, validate provider setup, callback signatures, abnormal orders, and reconciliation before exposing it.
 8. Confirm the asset directory and user storage under the Gouo storage administration view.
 
-Registration supports username/password and conditionally presents email-verification fields from backend status. Before forcing another CAPTCHA or OAuth flow, verify that the Gouo login/registration UI supplies all required parameters.
+Registration reads backend status to display email verification and Cloudflare Turnstile. A status failure shows a retry action instead of skipping required verification. Configure `TurnstileCheckEnabled`, `TurnstileSiteKey`, and `TurnstileSecretKey` in the backend and allow the actual frontend hostname in Cloudflare. The public site key enables challenges for registration, verification emails, password-reset emails, and account email binding; the secret stays on the server. Expired or failed challenges can be retried and refresh after submission. Custom CSP must allow scripts and frames from `https://challenges.cloudflare.com`. Tokens are sent to the existing backend Siteverify middleware; a client callback alone is not proof of verification. See [client rendering](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/) and [server validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/). OAuth entry points are not part of the public Gouo login page.
+
+Turnstile retains the existing backend session policy: the first successful verification stores `turnstile=true` in the session, and later requests in that session may reuse it without another Siteverify call. Refreshing the frontend token after each request does not change this server policy.
 
 ## 4. Model-specific image billing
 

@@ -136,7 +136,7 @@
 
 数据库保存账号、额度、渠道与作品关系，`backend-data` 保存后端数据和资产。备份恢复必须同时覆盖数据库、资产文件和相关签名密钥。多个后端实例还需要共享数据库、协调层和资产文件系统；光构专用云库目前使用文件目录，不能因为上游有对象存储模块就认为本产品云库已经接入对象存储。
 
-仓库还保留 GitHub Pages、Vercel Hook 和镜像发布工作流。[Docker 工作流](../../.github/workflows/docker.yml)与 Compose 统一使用根 [Dockerfile](../../Dockerfile)，构建启用后端的产品前端；`gpt_image_playground` 镜像名称保留兼容。旧 [deploy/Dockerfile](../../deploy/Dockerfile) 不再用于自动发布。静态托管工作流仍需单独配置后端地址。本轮只修改发布配置，没有触发发布。
+仓库还保留 GitHub Pages、Vercel Hook 和镜像发布工作流。[Docker 工作流](../../.github/workflows/docker.yml)与 Compose 统一使用根 [Dockerfile](../../Dockerfile)，构建启用后端的产品前端；`gpt_image_playground` 镜像名称保留兼容。旧的 deploy/Dockerfile 运行时注入路径已移除。静态托管工作流仍需单独配置后端地址。本轮只修改发布配置，没有触发发布。
 
 操作步骤见[开发指南](./development.md)、[Docker Compose 部署](./deployment/docker.md)、[Linux 手动部署](./deployment/manual.md)和[上线检查清单](./deployment/checklist.md)。
 

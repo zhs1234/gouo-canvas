@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"one-api/model"
 	"one-api/types"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,19 @@ func TestGouoImageRequestQuoteAndCapabilities(t *testing.T) {
 	require.Equal(t, 409, errQuote.StatusCode)
 	c.Request.Header.Set("X-Gouo-Price-Version", entry.PriceVersion)
 	require.Nil(t, prepareGouoImage(c, r))
+	c.Request.Header.Set("X-Gouo-Request-Id", "request/invalid")
+	errQuote = prepareGouoImage(c, r)
+	require.NotNil(t, errQuote)
+	require.Equal(t, "invalid_image_request_id", errQuote.Code)
+	c.Request.Header.Set("X-Gouo-Request-Id", "task-request_1")
+	require.Nil(t, prepareGouoImage(c, r))
+	for _, id := range []string{"agent:7c2d0d72-25c5-4e3e-8401-625c36d42b94:call_1", "7c2d0d72-25c5-4e3e-8401-625c36d42b94:0", "agent:7c2d0d72-25c5-4e3e-8401-625c36d42b94:" + strings.Repeat("c", 200), strings.Repeat("r", 512)} {
+		c.Request.Header.Set("X-Gouo-Request-Id", id)
+		require.Nil(t, prepareGouoImage(c, r), id)
+	}
+	c.Request.Header.Set("X-Gouo-Request-Id", strings.Repeat("r", 513))
+	require.Equal(t, "invalid_image_request_id", prepareGouoImage(c, r).Code)
+	c.Request.Header.Set("X-Gouo-Request-Id", "task-request_1")
 	r.request.N = 3
 	require.NotNil(t, prepareGouoImage(c, r))
 	r.request.Model = "image-a#option"

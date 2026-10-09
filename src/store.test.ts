@@ -48,6 +48,12 @@ vi.mock('./lib/db', () => {
       images.delete(id)
       thumbnails.delete(id)
     },
+    deleteImages: async (ids: string[]) => {
+      for (const id of ids) {
+        images.delete(id)
+        thumbnails.delete(id)
+      }
+    },
     clearImages: async () => {
       images.clear()
       thumbnails.clear()
@@ -227,7 +233,7 @@ describe('product model task snapshots', () => {
     expect(callImageApi).not.toHaveBeenCalled()
     expect(useStore.getState().tasks).toEqual([])
     const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
-    expect(confirmation).toMatchObject({ title: '确认付费重试', message: expect.stringContaining('成功后扣费 ¥0.1') })
+    expect(confirmation).toMatchObject({ title: '确认付费重试', message: expect.stringContaining('全部成功预计扣费 ¥0.10') })
     await confirmation?.action?.()
     expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
     expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ settings: { model: 'image-a' }, gouoPriceVersion: 'quote-a' })
@@ -236,7 +242,7 @@ describe('product model task snapshots', () => {
   it('requires confirmation before retrying a legacy task at the current price', async () => {
     await retryTask(task({ apiModel: 'image-a', status: 'error' }))
     expect(useStore.getState().tasks).toEqual([])
-    expect(useStore.getState().setConfirmDialog).toHaveBeenCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('当前价格为 ¥0.1/次成功请求。重试会新建付费请求') }))
+    expect(useStore.getState().setConfirmDialog).toHaveBeenCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('当前价格为 ¥0.1/次成功请求。重试会新建 1 次单图请求') }))
   })
 
   it('rechecks the quote after the user confirms a retry', async () => {
@@ -273,6 +279,133 @@ describe('product model task snapshots', () => {
     await submitTask()
     expect(useStore.getState().tasks).toEqual([])
     expect(useStore.getState().showToast).toHaveBeenCalledWith(expect.stringContaining('已不可用'), 'error')
+  })
+
+  it.each([undefined, 'quote-b'])('confirms the whole batch retry cost with quote %s', async (gouoPriceVersion) => {
+    const original = task({
+      apiModel: 'image-b', gouoPriceVersion, gouoPriceCNY: 0.3,
+      params: { ...DEFAULT_PARAMS, n: 2 }, outputImages: ['previous-success'],
+      outputErrors: [{ requestIndex: 1, error: '失败' }],
+    })
+    useStore.setState({ tasks: [original] })
+    await retryTask(original)
+    const { callImageApi } = await import('./lib/api')
+    expect(callImageApi).not.toHaveBeenCalled()
+    const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
+    expect(confirmation?.message).toContain('2 次单图请求')
+    expect(confirmation?.message).toContain('全部成功预计扣费 ¥0.60')
+    expect(confirmation?.message).toContain('包含已经成功的图片')
+    await confirmation?.action?.()
+    expect(useStore.getState().tasks).toHaveLength(2)
+    expect(useStore.getState().tasks.find((item) => item.id === original.id)?.outputImages).toEqual(['previous-success'])
+    const created = useStore.getState().tasks.find((item) => item.id !== original.id)!
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ params: { n: 2 }, requestId: created.id })
+  })
+
+  it('preserves parallel partial success after the single-request watchdog deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      const { callImageApi } = await import('./lib/api')
+      let finish!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
+      vi.mocked(callImageApi).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+      useStore.getState().setSettings({ timeout: 1 })
+      const running = task({ status: 'running', createdAt: Date.now(), params: { ...DEFAULT_PARAMS, n: 2 } })
+      useStore.setState({ tasks: [running] })
+      const { executeTask } = await import('./store')
+      const execution = executeTask(running.id)
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(useStore.getState().tasks[0].status).toBe('running')
+      finish({ images: ['data:image/png;base64,success'], actualParamsList: [{ size: '1024x1024' }], failedRequests: [{ requestIndex: 1, error: '请求超时' }] })
+      await execution
+      expect(useStore.getState().tasks[0]).toMatchObject({ status: 'done', outputErrors: [{ requestIndex: 1, error: '请求超时' }] })
+      expect(useStore.getState().tasks[0].outputImages).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('recovers an old failed task with its original request ID without requiring deleted inputs or creating a new task', async () => {
+    const { callImageApi } = await import('./lib/api')
+    const { executeTask } = await import('./store')
+    vi.mocked(callImageApi).mockResolvedValueOnce({ images: ['data:image/png;base64,recovered'] })
+    const failed = task({ status: 'error', requestId: 'agent:conversation:call-original', gouoPriceVersion: 'quote-a', createdAt: 1, inputImageIds: ['missing-input'], maskImageId: 'missing-mask', apiProfileId: 'removed-profile' })
+    useStore.setState({ tasks: [failed] })
+    await executeTask(failed.id, true)
+    expect(callImageApi).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ recoverOnly: true, requestId: failed.requestId, inputImageDataUrls: [] })
+    expect(useStore.getState().tasks).toHaveLength(1)
+    expect(useStore.getState().tasks[0]).toMatchObject({ id: failed.id, status: 'done', requestId: failed.requestId })
+    expect(useStore.getState().tasks[0].outputImages).toHaveLength(1)
+  })
+
+  it('does not start recovery twice while the same task is running', async () => {
+    const { callImageApi } = await import('./lib/api')
+    const { executeTask } = await import('./store')
+    let finish!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
+    vi.mocked(callImageApi).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const failed = task({ status: 'error', gouoPriceVersion: 'quote-a' })
+    useStore.setState({ tasks: [failed] })
+    const recovery = executeTask(failed.id, true)
+    await executeTask(failed.id, true)
+    expect(callImageApi).toHaveBeenCalledTimes(1)
+    finish({ images: ['data:image/png;base64,recovered'] })
+    await recovery
+    expect(useStore.getState().tasks[0].status).toBe('done')
+  })
+
+  it.each(['failure', 'success', 'saved output'])('ignores an old execution %s after watchdog timeout and result recovery starts', async (outcome) => {
+    vi.useFakeTimers()
+    try {
+      const { callImageApi } = await import('./lib/api')
+      const { executeTask } = await import('./store')
+      const db = await import('./lib/db')
+      let finishOld!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
+      let failOld!: (error: Error) => void
+      let finishRecovery!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
+      let releaseSave!: () => void
+      vi.mocked(callImageApi)
+        .mockImplementationOnce(() => new Promise((resolve, reject) => { finishOld = resolve; failOld = reject }))
+        .mockImplementationOnce(() => new Promise((resolve) => { finishRecovery = resolve }))
+      if (outcome === 'saved output') {
+        const save = db.storeImageWithSize
+        const gate = new Promise<void>((resolve) => { releaseSave = resolve })
+        vi.spyOn(db, 'storeImageWithSize').mockImplementationOnce(async (...args) => { await gate; return save(...args) })
+      }
+      useStore.getState().setSettings({ timeout: 1 })
+      const running = task({ status: 'running', gouoPriceVersion: 'quote-a', requestId: 'original-request', createdAt: Date.now() })
+      useStore.setState({ tasks: [running] })
+      const original = executeTask(running.id)
+      if (outcome === 'saved output') finishOld({ images: ['data:image/png;base64,stale-original'] })
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(useStore.getState().tasks[0].status).toBe('error')
+      const recovery = executeTask(running.id, true)
+      if (outcome === 'failure') failOld(new Error('old request aborted'))
+      else if (outcome === 'success') finishOld({ images: ['data:image/png;base64,stale-original'] })
+      else releaseSave()
+      await original
+      expect(useStore.getState().tasks[0]).toMatchObject({ status: 'running', error: null, outputImages: [] })
+      expect((await db.getAllImages()).some((image) => image.dataUrl === 'data:image/png;base64,stale-original')).toBe(false)
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(useStore.getState().tasks[0].status).toBe('running')
+      finishRecovery({ images: ['data:image/png;base64,recovery-result'] })
+      await recovery
+      expect(useStore.getState().tasks[0]).toMatchObject({ status: 'done', error: null, requestId: 'original-request' })
+      expect((await getImage(useStore.getState().tasks[0].outputImages[0]))?.dataUrl).toBe('data:image/png;base64,recovery-result')
+      expect(vi.mocked(callImageApi).mock.calls.map(([opts]) => Boolean(opts.recoverOnly))).toEqual([false, true])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('persists every failed child request when a whole batch fails', async () => {
+    const { callImageApi } = await import('./lib/api')
+    const failedRequests = [{ requestIndex: 0, error: '请求超时' }, { requestIndex: 1, error: '上游错误' }]
+    vi.mocked(callImageApi).mockRejectedValueOnce(Object.assign(new Error('请求超时'), { failedRequests }))
+    useStore.getState().setParams({ n: 2 })
+    await submitTask()
+    await vi.waitFor(() => expect(useStore.getState().tasks[0].status).toBe('error'))
+    expect(useStore.getState().tasks[0].outputErrors).toEqual(failedRequests)
+    expect((await getAllTasks())[0].outputErrors).toEqual(failedRequests)
   })
 })
 
@@ -417,7 +550,7 @@ describe('mask draft lifecycle in store actions', () => {
 
     const state = useStore.getState()
     expect(state.tasks).toHaveLength(1)
-    expect(state.showToast).toHaveBeenCalledWith('任务已提交', 'success')
+    expect(state.showToast).toHaveBeenCalledWith('任务已提交，可在「我的作品」查看进度', 'success')
   })
 
   it('stores decoded image size as actual size when the API omits size', async () => {
@@ -1048,6 +1181,65 @@ describe('reused task API profile', () => {
   })
 })
 
+
+describe('return to creation after reusing library work', () => {
+  const profile = createDefaultOpenAIProfile({ id: 'creation-profile', apiKey: 'test-key' })
+
+  beforeEach(async () => {
+    vi.stubGlobal('window', new EventTarget())
+    await clearImages()
+    const { callImageApi } = await import('./lib/api')
+    vi.mocked(callImageApi).mockClear()
+    useStore.setState({
+      settings: normalizeSettings({ ...DEFAULT_SETTINGS, profiles: [profile], activeProfileId: profile.id, reuseTaskApiProfileTemporarily: true }),
+      prompt: '', inputImages: [], maskDraft: null, params: { ...DEFAULT_PARAMS }, tasks: [],
+      reusedTaskApiProfileId: null, reusedTaskApiProfileMissing: false,
+      showToast: vi.fn(), setConfirmDialog: vi.fn(),
+    })
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it.each([false, true])('signals only after restoring prompt, images, and mask (missing profile: %s)', async (missingProfile) => {
+    await putImage(imageA)
+    await putImage({ id: 'creation-mask', dataUrl: 'data:image/png;base64,mask', source: 'upload', createdAt: 1 })
+    const onOpen = vi.fn(() => {
+      const state = useStore.getState()
+      return { prompt: state.prompt, images: state.inputImages, mask: state.maskDraft }
+    })
+    window.addEventListener('gouo:open-creation', onOpen)
+
+    await reuseConfig(task({
+      apiProvider: 'openai', apiProfileId: missingProfile ? 'missing-profile' : profile.id,
+      prompt: '收藏中的提示词', inputImageIds: [imageA.id], maskTargetImageId: imageA.id, maskImageId: 'creation-mask',
+    }))
+
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpen.mock.results[0].value).toMatchObject({
+      prompt: '收藏中的提示词', images: [imageA], mask: { targetImageId: imageA.id, maskDataUrl: 'data:image/png;base64,mask' },
+    })
+    expect(useStore.getState().setConfirmDialog).toHaveBeenCalledTimes(missingProfile ? 1 : 0)
+    expect(useStore.getState().tasks).toEqual([])
+    const { callImageApi } = await import('./lib/api')
+    expect(callImageApi).not.toHaveBeenCalled()
+  })
+
+  it('signals after output references are ready without submitting a task', async () => {
+    await putImage(imageA)
+    const onOpen = vi.fn(() => useStore.getState().inputImages)
+    window.addEventListener('gouo:open-creation', onOpen)
+
+    await editOutputs(task())
+    expect(onOpen).not.toHaveBeenCalled()
+    await editOutputs(task({ outputImages: [imageA.id] }))
+
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpen.mock.results[0].value).toEqual([imageA])
+    expect(useStore.getState().tasks).toEqual([])
+    const { callImageApi } = await import('./lib/api')
+    expect(callImageApi).not.toHaveBeenCalled()
+  })
+})
 
 describe('cloud sync with store persistence', () => {
   it('preserves pending edits through favorite writes and reload', async () => {

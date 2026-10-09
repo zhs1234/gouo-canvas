@@ -1,7 +1,7 @@
 import { lazy, Suspense, useRef, useEffect, useCallback, useState, useMemo, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, submitTask, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced, removeMultipleTasks } from '../store'
-import { DEFAULT_PARAMS, type TaskRecord } from '../types'
+import { useStore, submitTask, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced } from '../store'
+import { DEFAULT_PARAMS } from '../types'
 import { getActiveApiProfile, normalizeSettings } from '../lib/apiProfiles'
 import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
 import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, getPromptMentionParts, getSelectedImageMentionLabel, getSelectedTextMentionLabel, imageMentionMatches, insertImageMentionAtVisibleRange, isCursorInSelectedImageMention, stripImageMentionMarkers } from '../lib/promptImageMentions'
@@ -11,15 +11,13 @@ import { getSafeBoundingClientRect } from '../lib/domRect'
 import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import BackendModelSelector from './BackendModelSelector'
 import { getActionableErrorMessage, GUIDE_FLAGS, hasGuideFlag, setGuideFlag } from '../lib/userGuidance'
-import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
 import { useHintTooltip } from '../hooks/useHintTooltip'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getTaskOutputImageZipEntries } from '../lib/downloadImages'
-import { CloseIcon } from './icons'
+import { CloseIcon, PlusIcon, SettingsIcon } from './icons'
 import ButtonTooltip from './input/buttonTooltip'
 import AtImageOptionThumb, { type AtImageOption } from './input/atImageOptionThumb'
 import DragUploadOverlay from './input/dragUploadOverlay'
-import InputBatchBars from './input/inputBatchBars'
+import SelectionActions from './input/selectionActions'
 import InputParamsPanel from './input/inputParamsPanel'
 
 const SizePickerModal = lazy(() => import('./SizePickerModal'))
@@ -333,17 +331,8 @@ function setContentEditableSelection(el: HTMLElement, start: number, end: number
 /** API 支持的最大参考图数量 */
 const API_MAX_IMAGES = 16
 
-function getFavoriteCollectionTasksForBatch(collectionId: string, tasks: TaskRecord[]) {
-  const favoriteTasks = tasks.filter((task) => task.isFavorite)
-  if (collectionId === ALL_FAVORITES_COLLECTION_ID) return favoriteTasks
-  return favoriteTasks.filter((task) => getTaskFavoriteCollectionIds(task).includes(collectionId))
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
-export default function InputBar() {
+export default function InputBar({ inline = false }: { inline?: boolean }) {
+  const [showInlineParams, setShowInlineParams] = useState(false)
   const prompt = useStore((s) => s.prompt)
   const isSubmitting = useStore((s) => s.isSubmitting)
   const setPrompt = useStore((s) => s.setPrompt)
@@ -360,210 +349,6 @@ export default function InputBar() {
   const setLightboxImageId = useStore((s) => s.setLightboxImageId)
   const showToast = useStore((s) => s.showToast)
   const setConfirmDialog = useStore((s) => s.setConfirmDialog)
-  const selectedTaskIds = useStore((s) => s.selectedTaskIds)
-  const setSelectedTaskIds = useStore((s) => s.setSelectedTaskIds)
-  const clearSelection = useStore((s) => s.clearSelection)
-  const selectedFavoriteCollectionIds = useStore((s) => s.selectedFavoriteCollectionIds)
-  const setSelectedFavoriteCollectionIds = useStore((s) => s.setSelectedFavoriteCollectionIds)
-  const clearFavoriteCollectionSelection = useStore((s) => s.clearFavoriteCollectionSelection)
-  const tasks = useStore((s) => s.tasks)
-  const favoriteCollections = useStore((s) => s.favoriteCollections)
-  const filterStatus = useStore((s) => s.filterStatus)
-  const filterFavorite = useStore((s) => s.filterFavorite)
-  const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
-  const openFavoritePicker = useStore((s) => s.openFavoritePicker)
-  const searchQuery = useStore((s) => s.searchQuery)
-
-  const filteredTasks = useMemo(() => {
-    const sorted = [...tasks].sort((a, b) => b.createdAt - a.createdAt)
-    const q = searchQuery.trim().toLowerCase()
-    
-    return sorted.filter((t) => {
-      if (filterFavorite) {
-        if (!t.isFavorite) return false
-        if (activeFavoriteCollectionId && activeFavoriteCollectionId !== ALL_FAVORITES_COLLECTION_ID && !getTaskFavoriteCollectionIds(t).includes(activeFavoriteCollectionId)) return false
-      }
-      if (!taskMatchesFilterStatus(t, filterStatus)) return false
-      return taskMatchesSearchQuery(t, q)
-    })
-  }, [tasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
-
-  const inCollectionOverview = filterFavorite && !activeFavoriteCollectionId
-
-  const favoriteCollectionCards = useMemo(() => {
-    return [
-      {
-        id: ALL_FAVORITES_COLLECTION_ID,
-        name: '全部',
-        tasks: getFavoriteCollectionTasksForBatch(ALL_FAVORITES_COLLECTION_ID, tasks),
-      },
-      ...favoriteCollections.map((collection) => ({
-        id: collection.id,
-        name: collection.name,
-        collection,
-        tasks: getFavoriteCollectionTasksForBatch(collection.id, tasks),
-      })),
-    ]
-  }, [favoriteCollections, tasks])
-
-  const filteredFavoriteCollectionCards = useMemo(() => {
-    if (!searchQuery.trim()) return favoriteCollectionCards
-    const lowerQuery = searchQuery.toLowerCase()
-    return favoriteCollectionCards.filter((collection) => collection.name.toLowerCase().includes(lowerQuery))
-  }, [favoriteCollectionCards, searchQuery])
-
-  const handleSelectAllVisibleTasks = useCallback(() => {
-    setSelectedTaskIds(filteredTasks.map((task) => task.id))
-  }, [filteredTasks, setSelectedTaskIds])
-
-  const handleInvertVisibleTasks = useCallback(() => {
-    const visibleIds = new Set(filteredTasks.map((task) => task.id))
-    setSelectedTaskIds((current) => {
-      const currentSet = new Set(current)
-      const next = current.filter((id) => !visibleIds.has(id))
-      filteredTasks.forEach((task) => {
-        if (!currentSet.has(task.id)) next.push(task.id)
-      })
-      return next
-    })
-  }, [filteredTasks, setSelectedTaskIds])
-
-  const handleSelectAllVisibleFavoriteCollections = useCallback(() => {
-    setSelectedFavoriteCollectionIds(filteredFavoriteCollectionCards.map((collection) => collection.id))
-  }, [filteredFavoriteCollectionCards, setSelectedFavoriteCollectionIds])
-
-  const handleInvertVisibleFavoriteCollections = useCallback(() => {
-    const visibleIds = new Set(filteredFavoriteCollectionCards.map((collection) => collection.id))
-    setSelectedFavoriteCollectionIds((current) => {
-      const currentSet = new Set(current)
-      const next = current.filter((id) => !visibleIds.has(id))
-      filteredFavoriteCollectionCards.forEach((collection) => {
-        if (!currentSet.has(collection.id)) next.push(collection.id)
-      })
-      return next
-    })
-  }, [filteredFavoriteCollectionCards, setSelectedFavoriteCollectionIds])
-
-  const handleToggleFavorite = useCallback(() => {
-    openFavoritePicker(selectedTaskIds)
-  }, [openFavoritePicker, selectedTaskIds])
-
-  const handleDeleteSelected = useCallback(() => {
-    setConfirmDialog({
-      title: '批量删除',
-      message: `确定要删除选中的 ${selectedTaskIds.length} 个任务吗？`,
-      action: () => {
-        removeMultipleTasks(selectedTaskIds)
-      },
-    })
-  }, [selectedTaskIds, setConfirmDialog])
-
-  const handleDownloadSelected = useCallback(async () => {
-    const selectedTasks = tasks.filter((t) => selectedTaskIds.includes(t.id))
-    const imageIds = selectedTasks.flatMap(t => t.outputImages || [])
-    if (imageIds.length === 0) {
-      showToast('选中的任务没有图片', 'info')
-      return
-    }
-
-    try {
-      const timeStr = formatExportFileTime(new Date())
-      const fileNameBase = `batch-${timeStr}`
-      const { successCount, failCount } = settings.zipDownloadRoutes.includes('task-selection')
-        ? await downloadImageEntriesAsZip(getTaskOutputImageZipEntries(selectedTasks), fileNameBase)
-        : await downloadImageIds(imageIds, fileNameBase)
-
-      if (successCount === 0) {
-        showToast('下载失败', 'error')
-      } else if (failCount > 0) {
-        showToast(`部分下载失败：成功 ${successCount}，失败 ${failCount}`, 'error')
-      } else {
-        showToast(successCount > 1 ? `下载成功：${successCount} 张图片` : '下载成功', 'success')
-      }
-    } catch (err) {
-      console.error(err)
-      showToast('下载失败', 'error')
-    }
-    clearSelection()
-  }, [tasks, selectedTaskIds, settings.zipDownloadRoutes, showToast, clearSelection])
-
-  const handleDownloadSelectedFavoriteCollections = useCallback(async () => {
-    const selectedIdSet = new Set(selectedFavoriteCollectionIds)
-    const selectedCollections = favoriteCollectionCards.filter((collection) => selectedIdSet.has(collection.id))
-    if (selectedCollections.length === 0) return
-
-    let successCount = 0
-    let failCount = 0
-    let downloadedCollectionCount = 0
-    const useZipDownload = settings.zipDownloadRoutes.includes('favorite-collection-selection')
-    const timeStr = formatExportFileTime(new Date())
-
-    try {
-      for (const collection of selectedCollections) {
-        const entries = getTaskOutputImageZipEntries(collection.tasks)
-        if (entries.length === 0) continue
-        const zipName = collection.id === ALL_FAVORITES_COLLECTION_ID
-          ? `favorites-all-${timeStr}`
-          : `favorites-${collection.name}-${timeStr}`
-        const result = useZipDownload
-          ? await downloadImageEntriesAsZip(entries, zipName)
-          : await downloadImageIds(entries.map((entry) => entry.imageId), zipName)
-        successCount += result.successCount
-        failCount += result.failCount
-        if (result.successCount > 0) downloadedCollectionCount++
-        if (selectedCollections.length > 1) await delay(100)
-      }
-
-      if (successCount === 0) {
-        showToast('选中的收藏夹没有图片', 'info')
-      } else if (failCount > 0) {
-        showToast(`部分下载失败：成功 ${successCount}，失败 ${failCount}`, 'error')
-      } else {
-        showToast(useZipDownload && downloadedCollectionCount > 1 ? `下载成功：${downloadedCollectionCount} 个压缩包，${successCount} 张图片` : `下载成功：${successCount} 张图片`, 'success')
-      }
-    } catch (err) {
-      console.error(err)
-      showToast('下载失败', 'error')
-    }
-    clearFavoriteCollectionSelection()
-  }, [clearFavoriteCollectionSelection, favoriteCollectionCards, selectedFavoriteCollectionIds, settings.zipDownloadRoutes, showToast])
-
-  const handleDeleteSelectedFavoriteCollections = useCallback(() => {
-    const selectedIdSet = new Set(selectedFavoriteCollectionIds)
-    const selectedCollections = favoriteCollections.filter((collection) => selectedIdSet.has(collection.id))
-    if (selectedCollections.length === 0) {
-      showToast('没有可删除的收藏夹', 'info')
-      return
-    }
-    if (favoriteCollections.length - selectedCollections.length < 1) {
-      showToast('至少保留一个收藏夹', 'error')
-      return
-    }
-
-    const selectedCollectionIds = new Set(selectedCollections.map((collection) => collection.id))
-    const imageCount = new Set(
-      tasks
-        .filter((task) => getTaskFavoriteCollectionIds(task).some((id) => selectedCollectionIds.has(id)))
-        .flatMap((task) => task.outputImages || []),
-    ).size
-    setConfirmDialog({
-      title: '批量删除收藏夹',
-      message: `确定要删除选中的 ${selectedCollections.length} 个收藏夹吗？`,
-      checkbox: imageCount > 0
-        ? {
-            label: `同时删除收藏夹中的图片（${imageCount} 张）`,
-            tone: 'danger',
-          }
-        : undefined,
-      action: async (deleteImages = false) => {
-        for (const collection of selectedCollections) {
-          await deleteFavoriteCollection(collection.id, deleteImages)
-        }
-        clearFavoriteCollectionSelection()
-      },
-    })
-  }, [clearFavoriteCollectionSelection, favoriteCollections, selectedFavoriteCollectionIds, setConfirmDialog, showToast, tasks])
-
   const maskDraft = useStore((s) => s.maskDraft)
   const setMaskEditorImageId = useStore((s) => s.setMaskEditorImageId)
   const moveInputImage = useStore((s) => s.moveInputImage)
@@ -612,9 +397,9 @@ export default function InputBar() {
     if (!bar) return
 
     const rect = bar.getBoundingClientRect()
-    const clearance = Math.max(0, window.innerHeight - rect.top)
+    const clearance = inline ? 0 : Math.max(0, window.innerHeight - rect.top)
     document.documentElement.style.setProperty('--input-bar-clearance', `${Math.ceil(clearance)}px`)
-  }, [])
+  }, [inline])
 
   useLayoutEffect(() => {
     const bar = cardRef.current?.closest<HTMLElement>('[data-input-bar]')
@@ -688,8 +473,10 @@ export default function InputBar() {
   const isFalTextToImage = isFalProvider && inputImages.length === 0
   const nDraftValue = Number(nInput)
   const effectiveNValue = Number.isNaN(nDraftValue) ? params.n : nDraftValue
-  const streamConcurrentByN = activeProfile.provider === 'openai' && activeProfile.streamImages === true && effectiveNValue > 1
-  const nLimitHintText = isFalProvider
+  const streamConcurrentByN = (isBackendAuthEnabled() || (activeProfile.provider === 'openai' && activeProfile.streamImages === true)) && effectiveNValue > 1
+  const nLimitHintText = isBackendAuthEnabled()
+    ? `本次最多生成 ${outputImageLimit} 张图片`
+    : isFalProvider
     ? `fal.ai 最大请求数量为 ${outputImageLimit}`
     : `OpenAI 最大请求数量为 ${outputImageLimit}`
   const displaySize = isFalTextToImage && params.size === 'auto'
@@ -1806,9 +1593,6 @@ export default function InputBar() {
     />
   )
 
-  const showFavoriteCollectionBatchBar = inCollectionOverview && selectedFavoriteCollectionIds.length > 0
-  const showTaskBatchBar = !showFavoriteCollectionBatchBar && selectedTaskIds.length > 0
-
   return (
     <>
       <DragUploadOverlay visible={isDragging} atImageLimit={atImageLimit} maxImages={API_MAX_IMAGES} />
@@ -1824,29 +1608,13 @@ export default function InputBar() {
         </Suspense>
       )}
 
-      <div data-input-bar className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-4xl px-3 sm:px-4 transition-all duration-300">
-        <InputBatchBars
-          showFavoriteCollectionBatchBar={showFavoriteCollectionBatchBar}
-          showTaskBatchBar={showTaskBatchBar}
-          selectedTaskIds={selectedTaskIds}
-          tasks={tasks}
-          clearFavoriteCollectionSelection={clearFavoriteCollectionSelection}
-          onSelectAllVisibleFavoriteCollections={handleSelectAllVisibleFavoriteCollections}
-          onInvertVisibleFavoriteCollections={handleInvertVisibleFavoriteCollections}
-          onDownloadSelectedFavoriteCollections={handleDownloadSelectedFavoriteCollections}
-          onDeleteSelectedFavoriteCollections={handleDeleteSelectedFavoriteCollections}
-          clearSelection={clearSelection}
-          onSelectAllVisibleTasks={handleSelectAllVisibleTasks}
-          onInvertVisibleTasks={handleInvertVisibleTasks}
-          onToggleFavorite={handleToggleFavorite}
-          onDownloadSelected={handleDownloadSelected}
-          onDeleteSelected={handleDeleteSelected}
-        />
+      <div data-input-bar className={inline ? 'generation-composer relative w-full' : 'fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-4xl px-3 sm:px-4 transition-all duration-300'}>
+        <SelectionActions inline={inline} />
         <div ref={cardRef} className="bg-white/70 dark:bg-gray-900/70 backdrop-blur-2xl border border-white/50 dark:border-white/[0.08] shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] rounded-2xl sm:rounded-3xl p-3 sm:p-4 ring-1 ring-black/5 dark:ring-white/10">
           {/* 移动端拖动条 */}
           <div
             ref={handleRef}
-            className="sm:hidden flex justify-center pt-0.5 pb-2 -mt-1 cursor-pointer touch-none"
+            className={`${inline ? 'hidden' : 'sm:hidden flex'} justify-center pt-0.5 pb-2 -mt-1 cursor-pointer touch-none`}
             onClick={() => {
               if (Date.now() < suppressHandleClickUntilRef.current) {
                 suppressHandleClickUntilRef.current = 0
@@ -1909,6 +1677,8 @@ export default function InputBar() {
             <div
               ref={textareaRef}
               contentEditable
+              role="textbox"
+              aria-multiline="true"
               suppressContentEditableWarning
               onInput={(e) => {
                 isUserInputRef.current = true
@@ -1976,14 +1746,22 @@ export default function InputBar() {
 
           {/* 参数 + 按钮 */}
           <div className="mt-3">
-            {isBackendAuthEnabled() && (
+            {!inline && isBackendAuthEnabled() && (
               <BackendModelSelector onReady={setBackendModelReady} />
             )}
+            {inline && !isMobile && showInlineParams && <div className="mb-3">{renderParams('grid-cols-2 lg:grid-cols-6')}</div>}
             {/* 桌面端布局 */}
-            <div className="hidden sm:flex items-end justify-between gap-3">
-              {renderParams('grid-cols-6')}
+            <div className={`hidden sm:flex items-end justify-between gap-3${inline ? ' flex-wrap' : ''}`}>
+              {inline ? (
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 self-center text-xs text-gray-400">
+                  {!isMobile && isBackendAuthEnabled() && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
+                  <button type="button" aria-expanded={showInlineParams} className="inline-flex items-center gap-1.5" onClick={() => setShowInlineParams(!showInlineParams)}><SettingsIcon className="h-4 w-4" />{showInlineParams ? '收起参数' : '自定义参数'}</button>
+                  <span>{params.size} · {params.n} 张</span>
+                  <span>输入 @ 引用图片</span>
+                </div>
+              ) : <div className="flex min-w-0 flex-1 items-end gap-2">{renderParams('grid-cols-6')}</div>}
 
-              <div className="flex gap-2 flex-shrink-0 mb-0.5">
+              <div className="ml-auto flex gap-2 flex-shrink-0 mb-0.5">
                 <div
                   className="relative"
                   onMouseEnter={() => setAttachHover(true)}
@@ -1992,16 +1770,17 @@ export default function InputBar() {
                   <ButtonTooltip visible={attachHover} text={uploadImageTooltipText} />
                   <button
                     onClick={() => !atImageLimit && fileInputRef.current?.click()}
-                    className={`p-2.5 rounded-xl transition-all shadow-sm ${
+                    disabled={atImageLimit}
+                    className={`inline-flex items-center gap-2 whitespace-nowrap p-2.5 rounded-xl transition-all shadow-sm ${
                       atImageLimit
                         ? 'bg-gray-200 dark:bg-white/[0.04] text-gray-300 dark:text-gray-500 cursor-not-allowed'
                         : 'bg-gray-200 dark:bg-white/[0.06] hover:bg-gray-300 dark:hover:bg-white/[0.1] text-gray-500 dark:text-gray-300 hover:shadow'
                     }`}
                     aria-label={uploadImageTooltipText}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {inline ? <><PlusIcon className="h-5 w-5" /><span>上传图片</span></> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
+                    </svg>}
                   </button>
                 </div>
                 <div
@@ -2031,9 +1810,13 @@ export default function InputBar() {
 
             {/* 移动端布局 */}
             <div className="sm:hidden flex flex-col gap-2">
-              <div className={`collapse-section${mobileCollapsed ? ' collapsed' : ''}`}>
+              {inline && <div className="flex flex-wrap items-center gap-2">
+                {isMobile && isBackendAuthEnabled() && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
+                <button type="button" aria-expanded={showInlineParams} onClick={() => setShowInlineParams(!showInlineParams)} className="flex items-center gap-2 self-start py-2 text-xs text-gray-400"><SettingsIcon className="h-4 w-4" />{showInlineParams ? '收起参数' : '自定义参数'}<span className="ml-2">{params.size} · {params.n} 张</span></button>
+              </div>}
+              <div className={`collapse-section${inline ? (!showInlineParams ? ' collapsed' : '') : mobileCollapsed ? ' collapsed' : ''}`}>
                 <div className="collapse-inner">
-                  {renderParams('grid-cols-2')}
+                  {(!inline || showInlineParams) && renderParams('grid-cols-2')}
                   <div className="h-2" />
                 </div>
               </div>
@@ -2050,7 +1833,8 @@ export default function InputBar() {
                         setShowMobileUploadMenu(!showMobileUploadMenu)
                       }
                     }}
-                    className={`p-2.5 rounded-xl transition-all shadow-sm flex-shrink-0 ${
+                    disabled={atImageLimit}
+                    className={`inline-flex items-center gap-2 whitespace-nowrap p-2.5 rounded-xl transition-all shadow-sm flex-shrink-0 ${
                       atImageLimit
                         ? 'bg-gray-200 dark:bg-white/[0.04] text-gray-300 dark:text-gray-500 cursor-not-allowed'
                         : 'bg-gray-200 dark:bg-white/[0.06] hover:bg-gray-300 dark:hover:bg-white/[0.1] text-gray-500 dark:text-gray-300'
@@ -2065,6 +1849,7 @@ export default function InputBar() {
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
+                    {inline && <span>上传图片</span>}
                   </button>
 
                   {/* Mobile Upload Menu */}

@@ -183,6 +183,7 @@ export default function ImageContextMenu() {
       setDetailTaskId(null)
       setLightboxImageId(null)
       setMaskEditorImageId(null)
+      window.dispatchEvent(new Event('gouo:open-creation'))
       showToast('已加入参考图', 'success')
     } catch (err) {
       console.error(err)

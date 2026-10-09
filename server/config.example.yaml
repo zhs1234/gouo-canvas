@@ -4,6 +4,9 @@ gin_mode: "release" # gin 模式，可选值为 "release" 或 "debug"，默认�
 log_level: "info" # 日志级别，可选值为 "debug"、"info"、"warn"、"error"、"fatal"、"panic"，默认为 "info"。
 log_dir: "./logs" # 日志目录
 session_secret: "" # 会话密钥，未设置则使用随机值。
+gouo_allowed_origins: "" # 跨域前端完整 origin，以逗号分隔；禁止路径和通配符。留空仅允许同源账号请求。
+session_cookie_secure: false # HTTPS 部署建议开启；跨站 Cookie 必须开启。
+session_cookie_same_site: "strict" # strict（默认）、lax、none；none 必须同时配置 Secure 和允许来源。
 disable_token_encoders: false # 是否禁用 token 编码器计算tokens。启用后 内存占用可减少 40MB 左右，但是stream模式下tokens计算不准确
 trusted_header: "" # 可信头部，"CF-Connecting-IP" 用于 Cloudflare，"X-Appengine-Remote-Addr" 用于 Google App Engine，未设置则不使用。 可以解决一些代理问题，如获取用户真实IP
 language: "zh_CN" #国际化默认语言 目前支持`zh_CN`/`en_US`/ja_JP`/`zh_HK`

@@ -1,0 +1,125 @@
+/* 公开页（首页、登录、注册）共用的颗粒渐变与入场动效 */
+.gouo-public {
+  --ink: #171719;
+  --ink-soft: #5c5a60;
+  --line: rgb(23 23 25 / 0.12);
+  --paper: #faf8f3;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  color: var(--ink);
+  background: var(--paper);
+  font-feature-settings: 'ss01';
+}
+
+.gouo-grainient {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(55% 75% at 12% 18%, #ffb38a 0%, transparent 62%),
+    radial-gradient(45% 65% at 88% 12%, #a596ff 0%, transparent 60%),
+    radial-gradient(60% 80% at 72% 92%, #ff8a70 0%, transparent 62%),
+    radial-gradient(50% 60% at 25% 98%, #8a4fb3 0%, transparent 65%),
+    linear-gradient(160deg, #6b3f6e 0%, #d4705c 52%, #f4ad7f 100%);
+  background-size: 160% 160%;
+  animation: gouo-grainient-drift 26s ease-in-out infinite alternate;
+}
+
+.gouo-grainient-light {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(50% 70% at 10% 15%, #ffcfb3 0%, transparent 62%),
+    radial-gradient(45% 60% at 92% 10%, #dcd6ff 0%, transparent 60%),
+    radial-gradient(55% 75% at 80% 95%, #ffd9e6 0%, transparent 62%),
+    radial-gradient(45% 55% at 20% 90%, #ffc98e 0%, transparent 65%),
+    #f3eee6;
+  background-size: 150% 150%;
+  animation: gouo-grainient-drift 30s ease-in-out infinite alternate;
+}
+
+/* 颗粒噪点用内联 SVG，无需 WebGL */
+.gouo-grainient::after,
+.gouo-grainient-light::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.32;
+  mix-blend-mode: overlay;
+}
+
+.gouo-grainient-light::after {
+  opacity: 0.5;
+  mix-blend-mode: soft-light;
+}
+
+.gouo-glass {
+  background: rgb(255 255 255 / 0.3);
+  border: 1px solid rgb(255 255 255 / 0.55);
+  box-shadow: 0 24px 64px rgb(66 49 37 / 0.1), 0 3px 12px rgb(66 49 37 / 0.05), inset 0 0 0 1px rgb(255 255 255 / 0.16);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+.gouo-glass-dark {
+  background: rgb(255 255 255 / 0.14);
+  border: 1px solid rgb(255 255 255 / 0.32);
+  backdrop-filter: blur(15px) saturate(150%);
+  -webkit-backdrop-filter: blur(15px) saturate(150%);
+}
+
+.gouo-line-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.06em;
+}
+
+.gouo-line-text {
+  display: block;
+  animation: gouo-line-rise 1s var(--ease-out) both;
+  animation-delay: var(--delay, 0.2s);
+}
+
+.gouo-fade-up {
+  animation: gouo-fade-up 0.8s var(--ease-out) both;
+  animation-delay: var(--delay, 0.6s);
+}
+
+.gouo-faq summary {
+  list-style: none;
+}
+
+.gouo-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.gouo-faq[open] .gouo-faq-icon {
+  transform: rotate(45deg);
+}
+
+@keyframes gouo-grainient-drift {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 100% 100%; }
+}
+
+@keyframes gouo-line-rise {
+  from { transform: translateY(110%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes gouo-fade-up {
+  from { opacity: 0; transform: translateY(18px); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gouo-grainient,
+  .gouo-grainient-light,
+  .gouo-line-text,
+  .gouo-fade-up {
+    animation: none;
+  }
+}

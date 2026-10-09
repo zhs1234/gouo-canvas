@@ -1,22 +1,17 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { HashRouter } from 'react-router-dom'
+import Workspace from './components/Workspace'
 import { initStore } from './store'
 import { useStore } from './store'
 import { activateFirstImportedProfile, buildSettingsFromUrlParams, clearUrlSettingParams, hasUrlSettingParams } from './lib/urlSettings'
 import { isDefaultConfigOnlyEnabled, mergeImportedSettings } from './lib/apiProfiles'
 import { getCustomProviderConfigUrl, loadCustomProviderSettingsFromUrl } from './lib/customProviderConfigUrl'
-import { useDockerApiUrlMigrationNotice } from './hooks/useDockerApiUrlMigrationNotice'
 import type { AppSettings } from './types'
-import Header from './components/Header'
-import SearchBar from './components/SearchBar'
-import TaskGrid from './components/TaskGrid'
-import InputBar from './components/InputBar'
 import Toast from './components/Toast'
 import ImageContextMenu from './components/ImageContextMenu'
-import { FavoriteCollectionsView } from './components/favorites/FavoriteCollectionsView'
 import OverlayLayer from './components/OverlayLayer'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 import { startCloudSync } from './lib/cloudSync'
-import CloudSyncBanner from './components/CloudSyncBanner'
 import FirstGenerationGuide from './components/FirstGenerationGuide'
 import { GUIDE_FLAGS, hasGuideFlag } from './lib/userGuidance'
 
@@ -27,9 +22,6 @@ let customProviderConfigUrlImportStarted = false
 export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(() => !hasGuideFlag(GUIDE_FLAGS.onboarding))
   const setSettings = useStore((s) => s.setSettings)
-  const filterFavorite = useStore((s) => s.filterFavorite)
-  const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
-  useDockerApiUrlMigrationNotice()
   useGlobalClickSuppression()
 
   useEffect(() => {
@@ -98,7 +90,7 @@ export default function App() {
 
   useEffect(() => {
     const preventPageImageDrag = (e: DragEvent) => {
-      if ((e.target as HTMLElement | null)?.closest('img')) {
+      if ((e.target as HTMLElement | null)?.closest('img') && !(e.target as HTMLElement).closest('.canvas-workspace')) {
         e.preventDefault()
       }
     }
@@ -109,15 +101,7 @@ export default function App() {
 
   return (
     <>
-      <Header />
-      <CloudSyncBanner />
-      <main data-home-main data-drag-select-surface className="pb-48">
-        <div className="safe-area-x max-w-7xl mx-auto">
-          <SearchBar />
-          {filterFavorite && !activeFavoriteCollectionId ? <FavoriteCollectionsView /> : <TaskGrid />}
-        </div>
-      </main>
-      <InputBar />
+      <HashRouter><Workspace /></HashRouter>
       <OverlayLayer />
       <Toast />
       <ImageContextMenu />

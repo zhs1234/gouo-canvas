@@ -7,6 +7,7 @@ export type { CallApiOptions, CallApiResult } from './imageApiShared'
 export { normalizeBaseUrl } from './devProxy'
 
 export async function callImageApi(opts: CallApiOptions): Promise<CallApiResult> {
+  if (opts.recoverOnly && !isBackendAuthEnabled()) throw new Error('仅平台图片任务支持读取原请求结果')
   const backendSettings = isBackendAuthEnabled() ? await createBackendSettings() : null
   const settings = backendSettings ? { ...opts.settings, ...backendSettings } : opts.settings
   const profile = { ...getActiveApiProfile(settings), ...(backendSettings ? { provider: 'openai' as const } : {}) }
@@ -16,12 +17,12 @@ export async function callImageApi(opts: CallApiOptions): Promise<CallApiResult>
   }
 
   try {
-    return await callOpenAICompatibleImageApi({ ...opts, settings }, profile, backendSettings ? null : getCustomProviderDefinition(settings, profile.provider))
+    return await callOpenAICompatibleImageApi({ ...opts, settings }, profile, backendSettings ? null : getCustomProviderDefinition(settings, profile.provider), Boolean(backendSettings))
   } catch (error) {
     if (backendSettings && error instanceof Error && error.message.includes('模型价格或能力已更新') && typeof window !== 'undefined') window.dispatchEvent(new Event('gouo-models-refresh'))
-    if (!backendSettings || !isInvalidBackendTokenError(error)) throw error
+    if (!backendSettings || (error instanceof Error && 'imageResultRecovery' in error) || !isInvalidBackendTokenError(error)) throw error
     const refreshedSettings = { ...opts.settings, ...await createBackendSettings(true) }
     const refreshedProfile = { ...getActiveApiProfile(refreshedSettings), provider: 'openai' as const }
-    return callOpenAICompatibleImageApi({ ...opts, settings: refreshedSettings }, refreshedProfile)
+    return callOpenAICompatibleImageApi({ ...opts, settings: refreshedSettings }, refreshedProfile, null, true)
   }
 }

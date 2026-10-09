@@ -18,6 +18,9 @@ import (
 )
 
 func TestGouoBillingDurableRecoveryAndAtomicFinalization(t *testing.T) {
+	oldDir := config.GouoAssetDir
+	config.GouoAssetDir = t.TempDir()
+	t.Cleanup(func() { config.GouoAssetDir = oldDir })
 	path := filepath.Join(t.TempDir(), "billing.db")
 	dialector := gorm.Dialector(sqlite.Open(path + "?_busy_timeout=5000&_journal_mode=WAL"))
 	if dsn := os.Getenv("GOUO_BILLING_TEST_MYSQL_DSN"); dsn != "" {

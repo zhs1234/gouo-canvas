@@ -170,6 +170,8 @@ func UpsertGouoTask(task *GouoTask, assets []GouoTaskAsset, collectionIDs []stri
 		if err == nil {
 			task.ID = existing.ID
 			task.CreatedAt = existing.CreatedAt
+			// 回收站状态只由 hide/restore 接口修改，其他设备重新上传不能把已删除作品恢复。
+			task.HiddenAt = existing.HiddenAt
 			var previous []GouoTaskAsset
 			if err := tx.Where("task_id = ?", existing.ID).Find(&previous).Error; err != nil {
 				return err

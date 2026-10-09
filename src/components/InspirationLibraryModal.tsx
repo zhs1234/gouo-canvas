@@ -1,17 +1,26 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { INSPIRATION_CATEGORIES, INSPIRATION_PROMPTS, INSPIRATION_SOURCE, type InspirationCategory, type InspirationPrompt } from '../lib/inspirationPrompts'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { useStore } from '../store'
-import { CloseIcon, CopyIcon } from './icons'
+import { ChevronLeftIcon, CloseIcon, CopyIcon } from './icons'
+import './inspirationLibrary.css'
 
 interface InspirationLibraryModalProps {
   onClose: () => void
 }
 
 export default function InspirationLibraryModal({ onClose }: InspirationLibraryModalProps) {
+  return <InspirationLibrary onClose={onClose} />
+}
+
+export function InspirationLibraryPage({ onApply }: { onApply: () => void }) {
+  return <main aria-label="灵感库"><InspirationLibrary page onApply={onApply} /></main>
+}
+
+function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean; onClose?: () => void; onApply?: () => void }) {
   const [category, setCategory] = useState<'全部' | InspirationCategory>('全部')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<InspirationPrompt | null>(null)
@@ -21,8 +30,9 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
   const setPrompt = useStore((s) => s.setPrompt)
   const showToast = useStore((s) => s.showToast)
 
-  useCloseOnEscape(true, selected ? () => setSelected(null) : onClose)
-  usePreventBackgroundScroll(true, [libraryRef, detailRef])
+  useCloseOnEscape(!page || Boolean(selected), selected ? () => setSelected(null) : () => onClose?.())
+  usePreventBackgroundScroll(!page, [libraryRef, detailRef])
+  useEffect(() => { if (page && selected) detailRef.current?.focus() }, [page, selected])
 
   const prompts = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase('zh-CN')
@@ -37,8 +47,9 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
     const current = useStore.getState().prompt
     setPrompt(append && current.trim() ? `${current.trimEnd()}\n\n${item.prompt}` : item.prompt)
     showToast(`已填入「${item.title}」，请替换占位内容${item.referenceCount ? '并上传参考图' : ''}`, 'success')
-    onClose()
-    window.setTimeout(() => document.querySelector<HTMLElement>('[contenteditable="true"]')?.focus(), 0)
+    if (page) onApply?.()
+    else onClose?.()
+    window.setTimeout(() => document.querySelector<HTMLElement>('[data-input-bar] [contenteditable="true"]')?.focus(), 0)
   }
 
   const usePrompt = (item: InspirationPrompt) => {
@@ -48,7 +59,7 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
       return
     }
     // 使用现有确认弹窗，关闭灵感库后避免详情层遮住草稿选择。
-    onClose()
+    if (!page) onClose?.()
     useStore.getState().setConfirmDialog({
       title: '输入框已有提示词',
       message: `如何填入「${item.title}」？当前模型、参数和参考图保持不变。`,
@@ -69,28 +80,28 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
     }
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <div ref={libraryRef} role="dialog" aria-modal="true" aria-label="光构灵感库" className="flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-[#f7f8fb] shadow-2xl dark:bg-gray-950 sm:h-[88dvh] sm:max-w-6xl sm:rounded-[28px]">
-        <header className="relative overflow-hidden border-b border-gray-200/80 bg-white px-5 pb-5 pt-5 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7 sm:pt-6">
-          <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-blue-500/15 blur-3xl" />
+  const content = (
+    <div className={page ? 'inspiration-library-page' : 'fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-6'} onMouseDown={(event) => { if (!page && event.target === event.currentTarget) onClose?.() }}>
+      <div ref={libraryRef} role={page ? undefined : 'dialog'} aria-modal={page ? undefined : true} aria-label="光构灵感库" className={page ? 'inspiration-page-library' : 'flex h-[94dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-[#f7f8fb] shadow-2xl dark:bg-gray-950 sm:h-[88dvh] sm:max-w-6xl sm:rounded-[28px]'}>
+        <header className={page ? 'inspiration-page-header' : 'relative overflow-hidden border-b border-gray-200/80 bg-white px-5 pb-5 pt-5 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7 sm:pt-6'}>
+          {!page && <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-blue-500/15 blur-3xl" />}
           <div className="relative flex items-start justify-between gap-5">
             <div>
-              <p className="text-[11px] font-bold tracking-[0.2em] text-blue-600">GOUO INSPIRATION</p>
-              <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">灵感库</h2>
+              {!page && <p className="text-[11px] font-bold tracking-[0.2em] text-blue-600">GOUO INSPIRATION</p>}
+              {page ? <h1 className="text-3xl font-semibold tracking-tight">灵感库</h1> : <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">灵感库</h2>}
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">来自 awesome-gpt-image-2 的 22 套工业模板。填入后替换方括号中的内容，再用当前模型创作。</p>
             </div>
-            <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-white" aria-label="关闭灵感库">
+            {!page && <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-white" aria-label="关闭灵感库">
               <CloseIcon className="h-5 w-5" />
-            </button>
+            </button>}
           </div>
-          <div className="relative mt-5 flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative mt-5 flex flex-col gap-3 lg:flex-row lg:items-center" hidden={page && Boolean(selected)}>
             <div className="relative min-w-0 flex-1">
               <svg className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="7" strokeWidth="2" />
                 <path d="m20 20-3.5-3.5" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              <input autoFocus aria-label="搜索灵感" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模板、风格、场景或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
+              <input autoFocus={!page} aria-label="搜索灵感" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模板、风格、场景或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1 lg:max-w-[66%] lg:pb-0">
               {INSPIRATION_CATEGORIES.map((item) => (
@@ -102,7 +113,7 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+        <div className={page ? 'inspiration-page-results' : 'flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6'} hidden={page && Boolean(selected)}>
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{category === '全部' ? '全部灵感' : category}</p>
             <p className="text-xs text-gray-400">{prompts.length} 个模板</p>
@@ -110,8 +121,8 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
           {prompts.length ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {prompts.map((item) => (
-                <article key={item.id} className="group overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-900/5 dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-blue-500/30">
-                  <button type="button" onClick={() => setSelected(item)} className="block w-full text-left">
+                <article key={item.id} className="inspiration-template-card group overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-900/5 dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-blue-500/30">
+                  <button type="button" onClick={() => { setSelected(item); if (page) window.scrollTo(0, 0) }} className="block w-full text-left">
                     <div className="relative h-48 overflow-hidden bg-slate-900 text-slate-200">
                       {failedPreviews.includes(item.id)
                         ? <p className="p-4 pt-14 line-clamp-5 whitespace-pre-line font-mono text-[11px] leading-5 opacity-75">{item.prompt}</p>
@@ -143,22 +154,23 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
           )}
         </div>
 
-        <footer className="flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-5 py-3 text-[11px] text-gray-400 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7">
+        <footer hidden={page && Boolean(selected)} className={page ? 'inspiration-page-footer' : 'flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-5 py-3 text-[11px] text-gray-400 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7'}>
           <span>来源：{INSPIRATION_SOURCE.author} · <a href={`${import.meta.env.BASE_URL}inspiration-license.txt`} target="_blank" rel="noreferrer" className="underline hover:text-blue-600">许可与图片署名</a></span>
           <a href={INSPIRATION_SOURCE.url} target="_blank" rel="noreferrer" className="shrink-0 transition hover:text-blue-600">更多案例 ↗</a>
         </footer>
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null) }}>
-          <div ref={detailRef} role="dialog" aria-modal="true" aria-label={`${selected.title}提示词详情`} className="max-h-[88dvh] w-full overflow-y-auto rounded-t-[26px] border border-white/10 bg-white p-5 shadow-2xl dark:bg-gray-950 sm:max-w-2xl sm:rounded-[26px] sm:p-6">
+        <div className={page ? 'inspiration-page-detail' : 'fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-6'} onMouseDown={(event) => { if (!page && event.target === event.currentTarget) setSelected(null) }}>
+          <div ref={detailRef} tabIndex={page ? -1 : undefined} role={page ? 'region' : 'dialog'} aria-modal={page ? undefined : true} aria-label={`${selected.title}提示词详情`} className={page ? 'inspiration-page-detail-content' : 'max-h-[88dvh] w-full overflow-y-auto rounded-t-[26px] border border-white/10 bg-white p-5 shadow-2xl dark:bg-gray-950 sm:max-w-2xl sm:rounded-[26px] sm:p-6'}>
+            {page && <button type="button" onClick={() => setSelected(null)} className="inspiration-page-back"><ChevronLeftIcon className="h-4 w-4" />返回灵感列表</button>}
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="text-xs font-semibold text-blue-600">{selected.category}</span>
                 <h3 className="mt-1 text-xl font-bold text-gray-950 dark:text-white">{selected.title}</h3>
                 <p className="mt-1 text-sm text-gray-500">{selected.description}</p>
               </div>
-              <button autoFocus type="button" onClick={() => setSelected(null)} className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]" aria-label="关闭详情"><CloseIcon className="h-5 w-5" /></button>
+              {!page && <button autoFocus type="button" onClick={() => setSelected(null)} className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]" aria-label="关闭详情"><CloseIcon className="h-5 w-5" /></button>}
             </div>
             {!failedPreviews.includes(selected.id) && (
               <a href={`${import.meta.env.BASE_URL}${selected.previewImage}`} target="_blank" rel="noreferrer" className="mt-4 block rounded-xl bg-gray-50 dark:bg-white/[0.035]" aria-label={`查看${selected.title}示例大图`}>
@@ -189,7 +201,7 @@ export default function InspirationLibraryModal({ onClose }: InspirationLibraryM
           </div>
         </div>
       )}
-    </div>,
-    document.body,
+    </div>
   )
+  return page ? content : createPortal(content, document.body)
 }

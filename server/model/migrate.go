@@ -482,6 +482,9 @@ func migrationAfter(db *gorm.DB) error {
 		addExtraRatios(),
 		migrateTokenLimitsStructure(),
 		gouoCloudMillisecondMigration(),
+		{ID: "202610090001", Migrate: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&GouoDocument{})
+		}},
 	})
 	return m.Migrate()
 }

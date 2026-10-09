@@ -2,11 +2,24 @@ package controller
 
 import (
 	"net/http"
-	"one-api/model"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"one-api/model"
 )
+
+func refreshModelInfoPricing(c *gin.Context) bool {
+	// Agent 目录读取价格缓存中的能力信息，主节点不会定时重新加载该缓存。
+	if err := model.PricingInstance.Init(); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "模型信息已变更，但模型目录刷新失败：" + err.Error(),
+		})
+		return false
+	}
+	return true
+}
 
 func GetAllModelInfo(c *gin.Context) {
 	modelInfos, err := model.GetAllModelInfo()
@@ -74,6 +87,9 @@ func CreateModelInfo(c *gin.Context) {
 		})
 		return
 	}
+	if !refreshModelInfoPricing(c) {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -106,6 +122,9 @@ func UpdateModelInfo(c *gin.Context) {
 		})
 		return
 	}
+	if !refreshModelInfoPricing(c) {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -127,6 +146,9 @@ func DeleteModelInfo(c *gin.Context) {
 			"success": false,
 			"message": err.Error(),
 		})
+		return
+	}
+	if !refreshModelInfoPricing(c) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

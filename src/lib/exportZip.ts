@@ -1,9 +1,11 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 
-import type { AppSettings, ExportData, FavoriteCollection, StoredImage, StoredImageThumbnail, TaskRecord } from '../types'
+import type { AgentConversation, CanvasProject, AppSettings, ExportData, FavoriteCollection, StoredImage, StoredImageThumbnail, TaskRecord } from '../types'
 import { bytesToDataUrl, dataUrlToBytes } from './dataUrl'
 import { getNumberedFileNameBase, sanitizeFileNamePart } from './exportFileName'
 import { isRecord } from './storeInputNormalization'
+import { getDocumentImageIds } from './documentAssets'
+import { validateCanvasProject } from './canvas/document'
 
 type ZipFiles = Record<string, Uint8Array | [Uint8Array, { mtime: Date }]>
 
@@ -13,6 +15,8 @@ export interface BuildExportZipOptions {
 }
 
 export interface BuildExportZipParams {
+  canvasProjects?: CanvasProject[]
+  agentConversations?: AgentConversation[]
   options: BuildExportZipOptions
   exportedAt: number
   settings: AppSettings
@@ -74,12 +78,14 @@ export function buildExportZip(params: BuildExportZipParams) {
   }
 
   const manifest: ExportData = {
-    version: 3,
+    version: 4,
     exportedAt: exportedAtDate.toISOString(),
   }
 
   if (params.options.exportConfig) manifest.settings = params.settings
   if (params.options.exportTasks) {
+    manifest.canvasProjects = params.canvasProjects
+    manifest.agentConversations = params.agentConversations
     manifest.tasks = params.tasks
     manifest.favoriteCollections = params.favoriteCollections
     manifest.defaultFavoriteCollectionId = params.defaultFavoriteCollectionId
@@ -101,7 +107,7 @@ export function readExportZip(bytes: Uint8Array): ExportZipContents {
   if (!manifestBytes) throw new Error('ZIP 中缺少 manifest.json')
 
   const data: unknown = JSON.parse(strFromU8(manifestBytes))
-  if (!isRecord(data) || ![2, 3].includes(Number(data.version)) || typeof data.version !== 'number') throw new Error('不支持的备份版本，仅支持 ZIP 版本 2、3')
+  if (!isRecord(data) || ![2, 3, 4].includes(Number(data.version)) || typeof data.version !== 'number') throw new Error('不支持的备份版本，仅支持 ZIP 版本 2、3、4')
   if (data.exportedAt !== undefined && (typeof data.exportedAt !== 'string' || !Number.isFinite(Date.parse(data.exportedAt)))) throw new Error('备份导出时间无效')
   if (data.settings !== undefined && !isRecord(data.settings)) throw new Error('备份配置格式无效')
   if (data.tasks !== undefined && !Array.isArray(data.tasks)) throw new Error('备份任务列表格式无效')
@@ -136,6 +142,18 @@ export function readExportZip(bytes: Uint8Array): ExportZipContents {
     }
     for (const id of imageIds.filter(Boolean)) {
       if (!isRecord(data.imageFiles) || !Object.prototype.hasOwnProperty.call(data.imageFiles, id)) throw new Error(`任务 ${task.id} 缺少原图 ${id}`)
+    }
+  }
+  for (const key of ['canvasProjects', 'agentConversations']) {
+    if (data[key] === undefined) continue
+    if (!Array.isArray(data[key])) throw new Error('备份文档列表无效')
+    const ids = new Set<string>()
+    for (const doc of data[key]) {
+      if (!isRecord(doc) || typeof doc.id !== 'string' || !doc.id || ids.has(doc.id) || doc.schemaVersion !== 1 || typeof doc.title !== 'string' || !Number.isSafeInteger(doc.revision) || !Number.isFinite(doc.createdAt) || !Number.isFinite(doc.updatedAt)) throw new Error('备份文档字段无效或重复')
+      ids.add(doc.id)
+      if (key === 'canvasProjects') validateCanvasProject(doc)
+      else if (!Array.isArray(doc.messages) || typeof doc.modelId !== 'string' || !Array.isArray(doc.referenceImageIds) || doc.messages.some((message) => !isRecord(message) || typeof message.id !== 'string' || typeof message.content !== 'string' || !['user', 'assistant', 'tool'].includes(String(message.role)))) throw new Error('备份会话格式无效')
+      for (const id of getDocumentImageIds(doc)) if (!isRecord(data.imageFiles) || !data.imageFiles[id]) throw new Error(`文档缺少原图 ${id}`)
     }
   }
   if (data.favoriteCollections !== undefined && (!Array.isArray(data.favoriteCollections) || data.favoriteCollections.some((collection) => !isRecord(collection) || typeof collection.id !== 'string' || !collection.id || typeof collection.name !== 'string' || !collection.name.trim()))) throw new Error('备份收藏夹格式无效')

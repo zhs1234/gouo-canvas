@@ -1,4 +1,5 @@
-import { defineConfig, loadEnv } from 'vite'
+import { loadEnv } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'fs'
 import { normalizeDevProxyConfig } from './src/lib/devProxy'
@@ -41,7 +42,8 @@ export default defineConfig(({ command, mode }) => {
   if (gouoBackendTarget) {
     const backendProxy = {
       target: gouoBackendTarget,
-      changeOrigin: true,
+      // 保留浏览器 Host（含端口），供后端与 Origin 核对同源请求。
+      changeOrigin: false,
       secure: false,
     }
     proxy['/api'] = backendProxy
@@ -51,6 +53,10 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: [react()],
+    test: {
+      include: ['src/**/*.test.{ts,tsx,mjs}'],
+      env: { VITE_GOUO_BACKEND_ENABLED: 'false', VITE_SHOW_DEFAULT_CONFIG_ONLY: 'false', VITE_DEFAULT_API_URL: '', VITE_API_PROXY_AVAILABLE: 'false' },
+    },
     base: './',
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
@@ -58,6 +64,8 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       host: true,
+      // 后端运行文件和数据库不参与前端热更新，Windows 文件锁会让监听进程退出。
+      watch: { ignored: ['**/artifacts/**', '**/server/data/**'] },
       proxy: Object.keys(proxy).length ? proxy : undefined,
     },
   }

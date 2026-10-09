@@ -9,21 +9,13 @@ import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { CloseIcon, RefreshIcon, UserIcon } from './icons'
 import ImageBillingRecords from './ImageBillingRecords'
 import { copyTextToClipboard } from '../lib/clipboard'
+import { formatCNY, getUsageDisplay } from '../lib/accountUsage'
+import { createLatestRequest } from '../lib/latestRequest'
+import TurnstileChallenge from './TurnstileChallenge'
 
 interface UserCenterModalProps {
   initialSection?: 'overview' | 'topup' | 'logs' | 'security'
   onClose: () => void
-}
-
-function formatCNY(value?: number) {
-  return `¥${Math.max(0, value ?? 0).toFixed(2)}`
-}
-
-function getLogAmount(log: GouoUsageLog, rate: number) {
-  const price = log.metadata?.price_cny
-  return (log.metadata?.billing_unit === 'successful_request' || log.metadata?.billing_unit === 'refunded_request') && typeof price === 'number' && Number.isFinite(price) && price > 0
-    ? price
-    : (log.quota ?? 0) * rate
 }
 
 function formatDate(timestamp?: number) {
@@ -39,15 +31,11 @@ function formatTime(timestamp: number) {
   return new Date(timestamp * 1000).toLocaleString('zh-CN', { hour12: false })
 }
 
-function getLogLabel(type: number) {
-  if (type === 1) return '额度充值'
-  if (type === 2) return '图片生成'
-  if (type === 3) return '额度调整'
-  return '账户记录'
-}
-
 export default function UserCenterModal({ initialSection = 'overview', onClose }: UserCenterModalProps) {
   const scrollBoundaryRef = useRef<HTMLDivElement>(null)
+  const userRequest = useRef(createLatestRequest())
+  const logsRequest = useRef(createLatestRequest())
+  const statusRequest = useRef(createLatestRequest())
   const [user, setUser] = useState<GouoUser | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(true)
@@ -59,6 +47,10 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [redeemMessage, setRedeemMessage] = useState('')
   const [logs, setLogs] = useState<GouoUsageLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  const [logsError, setLogsError] = useState('')
+  const [userError, setUserError] = useState('')
+  const [statusError, setStatusError] = useState('')
+  const [statusLoading, setStatusLoading] = useState(true)
   const [logsPage, setLogsPage] = useState(1)
   const [logsTotal, setLogsTotal] = useState(0)
   const [logModel, setLogModel] = useState('')
@@ -66,6 +58,10 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [logStart, setLogStart] = useState('')
   const [logEnd, setLogEnd] = useState('')
   const [emailService, setEmailService] = useState(false)
+  const [turnstileEnabled, setTurnstileEnabled] = useState(false)
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState('')
+  const [turnstileReset, setTurnstileReset] = useState(0)
   const [redemptionHelp, setRedemptionHelp] = useState('')
   const [supportContact, setSupportContact] = useState('')
   const [supportCopied, setSupportCopied] = useState(false)
@@ -77,6 +73,8 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const [tokenRefreshError, setTokenRefreshError] = useState('')
+  const [refreshingToken, setRefreshingToken] = useState(false)
   const [error, setError] = useState('')
   const sync = useCloudSyncSnapshot()
   let supportUrl = ''
@@ -90,48 +88,51 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
 
   const loadUser = useCallback(async () => {
     setLoading(true)
-    setError('')
-    try {
-      const currentUser = await getCurrentUser()
+    setUserError('')
+    await userRequest.current.run(getCurrentUser, (currentUser) => {
       setUser(currentUser)
       setDisplayName(currentUser.display_name ?? '')
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError))
-    } finally {
-      setLoading(false)
-    }
+    }, (err) => setUserError(err instanceof Error ? err.message : String(err)), () => setLoading(false))
+  }, [])
+
+  const loadStatus = useCallback(async () => {
+    setStatusLoading(true)
+    setStatusError('')
+    await statusRequest.current.run(getBackendStatus, (status) => {
+      setEmailService(Boolean(status.email_service))
+      setTurnstileEnabled(Boolean(status.turnstile_check))
+      setTurnstileSiteKey(status.turnstile_site_key ?? '')
+      setRedemptionHelp(typeof status.gouo_redemption_help === 'string' ? status.gouo_redemption_help : '')
+      setSupportContact(typeof status.gouo_support_contact === 'string' ? status.gouo_support_contact : '')
+    }, (err) => setStatusError(err instanceof Error ? err.message : String(err)), () => setStatusLoading(false))
   }, [])
 
   useEffect(() => {
     void loadUser()
-    void getBackendStatus().then((status) => {
-      setEmailService(Boolean(status.email_service))
-      setRedemptionHelp(typeof status.gouo_redemption_help === 'string' ? status.gouo_redemption_help : '')
-      setSupportContact(typeof status.gouo_support_contact === 'string' ? status.gouo_support_contact : '')
-    }).catch((err) => console.warn('读取账号服务说明失败', err))
-  }, [loadUser])
+    void loadStatus()
+    const requests = [userRequest.current, logsRequest.current, statusRequest.current]
+    return () => { for (const request of requests) request.invalidate() }
+  }, [loadUser, loadStatus])
 
   const loadLogs = useCallback(async () => {
     setLogsLoading(true)
-    setError('')
-    try {
-      const result = await getUsageLogs(logsPage, 20, {
+    setLogsError('')
+    setLogs([])
+    await logsRequest.current.run(() => getUsageLogs(logsPage, 20, {
         model: logModel.trim() || undefined,
         type: logType || undefined,
         start: logStart ? Math.floor(new Date(`${logStart}T00:00:00`).getTime() / 1000) : undefined,
         end: logEnd ? Math.floor(new Date(`${logEnd}T23:59:59`).getTime() / 1000) : undefined,
-      })
+      }), (result) => {
       setLogs(result.data)
       setLogsTotal(result.total_count)
-    } catch (logsError) {
-      setError(logsError instanceof Error ? logsError.message : String(logsError))
-    } finally {
-      setLogsLoading(false)
-    }
+    }, (err) => setLogsError(err instanceof Error ? err.message : String(err)), () => setLogsLoading(false))
   }, [logEnd, logModel, logStart, logType, logsPage])
 
   useEffect(() => {
     if (activeSection === 'logs') void loadLogs()
+    const request = logsRequest.current
+    return () => request.invalidate()
   }, [activeSection, loadLogs])
 
   const handleSave = async (event: FormEvent) => {
@@ -170,12 +171,26 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
     try {
       const quota = await redeemCode(redemptionCode)
       setRedemptionCode('')
-      setRedeemMessage(`充值成功，已增加 ${formatCNY(quota * (user?.quota_cny_rate ?? 0))}`)
+      const rate = user?.quota_cny_rate
+      setRedeemMessage(typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? `充值成功，已增加 ${formatCNY(quota * rate)}` : `充值成功，已增加 ${quota.toLocaleString('zh-CN')} 额度，人民币折算暂不可用`)
       await loadUser()
     } catch (redeemError) {
       setError(redeemError instanceof Error ? redeemError.message : String(redeemError))
     } finally {
       setRedeeming(false)
+    }
+  }
+
+  const refreshRelayToken = async () => {
+    setRefreshingToken(true)
+    setTokenRefreshError('')
+    try {
+      const settings = await createBackendSettings(true)
+      useStore.getState().setSettings(settings)
+    } catch (refreshError) {
+      setTokenRefreshError(refreshError instanceof Error ? refreshError.message : String(refreshError))
+    } finally {
+      setRefreshingToken(false)
     }
   }
 
@@ -189,11 +204,11 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
     setError('')
     try {
       await updatePassword(currentPassword, newPassword)
-      await createBackendSettings(true)
       useStore.getState().showToast('密码已修改', 'success')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
+      await refreshRelayToken()
     } catch (passwordError) {
       setError(passwordError instanceof Error ? passwordError.message : String(passwordError))
     } finally {
@@ -206,12 +221,16 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
     setSendingEmail(true)
     setError('')
     try {
-      await sendEmailVerification(bindEmailValue.trim())
+      if (statusLoading || statusError) throw new Error('请先成功加载账号服务配置')
+      if (turnstileEnabled && !turnstileToken) throw new Error('请先完成安全验证')
+      await sendEmailVerification(bindEmailValue.trim(), turnstileToken)
       useStore.getState().showToast('验证码已发送，请检查邮箱', 'success')
     } catch (emailError) {
       setError(emailError instanceof Error ? emailError.message : String(emailError))
     } finally {
       setSendingEmail(false)
+      setTurnstileToken('')
+      setTurnstileReset((value) => value + 1)
     }
   }
 
@@ -235,7 +254,10 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [
       ['时间', '类型', '模型', '金额', '计费单位', '单价', '实际扣费额度', '退款额度', '耗时', 'Request ID', '内容'],
-      ...logs.map((log) => [formatTime(log.created_at), log.metadata?.billing_status === 'refunded' ? '图片退款' : getLogLabel(log.type), log.model_name || '', getLogAmount(log, user?.quota_cny_rate ?? 0).toFixed(2), log.metadata?.billing_unit === 'successful_request' ? '次成功请求' : log.metadata?.billing_unit === 'refunded_request' ? '次退款请求' : '额度折合', log.metadata?.price_cny ?? '', log.metadata?.charged_quota ?? (log.type === 2 ? log.quota : 0), log.metadata?.billing_status === 'refunded' ? log.quota : 0, log.request_time || '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']),
+      ...logs.map((log) => {
+        const display = getUsageDisplay(log, user?.quota_cny_rate)
+        return [formatTime(log.created_at), display.label, log.model_name || '', display.delta === null ? '金额不可用' : display.delta.toFixed(2), display.unit, log.metadata?.price_cny ?? '', log.metadata?.charged_quota ?? (log.type === 2 ? log.quota : ''), log.metadata?.billing_status === 'refunded' ? log.quota : '', log.request_time ?? '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']
+      }),
     ]
     const blob = new Blob([`\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -281,7 +303,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                     <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600 dark:bg-blue-500/10 dark:text-blue-300">光构用户</span>
                   </div>
                   <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">@{user.username}{user.email ? ` · ${user.email}` : ''}</p>
-                  <p className="mt-2 text-xs text-gray-400">用户 ID {user.id} · 累计生成 {(user.request_count ?? 0).toLocaleString('zh-CN')} 次 · 加入于 {formatDate(user.created_time)}</p>
+                  <p className="mt-2 text-xs text-gray-400">用户 ID {user.id} · 累计请求 {user.request_count?.toLocaleString('zh-CN') ?? '—'} 次 · 加入于 {formatDate(user.created_time)}</p>
                 </div>
                 <button type="button" onClick={() => void loadUser()} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-sm font-medium text-gray-600 transition hover:border-blue-200 hover:text-blue-600 disabled:cursor-wait disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
                   <RefreshIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -293,7 +315,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                 <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 p-5 text-white shadow-lg shadow-blue-500/15">
                   <p className="text-sm text-white/70">账户余额</p>
                   <p className="mt-3 text-2xl font-bold tracking-tight">{formatCNY(user.balance_cny)}</p>
-                  <p className="mt-1 text-xs text-white/55">人民币余额</p>
+                  <p className="mt-1 text-xs text-white/55">{typeof user.balance_cny === 'number' && Number.isFinite(user.balance_cny) ? '人民币余额' : '余额暂不可用，请刷新账户'}</p>
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">累计消费</p>
@@ -307,8 +329,8 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">云端空间</p>
-                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{sync.storage ? `${(sync.storage.used_bytes / 1024 ** 2).toFixed(0)} MB` : '—'}</p>
-                  <p className="mt-1 text-xs text-gray-400">{sync.storage ? `共 ${(sync.storage.quota_bytes / 1024 ** 3).toFixed(0)} GB` : '正在读取存储状态'}</p>
+                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{sync.storage?.enabled === false ? '未开启' : sync.storage?.enabled ? `${(sync.storage.used_bytes / 1024 ** 2).toFixed(0)} MB` : '—'}</p>
+                  <p className="mt-1 text-xs text-gray-400">{sync.storage?.enabled === false ? '作品保存在当前浏览器' : sync.storage?.enabled ? `共 ${(sync.storage.quota_bytes / 1024 ** 3).toFixed(0)} GB` : '存储状态暂不可用'}</p>
                 </div>
               </section>
 
@@ -363,10 +385,10 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-white/[0.08]">
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">使用记录</p>
-                      <p className="mt-1 text-xs text-gray-400">共 {logsTotal.toLocaleString('zh-CN')} 条记录，每页 20 条</p>
+                      <p className="mt-1 text-xs text-gray-400">{logsLoading ? '正在读取记录' : logsError ? '记录读取失败' : `共 ${logsTotal.toLocaleString('zh-CN')} 条记录，每页 20 条`}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={exportLogs} disabled={!logs.length} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:text-blue-600 disabled:opacity-40 dark:border-white/10">导出 CSV</button>
+                      <button type="button" onClick={exportLogs} disabled={logsLoading || Boolean(logsError) || !logs.length} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:text-blue-600 disabled:opacity-40 dark:border-white/10">导出本页 CSV</button>
                       <button type="button" onClick={() => void loadLogs()} disabled={logsLoading} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-blue-500 disabled:cursor-wait dark:hover:bg-white/[0.06]" aria-label="刷新使用记录">
                         <RefreshIcon className={`h-4 w-4 ${logsLoading ? 'animate-spin' : ''}`} />
                       </button>
@@ -377,7 +399,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                     <select value={logType} onChange={(event) => { setLogType(Number(event.target.value)); setLogsPage(1) }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900">
                       <option value={0}>全部类型</option>
                       <option value={1}>额度充值</option>
-                      <option value={2}>图片生成</option>
+                      <option value={2}>模型消费</option>
                       <option value={3}>额度调整</option>
                     </select>
                     <input type="date" value={logStart} max={logEnd || undefined} onChange={(event) => { setLogStart(event.target.value); setLogsPage(1) }} aria-label="开始日期" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900" />
@@ -385,13 +407,15 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                   </div>
                   {logsLoading ? (
                     <div className="py-10 text-center text-sm text-gray-400">正在读取使用记录…</div>
+                  ) : logsError ? (
+                    <div role="alert" className="space-y-3 px-5 py-8 text-sm text-red-600 dark:text-red-400"><p>{logsError}</p><button type="button" onClick={() => void loadLogs()} className="underline">重新读取使用记录</button></div>
                   ) : logs.length ? (
                     <div className="divide-y divide-gray-100 dark:divide-white/[0.06]">
                       {logs.map((log, index) => (
                         <div key={`${log.created_at}-${index}`} className="grid gap-2 px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{log.metadata?.billing_status === 'refunded' ? '图片退款' : getLogLabel(log.type)}</span>
+                              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{getUsageDisplay(log, user.quota_cny_rate).label}</span>
                               {log.model_name && <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{log.model_name}</span>}
                             </div>
                             <p className="mt-1 truncate text-xs text-gray-400">{formatTime(log.created_at)}{log.content ? ` · ${log.content}` : ''}</p>
@@ -399,7 +423,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                             {log.metadata?.billing_unit === 'successful_request' && <p className="mt-1 text-xs text-gray-400">单价 ¥{String(log.metadata.price_cny)}/次成功请求</p>}
                           </div>
                           <div className="text-left sm:text-right">
-                            <p className={`text-sm font-semibold ${log.type === 1 || log.metadata?.billing_status === 'refunded' ? 'text-emerald-500' : 'text-gray-700 dark:text-gray-300'}`}>{log.type === 1 || log.metadata?.billing_status === 'refunded' ? '+' : '-'}{formatCNY(getLogAmount(log, user.quota_cny_rate ?? 0))}</p>
+                            <p className={`text-sm font-semibold ${(getUsageDisplay(log, user.quota_cny_rate).delta ?? 0) > 0 ? 'text-emerald-500' : 'text-gray-700 dark:text-gray-300'}`}>{getUsageDisplay(log, user.quota_cny_rate).amountText}</p>
                             {log.request_time ? <p className="mt-1 text-xs text-gray-400">{log.request_time} ms</p> : null}
                           </div>
                         </div>
@@ -410,8 +434,8 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                   )}
                   <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-xs dark:border-white/[0.08]">
                     <button type="button" disabled={logsPage <= 1 || logsLoading} onClick={() => setLogsPage((page) => Math.max(1, page - 1))} className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-35 dark:border-white/10">上一页</button>
-                    <span className="text-gray-400">第 {logsPage} / {Math.max(1, Math.ceil(logsTotal / 20))} 页</span>
-                    <button type="button" disabled={logsPage * 20 >= logsTotal || logsLoading} onClick={() => setLogsPage((page) => page + 1)} className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-35 dark:border-white/10">下一页</button>
+                    <span className="text-gray-400">{logsError ? '分页信息不可用' : `第 ${logsPage} / ${Math.max(1, Math.ceil(logsTotal / 20))} 页`}</span>
+                    <button type="button" disabled={logsPage * 20 >= logsTotal || logsLoading || Boolean(logsError)} onClick={() => setLogsPage((page) => page + 1)} className="rounded-lg border border-gray-200 px-3 py-1.5 disabled:opacity-35 dark:border-white/10">下一页</button>
                   </div>
                 </section>
               )}
@@ -422,7 +446,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                     <p className="font-semibold text-gray-900 dark:text-white">修改密码</p>
                     <p className="mt-1 text-xs text-gray-400">修改后会自动刷新当前设备的生图令牌。</p>
                     <div className="mt-4 space-y-3">
-                      <input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="当前密码" minLength={8} maxLength={20} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
+                      <input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="当前密码" required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
                       <input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" autoComplete="new-password" placeholder="新密码（8–20 个字符）" minLength={8} maxLength={20} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
                       <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" placeholder="再次输入新密码" minLength={8} maxLength={20} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
                       <button type="submit" disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword} className="w-full rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">{changingPassword ? '修改中…' : '修改密码'}</button>
@@ -431,14 +455,15 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
 
                   <form onSubmit={handleBindEmail} className="rounded-2xl border border-gray-100 p-5 dark:border-white/[0.08]">
                     <p className="font-semibold text-gray-900 dark:text-white">绑定邮箱</p>
-                    <p className="mt-1 text-xs text-gray-400">{user.email ? `当前邮箱：${user.email}` : emailService ? '绑定后可使用邮箱找回密码。' : '管理员尚未配置邮件服务。'}</p>
+                    <p className="mt-1 text-xs text-gray-400">{user.email ? `当前邮箱：${user.email}` : statusLoading ? '正在读取邮件服务配置…' : statusError ? '邮件服务状态暂不可用，请重新加载配置。' : emailService ? '绑定后可使用邮箱找回密码。' : '管理员尚未配置邮件服务。'}</p>
                     <div className="mt-4 space-y-3">
-                      <input value={bindEmailValue} onChange={(event) => setBindEmailValue(event.target.value)} type="email" autoComplete="email" placeholder="邮箱地址" disabled={!emailService} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04]" />
+                      {!statusLoading && !statusError && turnstileEnabled && <TurnstileChallenge siteKey={turnstileSiteKey} resetKey={turnstileReset} onToken={setTurnstileToken} />}
+                      <input value={bindEmailValue} onChange={(event) => { setBindEmailValue(event.target.value); setEmailCode('') }} type="email" autoComplete="email" placeholder="邮箱地址" disabled={!emailService || sendingEmail || bindingEmail} required className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04]" />
                       <div className="flex gap-2">
                         <input value={emailCode} onChange={(event) => setEmailCode(event.target.value)} inputMode="numeric" placeholder="邮箱验证码" disabled={!emailService} required className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04]" />
-                        <button type="button" onClick={() => void handleSendEmail()} disabled={!emailService || sendingEmail || !bindEmailValue.trim()} className="rounded-xl border border-blue-200 px-3 text-xs font-medium text-blue-600 disabled:opacity-40 dark:border-blue-500/30 dark:text-blue-300">{sendingEmail ? '发送中…' : '发送验证码'}</button>
+                        <button type="button" onClick={() => void handleSendEmail()} disabled={!emailService || statusLoading || Boolean(statusError) || sendingEmail || bindingEmail || !bindEmailValue.trim() || (turnstileEnabled && !turnstileToken)} className="rounded-xl border border-blue-200 px-3 text-xs font-medium text-blue-600 disabled:opacity-40 dark:border-blue-500/30 dark:text-blue-300">{sendingEmail ? '发送中…' : '发送验证码'}</button>
                       </div>
-                      <button type="submit" disabled={!emailService || bindingEmail || !emailCode.trim()} className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{bindingEmail ? '绑定中…' : user.email ? '更换邮箱' : '绑定邮箱'}</button>
+                      <button type="submit" disabled={!emailService || sendingEmail || bindingEmail || !emailCode.trim()} className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{bindingEmail ? '绑定中…' : user.email ? '更换邮箱' : '绑定邮箱'}</button>
                     </div>
                   </form>
                 </section>
@@ -463,10 +488,13 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
           ) : null}
 
           {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
+          {tokenRefreshError && <div role="alert" className="space-y-2 rounded-xl border border-amber-200 p-4 text-sm text-amber-700 dark:border-amber-500/20 dark:text-amber-300"><p>密码已修改，但创作凭据刷新失败：{tokenRefreshError}。请勿重复修改密码，可重新刷新凭据。</p><button type="button" onClick={() => void refreshRelayToken()} disabled={refreshingToken} className="underline">{refreshingToken ? '正在刷新…' : '重新刷新创作凭据'}</button></div>}
+          {userError && <div role="alert" className="space-y-2 rounded-xl border border-red-200 p-4 text-sm text-red-600 dark:border-red-500/20 dark:text-red-300"><p>账户信息读取失败：{userError}</p><button type="button" onClick={() => void loadUser()} disabled={loading} className="underline">重新读取账户</button></div>}
+          {statusError && <div role="alert" className="space-y-2 rounded-xl border border-red-200 p-4 text-sm text-red-600 dark:border-red-500/20 dark:text-red-300"><p>账号服务配置读取失败：{statusError}</p><button type="button" onClick={() => void loadStatus()} disabled={statusLoading} className="underline">重新加载配置</button></div>}
 
           <section className="rounded-xl border border-gray-100 p-4 text-sm dark:border-white/10" aria-label="充值与账务帮助">
             <p className="font-medium text-gray-800 dark:text-gray-200">充值与账务帮助</p>
-            <p className="mt-2 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">{supportContact || '客服联系方式暂未配置。'}</p>
+            <p className="mt-2 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">{statusLoading ? '正在读取客服信息…' : statusError ? '客服信息暂不可用，请重新加载账号服务配置。' : supportContact || '客服联系方式暂未配置。'}</p>
             {supportContact && <div className="mt-3 flex flex-wrap items-center gap-4">
               {supportUrl && <a href={supportUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline dark:text-blue-400">打开客服链接</a>}
               <button type="button" className="text-blue-600 underline dark:text-blue-400" onClick={async () => {

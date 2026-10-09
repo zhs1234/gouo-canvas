@@ -315,6 +315,7 @@ export default function TaskGrid() {
                   type="button"
                   onClick={() => {
                     useStore.getState().setPrompt(item.prompt)
+                    window.dispatchEvent(new Event('gouo:open-creation'))
                     window.setTimeout(() => document.querySelector<HTMLElement>('[contenteditable="true"]')?.focus(), 0)
                   }}
                   className="group rounded-xl border border-gray-200 bg-white px-4 py-3 transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md hover:shadow-blue-900/5 dark:border-white/[0.08] dark:bg-white/[0.035] dark:hover:border-blue-500/30"

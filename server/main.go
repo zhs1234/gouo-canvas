@@ -3,7 +3,6 @@ package main
 import (
 	"embed"
 	"fmt"
-	"net/http"
 	"one-api/cli"
 	"one-api/common"
 	"one-api/common/cache"
@@ -131,19 +130,17 @@ func initHttpServer() {
 	}
 
 	store := cookie.NewStore([]byte(config.SessionSecret))
-	store.Options(sessions.Options{
-		Path:     "/",
-		MaxAge:   2592000, // 30 days
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
-	})
+	policy, err := middleware.LoadBrowserPolicy()
+	if err != nil {
+		logger.FatalLog("invalid browser security configuration: " + err.Error())
+	}
+	store.Options(policy.Cookie)
 	server.Use(sessions.Sessions("session", store))
 
 	router.SetRouter(server, buildFS, indexPage)
 	port := viper.GetString("port")
 
-	err := server.Run(":" + port)
+	err = server.Run(":" + port)
 	if err != nil {
 		logger.FatalLog("failed to start HTTP server: " + err.Error())
 	}

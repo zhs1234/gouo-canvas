@@ -152,6 +152,12 @@ func TestGouoTaskHideAndRestore(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, hidden, 1)
 	require.Greater(t, hidden[0].HiddenAt, int64(0))
+	// 其他设备重新上传同一作品不能把回收站中的作品恢复。
+	reupload := GouoTask{ID: "task-new", UserID: 1, ClientTaskID: "client-a", SchemaVersion: 1, Status: "error", Operation: "generation", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`), CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, UpsertGouoTask(&reupload, nil, nil))
+	hidden, err = ListGouoTasks(1, true, 0, "", 10)
+	require.NoError(t, err)
+	require.Len(t, hidden, 1)
 
 	require.NoError(t, SetGouoTaskHidden(1, task.ID, false))
 	visible, err := ListGouoTasks(1, false, 0, "", 10)

@@ -67,3 +67,7 @@ export function shouldReloadForStorageScopeChange(event: StorageEvent): boolean 
   if (!backendAuthEnabled) return false
   return readActiveUserId() !== loadedUserId
 }
+
+export function isStorageScopeCurrent(): boolean {
+  return !backendAuthEnabled || readActiveUserId() === loadedUserId
+}

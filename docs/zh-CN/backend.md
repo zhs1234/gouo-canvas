@@ -49,6 +49,16 @@ VITE_GOUO_IMAGE_MODEL=gpt-image-2
 
 本地 Vite 和生产 Nginx 都应保持同一路由语义：`/api` 负责账号与作品库，`/v1` 负责模型中继。生产环境优先同域部署；只有明确需要跨域时才设置 `VITE_GOUO_BACKEND_URL`，并同时正确配置 Cookie、CORS 和 HTTPS。
 
+同域默认使用 `HttpOnly; SameSite=Strict` 会话。若前端为 `https://app.example.com`、后端为独立站点，前端构建时设置 `VITE_GOUO_BACKEND_URL=https://api.example.net`，后端设置：
+
+```dotenv
+GOUO_ALLOWED_ORIGINS=https://app.example.com
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_SAME_SITE=none
+```
+
+来源必须是精确的 `http(s)://主机[:端口]`，多个以逗号分隔，不带末尾斜杠、路径或通配符；错误配置会阻止启动。`none` 必须同时启用 Secure 和来源名单。反向代理应覆盖并正确传递 `Host`、`X-Forwarded-Proto`，且 HTTPS 必须贯穿浏览器入口。账号 API 的跨域凭据仅授予名单中的来源；无 Origin 的跨站请求会被拒绝，`none` 模式下携带会话的无 Origin 请求必须有 `Sec-Fetch-Site: same-origin`，只有已有 state 校验的 GitHub/Lark/OIDC GET 回调例外。浏览器禁用第三方 Cookie 时仍应改用同域代理。Compose 已传递这三个环境变量，YAML 对应小写同名配置。
+
 ## 3. 首次管理后台配置
 
 管理后台由后端提供，默认地址为 `http://127.0.0.1:3000/panel`。空数据库首次启动会创建 `root` / `123456`，必须在开放网络访问前修改。
@@ -64,7 +74,9 @@ VITE_GOUO_IMAGE_MODEL=gpt-image-2
 7. 若计划使用在线支付，完成支付渠道、回调验签、异常订单和对账测试后再开放入口。
 8. 在“运营 → 光构存储”确认资产目录可写并检查用户空间。
 
-注册页支持用户名和密码，并会根据后端状态显示邮箱验证码相关字段。若管理员强制启用额外验证码或 OAuth 流程，必须先确认光构登录/注册页已经提供对应参数。
+注册页按后端状态显示邮箱验证码和 Cloudflare Turnstile；状态加载失败时显示重试，不会略过必需验证。后台设置 `TurnstileCheckEnabled`、`TurnstileSiteKey`、`TurnstileSecretKey`，并在 Cloudflare 配置实际前端域名。公开 site key 用于注册、发送邮箱验证码、发送密码重置邮件和用户中心绑定邮箱的验证组件，secret key 只留在服务端；过期或失败可以重试，提交后刷新挑战。自定义 CSP 需允许 `https://challenges.cloudflare.com` 的脚本和 frame。令牌随请求交给后端现有 Siteverify 中间件校验，不能只信任前端成功回调。参见 [客户端接入](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/) 和 [服务端校验](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)。OAuth 登录入口尚不属于光构公开登录页。
+
+Turnstile 保留既有后端会话策略：首次校验成功会在 session 写入 `turnstile=true`，同一会话后续请求可复用这一验证状态，不会逐次调用 Siteverify。前端每次请求后刷新 token 并不改变该服务端策略。
 
 ## 4. 按模型图片计费
 

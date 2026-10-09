@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getImageCharges, type GouoImageCharge } from '../lib/gouoBackend'
+import { createLatestRequest } from '../lib/latestRequest'
 
 const labels = { reserved: '已预扣，尚未发送', dispatched: '生成中，已预扣', needs_review: '结果待核对', settled: '已结算', refunded: '已退款' }
 
 export default function ImageBillingRecords() {
+  const request = useRef(createLatestRequest())
   const [rows, setRows] = useState<GouoImageCharge[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
@@ -12,17 +14,17 @@ export default function ImageBillingRecords() {
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
-    try {
-      const result = await getImageCharges(page)
+    setRows([])
+    await request.current.run(() => getImageCharges(page), (result) => {
       setRows(result.data || [])
       setTotal(result.total_count)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
+    }, (err) => setError(err instanceof Error ? err.message : String(err)), () => setLoading(false))
   }, [page])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    const current = request.current
+    return () => current.invalidate()
+  }, [load])
 
   return (
     <details className="border-b border-gray-100 px-5 py-4 dark:border-white/10" open>
@@ -40,8 +42,8 @@ export default function ImageBillingRecords() {
       {!loading && !error && !rows.length && <p className="mt-3 text-xs text-gray-500">暂无图片请求记录</p>}
       <div className="mt-3 flex items-center justify-between text-xs">
         <button type="button" disabled={page <= 1 || loading} onClick={() => setPage(page - 1)} className="disabled:opacity-35">上一页请求</button>
-        <span>{page} / {Math.max(1, Math.ceil(total / 20))}</span>
-        <button type="button" disabled={page * 20 >= total || loading} onClick={() => setPage(page + 1)} className="disabled:opacity-35">下一页请求</button>
+        <span>{error ? '分页信息不可用' : `${page} / ${Math.max(1, Math.ceil(total / 20))}`}</span>
+        <button type="button" disabled={page * 20 >= total || loading || Boolean(error)} onClick={() => setPage(page + 1)} className="disabled:opacity-35">下一页请求</button>
       </div>
     </details>
   )

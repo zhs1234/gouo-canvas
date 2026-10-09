@@ -39,7 +39,7 @@ describe('userGuidance', () => {
       const guidance = getActionableErrorMessage(message, true)
       expect(guidance).toContain('图片请求状态')
       expect(guidance).toContain('不代表已退款')
-      expect(guidance).toContain('新建一次付费请求')
+      expect(guidance).toContain('新建付费请求，多张图片分别计费')
       expect(guidance).not.toContain('稍后点击任务上的“重试”')
     }
     expect(getActionableErrorMessage('图片添加失败：Failed to fetch')).not.toContain('付费请求')

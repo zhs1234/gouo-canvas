@@ -6,6 +6,7 @@ import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import type { UserCenterSection } from '../lib/userGuidance'
 import ViewportTooltip from './ViewportTooltip'
+import AccountBalance from './AccountBalance'
 import { useFavoriteCollectionTitle } from './favorites/useFavoriteCollectionTitle'
 import { HelpCircleIcon, InstallIcon, SettingsIcon, SparklesIcon, UserIcon } from './icons'
 
@@ -23,7 +24,7 @@ function isInstalledPwa() {
   return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true
 }
 
-export default function Header() {
+export default function Header({ compact = false }: { compact?: boolean }) {
   const setShowSettings = useStore((s) => s.setShowSettings)
   const setConfirmDialog = useStore((s) => s.setConfirmDialog)
   const filterFavorite = useStore((s) => s.filterFavorite)
@@ -111,9 +112,9 @@ export default function Header() {
 
   return (
     <>
-      <header data-no-drag-select className="safe-area-top fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur border-b border-gray-200 dark:border-white/[0.08]">
+      <header data-no-drag-select className={compact ? 'workspace-header' : 'safe-area-top fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur border-b border-gray-200 dark:border-white/[0.08]'}>
         <div className="safe-area-x safe-header-inner max-w-7xl mx-auto flex items-center justify-between relative">
-          <div className="flex-1 min-w-0 pr-2 flex items-center gap-2">
+          <div className={compact ? 'hidden' : 'flex-1 min-w-0 pr-2 flex items-center gap-2'}>
             <h1 className="inline-flex min-w-0 items-start relative mr-2">
               {showFavoriteCollectionTitle ? (
                 <>
@@ -132,7 +133,7 @@ export default function Header() {
               )}
             </h1>
           </div>
-          {showFavoriteCollectionTitle && (
+          {!compact && showFavoriteCollectionTitle && (
             <div className="absolute left-1/2 top-1/2 hidden max-w-[30%] -translate-x-1/2 -translate-y-1/2 sm:flex">
               <div className="truncate rounded px-2 py-1 text-sm font-semibold text-gray-700 dark:text-gray-300" title={favoriteCollectionTitle}>
                 {favoriteCollectionTitle}
@@ -140,7 +141,12 @@ export default function Header() {
             </div>
           )}
           <div className="flex items-center gap-1 shrink-0">
-            <div className="relative" {...inspirationTooltip.handlers}>
+            {compact && isBackendAuthEnabled() && <AccountBalance refreshKey={showUserCenter} onClick={() => {
+              dismissAllTooltips()
+              setUserCenterSection('overview')
+              setShowUserCenter(true)
+            }} />}
+            {!compact && <div className="relative" {...inspirationTooltip.handlers}>
               <button
                 type="button"
                 onClick={() => {
@@ -154,7 +160,7 @@ export default function Header() {
                 <span className="hidden text-sm font-medium lg:inline">灵感</span>
               </button>
               <ViewportTooltip visible={inspirationTooltip.visible} className="whitespace-nowrap">灵感库</ViewportTooltip>
-            </div>
+            </div>}
             {isBackendAuthEnabled() && (
               <div className="relative" {...userCenterTooltip.handlers}>
                 <button
@@ -193,7 +199,7 @@ export default function Header() {
                 </ViewportTooltip>
               </div>
             )}
-            <div
+            {!compact && <div
               className="relative"
               {...helpTooltip.handlers}
             >
@@ -210,8 +216,8 @@ export default function Header() {
               <ViewportTooltip visible={helpTooltip.visible} className="whitespace-nowrap">
                 操作指南
               </ViewportTooltip>
-            </div>
-            <div
+            </div>}
+            {!compact && <div
               className="relative"
               {...settingsTooltip.handlers}
             >
@@ -225,12 +231,12 @@ export default function Header() {
               <ViewportTooltip visible={settingsTooltip.visible} className="whitespace-nowrap">
                 设置
               </ViewportTooltip>
-            </div>
+            </div>}
           </div>
         </div>
       </header>
       
-      <div className="safe-area-top invisible pointer-events-none" aria-hidden="true">
+      <div className={compact ? 'hidden' : 'safe-area-top invisible pointer-events-none'} aria-hidden="true">
         <div className="safe-header-inner" />
       </div>
       <Suspense fallback={null}>

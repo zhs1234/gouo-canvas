@@ -194,7 +194,7 @@ func InitDB() (err error) {
 			return err
 		}
 
-		err = DB.AutoMigrate(&GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}, &GouoImageCharge{})
+		err = DB.AutoMigrate(&GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}, &GouoImageCharge{}, &GouoDocument{})
 		if err != nil {
 			return err
 		}
