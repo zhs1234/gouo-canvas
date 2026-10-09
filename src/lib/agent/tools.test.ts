@@ -9,8 +9,9 @@ const mocks = vi.hoisted(() => ({
   getImage: vi.fn(),
   projects: [] as Pick<CanvasProject, 'id' | 'nodes' | 'hiddenAt'>[],
   tasks: [] as Array<{ id: string; status: string; outputImages: string[]; prompt: string; error: string | null; params: { n: number } }>,
+  dialog: null as null | { action?: () => void; cancelAction?: () => void },
 }))
-vi.mock('../../store', () => ({ useStore: { getState: () => ({ tasks: mocks.tasks }) } }))
+vi.mock('../../store', () => ({ useStore: { getState: () => ({ tasks: mocks.tasks, confirmDialog: mocks.dialog, setConfirmDialog: (dialog: typeof mocks.dialog) => { mocks.dialog = dialog } }) } }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))
@@ -25,6 +26,7 @@ const run = (name: string, args: unknown, item = conversation) => executeAgentTo
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.tasks = []
+  mocks.dialog = null
   mocks.projects = [{ id: 'canvas', nodes: [{ id: 'canvas-image', type: 'image', title: '参考图', position: { x: 0, y: 0 }, width: 100, height: 100, metadata: { imageId: 'canvas-reference' } }] }]
   mocks.snapshot.mockReturnValue({ id: 'canvas', nodes: [], revision: 2 })
   mocks.apply.mockResolvedValue({ id: 'canvas', nodes: [], revision: 3 })
@@ -37,6 +39,44 @@ describe('Agent tool boundary', () => {
     expect(() => parseToolArguments('get_canvas', '{"projectId":"other"}')).toThrow('不支持的字段')
     expect(() => parseToolArguments('get_canvas', '[]')).toThrow('必须为对象')
     expect(() => parseToolArguments('apply_canvas_operations', '{"expectedRevision":2,"operations":[{"__proto__":{"polluted":true}}]}')).toThrow('禁止的字段')
+  })
+
+  it('asks the user before an Agent run submits more than 4 images for one message', async () => {
+    const call = (id: string, n: number, status: 'done' | 'error' = 'done') => ({ id, name: 'create_image_task', arguments: JSON.stringify({ prompt: '图', params: { n } }), status })
+    const earlier = { ...conversation, messages: [
+      { id: 'old-user', role: 'user' as const, content: '上一条', createdAt: 1 },
+      { id: 'old-assistant', role: 'assistant' as const, content: '', createdAt: 2, toolCalls: [call('old', 4)] },
+      { id: 'user', role: 'user' as const, content: '画几张海报', createdAt: 3 },
+      { id: 'assistant', role: 'assistant' as const, content: '', createdAt: 4, toolCalls: [call('done', 2), call('failed', 4, 'error')] },
+    ] }
+    // 本条消息已提交 2 张（失败的、上一条消息的不计），再提交 2 张不超过上限，无需确认
+    await expect(run('create_image_task', { prompt: '海报', params: { n: 2 } }, earlier)).resolves.toMatchObject({ taskIds: ['task'] })
+    expect(mocks.dialog).toBeNull()
+
+    // 再提交 3 张超过上限：用户取消则不提交
+    const cancelled = run('create_image_task', { prompt: '海报', params: { n: 3 } }, earlier)
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    mocks.dialog!.cancelAction!()
+    await expect(cancelled).rejects.toThrow('没有确认')
+    expect(mocks.submit).toHaveBeenCalledTimes(1)
+
+    // 用户确认后提交
+    mocks.dialog = null
+    const confirmed = run('create_image_task', { prompt: '海报', params: { n: 10 } }, earlier)
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    mocks.dialog!.action!()
+    await expect(confirmed).resolves.toMatchObject({ taskIds: ['task'] })
+    expect(mocks.submit).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not submit when the run is stopped while waiting for confirmation', async () => {
+    const controller = new AbortController()
+    const pending = executeAgentTool({ conversation, name: 'create_image_task', arguments: JSON.stringify({ prompt: '海报', params: { n: 5 } }), callId: 'call_1', signal: controller.signal })
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    controller.abort()
+    await expect(pending).rejects.toThrow()
+    expect(mocks.dialog).toBeNull()
+    expect(mocks.submit).not.toHaveBeenCalled()
   })
 
   it('sends image work through the shared task service with a stable request ID', async () => {
