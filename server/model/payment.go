@@ -43,6 +43,13 @@ func GetPaymentByUUID(uuid string) (*Payment, error) {
 	return &payment, err
 }
 
+// GetPaymentByUUIDForCallback 回调不要求网关仍启用或未删除：用户可能已经付款，停用网关后仍要按原配置验签入账。
+func GetPaymentByUUIDForCallback(uuid string) (*Payment, error) {
+	var payment Payment
+	err := DB.Unscoped().Where("uuid = ?", uuid).First(&payment).Error
+	return &payment, err
+}
+
 var allowedPaymentOrderFields = map[string]bool{
 	"id":         true,
 	"uuid":       true,
