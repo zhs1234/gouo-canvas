@@ -123,3 +123,111 @@
     animation: none;
   }
 }
+
+/* 滚动进入视口时淡入；脚本未就绪时内容保持可见 */
+.gouo-reveal-ready .gouo-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.8s var(--ease-out), transform 0.8s var(--ease-out);
+  transition-delay: var(--delay, 0s);
+}
+
+.gouo-reveal-ready .gouo-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* 显现后的高光卡片保留倾斜，优先级需高于显现规则 */
+.gouo-reveal-ready .gouo-reveal.is-visible.gouo-spotlight {
+  transform: perspective(1200px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+}
+
+/* 产品预览：候选图依次“显影” */
+.gouo-develop {
+  animation: gouo-develop 6.4s var(--ease-out) infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+.gouo-caret::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: gouo-caret 1s steps(1) infinite;
+}
+
+/* 鼠标跟随高光：卡片与收尾区共用 */
+.gouo-spotlight {
+  --spot-x: 50%;
+  --spot-y: 50%;
+  --spot-opacity: 0;
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transform: perspective(1200px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform 0.26s var(--ease-out), box-shadow 0.28s var(--ease-out);
+}
+
+.gouo-spotlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(260px circle at var(--spot-x) var(--spot-y), rgb(255 255 255 / 0.6), transparent 70%);
+  opacity: var(--spot-opacity);
+  transition: opacity 0.24s ease-out;
+}
+
+.gouo-dots {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.14;
+  background-image: radial-gradient(circle, #747478 1px, transparent 1px);
+  background-size: 14px 14px;
+  -webkit-mask-image: linear-gradient(120deg, transparent 20%, #000 75%);
+  mask-image: linear-gradient(120deg, transparent 20%, #000 75%);
+}
+
+/* 数据区的同心圆装饰 */
+.gouo-rings i {
+  position: absolute;
+  aspect-ratio: 1;
+  border: 1px solid rgb(75 76 128 / 0.22);
+  border-radius: 50%;
+}
+
+@keyframes gouo-develop {
+  0%, 8% { opacity: 0.35; filter: blur(18px) saturate(0.4); transform: scale(0.96); }
+  30%, 88% { opacity: 1; filter: none; transform: none; }
+  100% { opacity: 0.35; filter: blur(18px) saturate(0.4); transform: scale(0.96); }
+}
+
+@keyframes gouo-caret {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gouo-reveal-ready .gouo-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .gouo-develop,
+  .gouo-caret::after {
+    animation: none;
+  }
+
+  .gouo-spotlight {
+    transform: none;
+  }
+}
