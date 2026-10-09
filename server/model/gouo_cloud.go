@@ -329,13 +329,23 @@ func UpsertGouoCollection(collection *GouoFavoriteCollection) error {
 	}).Create(collection).Error
 }
 
+// 隐藏或恢复收藏夹会改变夹内任务下发的收藏关系，同时推进这些任务的 updated_at，其他设备才能增量拉到。
 func SetGouoCollectionHidden(userID int, id string, hidden bool) error {
-	now := time.Now().UnixMilli()
-	hiddenAt := int64(0)
-	if hidden {
-		hiddenAt = now
-	}
-	return DB.Model(&GouoFavoriteCollection{}).Where("user_id = ? AND id = ?", userID, id).Updates(map[string]any{"hidden_at": hiddenAt, "updated_at": now}).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		now, err := nextGouoTaskTimestamp(tx, userID)
+		if err != nil {
+			return err
+		}
+		hiddenAt := int64(0)
+		if hidden {
+			hiddenAt = now
+		}
+		if err := tx.Model(&GouoFavoriteCollection{}).Where("user_id = ? AND id = ?", userID, id).Updates(map[string]any{"hidden_at": hiddenAt, "updated_at": now}).Error; err != nil {
+			return err
+		}
+		taskIDs := tx.Model(&GouoFavoriteItem{}).Select("task_id").Where("user_id = ? AND collection_id = ?", userID, id)
+		return tx.Model(&GouoTask{}).Where("user_id = ? AND id IN (?)", userID, taskIDs).Update("updated_at", now).Error
+	})
 }
 
 // 收藏关系随任务一起增量同步，变更时同步推进任务的 updated_at，其他设备才能拉到。
@@ -358,9 +368,11 @@ func SetGouoFavoriteItem(userID int, collectionID, taskID string, add bool) erro
 	})
 }
 
+// ListGouoFavoriteItems 只返回未隐藏收藏夹中的收藏；恢复收藏夹后原有收藏随之恢复。
 func ListGouoFavoriteItems(userID int) ([]GouoFavoriteItem, error) {
 	var items []GouoFavoriteItem
-	err := DB.Where("user_id = ?", userID).Order("updated_at, collection_id, task_id").Find(&items).Error
+	visible := DB.Model(&GouoFavoriteCollection{}).Select("id").Where("user_id = ? AND hidden_at = 0", userID)
+	err := DB.Where("user_id = ? AND collection_id IN (?)", userID, visible).Order("updated_at, collection_id, task_id").Find(&items).Error
 	return items, err
 }
 
