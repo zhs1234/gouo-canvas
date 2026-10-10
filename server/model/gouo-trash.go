@@ -70,7 +70,7 @@ func PurgeGouoTrash(now time.Time) error {
 func purgeGouoUserTrash(userID int, cutoff int64, all bool, root string) error {
 	// 与上传共用锁，删除文件也在锁内完成：否则锁释放后同一张图重新上传会写入新记录，随后文件被删掉
 	defer lockGouoAssets(userID)()
-	var paths []string
+	var fileErr error
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		// 与作品、文档保存一样先锁用户行，清理期间新增的图片引用会等清理结束后再确认归属；
 		// 必须是第一条语句，MySQL 的一致性快照才会在拿到锁之后建立。已删除账号也要锁，用 Unscoped
@@ -150,21 +150,38 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool, root string) error {
 			return err
 		}
 		var assetIDs []string
+		pathByID := map[string]string{}
 		for _, asset := range candidates {
 			if referenced[asset.ID] {
 				continue
 			}
 			assetIDs = append(assetIDs, asset.ID)
-			paths = append(paths, asset.StoragePath)
+			pathByID[asset.ID] = asset.StoragePath
 		}
 		for start := 0; start < len(assetIDs); start += 500 {
+			batch := assetIDs[start:min(start+500, len(assetIDs))]
 			// 删除时再按时间过滤，期间被重新上传或去重复用的图片不删
-			query := tx.Where("user_id = ? AND id IN ?", userID, assetIDs[start:min(start+500, len(assetIDs))])
+			query := tx.Where("user_id = ? AND id IN ?", userID, batch)
 			if !all {
 				query = query.Where("updated_at < ?", cutoff)
 			}
 			if err := query.Delete(&GouoAsset{}).Error; err != nil {
 				return err
+			}
+			// 只删实际删掉记录的文件，被保留的记录仍要能读到图片
+			var kept []string
+			if err := tx.Model(&GouoAsset{}).Where("user_id = ? AND id IN ?", userID, batch).Pluck("id", &kept).Error; err != nil {
+				return err
+			}
+			for _, id := range kept {
+				delete(pathByID, id)
+			}
+		}
+		// 在提交前、仍持有用户行锁时删文件：上传也先锁用户行再查重写文件，多实例共享素材目录时不会删掉刚复用的文件。
+		// 单个文件删不掉只残留文件，记录照常删除，最后返回第一个错误
+		for _, path := range pathByID {
+			if err := os.Remove(filepath.Join(root, filepath.Clean(path))); err != nil && !errors.Is(err, os.ErrNotExist) && fileErr == nil {
+				fileErr = err
 			}
 		}
 		return nil
@@ -172,11 +189,5 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool, root string) error {
 	if err != nil {
 		return err
 	}
-	// 记录删除提交后再删文件；文件删除失败只会残留文件，不会留下指向缺失文件的记录。
-	for _, path := range paths {
-		if err := os.Remove(filepath.Join(root, filepath.Clean(path))); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
+	return fileErr
 }

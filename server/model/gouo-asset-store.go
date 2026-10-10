@@ -20,6 +20,7 @@ import (
 	"one-api/common/utils"
 
 	_ "golang.org/x/image/webp"
+	"gorm.io/gorm"
 )
 
 var (
@@ -74,14 +75,7 @@ func SaveGouoAssetBytes(userID int, data []byte, originalName string, enforceQuo
 	if err != nil {
 		return nil, false, err
 	}
-	if existing != nil {
-		// 回收站清理按 updated_at 保护近期上传的图片，复用旧记录时刷新，避免在关联到作品或文档之前被清除
-		if err := DB.Model(existing).UpdateColumn("updated_at", time.Now().UnixMilli()).Error; err != nil {
-			return nil, false, err
-		}
-		return existing, true, nil
-	}
-	if enforceQuota {
+	if existing == nil && enforceQuota {
 		used, _, err := GetGouoStorageUsage(userID)
 		if err != nil {
 			return nil, false, err
@@ -95,58 +89,83 @@ func SaveGouoAssetBytes(userID int, data []byte, originalName string, enforceQuo
 		}
 	}
 
-	relativePath := filepath.Join(strconv.Itoa(userID), hash[:2], hash+extension)
 	root, err := filepath.Abs(config.GouoAssetDir)
 	if err != nil {
 		return nil, false, err
 	}
-	target := filepath.Join(root, relativePath)
-	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
-		return nil, false, err
-	}
-	if _, err := os.Stat(target); errors.Is(err, os.ErrNotExist) {
-		temp, err := os.CreateTemp(filepath.Dir(target), ".gouo-upload-*")
-		if err != nil {
-			return nil, false, err
-		}
-		defer os.Remove(temp.Name())
-		if _, err := temp.Write(data); err != nil {
-			temp.Close()
-			return nil, false, err
-		}
-		if err := temp.Sync(); err != nil {
-			temp.Close()
-			return nil, false, err
-		}
-		if err := temp.Close(); err != nil {
-			return nil, false, err
-		}
-		if err := os.Rename(temp.Name(), target); err != nil {
-			return nil, false, err
-		}
-	} else if err != nil {
-		return nil, false, err
-	}
-
 	if len([]rune(originalName)) > 120 {
 		originalName = string([]rune(originalName)[:120])
 	}
-	now := time.Now().UnixMilli()
-	asset := GouoAsset{
-		ID:           utils.GetUUID(),
-		UserID:       userID,
-		SHA256:       hash,
-		StoragePath:  relativePath,
-		MimeType:     detected,
-		FileSize:     int64(len(data)),
-		Width:        width,
-		Height:       height,
-		OriginalName: originalName,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := InsertGouoAsset(&asset); err != nil {
+	var asset GouoAsset
+	deduplicated := false
+	// 进程内锁只管本实例；查重、写文件和建记录都在锁住用户行的事务里完成，
+	// 与回收站清理（同样先锁用户行、提交前删文件）在多实例共享素材目录时也互斥
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", userID).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
+			return err
+		}
+		err := tx.Where("user_id = ? AND sha256 = ?", userID, hash).First(&asset).Error
+		if err == nil {
+			deduplicated = true
+			// 文件可能因清理事务提交失败等原因缺失，复用记录时补写，否则去重会一直返回坏图
+			if err := writeGouoAssetFile(filepath.Join(root, filepath.Clean(asset.StoragePath)), data); err != nil {
+				return err
+			}
+			// 回收站清理按 updated_at 保护近期上传的图片，复用旧记录时刷新，避免在关联到作品或文档之前被清除
+			return tx.Model(&asset).UpdateColumn("updated_at", time.Now().UnixMilli()).Error
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		relativePath := filepath.Join(strconv.Itoa(userID), hash[:2], hash+extension)
+		if err := writeGouoAssetFile(filepath.Join(root, relativePath), data); err != nil {
+			return err
+		}
+		now := time.Now().UnixMilli()
+		asset = GouoAsset{
+			ID:           utils.GetUUID(),
+			UserID:       userID,
+			SHA256:       hash,
+			StoragePath:  relativePath,
+			MimeType:     detected,
+			FileSize:     int64(len(data)),
+			Width:        width,
+			Height:       height,
+			OriginalName: originalName,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		return tx.Create(&asset).Error
+	})
+	if err != nil {
 		return nil, false, err
 	}
-	return &asset, false, nil
+	return &asset, deduplicated, nil
+}
+
+// writeGouoAssetFile 在文件不存在时原子写入；内容按哈希命名，已存在即视为相同内容。
+func writeGouoAssetFile(target string, data []byte) error {
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(target), ".gouo-upload-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	if _, err := temp.Write(data); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), target)
 }
