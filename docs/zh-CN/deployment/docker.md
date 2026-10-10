@@ -66,6 +66,9 @@ PUBLIC_PORT=127.0.0.1:8080
 # 后端管理端只绑定本机，远程访问使用 SSH 隧道。
 BACKEND_ADMIN_PORT=3000
 
+# 通过 HTTPS 访问时必须为 true，登录 Cookie 才不会在 http:// 请求中明文发送。
+SESSION_COOKIE_SECURE=true
+
 GOUO_IMAGE_MODEL=gpt-image-2
 GOUO_IMAGE_PRICE_CNY=0.10
 GOUO_CLOUD_LIBRARY_ENABLED=true
@@ -86,6 +89,7 @@ USER_TOKEN_SECRET=替换为第二段随机值
 | --- | --- | --- |
 | `PUBLIC_PORT` | 有外层 HTTPS 代理时用 `127.0.0.1:8080`；临时局域网测试可用 `8080` | 使用 `8080` 会监听所有网卡，不应长期裸露在公网 |
 | `BACKEND_ADMIN_PORT` | 一般保持 `3000` | Compose 已固定绑定 `127.0.0.1`，不要改成公网地址 |
+| `SESSION_COOKIE_SECURE` | 通过 HTTPS 访问时填 `true` | 为 `false` 时，用户经 `http://` 打开（旧书签、手输网址）的第一次请求会在跳转前明文带上登录 Cookie；只有纯局域网 HTTP 测试才保持 `false` |
 | `GOUO_IMAGE_MODEL` | 首次默认模型及迁移目标 | 前端默认值修改须重建 `web`；后台迁移只执行一次，后续选择和定价由模型目录管理 |
 | `GOUO_IMAGE_PRICE_CNY` | 默认模型首次迁移的人民币售价 | 后续在后台单模型编辑中改价，重启不覆盖已保存价格；上线前核对成本和输出上限 |
 | `GOUO_ASSET_DIR` | 保持 `/data/gouo-assets` | `/data` 已挂载 `backend-data`，不要改到未挂载目录 |
@@ -177,10 +181,10 @@ http://127.0.0.1:8080
 
 外层代理必须满足：
 
-- HTTP 永久重定向到 HTTPS。
+- HTTP 永久重定向到 HTTPS，并返回 `Strict-Transport-Security: max-age=31536000`（确认全站 HTTPS 稳定后再开启），浏览器之后不再发出明文请求。
 - 保留 `Host`、`X-Forwarded-For` 和 `X-Forwarded-Proto`。
 - 请求体上限至少 32 MB，否则 25 MB 图片会在到达后端前被拒绝。
-- `/v1/` 的读取和发送超时至少 600 秒，并关闭代理缓冲。
+- `/v1/` 的读取和发送超时至少 960 秒，并关闭代理缓冲。后端单次出图最长 15 分钟，代理先断开会让已预扣的请求进入待核对。
 - `/api/` 的读取超时至少 300 秒。
 - 不单独公开后端 3000 端口、MySQL 3306 或 Redis 6379。
 

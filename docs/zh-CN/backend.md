@@ -59,7 +59,7 @@ SESSION_COOKIE_SAME_SITE=none
 
 来源必须是精确的 `http(s)://主机[:端口]`，多个以逗号分隔，不带末尾斜杠、路径或通配符；错误配置会阻止启动。`none` 必须同时启用 Secure 和来源名单。反向代理应覆盖并正确传递 `Host`、`X-Forwarded-Proto`，且 HTTPS 必须贯穿浏览器入口。账号 API 的跨域凭据仅授予名单中的来源；无 Origin 的跨站请求会被拒绝，`none` 模式下携带会话的无 Origin 请求必须有 `Sec-Fetch-Site: same-origin`，只有已有 state 校验的 GitHub/Lark/OIDC GET 回调例外。浏览器禁用第三方 Cookie 时仍应改用同域代理。Compose 已传递这三个环境变量，YAML 对应小写同名配置。
 
-后端按来源 IP 做登录、注册、验证码等限流，并支持令牌 IP 白名单。只有来自 `TRUSTED_PROXIES`（YAML 为 `trusted_proxies`）所列地址的请求才会读取 `X-Forwarded-For` 中的客户端 IP；默认是本机和私有网段，适用于同机或同一容器网络中的 Nginx。反向代理在其他公网地址时，把它的地址或网段加入名单（多个以逗号分隔）；后端直接对公网提供服务时设为空。经 Cloudflare 等平台访问时，可改用 `trusted_header`（如 `CF-Connecting-IP`）。
+后端按来源 IP 做登录、注册、验证码等限流，并支持令牌 IP 白名单。只有来自 `TRUSTED_PROXIES`（YAML 为 `trusted_proxies`）所列地址的请求才会读取 `X-Forwarded-For` 中的客户端 IP；默认是本机和私有网段，适用于同机或同一容器网络中的 Nginx。反向代理在其他公网地址时，把它的地址或网段加入名单（多个以逗号分隔）；后端直接对公网提供服务时设为空。经 Cloudflare 等平台访问时，可改用 `trusted_header`（如 `CF-Connecting-IP`）。注意后端只要看到这个头就直接采用，不检查请求来源：必须保证源站只能经该平台访问（防火墙只放行平台网段，`PUBLIC_PORT` 绑定本机或内网），否则任何人直连源站并自带该头即可伪造 IP，绕过限流和令牌 IP 白名单。
 
 ## 3. 首次管理后台配置
 
@@ -133,6 +133,7 @@ GOUO_ASSET_MAX_TASK_FILES=32
 - 本地开发可使用 SQLite。
 - 公开生产环境使用 MySQL 或 PostgreSQL。
 - 多实例共享同一数据库、Redis、签名密钥和资产存储。
+- 多实例时只让一个实例作为主节点（其余设 `NODE_TYPE=slave`），定时任务（扣费恢复、回收站清理）只在主节点运行。模型价格和光构模型上下架在其他实例上最多 1 分钟后生效，期间按旧价格版本提交的请求会收到“价格已更新”，刷新页面即可。
 - Redis 是缓存与协调层，不能代替数据库备份。
 - 数据库与 `GOUO_ASSET_DIR` 必须在同一维护窗口成对备份和恢复。
 - `SESSION_SECRET`、`USER_TOKEN_SECRET` 和生产环境文件要加密备份。

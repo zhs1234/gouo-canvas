@@ -9,7 +9,7 @@ session_cookie_secure: false # HTTPS 部署建议开启；跨站 Cookie 必须�
 session_cookie_same_site: "strict" # strict（默认）、lax、none；none 必须同时配置 Secure 和允许来源。
 disable_token_encoders: false # 是否禁用 token 编码器计算tokens。启用后 内存占用可减少 40MB 左右，但是stream模式下tokens计算不准确
 trusted_proxies: "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7" # 可信反向代理的地址或网段，只有来自这些地址的请求才读取 X-Forwarded-For 中的客户端 IP。默认为本机和私有网段；后端直接对公网时可设为空字符串
-trusted_header: "" # 可信头部，"CF-Connecting-IP" 用于 Cloudflare，"X-Appengine-Remote-Addr" 用于 Google App Engine，未设置则不使用。 可以解决一些代理问题，如获取用户真实IP
+trusted_header: "" # 可信头部（只要请求带该头就直接采用，源站必须只能经对应平台访问，否则可伪造 IP），"CF-Connecting-IP" 用于 Cloudflare，"X-Appengine-Remote-Addr" 用于 Google App Engine，未设置则不使用。 可以解决一些代理问题，如获取用户真实IP
 language: "zh_CN" #国际化默认语言 目前支持`zh_CN`/`en_US`/ja_JP`/`zh_HK`
 favicon: "" # 设置favicon路径,可以是ico的URL，也可以是文件路径。前后端分离部署的请直接修改前端的favicon.ico文件
 logs:

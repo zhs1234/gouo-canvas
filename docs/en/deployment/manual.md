@@ -143,6 +143,11 @@ REDIS_CONN_STRING=redis://127.0.0.1:6379
 
 SESSION_SECRET=replace-with-the-first-random-value
 USER_TOKEN_SECRET=replace-with-the-second-different-random-value
+# Must be true when users reach the site over HTTPS, so the login cookie is never sent on http:// requests.
+SESSION_COOKIE_SECURE=true
+
+# Default model for the first migration; keep it equal to the frontend build value VITE_GOUO_IMAGE_MODEL.
+GOUO_IMAGE_MODEL=gpt-image-2
 
 GOUO_IMAGE_PRICE_CNY=0.10
 GOUO_CLOUD_LIBRARY_ENABLED=true
@@ -303,8 +308,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
         proxy_cache off;
-        proxy_read_timeout 600s;
-        proxy_send_timeout 600s;
+        # Backend image requests can take up to 15 minutes; the proxy must wait longer
+        proxy_read_timeout 960s;
+        proxy_send_timeout 960s;
     }
 
     location / {
@@ -326,7 +332,7 @@ The public Nginx configuration deliberately does not proxy `/panel`. Reach the a
 
 ## 12. Add HTTPS
 
-Use your certificate manager to issue a certificate and permanently redirect HTTP to HTTPS. Whether using Certbot, Caddy, or a cloud load balancer, preserve the `/api`, `/v1`, body-size, and timeout behavior above.
+Use your certificate manager to issue a certificate and permanently redirect HTTP to HTTPS. On the HTTPS site add `add_header Strict-Transport-Security "max-age=31536000" always;` and make sure `/etc/gouo/gouo.env` sets `SESSION_COOKIE_SECURE=true`. Whether using Certbot, Caddy, or a cloud load balancer, preserve the `/api`, `/v1`, body-size, and timeout behavior above.
 
 Verify:
 
@@ -506,7 +512,7 @@ Set `client_max_body_size` to at least 32 MiB and raise the limit in every CDN o
 
 ### Image generation times out
 
-Keep `/v1/` `proxy_read_timeout` and `proxy_send_timeout` at 600 seconds or more and disable buffering. A 524 often comes from a CDN or outer proxy, so inspect every layer.
+Keep `/v1/` `proxy_read_timeout` and `proxy_send_timeout` at 960 seconds or more and disable buffering. A 524 often comes from a CDN or outer proxy, so inspect every layer.
 
 ### Generation succeeds but cloud artwork is missing
 

@@ -107,9 +107,11 @@ describe('product image result recovery', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockImplementation(async () => new Response(JSON.stringify({ success: true, data: { status: 'dispatched', recoverable: false, reason: 'not_ready' } })))
     const pending = expect(callImageApi({ ...options, settings: { ...options.settings, timeout: 3 } })).rejects.toMatchObject({ imageResultRecovery: true, message: expect.stringContaining('等待原图片请求结果超时') })
-    await vi.advanceTimersByTimeAsync(3_000)
+    await vi.advanceTimersByTimeAsync(960_000)
     await pending
-    expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['POST', 'GET', 'GET'])
+    const methods = fetchMock.mock.calls.map(([, init]) => init?.method)
+    expect(methods[0]).toBe('POST')
+    expect(methods.slice(1).every((method) => method === 'GET')).toBe(true)
     expect(vi.getTimerCount()).toBe(0)
   })
 
@@ -119,7 +121,13 @@ describe('product image result recovery', () => {
       .mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))))
       .mockResolvedValueOnce(new Response(JSON.stringify(recovered)))
     const pending = callImageApi({ ...options, settings: { ...options.settings, timeout: 3 } })
-    await vi.advanceTimersByTimeAsync(3_000)
+    // 平台模式不采用较短的本地超时，等到比后端 15 分钟上限多 1 分钟才中止
+    let settled = false
+    void pending.finally(() => { settled = true })
+    await vi.advanceTimersByTimeAsync(900_000)
+    expect(settled).toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(60_000)
     expect((await pending).images).toHaveLength(1)
     expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['POST', 'GET'])
     expect(vi.getTimerCount()).toBe(0)

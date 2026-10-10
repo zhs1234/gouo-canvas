@@ -619,7 +619,9 @@ async function callImagesApiSingle(opts: CallApiOptions, profile: ApiProfile, pr
   const abort = () => controller.abort()
   if (opts.signal?.aborted) controller.abort()
   opts.signal?.addEventListener('abort', abort, { once: true })
-  const timeoutMs = (productMode ? Math.min(profile.timeout, 900) : profile.timeout) * 1000
+  // 平台出图在后端最长 15 分钟；前端先中止会断开连接，后端随之取消上游请求，已预扣的额度只能等人工核对。
+  // 因此平台模式固定比后端多等 1 分钟（与部署 Nginx 的 960 秒一致），不采用较短的本地超时设置
+  const timeoutMs = (productMode ? 960 : profile.timeout) * 1000
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   let response: Response | undefined
   let requestSent = false
