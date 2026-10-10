@@ -46,8 +46,8 @@ hashids_salt: "" # sqids alphabet参数，可空，如果不设置则使用默�
 
 # 全局设置
 global:
-  api_rate_limit: 180 # 全局 API 速率限制（除中继请求外），单 ip 三分钟内的最大请求数，默认为 180。
-  web_rate_limit: 100 # 全局 Web 速率限制，单 ip 三分钟内的最大请求数，默认为 100。
+  api_rate_limit: 180 # 全局 API 速率限制（除中继请求外），单 ip 三分钟内的最大请求数，未配置时默认为 300。
+  web_rate_limit: 100 # 全局 Web 速率限制，单 ip 三分钟内的最大请求数，未配置时默认为 180。
 
 # 频道更新设置
 channel:

@@ -52,7 +52,7 @@ A running service is not ready for public registration. Configure it in this ord
 | Data | Purpose | Backup requirement |
 | --- | --- | --- |
 | MySQL database | Users, channels, tokens, balance, logs, tasks, and asset relationships | Required |
-| `GOUO_ASSET_DIR` | Outputs, references, masks, thumbnails, and partial images | Required at the same point in time as the database |
+| `GOUO_ASSET_DIR` | Outputs, references, masks, and the 24-hour image result cache under `image-results` (up to 4 GB) | Required at the same point in time as the database |
 | `SESSION_SECRET` | Session-cookie signing | Store securely; changing it signs all users out |
 | `USER_TOKEN_SECRET` | Per-user relay-token signing | Store securely; changing it invalidates existing tokens |
 | Redis | Cache and multi-instance coordination | Preserve configuration; it does not replace the database |

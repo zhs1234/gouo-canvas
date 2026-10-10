@@ -155,8 +155,8 @@ Do not edit `dist/`; Vite generates it. `server/` has a separate `AGENTS.md`, wh
 - `src/store.ts` owns application state and primary actions.
 - `src/lib/db.ts` wraps IndexedDB. Schema changes require a version upgrade and migration for old data.
 - `normalize*` functions sanitize legacy localStorage/IndexedDB values; do not remove compatibility branches casually.
-- In product mode, `src/lib/cloudSync.ts` synchronizes account-scoped tasks, images, and collections.
-- A browser cache is not a server backup. A synchronization failure can leave work only in the browser.
+- In product mode, `src/lib/serverLibrary.ts` loads the account's artworks and collections from the server, which saves generated images itself; `src/lib/serverDocuments.ts` saves canvases and Agent conversations.
+- A browser cache is not a server backup. Local work that was never imported into the account exists only in the browser.
 
 Put new pure or shared logic in `src/lib/` instead of expanding `src/store.ts`. Shared types belong in `src/types.ts`; local types belong near the top of their file.
 

@@ -155,8 +155,8 @@ Copy-Item dev-proxy.config.example.json dev-proxy.config.json
 - `src/store.ts` 管理应用状态和主要 action。
 - `src/lib/db.ts` 封装 IndexedDB；修改 schema 需要升级版本并处理旧数据迁移。
 - `normalize*` 函数用于清洗旧 localStorage/IndexedDB 数据，不应随意删除兼容分支。
-- 产品模式下，`src/lib/cloudSync.ts` 把账号作用域内的任务、图片和收藏夹与后端同步。
-- 浏览器缓存并不等于服务端备份；同步失败任务可能只在本地存在。
+- 产品模式下，`src/lib/serverLibrary.ts` 从服务端加载账号的作品和收藏夹（生成图由服务端直接保存），`src/lib/serverDocuments.ts` 保存画布和 Agent 会话。
+- 浏览器缓存并不等于服务端备份；未导入账号的本机作品只存在于浏览器。
 
 新增纯函数或共享逻辑优先放在 `src/lib/`，不要继续扩大 `src/store.ts`。共享类型放 `src/types.ts`，局部类型放使用文件顶部。
 

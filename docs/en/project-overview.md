@@ -15,7 +15,7 @@ This document helps maintainers and new contributors understand the product scop
 | Tasks and artwork | Status, error details, retries, parameter reuse, search, filters, downloads, and recycle-bin restoration | [store.ts](../../src/store.ts), [TaskGrid.tsx](../../src/components/TaskGrid.tsx) |
 | Collections and data | Collections, batch actions, ZIP data import and export | [favorites](../../src/components/favorites), [DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
 | User center | Balance, current image price, redemption codes, usage history, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
-| Cloud library | Task and image synchronization, storage usage, and account isolation | [cloudSync.ts](../../src/lib/cloudSync.ts), [gouo_cloud.go](../../server/controller/gouo_cloud.go) |
+| Cloud library | Server-saved artworks, storage usage, and account isolation | [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | Admin application | One Hub user, channel, and quota administration, plus Gouo storage management | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
 
 The frontend also includes an inspiration library, onboarding, dark theme, and PWA installation. The service worker caches pages and static assets while bypassing `/api`, `/v1`, and `/panel`; it does not generate images offline. See [main.tsx](../../src/main.tsx) and [sw.js](../../public/sw.js).
@@ -54,7 +54,7 @@ The repository contains three independent dependency and build units.
 | [src/types.ts](../../src/types.ts) | Settings, providers, task parameters, and records | Data structures |
 | [src/lib/api.ts](../../src/lib/api.ts) | Image request dispatch and refresh/retry for invalid relay tokens | Request routing and errors |
 | [src/lib/openaiCompatibleImageApi.ts](../../src/lib/openaiCompatibleImageApi.ts), [falAiImageApi.ts](../../src/lib/falAiImageApi.ts) | Protocol adapters, image extraction, and polling | Provider compatibility |
-| [src/lib/db.ts](../../src/lib/db.ts), [cloudSync.ts](../../src/lib/cloudSync.ts) | IndexedDB, thumbnails, sync queue, and asset mapping | Persistence and synchronization |
+| [src/lib/db.ts](../../src/lib/db.ts), [serverLibrary.ts](../../src/lib/serverLibrary.ts), [serverDocuments.ts](../../src/lib/serverDocuments.ts) | IndexedDB cache, loading cloud artworks and documents, metadata submission | Local cache and cloud library |
 | [src/lib/gouoBackend.ts](../../src/lib/gouoBackend.ts) | HTTP client for accounts, tokens, balances, and cloud data | Product APIs |
 | [server/router](../../server/router), [middleware](../../server/middleware) | Routing, authentication, permissions, rate limits, and channel distribution | API entry and access control |
 | [server/controller/gouo_cloud.go](../../server/controller/gouo_cloud.go), [model/gouo_cloud.go](../../server/model/gouo_cloud.go) | Gouo tasks, assets, collections, and storage quotas | Cloud library |
@@ -102,15 +102,13 @@ Sources: [store.ts](../../src/store.ts), [api.ts](../../src/lib/api.ts), [gouoBa
 
 Image requests reserve user/token quota atomically through conditional transaction updates, including high-balance accounts. Channel retries share one reservation. Confirmed backend failures refund it and success settles it. Logs preserve the public model, price, billing unit, version, and charged quota. Group multipliers and upstream mappings do not alter selling prices. Changed prices or capabilities require renewed client confirmation.
 
-Multiple outputs within the model limit cost one charge per HTTP request. Legacy `GOUO_IMAGE_PRICE_CNY` seeds the default model only once, with an output limit of 1; administrators explicitly enable and price other models. Product settings disable splitting, while frontend compatibility modes may create separately charged requests. Browser timeouts, downloads, and local storage failures do not establish upstream failure. The durable ledger refunds unsent reservations older than 20 minutes; dispatched requests with unknown outcomes require administrator reconciliation against upstream records. Users can inspect request status in Usage, and retries require confirmation of the new request's price.
+The Gouo product client splits multiple images into single-image requests and each successful image is charged separately; for direct API calls, multiple outputs within the model limit cost one charge per HTTP request. Legacy `GOUO_IMAGE_PRICE_CNY` seeds the default model only once, with an output limit of 1; administrators explicitly enable and price other models. Frontend compatibility modes may also create separately charged requests. Browser timeouts, downloads, and local storage failures do not establish upstream failure. The durable ledger refunds unsent reservations older than 20 minutes; dispatched requests with unknown outcomes require administrator reconciliation against upstream records. Users can inspect request status in Usage, and retries require confirmation of the new request's price.
 
 Sources: [relay/main.go](../../server/relay/main.go), [quota.go](../../server/relay/relay_util/quota.go), [openaiCompatibleImageApi.ts](../../src/lib/openaiCompatibleImageApi.ts). See the [backend guide](./backend.md) for pricing, payment configuration, and production validation.
 
-### Cloud synchronization
+### Cloud library
 
-IndexedDB stores tasks, images, thumbnails, queue items, cursors, and mappings between local images and cloud assets. Changes to terminal tasks enter the queue. Synchronization uploads linked assets, writes task and collection relationships, then pulls cloud changes by cursor and merges them locally. Thumbnails download during the pull; original images can be loaded on demand.
-
-Initialization, relevant state changes, network recovery, window focus, and manual retries trigger synchronization. Queue records include attempts and the next attempt time, but there is no independent continuous polling timer; another sync run processes eligible retries. The implementation provides artwork synchronization, not real-time collaboration or a verified guarantee for concurrent conflict resolution.
+The server is the source of truth: successful images are written to the library by the server when they are generated, and IndexedDB in the browser is only a cache that pulls artworks and collections from the server by cursor. The browser only submits metadata (parameters, references, and masks) for completed tasks, retrying at most 3 times; there is no upload queue or two-way merge. Older local work and ZIP imports must be imported by the user with **用户中心 → 导入本机旧作品** (User Center → Import local works). Canvases and Agent conversations are saved as whole documents with revision checks against overwrites. There is no real-time collaboration.
 
 The backend recalculates SHA-256 and deduplicates within each user. The database stores metadata and ownership; files live in `GOUO_ASSET_DIR`. Image reads require an authenticated endpoint. Do not publish this directory as public static storage.
 
@@ -120,11 +118,11 @@ The backend recalculates SHA-256 and deduplicates within each user. The database
 | Size per file | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES` |
 | Asset links per task | 32 | `GOUO_ASSET_MAX_TASK_FILES` |
 
-The frontend also caps uploads at 32 asset links, including references, masks, outputs, and thumbnails. Raising only the backend limit does not expand frontend synchronization. Administrators can override storage quota for individual users.
+The frontend also caps metadata submissions at 32 asset links (references, masks, and outputs). Raising only the backend limit does not expand the frontend. The quota applies to user uploads; paid generated images saved by the server are not limited by it. Administrators can override storage quota for individual users.
 
-Deleting a synchronized task hides it in a recoverable recycle bin; cloud files still consume storage. Unsynchronized task deletion uses local cleanup. Artwork may remain viewable locally after sync failure, but clearing browser data or changing devices can lose content that was never uploaded.
+Deleted cloud artworks, canvases, conversations, and collections go to the recycle bin for 3 days. They can be restored during that time and still count toward storage; after that, an hourly cleanup job on the master node permanently deletes the records and unreferenced images. Local work not yet imported into the account exists only in the original browser and is lost if browser data is cleared or the device changes.
 
-Sources: [db.ts](../../src/lib/db.ts), [cloudSync.ts](../../src/lib/cloudSync.ts), [controller/gouo_cloud.go](../../server/controller/gouo_cloud.go), [model/gouo_cloud.go](../../server/model/gouo_cloud.go).
+Sources: [db.ts](../../src/lib/db.ts), [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo-trash.go](../../server/model/gouo-trash.go), [controller/gouo_cloud.go](../../server/controller/gouo_cloud.go), [model/gouo_cloud.go](../../server/model/gouo_cloud.go).
 
 ## Development and deployment
 

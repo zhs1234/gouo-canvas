@@ -34,7 +34,7 @@ Low-cost checks commonly used in this repository:
 ```powershell
 Set-Location server
 go test ./controller -run '^$'
-go test ./relay/relay_util -run '^TestGetFixedImageQuota$'
+go test ./relay/relay_util -run '^TestGouoImage'
 ```
 
 The first compiles the `controller` package without running tests, catching route and type compilation failures. The second verifies Gouo fixed image-quota calculation. For other backend packages, follow `server/AGENTS.md` and run the relevant package tests, expanding scope when risk warrants it.

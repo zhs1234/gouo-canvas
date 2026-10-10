@@ -15,7 +15,7 @@
 | 任务与作品 | 状态展示、失败详情、重试、参数复用、搜索筛选、下载和回收站恢复 | [store.ts](../../src/store.ts)、[TaskGrid.tsx](../../src/components/TaskGrid.tsx) |
 | 收藏与数据 | 收藏夹、批量操作、ZIP 数据导入导出 | [favorites](../../src/components/favorites)、[DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
 | 用户中心 | 余额、当前图片价格、兑换码、使用记录和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
-| 云端作品库 | 任务及关联图片同步、空间用量、账号隔离 | [cloudSync.ts](../../src/lib/cloudSync.ts)、[gouo_cloud.go](../../server/controller/gouo_cloud.go) |
+| 云端作品库 | 任务及关联图片同步、空间用量、账号隔离 | [serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | 运营后台 | 用户、渠道、额度等 One Hub 管理能力，以及光构存储管理 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
 
 前端还提供灵感库、新用户引导、深色主题和 PWA 安装。PWA 缓存页面与静态资源，并跳过 `/api`、`/v1` 和 `/panel`；它不提供离线图片生成。实现见 [main.tsx](../../src/main.tsx) 和 [sw.js](../../public/sw.js)。
@@ -54,7 +54,7 @@
 | [src/types.ts](../../src/types.ts) | 设置、服务商、任务参数与记录类型 | 数据结构变更 |
 | [src/lib/api.ts](../../src/lib/api.ts) | 图片请求的统一分发与失效令牌刷新重试 | 请求路由和错误处理 |
 | [src/lib/openaiCompatibleImageApi.ts](../../src/lib/openaiCompatibleImageApi.ts)、[falAiImageApi.ts](../../src/lib/falAiImageApi.ts) | 各类协议、结果提取和轮询适配 | 服务商兼容 |
-| [src/lib/db.ts](../../src/lib/db.ts)、[cloudSync.ts](../../src/lib/cloudSync.ts) | IndexedDB、缩略图、同步队列、资产映射 | 本地持久化与云同步 |
+| [src/lib/db.ts](../../src/lib/db.ts)、[serverLibrary.ts](../../src/lib/serverLibrary.ts)、[serverDocuments.ts](../../src/lib/serverDocuments.ts) | IndexedDB 缓存、云端作品与文档的读取和补交 | 本地缓存与云端作品库 |
 | [src/lib/gouoBackend.ts](../../src/lib/gouoBackend.ts) | 账号、令牌、余额和云库 HTTP 客户端 | 前后端产品接口 |
 | [server/router](../../server/router)、[middleware](../../server/middleware) | 路由、认证、权限、限流和渠道分发 | 接口入口与访问控制 |
 | [server/controller/gouo_cloud.go](../../server/controller/gouo_cloud.go)、[model/gouo_cloud.go](../../server/model/gouo_cloud.go) | 光构任务、资产、收藏和存储配额 | 云端作品库 |
@@ -102,15 +102,13 @@
 
 图片中继通过事务条件更新原子预扣用户和令牌额度，不跳过高余额账号。整个 HTTP 请求的渠道重试共用一份预扣，后端失败退款、成功结算，日志记录公开模型、单价快照、计费单位、版本和实际额度；用户组倍率和渠道模型映射不改变售价。价格或能力变化会要求客户端重新确认。
 
-单个请求在模型数量上限内要求多张图仍收费一次。旧 `GOUO_IMAGE_PRICE_CNY` 只用于首次迁移默认模型，迁移的输出上限为 1 张，其他模型需要管理员启用并定价。产品模式关闭请求拆分；纯前端兼容模式可能拆成多个分别收费的请求。浏览器超时、下载图片失败或本地保存失败，不必然说明上游调用失败或后端应退款。持久账本支持中断后核对：未发送的预扣超过 20 分钟自动退款，已发送但结果未知的请求由管理员核对渠道记录后处理。用户可在使用记录查看请求状态；重试会要求确认新请求费用。
+光构产品客户端把多张拆成单图请求，每张成功的图片单独收费；直接调用 API 时，单个请求在模型数量上限内要求多张图只收费一次。旧 `GOUO_IMAGE_PRICE_CNY` 只用于首次迁移默认模型，迁移的输出上限为 1 张，其他模型需要管理员启用并定价。纯前端兼容模式同样可能拆成多个分别收费的请求。浏览器超时、下载图片失败或本地保存失败，不必然说明上游调用失败或后端应退款。持久账本支持中断后核对：未发送的预扣超过 20 分钟自动退款，已发送但结果未知的请求由管理员核对渠道记录后处理。用户可在使用记录查看请求状态；重试会要求确认新请求费用。
 
 依据：[relay/main.go](../../server/relay/main.go)、[quota.go](../../server/relay/relay_util/quota.go)、[openaiCompatibleImageApi.ts](../../src/lib/openaiCompatibleImageApi.ts)。价格、付款配置与生产验证见[后端说明](./backend.md)。
 
-### 云端作品同步
+### 云端作品库
 
-前端用 IndexedDB 保存任务、图片、缩略图、同步队列、游标和本地图片到云资产的映射。终态任务变化后入队，同步先上传关联图片，再写入任务及收藏关系，最后按游标拉取云端变化并合并到本地。缩略图在拉取时下载，原图可按需读取。
-
-同步在初始化、相关状态变化、网络恢复、窗口聚焦及手动重试时触发。队列记录失败次数与下一次尝试时间，但没有独立的持续轮询定时器；下一次同步运行才会处理符合条件的重试项。它提供作品同步，不提供多人实时协作或已验证的并发冲突解决保证。
+作品以服务端为准：生成成功的图片在出图时由服务端直接写入作品库，浏览器 IndexedDB 只做缓存，按游标从服务端拉取作品和收藏夹。浏览器只对已完成的任务补交元数据（参数、参考图和遮罩），失败最多重试 3 次；不再排队上传或双向合并。本机旧作品和 ZIP 导入的作品需要用户在“用户中心 → 导入本机旧作品”手动导入。画布和 Agent 会话按文档整体保存，带版本号防止覆盖。它不提供多人实时协作。
 
 资产由后端重新计算 SHA-256，并在同一用户内去重。数据库保存任务元数据和归属，文件保存在 `GOUO_ASSET_DIR`。读取图片必须经过鉴权接口，不能把这个目录直接作为公开静态资源。
 
@@ -120,11 +118,11 @@
 | 单文件大小 | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES` |
 | 单任务关联资产数 | 32 | `GOUO_ASSET_MAX_TASK_FILES` |
 
-前端上传逻辑也限制为 32 个关联资产，包含参考图、遮罩、输出图和缩略图等；只增加后端限额不会自动扩大前端同步范围。管理员可为用户设置单独空间额度。
+前端补交逻辑也限制为 32 个关联资产（参考图、遮罩和输出图）；只增加后端限额不会自动扩大前端范围。空间配额只约束用户上传，服务端保存的已付费生成图不受配额限制。管理员可为用户设置单独空间额度。
 
-删除已同步任务会设置隐藏状态并进入可恢复回收站，云文件继续占用空间。本地未同步任务的删除走本地清理。云同步失败时，本地作品可能仍可查看，但清浏览器数据或换设备可能失去尚未上传的内容。
+删除云端作品、画布、会话或收藏夹会进入回收站，保留 3 天，期间可恢复并继续占用空间；之后由主节点每小时的清理任务彻底删除记录和不再被引用的图片。尚未导入账号的本机作品只存在于原浏览器，清理浏览器数据或换设备会丢失。
 
-依据：[db.ts](../../src/lib/db.ts)、[cloudSync.ts](../../src/lib/cloudSync.ts)、[controller/gouo_cloud.go](../../server/controller/gouo_cloud.go)、[model/gouo_cloud.go](../../server/model/gouo_cloud.go)。
+依据：[db.ts](../../src/lib/db.ts)、[serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo-trash.go](../../server/model/gouo-trash.go)、[controller/gouo_cloud.go](../../server/controller/gouo_cloud.go)、[model/gouo_cloud.go](../../server/model/gouo_cloud.go)。
 
 ## 运行和部署
 
