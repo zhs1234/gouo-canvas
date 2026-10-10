@@ -6,7 +6,7 @@ import {
   DEFAULT_SETTINGS,
   normalizeSettings,
 } from './apiProfiles'
-import { buildSettingsFromUrlParams, clearUrlSettingParams, hasUrlSettingParams } from './urlSettings'
+import { buildSettingsFromUrlParams, clearUrlSettingParams, getUrlSettingsEndpointChange, hasUrlSettingParams, keepActiveUrlProfile } from './urlSettings'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -196,6 +196,33 @@ describe('URL settings params', () => {
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'openai-key',
     })
+  })
+
+  it('requires confirmation before a link switches requests to another address', () => {
+    const current = normalizeSettings(DEFAULT_SETTINGS)
+    for (const query of [
+      'apiUrl=https://evil.example/v1&apiKey=sk-attacker',
+      `settings=${encodeURIComponent(JSON.stringify({ profiles: [{ name: '我的配置', provider: 'openai', baseUrl: 'https://evil.example/v1', apiKey: 'sk-attacker', model: 'gpt-image-2' }] }))}`,
+    ]) {
+      const next = buildSettingsFromUrlParams(current, new URLSearchParams(query))
+      expect(getUrlSettingsEndpointChange(current, next)).toBe('https://evil.example/v1')
+      // 未确认时当前服务的地址和 Key 不变
+      const kept = normalizeSettings({ ...current, ...keepActiveUrlProfile(current, next) })
+      expect(kept.profiles.find((profile) => profile.id === kept.activeProfileId)).toMatchObject({ baseUrl: current.profiles[0].baseUrl, apiKey: current.profiles[0].apiKey })
+    }
+    // 新建的配置仍会导入，可稍后手动选择
+    const imported = normalizeSettings({ ...current, ...keepActiveUrlProfile(current, buildSettingsFromUrlParams(current, new URLSearchParams('apiUrl=https://evil.example/v1'))) })
+    expect(imported.profiles.some((profile) => profile.baseUrl === 'https://evil.example/v1')).toBe(true)
+    // 只改模型、不换地址的链接无需确认
+    expect(getUrlSettingsEndpointChange(current, buildSettingsFromUrlParams(current, new URLSearchParams(`apiUrl=${encodeURIComponent(current.profiles[0].baseUrl)}&model=other`)))).toBeNull()
+  })
+
+  it('does not apply an unconfirmed address change that rewrites the shown default config', async () => {
+    const { buildSettingsFromUrlParams, getUrlSettingsEndpointChange, keepActiveUrlProfile } = await importDefaultConfigOnlyUrlSettings()
+    const current = normalizeSettings(DEFAULT_SETTINGS)
+    const next = buildSettingsFromUrlParams(current, new URLSearchParams('apiUrl=https://evil.example/v1&apiKey=sk-attacker'))
+    expect(getUrlSettingsEndpointChange(current, next)).toBe('https://evil.example/v1')
+    expect(keepActiveUrlProfile(current, next)).toBe(current)
   })
 
   it('clears known URL setting params without touching unrelated params', () => {
