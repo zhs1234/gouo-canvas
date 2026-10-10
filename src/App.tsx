@@ -3,7 +3,7 @@ import { HashRouter } from 'react-router-dom'
 import Workspace from './components/Workspace'
 import { initStore } from './store'
 import { useStore } from './store'
-import { activateFirstImportedProfile, buildSettingsFromUrlParams, clearUrlSettingParams, hasUrlSettingParams } from './lib/urlSettings'
+import { activateFirstImportedProfile, buildSettingsFromUrlParams, clearUrlSettingParams, getUrlSettingsEndpointChange, hasUrlSettingParams, keepActiveUrlProfile } from './lib/urlSettings'
 import { isDefaultConfigOnlyEnabled, mergeImportedSettings } from './lib/apiProfiles'
 import { getCustomProviderConfigUrl, loadCustomProviderSettingsFromUrl } from './lib/customProviderConfigUrl'
 import type { AppSettings } from './types'
@@ -29,9 +29,28 @@ export default function App() {
     const customProviderConfigUrl = getCustomProviderConfigUrl()
     const defaultConfigOnly = isDefaultConfigOnlyEnabled()
 
-    const applyUrlSettings = (baseSettings: Partial<AppSettings>) => {
+    const applyUrlSettings = (baseSettings: AppSettings) => {
+      const state = useStore.getState()
       const nextSettings = buildSettingsFromUrlParams(baseSettings, searchParams)
-      return Object.keys(nextSettings).length ? nextSettings : baseSettings
+      if (!Object.keys(nextSettings).length) {
+        if (baseSettings !== state.settings) state.setSettings(baseSettings)
+        return
+      }
+      const target = getUrlSettingsEndpointChange(baseSettings, nextSettings)
+      if (!target) {
+        state.setSettings(nextSettings)
+        return
+      }
+      // 链接参数会把之后的提示词和参考图发往另一个地址，先让用户确认；不确认时只导入配置、不切换
+      state.setSettings(keepActiveUrlProfile(baseSettings, nextSettings))
+      state.setConfirmDialog({
+        title: '切换到链接中的服务地址？',
+        message: `打开的链接要求把图片服务切换到 ${target}，之后的提示词和参考图都会发送到这个地址。只在信任链接来源时切换；不切换时链接中的配置仍会导入，可稍后在设置中手动选择。`,
+        confirmText: '切换',
+        cancelText: '不切换',
+        tone: 'warning',
+        action: () => useStore.getState().setSettings(nextSettings),
+      })
     }
 
     const clearAppliedUrlSettings = () => {
@@ -52,13 +71,12 @@ export default function App() {
           const baseSettings = importedSettings
             ? activateFirstImportedProfile(mergeImportedSettings(state.settings, importedSettings), importedSettings)
             : state.settings
-          state.setSettings(applyUrlSettings(baseSettings))
+          applyUrlSettings(baseSettings)
           clearAppliedUrlSettings()
         })
         .catch((error) => {
           console.warn('Failed to import custom provider config URL:', error)
-          const state = useStore.getState()
-          state.setSettings(applyUrlSettings(state.settings))
+          applyUrlSettings(useStore.getState().settings)
           clearAppliedUrlSettings()
         })
 
@@ -66,9 +84,7 @@ export default function App() {
       return
     }
 
-    const nextSettings = buildSettingsFromUrlParams(useStore.getState().settings, searchParams)
-
-    setSettings(nextSettings)
+    applyUrlSettings(useStore.getState().settings)
 
     clearAppliedUrlSettings()
 

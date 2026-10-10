@@ -148,6 +148,24 @@ function buildDefaultConfigOnlySettingsFromUrlParams(currentSettings: Partial<Ap
   })
 }
 
+function getActiveBaseUrl(settings: Partial<AppSettings>) {
+  const profile = settings.profiles?.find((item) => item.id === settings.activeProfileId)
+  return profile ? normalizeBaseUrl(profile.baseUrl) : null
+}
+
+// 链接参数会让当前服务改发到另一个地址时返回新地址；调用方需先让用户确认，之后的提示词和参考图都会发往该地址
+export function getUrlSettingsEndpointChange(current: AppSettings, next: Partial<AppSettings>) {
+  const target = getActiveBaseUrl(next)
+  return target !== null && target !== getActiveBaseUrl(current) ? target : null
+}
+
+// 用户未确认时只导入新配置、保留当前服务；当前配置本身被改写（仅默认配置模式）时整体不应用
+export function keepActiveUrlProfile(current: AppSettings, next: Partial<AppSettings>): Partial<AppSettings> {
+  const kept = next.profiles?.find((item) => item.id === current.activeProfileId)
+  if (!kept || normalizeBaseUrl(kept.baseUrl) !== getActiveBaseUrl(current)) return current
+  return { ...next, activeProfileId: current.activeProfileId }
+}
+
 export function hasUrlSettingParams(searchParams: URLSearchParams) {
   return URL_SETTING_KEYS.some((key) => searchParams.has(key))
 }
