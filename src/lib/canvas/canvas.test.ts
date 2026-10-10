@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applyCanvasAgentOps, type CanvasAgentSnapshot } from './agentOps'
 import { createCanvasNode, referencedCanvasImageIds, serializeCanvasProject, validateCanvasProject } from './document'
 import { applyGroupSelection, applyUngroupSelection, getGroupWrapRect } from './nodeGeometry'
+import { fitNodeSize } from './nodeSize'
 import { pinchCanvasViewport, visibleCanvasNodes } from './viewport'
 import { CanvasNodeType } from './types'
 
@@ -87,6 +88,29 @@ describe('复用的分组与视口几何', () => {
     expect(restored.nodes[0].metadata?.content).toBe('A')
     expect(restored.nodes[0].position).toEqual(first.position)
     expect(restored.connections).toEqual(connections)
+  })
+
+  it('分组、解组不删除画布上本来就空着的分组', () => {
+    const first = createCanvasNode(CanvasNodeType.Text, { x: 0, y: 0 })
+    const second = createCanvasNode(CanvasNodeType.Text, { x: 300, y: 0 })
+    const frame = createCanvasNode(CanvasNodeType.Group, { x: 1000, y: 1000 })
+    const group = createCanvasNode(CanvasNodeType.Group, { x: 0, y: 0 })
+    const grouped = applyGroupSelection(new Set([first.id, second.id]), [frame, first, second], [], group)!
+    expect(grouped.nodes.map((node) => node.id)).toContain(frame.id)
+    const released = applyUngroupSelection(new Set([group.id]), grouped.nodes, grouped.connections)!
+    expect(released.nodes.map((node) => node.id)).toContain(frame.id)
+    // 成员全部移走后变空的旧分组仍然清理
+    const regrouped = applyGroupSelection(new Set([first.id, second.id]), grouped.nodes, [], createCanvasNode(CanvasNodeType.Group, { x: 0, y: 0 }))!
+    expect(regrouped.nodes.map((node) => node.id)).not.toContain(group.id)
+  })
+
+  it('小图标和细长横幅的节点尺寸不低于画布校验下限', () => {
+    expect(fitNodeSize(16, 16, 420, 420)).toEqual({ width: 20, height: 20 })
+    const banner = fitNodeSize(4000, 100, 420, 420)
+    expect(banner.width).toBe(420)
+    expect(banner.height).toBe(20)
+    const node = { ...createCanvasNode(CanvasNodeType.Image, { x: 0, y: 0 }, { imageId: 'icon' }), ...banner }
+    expect(() => validateCanvasProject({ ...empty, nodes: [node] })).not.toThrow()
   })
 
   it('1000个文本和100个图片只挂载可见区，并保留完整文档', () => {
