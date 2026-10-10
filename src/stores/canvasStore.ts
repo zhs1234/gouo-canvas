@@ -140,7 +140,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     return project
   },
   renameProject: (id, title) => get().updateProject(id, { title: title.trim() || '未命名画布' }),
-  hideProject: (id, hidden = true) => get().updateProject(id, { hiddenAt: hidden ? Date.now() : undefined }),
+  // 移入回收站和恢复不记入撤销历史，否则恢复后按撤销会把画布又放回回收站，并还原成最初的删除时间
+  hideProject: (id, hidden = true) => get().updateProject(id, { hiddenAt: hidden ? Date.now() : undefined }, { history: false }),
   saveProject: async (id) => {
     const project = get().projects.find((item) => item.id === id)
     if (!project) throw new Error('画布不存在')

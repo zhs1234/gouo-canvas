@@ -3,7 +3,8 @@ export function fitNodeSize(width: number, height: number, maxWidth = 640, maxHe
   const w = Math.max(1, width)
   const h = Math.max(1, height)
   const scale = Math.min(1, maxWidth / w, maxHeight / h)
-  return { width: w * scale, height: h * scale }
+  // 画布节点最小 20，否则小图标、细长横幅放不进画布（校验会拒绝整批插入）
+  return { width: Math.max(20, w * scale), height: Math.max(20, h * scale) }
 }
 
 export function nodeSizeFromRatio(size: string, baseWidth: number, baseHeight: number) {

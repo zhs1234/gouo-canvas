@@ -167,15 +167,20 @@ export async function reconcileCanvasTasks() {
               status: task.status === 'done' || images.length ? ('success' as const) : ('error' as const),
               // 自定义服务商可能返回很长的错误页，超过画布元数据长度上限会让整次回填失败
               errorDetails: task.error?.slice(0, 10000) || undefined,
-              outputErrors: task.outputErrors,
+              // 错误信息可能是整页 HTML，超过画布元数据长度上限会让整次回填失败
+              outputErrors: task.outputErrors?.slice(0, 100).map((item) => ({ ...item, error: item.error.slice(0, 10000) })),
             },
           }
         })
-        if (changed) await useCanvasStore.getState().updateProject(project.id, { nodes }, { history: false })
+        if (!changed) continue
+        // 单个项目保存失败不应阻断其他项目的回填
+        try {
+          await useCanvasStore.getState().updateProject(project.id, { nodes }, { history: false })
+        } catch (err) {
+          console.error('同步画布生成结果失败', project.id, err)
+        }
       }
     } while (reconcileAgain)
-  } catch (err) {
-    console.error('同步画布生成结果失败', err)
   } finally {
     reconciling = false
   }

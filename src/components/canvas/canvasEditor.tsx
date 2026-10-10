@@ -502,16 +502,19 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
 
   const imageActions = (node: CanvasNodeData) => (
     <div className="flex items-center gap-1" onMouseDown={(event) => event.stopPropagation()}>
-      <Button
-        size="small"
-        type="text"
-        aria-label="上传到此节点"
-        icon={<ImagePlus className="size-4" />}
-        onClick={() => {
-          targetUpload.current = node.id
-          inputRef.current?.click()
-        }}
-      />
+      {/* 上传会把节点替换成图片节点，生成配置节点上不提供，否则提示词、模型等配置全部丢失 */}
+      {node.type === CanvasNodeType.Image && (
+        <Button
+          size="small"
+          type="text"
+          aria-label="上传到此节点"
+          icon={<ImagePlus className="size-4" />}
+          onClick={() => {
+            targetUpload.current = node.id
+            inputRef.current?.click()
+          }}
+        />
+      )}
       {node.metadata?.imageId && (
         <>
           <Button

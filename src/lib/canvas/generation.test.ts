@@ -97,6 +97,42 @@ describe('画布生成任务闭环', () => {
     expect(metadata?.images).toHaveLength(2)
     expect(metadata?.outputErrors).toEqual(errors)
   })
+  it('逐项错误是整页 HTML 时截断后回填，不因超过元数据上限而一直停在生成中', async () => {
+    const state = useCanvasStore.getState()
+    const project = await state.createProject()
+    await state.applyOperations(project.id, [{ type: 'add_node', id: 'out', nodeType: 'image', metadata: { status: 'loading', taskId: 'html' } }])
+    const errors = Array.from({ length: 120 }, (_, idx) => ({ requestIndex: idx, error: '<html>'.repeat(30000) }))
+    useStore.setState({ tasks: [{ id: 'html', status: 'error', outputImages: [], outputErrors: errors, params: { output_format: 'png' } } as unknown as TaskRecord] })
+    await reconcileCanvasTasks()
+    await vi.waitFor(() => expect(mocks.projects.get(project.id)?.nodes.find((node) => node.id === 'out')?.metadata?.status).toBe('error'))
+    const metadata = mocks.projects.get(project.id)?.nodes.find((node) => node.id === 'out')?.metadata
+    expect(metadata?.outputErrors).toHaveLength(100)
+    expect(metadata?.outputErrors?.[0].error).toHaveLength(10000)
+  })
+
+  it('一张画布保存失败时，其他画布的生成结果照常回填', async () => {
+    const state = useCanvasStore.getState()
+    // 新建的画布排在前面，先处理失败的那张
+    const ok = await state.createProject('正常')
+    const broken = await state.createProject('失败')
+    for (const project of [broken, ok]) {
+      await state.applyOperations(project.id, [{ type: 'add_node', id: 'out', nodeType: 'image', metadata: { status: 'loading', taskId: project.id } }])
+    }
+    mocks.beforeSave = (project) => {
+      if (project.id === broken.id) throw new Error('quota')
+    }
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      useStore.setState({ tasks: [broken, ok].map((project) => ({
+        id: project.id, status: 'done', outputImages: ['result'], params: { output_format: 'png' },
+      } as unknown as TaskRecord)) })
+      await reconcileCanvasTasks()
+      await vi.waitFor(() => expect(mocks.projects.get(ok.id)?.nodes.find((node) => node.id === 'out')?.metadata?.status).toBe('success'))
+    } finally {
+      error.mockRestore()
+    }
+  })
+
   it('撤销恢复出生成中的节点时，按已完成的任务重新回填结果', async () => {
     const state = useCanvasStore.getState()
     const project = await state.createProject()

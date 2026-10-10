@@ -71,6 +71,17 @@ describe('画布状态持久化与撤销', () => {
     }
   })
 
+  it('移入回收站和恢复不进入撤销历史，恢复后撤销不会把画布再放回回收站', async () => {
+    const state = useCanvasStore.getState()
+    const project = await state.createProject()
+    await state.updateProject(project.id, { title: '改过' })
+    await state.hideProject(project.id)
+    await state.hideProject(project.id, false)
+    await state.undo(project.id)
+    expect(state.getSnapshot(project.id).hiddenAt).toBeUndefined()
+    expect(state.getSnapshot(project.id).title).not.toBe('改过')
+  })
+
   it('交互期间真实 Agent 修改仍会拒绝旧快照，取消及卸载不留下延迟保存', async () => {
     vi.useFakeTimers()
     const state = useCanvasStore.getState()

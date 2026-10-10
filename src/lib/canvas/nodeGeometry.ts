@@ -86,9 +86,10 @@ export function canUngroupSelectedNodes(selectedIds: Set<string>, nodes: CanvasN
   return nodes.some((node) => selectedIds.has(node.id) && (node.type === CanvasNodeType.Group || Boolean(node.metadata?.groupId)))
 }
 
-function emptyGroupIds(nodes: CanvasNodeData[], keepId?: string) {
+// 只清理本次操作中成员被移走后变空的分组；画布上本来就空着的分组（如先建好、稍后再放节点的画框）保留
+function emptyGroupIds(nodes: CanvasNodeData[], candidateIds: Set<string>) {
   const used = new Set(nodes.flatMap((node) => (node.type !== CanvasNodeType.Group && node.metadata?.groupId ? [node.metadata.groupId] : [])))
-  return new Set(nodes.filter((node) => node.type === CanvasNodeType.Group && node.id !== keepId && !used.has(node.id)).map((node) => node.id))
+  return new Set(nodes.filter((node) => node.type === CanvasNodeType.Group && candidateIds.has(node.id) && !used.has(node.id)).map((node) => node.id))
 }
 
 function withoutRemoved(nodes: CanvasNodeData[], connections: CanvasConnection[], removedIds: Set<string>) {
@@ -102,13 +103,14 @@ export function applyGroupSelection(selectedIds: Set<string>, nodes: CanvasNodeD
   const members = collectGroupMemberNodes(selectedIds, nodes)
   if (members.length < 2) return null
   const memberIds = new Set(members.map((node) => node.id))
+  const formerGroupIds = new Set(members.flatMap((node) => (node.metadata?.groupId ? [node.metadata.groupId] : [])))
   const flattenedGroupIds = selectedGroupIds(selectedIds, nodes)
   const updated = nodes
     .filter((node) => !flattenedGroupIds.has(node.id))
     .map((node) => (memberIds.has(node.id) ? { ...node, metadata: { ...node.metadata, groupId: group.id } } : node))
   const insertAt = updated.findIndex((node) => memberIds.has(node.id))
   const withGroup = insertAt < 0 ? [...updated, group] : [...updated.slice(0, insertAt), group, ...updated.slice(insertAt)]
-  const next = withoutRemoved(withGroup, connections, new Set([...flattenedGroupIds, ...emptyGroupIds(withGroup, group.id)]))
+  const next = withoutRemoved(withGroup, connections, new Set([...flattenedGroupIds, ...emptyGroupIds(withGroup, formerGroupIds)]))
   return { ...next, selectedIds: [group.id] }
 }
 
@@ -116,6 +118,7 @@ export function applyUngroupSelection(selectedIds: Set<string>, nodes: CanvasNod
   const flattenedGroupIds = selectedGroupIds(selectedIds, nodes)
   if (!flattenedGroupIds.size && !nodes.some((node) => selectedIds.has(node.id) && node.metadata?.groupId)) return null
   const releasedIds = new Set<string>()
+  const formerGroupIds = new Set<string>()
   const updated = nodes
     .filter((node) => !flattenedGroupIds.has(node.id))
     .map((node) => {
@@ -123,9 +126,10 @@ export function applyUngroupSelection(selectedIds: Set<string>, nodes: CanvasNod
       if (!groupId) return node
       if (!flattenedGroupIds.has(groupId) && !selectedIds.has(node.id)) return node
       releasedIds.add(node.id)
+      formerGroupIds.add(groupId)
       return { ...node, metadata: { ...node.metadata, groupId: undefined } }
     })
-  const next = withoutRemoved(updated, connections, new Set([...flattenedGroupIds, ...emptyGroupIds(updated)]))
+  const next = withoutRemoved(updated, connections, new Set([...flattenedGroupIds, ...emptyGroupIds(updated, formerGroupIds)]))
   return { ...next, selectedIds: next.nodes.filter((node) => selectedIds.has(node.id) || releasedIds.has(node.id)).map((node) => node.id) }
 }
 
