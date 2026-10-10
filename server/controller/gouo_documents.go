@@ -176,7 +176,7 @@ func PutGouoDocument(c *gin.Context) {
 	}
 	assetSet := make(map[string]bool, len(assetIDs))
 	for _, id := range assetIDs {
-		if len(id) != 32 {
+		if !gouoAssetIDPattern.MatchString(id) {
 			gouoFail(c, http.StatusBadRequest, "invalid_document_assets", "文档图片 ID 无效")
 			return
 		}

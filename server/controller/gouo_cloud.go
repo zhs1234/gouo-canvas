@@ -23,6 +23,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// 每个用户最多的收藏夹数量（含回收站）
+const gouoMaxCollections = 500
+
 var gouoAssetRoles = map[string]bool{
 	"input":                true,
 	"mask_target":          true,
@@ -300,6 +303,10 @@ func PutGouoTask(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "invalid_status", "任务状态无效")
 		return
 	}
+	if len(input.Model) > 100 {
+		gouoFail(c, http.StatusBadRequest, "invalid_model", "模型名称过长")
+		return
+	}
 	if input.Operation != "generation" && input.Operation != "edit" && input.Operation != "variation" {
 		gouoFail(c, http.StatusBadRequest, "invalid_operation", "任务类型无效")
 		return
@@ -325,7 +332,7 @@ func PutGouoTask(c *gin.Context) {
 	outputCount := 0
 	assets := make([]model.GouoTaskAsset, 0, len(input.Assets))
 	for _, item := range input.Assets {
-		if !gouoAssetRoles[item.Role] || item.AssetID == "" || item.Position < 0 {
+		if !gouoAssetRoles[item.Role] || !gouoAssetIDPattern.MatchString(item.AssetID) || item.Position < 0 || len(item.ClientImageID) > 128 {
 			gouoFail(c, http.StatusBadRequest, "invalid_asset_link", "任务图片关系无效")
 			return
 		}
@@ -380,6 +387,10 @@ func PutGouoTask(c *gin.Context) {
 	if err := model.UpsertGouoTask(&task, assets, collectionIDs); err != nil {
 		if errors.Is(err, model.ErrGouoOriginalAssetConflict) {
 			gouoFail(c, http.StatusConflict, "original_asset_conflict", err.Error())
+			return
+		}
+		if errors.Is(err, model.ErrGouoTaskAssets) {
+			gouoFail(c, http.StatusForbidden, "asset_not_owned", err.Error())
 			return
 		}
 		if errors.Is(err, model.ErrGouoStorageQuota) {
@@ -549,6 +560,10 @@ func PutGouoCollection(c *gin.Context) {
 	if existing, _ := model.GetGouoCollection(c.GetInt("id"), c.Param("id")); existing != nil {
 		collection.CreatedAt = existing.CreatedAt
 		collection.HiddenAt = existing.HiddenAt
+	} else if count, err := model.CountGouoCollections(c.GetInt("id")); err != nil || count >= gouoMaxCollections {
+		// 收藏夹和收藏关系不计入云端空间，限制数量避免无限写入
+		gouoFail(c, http.StatusBadRequest, "collection_limit", fmt.Sprintf("收藏夹最多 %d 个，请先删除不用的收藏夹", gouoMaxCollections))
+		return
 	}
 	if err := model.UpsertGouoCollection(&collection); err != nil {
 		gouoFail(c, http.StatusInternalServerError, "collection_save_failed", "保存云端收藏夹失败")

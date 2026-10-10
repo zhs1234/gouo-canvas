@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"one-api/common/config"
@@ -144,4 +146,32 @@ func performAssetUpload(t *testing.T, router http.Handler, userID int, data []by
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	return response
+}
+
+func TestGouoCollectionCountLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.GouoFavoriteCollection{}))
+	oldDB := model.DB
+	model.DB = db
+	t.Cleanup(func() { model.DB = oldDB })
+	rows := make([]model.GouoFavoriteCollection, 0, gouoMaxCollections)
+	for i := 0; i < gouoMaxCollections; i++ {
+		rows = append(rows, model.GouoFavoriteCollection{ID: fmt.Sprintf("c%d", i), UserID: 1, Name: "收藏"})
+	}
+	require.NoError(t, db.CreateInBatches(rows, 100).Error)
+	put := func(id string) int {
+		router := gin.New()
+		router.PUT("/collections/:id", func(c *gin.Context) {
+			c.Set("id", 1)
+			PutGouoCollection(c)
+		})
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/collections/"+id, strings.NewReader(`{"name":"新名字"}`)))
+		return res.Code
+	}
+	// 达到上限后不能再新建，已有收藏夹仍可改名
+	require.Equal(t, http.StatusBadRequest, put("new-one"))
+	require.Equal(t, http.StatusOK, put("c1"))
 }

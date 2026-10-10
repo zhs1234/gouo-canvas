@@ -151,6 +151,10 @@ func cleanupGouoImageResults(root string) (int64, error) {
 			continue
 		}
 		info, err := entry.Info()
+		// 多实例共享目录时，其他实例的临时文件可能在列目录后被改名或删除
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return used, err
 		}

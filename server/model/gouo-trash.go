@@ -2,11 +2,13 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"one-api/common/config"
+	"one-api/common/logger"
 
 	"gorm.io/gorm"
 )
@@ -51,28 +53,30 @@ func PurgeGouoTrash(now time.Time) error {
 	if err != nil {
 		return err
 	}
+	// 单个账号出错不影响其他账号的清理，最后返回第一个错误
+	var firstErr error
 	for userID := range users {
-		paths, err := purgeGouoUserTrash(userID, cutoff, deleted[userID])
-		if err != nil {
-			return err
-		}
-		// 记录删除提交后再删文件；文件删除失败只会残留文件，不会留下指向缺失文件的记录。
-		for _, path := range paths {
-			if err := os.Remove(filepath.Join(root, filepath.Clean(path))); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
+		if err := purgeGouoUserTrash(userID, cutoff, deleted[userID], root); err != nil {
+			logger.SysError(fmt.Sprintf("清理用户 %d 的云端回收站失败: %s", userID, err.Error()))
+			if firstErr == nil {
+				firstErr = err
 			}
 		}
 	}
-	return nil
+	return firstErr
 }
 
-// purgeGouoUserTrash 删除一个账号过期的回收站记录，返回已删除图片的存储路径；all 表示账号已删除，清除全部云端数据。
-func purgeGouoUserTrash(userID int, cutoff int64, all bool) ([]string, error) {
-	// 与上传共用锁，避免上传按哈希复用一张正在被清除的图片
-	gouoAssetMutex.Lock()
-	defer gouoAssetMutex.Unlock()
+// purgeGouoUserTrash 删除一个账号过期的回收站记录及不再被引用的图片文件；all 表示账号已删除，清除全部云端数据。
+func purgeGouoUserTrash(userID int, cutoff int64, all bool, root string) error {
+	// 与上传共用锁，删除文件也在锁内完成：否则锁释放后同一张图重新上传会写入新记录，随后文件被删掉
+	defer lockGouoAssets(userID)()
 	var paths []string
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		// 与作品、文档保存一样先锁用户行，清理期间新增的图片引用会等清理结束后再确认归属；
+		// 必须是第一条语句，MySQL 的一致性快照才会在拿到锁之后建立。已删除账号也要锁，用 Unscoped
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", userID).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
+			return err
+		}
 		expired := func(model any) *gorm.DB {
 			query := tx.Model(model).Where("user_id = ?", userID)
 			if !all {
@@ -103,11 +107,13 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool) ([]string, error) {
 		if err := expired(&GouoFavoriteCollection{}).Pluck("id", &collectionIDs).Error; err != nil {
 			return err
 		}
-		if len(collectionIDs) > 0 {
-			if err := tx.Where("user_id = ? AND collection_id IN ?", userID, collectionIDs).Delete(&GouoFavoriteItem{}).Error; err != nil {
+		// 分批删除，避免超过数据库占位符数量上限
+		for start := 0; start < len(collectionIDs); start += 500 {
+			batch := collectionIDs[start:min(start+500, len(collectionIDs))]
+			if err := tx.Where("user_id = ? AND collection_id IN ?", userID, batch).Delete(&GouoFavoriteItem{}).Error; err != nil {
 				return err
 			}
-			if err := tx.Where("user_id = ? AND id IN ?", userID, collectionIDs).Delete(&GouoFavoriteCollection{}).Error; err != nil {
+			if err := tx.Where("user_id = ? AND id IN ?", userID, batch).Delete(&GouoFavoriteCollection{}).Error; err != nil {
 				return err
 			}
 		}
@@ -152,14 +158,25 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool) ([]string, error) {
 			paths = append(paths, asset.StoragePath)
 		}
 		for start := 0; start < len(assetIDs); start += 500 {
-			if err := tx.Where("user_id = ? AND id IN ?", userID, assetIDs[start:min(start+500, len(assetIDs))]).Delete(&GouoAsset{}).Error; err != nil {
+			// 删除时再按时间过滤，期间被重新上传或去重复用的图片不删
+			query := tx.Where("user_id = ? AND id IN ?", userID, assetIDs[start:min(start+500, len(assetIDs))])
+			if !all {
+				query = query.Where("updated_at < ?", cutoff)
+			}
+			if err := query.Delete(&GouoAsset{}).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return paths, nil
+	// 记录删除提交后再删文件；文件删除失败只会残留文件，不会留下指向缺失文件的记录。
+	for _, path := range paths {
+		if err := os.Remove(filepath.Join(root, filepath.Clean(path))); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }

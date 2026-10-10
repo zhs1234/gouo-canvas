@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"one-api/common/config"
@@ -14,6 +15,7 @@ import (
 )
 
 var ErrGouoOriginalAssetConflict = errors.New("原图不能被预览图覆盖，请刷新后重新同步")
+var ErrGouoTaskAssets = errors.New("任务引用了不属于当前用户的图片")
 
 type GouoTask struct {
 	ID              string         `json:"id" gorm:"type:char(32);primaryKey"`
@@ -107,6 +109,18 @@ func GetGouoAsset(userID int, id string) (*GouoAsset, error) {
 
 func InsertGouoAsset(asset *GouoAsset) error {
 	return DB.Create(asset).Error
+}
+
+// 作品文本列在 MySQL 上是 TEXT（最多 65535 字节），超长会让同步一直失败；PostgreSQL 不能存 NUL
+const gouoTextMaxBytes = 60000
+
+func trimGouoText(text string) string {
+	text = strings.ReplaceAll(text, "\x00", "")
+	if len(text) <= gouoTextMaxBytes {
+		return text
+	}
+	// 截断可能切在多字节字符中间，去掉残缺的尾字节
+	return strings.ToValidUTF8(text[:gouoTextMaxBytes], "")
 }
 
 func CountOwnedGouoAssets(userID int, ids []string) (int64, error) {
@@ -209,6 +223,25 @@ func UpsertGouoTask(task *GouoTask, assets []GouoTaskAsset, collectionIDs []stri
 			return err
 		}
 		task.UpdatedAt = now
+		task.Prompt, task.ErrorMessage = trimGouoText(task.Prompt), trimGouoText(task.ErrorMessage)
+		// 控制器的归属检查在事务外，期间回收站清理可能已删掉未被引用的图片；锁住用户行后再确认一次
+		owned := map[string]bool{}
+		for _, asset := range assets {
+			owned[asset.AssetID] = true
+		}
+		if len(owned) > 0 {
+			ids := make([]string, 0, len(owned))
+			for id := range owned {
+				ids = append(ids, id)
+			}
+			var count int64
+			if err := tx.Model(&GouoAsset{}).Where("user_id = ? AND id IN ?", task.UserID, ids).Count(&count).Error; err != nil {
+				return err
+			}
+			if count != int64(len(ids)) {
+				return ErrGouoTaskAssets
+			}
+		}
 		var existing GouoTask
 		err = tx.Where("user_id = ? AND client_task_id = ?", task.UserID, task.ClientTaskID).First(&existing).Error
 		if err == nil {
@@ -348,6 +381,13 @@ func ListGouoCollections(userID int, includeHidden bool) ([]GouoFavoriteCollecti
 	}
 	err := tx.Order("updated_at DESC, id").Find(&collections).Error
 	return collections, err
+}
+
+// CountGouoCollections 统计用户的全部收藏夹（含回收站中的）
+func CountGouoCollections(userID int) (int64, error) {
+	var count int64
+	err := DB.Model(&GouoFavoriteCollection{}).Where("user_id = ?", userID).Count(&count).Error
+	return count, err
 }
 
 func CountOwnedGouoCollections(userID int, ids []string) (int64, error) {
@@ -527,7 +567,7 @@ func RecordGouoGeneration(record GouoGenerationRecord) error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			task = GouoTask{
 				ID: utils.GetUUID(), UserID: record.UserID, ClientTaskID: record.ClientTaskID, SchemaVersion: 1,
-				Prompt: record.Prompt, Model: record.Model, Operation: record.Operation, Params: record.Params,
+				Prompt: trimGouoText(record.Prompt), Model: record.Model, Operation: record.Operation, Params: record.Params,
 				ResultMeta: datatypes.JSON(`{}`), ClientCreatedAt: now, CreatedAt: now,
 			}
 		} else if err != nil {
@@ -589,7 +629,7 @@ func UpdateGouoTaskMeta(userID int, clientTaskID string, meta GouoTaskMeta) (*Go
 		}
 		updates := map[string]any{"updated_at": now}
 		if meta.Prompt != "" {
-			updates["prompt"] = meta.Prompt
+			updates["prompt"] = trimGouoText(meta.Prompt)
 		}
 		if len(meta.Params) > 0 {
 			updates["params"] = meta.Params

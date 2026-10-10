@@ -36,8 +36,16 @@ var GouoAssetFormats = map[string]string{
 	"image/avif": ".avif",
 }
 
-// 同一用户按内容去重；上传与服务端保存生成结果共用，避免并发写入同一文件。
-var gouoAssetMutex sync.Mutex
+// 同一用户按内容去重；上传、服务端保存生成结果与回收站清理按用户互斥，避免并发写入或删除同一文件。
+// 不同用户互不阻塞，否则一个大账号的清理会卡住全站的出图响应。
+var gouoAssetLocks sync.Map
+
+func lockGouoAssets(userID int) func() {
+	value, _ := gouoAssetLocks.LoadOrStore(userID, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
 
 // SaveGouoAssetBytes 把图片写入用户素材库，内容相同时直接返回已有素材。
 // 服务端保存的生成结果已经扣费，不受空间配额限制，否则付费图片会丢失。
@@ -61,8 +69,7 @@ func SaveGouoAssetBytes(userID int, data []byte, originalName string, enforceQuo
 	sum := sha256.Sum256(data)
 	hash := hex.EncodeToString(sum[:])
 
-	gouoAssetMutex.Lock()
-	defer gouoAssetMutex.Unlock()
+	defer lockGouoAssets(userID)()
 	existing, err := GetGouoAssetByHash(userID, hash)
 	if err != nil {
 		return nil, false, err

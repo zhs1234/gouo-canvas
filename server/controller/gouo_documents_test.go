@@ -76,6 +76,12 @@ func TestGouoDocumentAPIValidationConflictAndAssets(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, request("PUT", "/canvases/project", 1, input).Code)
 	}
 	require.True(t, validateGouoDocument(map[string]any{"prompt": "如何保护 api_key？"}, 0))
+	// MySQL 比较不区分大小写，大写 ID 会通过归属检查，但清理时按原样比较，图片会被当作未引用删掉
+	upper := strings.ToUpper(assetID)
+	input["document"] = map[string]any{"schemaVersion": 1, "nodes": []any{}}
+	input["asset_ids"] = []string{upper}
+	input["assets"] = []any{map[string]string{"asset_id": upper, "client_image_id": "local-image"}}
+	require.Equal(t, http.StatusBadRequest, request("PUT", "/canvases/project", 1, input).Code)
 }
 
 func TestGouoDocumentReferencesIgnoreTextAndKeepNestedImages(t *testing.T) {
