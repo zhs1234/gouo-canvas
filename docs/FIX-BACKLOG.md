@@ -24,7 +24,7 @@
 
 - 暂缓（只登记）：6 项（GOUO-081 至 086），其中 GOUO-084 通用对话可透支为 P1，属上游设计
 
-- 修复中：0 项；待修复：0 项。合并不等于已验证，仍需按各条目验收检查验证
+- 修复中：0 项；待修复：0 项。相关补丁均已合并；部分条目仍有正文已登记的未覆盖边界，合并不表示只剩运行验收。本轮新复核不改变 14 项历史已验证范围。
 
 - 不适用：1 项（GOUO-025，复核为误报）
 
@@ -96,6 +96,45 @@ main 并非完全没有工作流：存在仅以 v* tag push / 部分允许 workf
 
 
 本轮仅静态阅读代码及测试源码，未执行测试、浏览器验收、支付或模型请求。保留此前修复会话的 14 项本地已验证状态与原始记录；本轮没有独立重放其原始输出，不能将此前结果冒称为本轮执行，也不撤销它们。外部 OAuth/Stripe、MySQL、真实部署及供应商验收仍未完成。私有 Page 仍待同步，本轮未读取或更新。
+
+## 合并后增量复核（2026-10-10 20:26，北京时间）
+
+截至北京时间2026-10-10 20:26，结束前再次读取，状态未变：
+
+- main：eea382e07e14502ec74de8476b51d23a5c402ec2
+- PR #20–32 已于15:34合并，PR #33于15:41合并
+- 唯一开放PR为草稿[PR #7](https://github.com/zhs1234/gouo-canvas/pull/7)，head：d4f682d129610b456fd9cca99d3e7e05ef8fd3f8
+- 完整清单2510行，blob：3c9b7d395dcb5c9051c3bb8c41f3d17653126535
+- 编号001–086连续唯一；逐条统计14已验证修复、65待验证、6暂缓、1不适用，与用户更新后的顶部一致
+- 文档较上轮新增3提交，仅该文件变动，69增/53删，应保留全部用户编辑
+- main较上轮新增32提交，包括此前已审候选、合并记录及新增PR #33。26个fix/*分支全部ahead=0，无未合并修复增量。旧文档分支的历史ahead不算活跃代码工作；指定v2及旧派生均排除
+
+来源：[主干增量](https://github.com/zhs1234/gouo-canvas/compare/a496a116fa75e7d7db1e316803a5551d5682894f...eea382e07e14502ec74de8476b51d23a5c402ec2)、[文档增量](https://github.com/zhs1234/gouo-canvas/compare/84b65f7b6f24f84e90aee866f173d55ce858fc0d...d4f682d129610b456fd9cca99d3e7e05ef8fd3f8)、[PR #33](https://github.com/zhs1234/gouo-canvas/pull/33)。
+
+
+以下16个固定SHA均为check-runs=0、statuses=[]、汇总pending/total_count=0、Actions runs=0。没有运行中或通过的证据：
+
+- main eea382e07e14502ec74de8476b51d23a5c402ec2
+- PR7 d4f682d129610b456fd9cca99d3e7e05ef8fd3f8
+- PR20 7f703bcd4263936da91487f69614e1dac643fb06
+- PR21 a8a52dd07adcc798ed4951ebcb56bca3d87c4ae7
+- PR22 d4df8cd628021f9339e6174ee0efac99caa5e6d2
+- PR23 cfd758d6ef3f5e0d77e2d514cee42485aafe662c
+- PR24 f9dc70333ce379b27a73e91a04d3384d684a1373
+- PR25 29e2e28123dac833c9427244d19c26a90aae0f7e
+- PR26 6e71231d9fbbd8b304b4e7a7904cda0084ef29ab
+- PR27 e5d9360a409abc61f7de16f29e6eaa02d3922297
+- PR28 ff82b55ca07a1e6f429e37b9811deef30a16f2b6
+- PR29 d7ffb7b6a8a2c80665d19948e10700efe01c3e43
+- PR30 502726c88eb44198cd91b1fabdc6ce4b607101c1
+- PR31 e67e103ac0a6c8f18c4891219b74a01661fdb23a
+- PR32 a382f0904bc578e5e09ee495ca1b1465a0750f67
+- PR33 676e2b2223f6531a242717d2929ed771f5ec3e22
+
+最新三条部署运行仍关联旧a7132c1e7e290ef3c29abcdb8cc7c60da6ee696c：[Pages失败](https://github.com/zhs1234/gouo-canvas/actions/runs/37915140169)、[Docker成功](https://github.com/zhs1234/gouo-canvas/actions/runs/37915139956)、[Vercel Hook成功](https://github.com/zhs1234/gouo-canvas/actions/runs/37915140291)。未核验实际线上部署。
+
+
+本轮只读核对代码及测试源码，没有执行测试、构建、浏览器验收、支付或模型请求；此前用户补充的本地测试和 14 项已验证历史全部保留。GOUO-055、066、073/077、078、080 的已登记剩余边界在合并后仍保留，不能把合并等同于完整覆盖。私有 Page 仍待同步，本轮未读取或更新。
 
 ## 优先处理顺序
 
@@ -318,7 +357,7 @@ root、admin1、普通用户分别调用用户列表与详情：root 列表含�
 
 历史记录（此处保留原结论，当前操作建议见下方更正）：用户要求修复已知问题，按此前推荐的方案 (a) 处理：在部署文档中说明支付回调按网关当前配置验签，更换商户时新建网关并停用旧网关，旧网关保留到其订单全部完成或关闭（[PR #16](https://github.com/zhs1234/gouo-canvas/pull/16)，`docs/zh-CN/backend.md`、`docs/en/backend.md`）。代码行为不变；如需让改配置后的旧订单仍能按原商户入账，需改为下单时保存配置快照（方案 b），另行决定。
 
-**静态复核更正（2026-10-10，北京时间；main a496a116fa75e7d7db1e316803a5551d5682894f）**
+**历史静态复核更正（2026-10-10，合并前 main a496a116fa75e7d7db1e316803a5551d5682894f）**
 
 此前方案 (a) 和部署文档的“新建网关并停用旧网关”建议存在代码前提遗漏。当前 main 的 [PaymentCallback](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/server/controller/order.go#L116-L122) 仍调用下单共用的加载路径，而 [GetPaymentByUUID](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/server/model/payment.go#L40-L43) 只查询启用、未软删除的网关。因此旧网关一旦停用或删除，先前已付款订单的后续回调会返回 payment not found，不能自动到账。原文的[部署建议](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/docs/zh-CN/backend.md#L76) 不足以实现预期。
 
@@ -326,13 +365,20 @@ root、admin1、普通用户分别调用用户列表与详情：root 列表含�
 
 候选提交 [c6aa0d5ec95fd7adffbc607b2005da5496e1f52e](https://github.com/zhs1234/gouo-canvas/commit/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e) 新增 [只供回调使用的无状态过滤加载](https://github.com/zhs1234/gouo-canvas/blob/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e/server/model/payment.go#L46-L50)，允许停用或软删除后仍按保留配置验签，下单路径保持启用限制。它没有保存历史商户配置快照，原地改商户配置仍会破坏原商户回调。新增 [停用后软删除网关的测试](https://github.com/zhs1234/gouo-canvas/blob/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e/server/controller/payment_callback_test.go#L67-L71) 本轮未运行，且只测停用并软删除的组合，仍需分别覆盖启用、仅停用、仅软删除及所有受支持网关。
 
-**当前使用建议（取代历史停用旧网关建议）**
+**合并前使用建议（历史，当前以合并后时效更正为准）**
 
 “支付回调目前按网关的当前配置验签，更换商户应新建网关，不要原地覆盖仍有未结清交易的旧网关配置。当前 main 停用或删除旧网关会同时阻断其回调；在回调独立加载补丁合并并验证前，不能把‘停用旧网关’当成既停止新下单、又保证旧订单到账的切换方式。若保留旧网关接收回调，它仍须保持启用，这也仍允许新下单，需另行安排受控停单与对账窗口。所有支付会话、延迟回调和未结清交易应先完成核对；仅本地订单超时关闭不代表支付渠道已撤销付款。候选补丁验证通过后，可停止旧网关新下单，同时保留其原配置处理历史回调。更换商户配置快照方案仍需另行决定。”
 
 处理状态继续待验证，不改变本条历史本地验证记录。应补充验收：停用/软删后新下单被拒，旧订单正确签名仍可到账；延迟到达的 closed 订单正确处理；重复回调幂等；错误签名、金额和币种仍拒绝；商户配置不可被旧订单静默替换。
 
-**修复记录（2026-10-10，第三轮修复会话）**：[PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)，单元测试 `controller/payment_callback_test.go` 撤掉修复后失败。 历史商户配置快照仍未实现，原地改商户配置仍会破坏原商户回调；按上方"当前使用建议"操作。
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)，单元测试 `controller/payment_callback_test.go` 撤掉修复后失败。 历史商户配置快照仍未实现，原地改商户配置仍会破坏原商户回调；按下方合并后时效更正操作；上方使用建议保留为合并前历史。
+
+**合并后时效更正（2026-10-10 20:26北京时间）**：PR #22 已合并。main eea382e07e14502ec74de8476b51d23a5c402ec2 的回调使用独立加载路径，按UUID进行Unscoped查询，不再要求网关启用或未软删除；新下单仍要求启用且未删除。因此上方“当前main停用或删除会阻断回调”仅适用于合并前基线，不应继续作为当前行为。保留原商户配置、避免原地换商户，以及延迟订单对账要求仍适用。此为代码核对，不代表全部支付渠道、停用/软删组合及真实沙箱验收已完成，处理状态保持待验证。
+
+依据：[控制器](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/controller/order.go#L116-L125)、[回调与下单查询差别](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/model/payment.go#L40-L50)。
+
+
+当前操作边界：更换商户应新建网关；旧网关可停用以阻止新下单，并保留原商户配置处理历史回调。不要原地替换仍有未结清交易的商户配置。停用/软删除不等于撤销已泄漏支付凭据，延迟支付与渠道对账仍需核对；不存在历史配置快照的保证。各支持网关与状态组合仍待对应沙箱验收。
 
 ### GOUO-007 供应商图片 URL 可触发后端内网请求
 
@@ -1222,7 +1268,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 [PR #18](https://github.com/zhs1234/gouo-canvas/pull/18)，提交 [f5c1b41](https://github.com/zhs1234/gouo-canvas/commit/f5c1b41)。已运行：`TestPurgeGouoTrashKeepsReuploadedAsset`（撤掉修复后失败）、`TestPurgeGouoTrashAfterRetention`。合并并按上方验收检查完成验证前，不标记为已验证修复。
 
-**补充复核（2026-10-10，main a496a116）**
+**历史补充复核（2026-10-10，合并前 main a496a116）**
 
 PR #18 已修复“去重命中不刷新 updated_at”，但仍有另一段清理与同内容重传的竞态：purgeGouoUserTrash 在数据库删除后返回并释放素材锁，外层随后才删除物理文件。两者之间同用户重新上传同内容时，新记录会重新建立并复用旧路径；随后清理删除该路径，留下新记录指向不存在的文件。这不是原有“刷新 updated_at”验收能覆盖的时序。
 
@@ -1234,7 +1280,7 @@ PR #18 已修复“去重命中不刷新 updated_at”，但仍有另一段清�
 
 **修复记录（2026-10-10，第三轮修复会话）**：修复在 [PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)（按用户锁覆盖数据库删除和物理文件删除），并新增 `TestPurgeGouoTrashKeepsAssetTouchedDuringPurge`（清理事务挑出候选后、删除前刷新 updated_at，撤掉"删除时按 updated_at 过滤"后失败）及 GOUO-060 的用户行锁。上方要求的"数据库删除后、删文件前设屏障并发重传"的确定性测试和双进程验证尚未做；锁是进程内锁，多实例共享素材盘时文件删除与重传仍有窗口。
 
-**补充复核（2026-10-10，PR25 head 29e2e281）**：删除时增加 updated_at 过滤仍未覆盖文件删除清单。两个实例共享 PostgreSQL/MySQL 与素材目录时，候选选取后被另一实例去重复用的素材记录会保留，但物理文件仍被删除：paths 在 DELETE 过滤前已收集，提交后没有依据实际删除结果重新筛选。上传去重只持有进程内锁并更新素材行，不参与清理的用户行锁。新增 TestPurgeGouoTrashKeepsAssetTouchedDuringPurge 仅断言记录保留，不能证明图片可读取。本次为静态发现，未执行测试；此前测试报告不能覆盖本场景。
+**历史补充复核（2026-10-10，PR25 head 29e2e281；旧正常并发遗漏已由 PR #33 覆盖）**：删除时增加 updated_at 过滤仍未覆盖文件删除清单。两个实例共享 PostgreSQL/MySQL 与素材目录时，候选选取后被另一实例去重复用的素材记录会保留，但物理文件仍被删除：paths 在 DELETE 过滤前已收集，提交后没有依据实际删除结果重新筛选。上传去重只持有进程内锁并更新素材行，不参与清理的用户行锁。新增 TestPurgeGouoTrashKeepsAssetTouchedDuringPurge 仅断言记录保留，不能证明图片可读取。本次为静态发现，未执行测试；此前测试报告不能覆盖本场景。
 
 **新增验收**：让双实例在“选出候选”和“执行删除”之间发生同内容去重上传，同时检查数据库记录、物理文件内容及鉴权下载。修复应使文件删除严格对应实际删除的记录，并在跨实例同步范围内保护重传；不得仅以行数断言证明图片完整性。
 
@@ -1247,6 +1293,26 @@ PR #18 已修复“去重命中不刷新 updated_at”，但仍有另一段清�
 - 新增测试用回调构造更新时间变化，只检查数据库行数，没有检查文件：[test L161–173](https://github.com/zhs1234/gouo-canvas/blob/29e2e28123dac833c9427244d19c26a90aae0f7e/server/model/gouo-trash_test.go#L161-L173)。
 
 **合并后复核修复（2026-10-10，[PR #33](https://github.com/zhs1234/gouo-canvas/pull/33)，已合并到 main [eea382e](https://github.com/zhs1234/gouo-canvas/commit/eea382e07e14502ec74de8476b51d23a5c402ec2)）**：见 GOUO-060 同名记录：文件删除改在用户行锁内且只删实际删掉的记录，上传同样先锁用户行，多实例下与清理互斥；双进程屏障测试尚未做。
+
+**补充静态复核（2026-10-10 20:26北京时间，PR #33 head 676e2b2223f6531a242717d2929ed771f5ec3e22；main eea382e07e14502ec74de8476b51d23a5c402ec2）**：上传与清理已使用相同用户行锁，并在 DELETE 后排除实际保留记录，原跨实例正常并发遗漏已有对应修复。另有提交前删除物理文件的故障恢复窗口：若文件删除后数据库事务未能提交并回滚，素材记录及过期回收站关系恢复，文件却不会恢复。影响仅限本次符合清理条件的素材，不包括原本受引用保护的活跃作品；但用户随后恢复该回收站作品仍可成功，下载图片返回404，恢复后的引用又会使坏素材记录持续保留。新增补写测试依赖调用者重新提供完整原图，不能证明提交失败后的恢复语义完整。建议作为P2故障恢复遗漏保留，采用可恢复的删除流程并保持跨实例互斥，不能简单移回提交后删除而重新引入旧竞态。
+
+**新增验收**：在物理删除后、数据库提交前注入确定性提交失败及进程退出；重启后不重新上传原图，检查数据库记录、文件内容、恢复接口和鉴权下载是否一致。另保留双进程共享数据库及素材目录的屏障测试。以上均未在本轮执行。
+
+
+正常并发覆盖证据：
+- [上传L103–138](https://github.com/zhs1234/gouo-canvas/blob/676e2b2223f6531a242717d2929ed771f5ec3e22/server/model/gouo-asset-store.go#L103-L138)与[清理L74–79](https://github.com/zhs1234/gouo-canvas/blob/676e2b2223f6531a242717d2929ed771f5ec3e22/server/model/gouo-trash.go#L74-L79)使用同一users行锁。
+- [DELETE后排除保留记录L168–177](https://github.com/zhs1234/gouo-canvas/blob/676e2b2223f6531a242717d2929ed771f5ec3e22/server/model/gouo-trash.go#L168-L177)修复旧文件删除清单遗漏。
+- [测试L161–176](https://github.com/zhs1234/gouo-canvas/blob/676e2b2223f6531a242717d2929ed771f5ec3e22/server/model/gouo-trash_test.go#L161-L176)已补文件存在断言，但仍是事务回调模拟，不是双进程屏障验证。
+- [清理每小时执行L30–37](https://github.com/zhs1234/gouo-canvas/blob/676e2b2223f6531a242717d2929ed771f5ec3e22/server/cron/main.go#L30-L37)，没有失败后阻断读取/恢复或立即修复文件的流程。
+- 普通用户也可凭仍在库内的素材ID新建引用：[作品只检查数据库归属L227–243](https://github.com/zhs1234/gouo-canvas/blob/676e2b2223f6531a242717d2929ed771f5ec3e22/server/model/gouo_cloud.go#L227-L243)、[文档同样只检查记录L79–90](https://github.com/zhs1234/gouo-canvas/blob/676e2b2223f6531a242717d2929ed771f5ec3e22/server/model/gouo-document.go#L79-L90)。
+- GOUO-063的图片结果缓存路径未被本补丁修改。
+
+
+故障与恢复代码依据：[清理L180–190](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/model/gouo-trash.go#L180-L190) 在事务提交前执行os.Remove
+- 删除文件后提交失败，或进程退出导致事务回滚，数据库会恢复素材记录及原回收站关系，文件不会恢复
+- 影响仅限本轮合格清理候选，例如过期回收站图片、过期孤立素材，不是原本受引用保护的活跃作品普遍丢图
+- [恢复接口L519–533](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/controller/gouo_cloud.go#L519-L533)和[恢复模型L362–372](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/model/gouo_cloud.go#L362-L372) 不检查保留期或物理文件，可恢复成功；随后[鉴权下载](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/controller/gouo_cloud.go#L239-L273)返回404。恢复成活跃引用后，下轮清理还会保留坏素材记录
+- [新增补写测试](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/model/gouo-trash_test.go#L179-L197) 明确提到提交失败，但依赖调用者仍持有原图并重新上传。它没有证明自动恢复或恢复接口一致性；代码承认此场景不等于用户接受该边界
 
 ### GOUO-035 平台账号令牌明文留在本地存储和备份文件中
 
@@ -1656,7 +1722,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 **修复记录（2026-10-10，第三轮修复会话）**：[PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)，单元测试覆盖；本地运行环境用支付宝模拟验证：跨网关回调确认收到但不结算，原网关回调正常入账。 补充提交（同在 [PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)）：没有订单号的会话在检查 payment_intent 之前确认收到，测试新增无 payment_intent 的零金额外来会话，撤掉后失败。RecordNotFound 确认收到时写系统日志，错配回调地址可从日志发现；其他网关同样适用，是否需要告警由用户决定。
 
-**增量复核（2026-10-10 14:37，PR #22 head d4df8cd）**
+**历史增量复核（2026-10-10 14:37，PR #22 head d4df8cd；该缺口已由 PR #33 覆盖）**
 
 d4df8cd628021f9339e6174ee0efac99caa5e6d2已将空client_reference_id判断移到payment_intent之前，修掉原文点名的“空引用+无payment_intent”场景，并增加无引用零金额fixture。应将原候选缺口描述标为历史，不继续当作当前行为。仍有同根因边界：合法签名paid事件若client_reference_id非空但不属于本站，且没有payment_intent，会在查询本站订单归属前报错并由控制器返回400。新fixture没有设置client_reference_id，尚未覆盖此组合。建议仍在050追加待验证，勿新编号。
 - https://github.com/zhs1234/gouo-canvas/blob/d4df8cd628021f9339e6174ee0efac99caa5e6d2/server/payment/gateway/stripe/payment.go#L203-L214
@@ -1664,9 +1730,14 @@ d4df8cd628021f9339e6174ee0efac99caa5e6d2已将空client_reference_id判断移到
 - https://github.com/zhs1234/gouo-canvas/blob/d4df8cd628021f9339e6174ee0efac99caa5e6d2/server/controller/payment_callback_test.go#L58-L73
 
 
-新增验收：有效签名 paid 事件携带非空外来 client_reference_id 且缺少 payment_intent，先识别订单归属再决定确认或拒绝；本系统订单的数据库故障仍需可重试。保持修复中，本轮未运行测试。
+新增验收：有效签名 paid 事件携带非空外来 client_reference_id 且缺少 payment_intent，先识别订单归属再决定确认或拒绝；本系统订单的数据库故障仍需可重试。这是合并前历史状态；当前保持待验证，本轮未运行测试。
 
 **合并后复核修复（2026-10-10，[PR #33](https://github.com/zhs1234/gouo-canvas/pull/33)，已合并到 main [eea382e](https://github.com/zhs1234/gouo-canvas/commit/eea382e07e14502ec74de8476b51d23a5c402ec2)）**：带非空外来订单号但没有 payment_intent 的会话，改为先按订单归属处理（外来订单确认收到、不入账），本系统已支付会话以会话 ID 作渠道流水号；数据库故障仍返回 5xx。`TestStripeCallbackGatewayEdgeCases` 补充该用例，撤掉修复后失败。
+
+**合并后静态复核（2026-10-10 20:26，北京时间）**
+
+PR #33已移除缺少payment_intent时的提前拒绝，以session ID作为后备流水号；正金额外来引用可进入订单归属查询，再确认收到、不入账。测试新增该组合，本轮未运行，未发现足够证据支持另增支付问题。[实现](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/payment/gateway/stripe/payment.go#L203-L227)、[新用例](https://github.com/zhs1234/gouo-canvas/blob/eea382e07e14502ec74de8476b51d23a5c402ec2/server/controller/payment_callback_test.go#L73-L82)。
+保留已有修复会话的运行记录，本轮仅核对代码与测试源码，不冒称独立执行或升级已验证。
 
 ### GOUO-051 单次对话远程图片总量没有内存预算
 
@@ -1924,7 +1995,7 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 ## 2026-10-10 第三轮修复会话新增（GOUO-060 起）
 
-以下条目来自同日第三轮深度检查的其余方向（数据库兼容、多实例、Agent、画布、前端安全、部署、文档一致性），编号接续 GOUO-059。修复已开 PR、未合并，按本清单惯例记为修复中；"本地运行环境"指会话容器中的 SQLite 与 PostgreSQL 16、mock 上游和模拟代理头，不等于实际部署验证。
+以下条目来自同日第三轮深度检查的其余方向（数据库兼容、多实例、Agent、画布、前端安全、部署、文档一致性），编号接续 GOUO-059。本节原登记时修复已开 PR、未合并，当时记为修复中；现 PR #20 至 #33 已合并，当前以各条目处理状态与顶部为准；"本地运行环境"指会话容器中的 SQLite 与 PostgreSQL 16、mock 上游和模拟代理头，不等于实际部署验证。
 
 ### GOUO-060 回收站清理期间新引用的图片被删
 
@@ -1942,9 +2013,11 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 **修复记录（2026-10-10）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，单元测试 `TestPurgeGouoTrashKeepsAssetTouchedDuringPurge`、`TestUpsertGouoTaskRechecksAssetsAndTrimsText` 撤掉修复后失败，并在 PostgreSQL 16 上运行通过。
 
-**增量复核（2026-10-10 14:37，PR #25 head 29e2e281）**：用户行锁与锁内归属复查覆盖作品/文档引用写入，但不覆盖素材上传的跨实例文件竞态；后者见 GOUO-034 的 29e2e281 补充复核。此前 PostgreSQL 16 测试报告保留，其行数断言不能扩展为双实例图片文件与鉴权下载完整性已通过。本轮未运行测试，保持修复中。
+**历史增量复核（2026-10-10 14:37，PR #25 head 29e2e281；旧正常并发遗漏已由 PR #33 覆盖）**：用户行锁与锁内归属复查覆盖作品/文档引用写入，但不覆盖素材上传的跨实例文件竞态；后者见 GOUO-034 的 29e2e281 补充复核。此前 PostgreSQL 16 测试报告保留，其行数断言不能扩展为双实例图片文件与鉴权下载完整性已通过。本轮未运行测试，保持修复中。
 
 **合并后复核修复（2026-10-10，[PR #33](https://github.com/zhs1234/gouo-canvas/pull/33)，已合并到 main [eea382e](https://github.com/zhs1234/gouo-canvas/commit/eea382e07e14502ec74de8476b51d23a5c402ec2)）**：14:37 增量复核指出：删除记录时按 updated_at 保留了刚复用的记录，但文件清单在此之前已收集，被保留记录的文件仍被删除。PR #33 改为只删实际删掉记录的文件，并在提交前、仍持有用户行锁时删除；上传的查重、写文件、建记录放进先锁用户行的事务，与清理在多实例下互斥；去重命中但文件缺失时补写。`TestPurgeGouoTrashKeepsAssetTouchedDuringPurge` 扩充文件检查、新增 `TestSaveGouoAssetRestoresMissingFileOnDeduplicate`，撤掉修复后均失败；SQLite 与 PostgreSQL 本地运行回归通过。双进程并发验证尚未做。
+
+**补充静态复核（2026-10-10 20:26，北京时间，main eea382e）**：原正常跨实例引用/去重并发遗漏已由 PR #33 覆盖，不能沿用“上传不参与用户行锁”或“记录保留却仍按旧清单删文件”的当前结论。另有数据库提交前删除物理文件、随后事务回滚的 P2 故障恢复遗漏，详见 GOUO-034 同时间补充；仅涉及本次合格清理候选，不泛化为受引用保护的活跃作品普遍丢图。验收同时覆盖提交失败/进程退出、不重新上传的恢复与鉴权下载，以及双进程屏障；本轮未执行，仍为待验证。
 
 ### GOUO-061 作品提示词超出 MySQL TEXT 上限或含 NUL 时同步一直失败
 
@@ -2507,3 +2580,6 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 | 2026-10-10 | 按用户要求将 [PR #20](https://github.com/zhs1234/gouo-canvas/pull/20) 至 [PR #32](https://github.com/zhs1234/gouo-canvas/pull/32) 按顺序合并到 main（[c48719a](https://github.com/zhs1234/gouo-canvas/commit/c48719ad23d6fc7f1b992e34228d52bda5790705)），合并前核对各 PR head 与已验证提交一致；合并后测试与构建通过。GOUO-043 至 080 由修复中改为待验证。按 14:37 增量复核意见，GOUO-060（清理删除被保留记录的文件，多实例）与 GOUO-050（带外来订单号、无 payment_intent 的 Stripe 会话）开 [PR #33](https://github.com/zhs1234/gouo-canvas/pull/33) 修复，未合并。Turnstile 时效、支付配置与删除日志仅限 root 随 PR #20、#23 一并合并，视为用户已接受。 | 86 项：已验证修复 14 项，待验证 65 项，暂缓 6 项，不适用 1 项，修复中 0 项 |
 | 2026-10-10 | 按用户要求合并 [PR #33](https://github.com/zhs1234/gouo-canvas/pull/33)（main [eea382e](https://github.com/zhs1234/gouo-canvas/commit/eea382e07e14502ec74de8476b51d23a5c402ec2)），合并前核对 head 676e2b2 与本地验证一致；合并后 `npm test` 480 项、`npm run build`、`go vet ./...` 通过，`go test ./...` 仅 4 个需外网的上游测试失败。GOUO-034、050、060 的合并后复核修复已在 main，仍为待验证。 | 86 项：已验证修复 14 项，待验证 65 项，暂缓 6 项，不适用 1 项，修复中 0 项 |
 | 2026-10-10 | 整理清单：顶部加入合并后当前快照（main eea382e，无开放修复 PR，逐条统计 14/65/6/1，编号连续无重复）；说明章节标题沿用登记分类；08:00 与 14:37 两段复核标为历史快照；"优先处理顺序"改为合并后的验证步骤与待决定事项（原顺序见 Git 历史）。条目内容与计数不变。 | 86 项：已验证修复 14 项，待验证 65 项，暂缓 6 项，不适用 1 项，修复中 0 项 |
+
+
+| 2026-10-10 20:26 | 合并后静态复核 main eea382e、PR #20 至 #33 已合并、仅文档 PR #7 开放草稿；16 固定 SHA 的 CI 结果为空。保留用户三次文档更新及全部历史验证。GOUO-034/060 追加 P2 提交失败/事务回滚后的文件恢复边界，明确原正常并发遗漏已有 PR #33 修复；050 缺 payment_intent 旧缺口标历史；006 更正独立回调加载已合并的操作时效。既有未覆盖边界继续保留，不新增编号或已验证，本轮未运行测试，Page 待同步。 | 86 项：已验证修复 14 项，待验证 65 项，暂缓 6 项，不适用 1 项 |
