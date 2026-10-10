@@ -181,6 +181,11 @@ func (e *Stripe) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 		return nil, fmt.Errorf("failed to parse gateway config: %v", err)
 	}
 
+	// 签名密钥为空时任何人都能用空密钥伪造回调
+	if stripeConfig.WebhookSecret == "" {
+		return nil, fmt.Errorf("webhook signing secret is not configured")
+	}
+
 	stripeSignature := c.GetHeader("Stripe-Signature")
 	event, err := webhook.ConstructEvent(body, stripeSignature, stripeConfig.WebhookSecret)
 	if err != nil {
@@ -198,12 +203,15 @@ func (e *Stripe) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 		if session.PaymentStatus != stripe.CheckoutSessionPaymentStatusPaid {
 			return nil, nil
 		}
+		// 获取订单号；没有订单号的会话不是本系统创建的，确认收到即可。
+		// 需在检查 payment_intent 之前判断：其他业务的会话（如零金额、订阅）可能没有 payment_intent
+		orderID := session.ClientReferenceID
+		if orderID == "" {
+			return nil, nil
+		}
 		if session.PaymentIntent == nil || session.PaymentIntent.ID == "" {
 			return nil, fmt.Errorf("missing payment intent")
 		}
-
-		// 获取订单号
-		orderID := session.ClientReferenceID
 
 		// 构造 PayNotify
 		payNotify := &types.PayNotify{

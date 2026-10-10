@@ -28,6 +28,19 @@ func NewPaymentService(uuid string) (*PaymentService, error) {
 	if err != nil {
 		return nil, errors.New("payment not found")
 	}
+	return newPaymentService(payment)
+}
+
+// NewCallbackPaymentService 处理支付回调，网关停用或删除后仍能为已付款订单入账
+func NewCallbackPaymentService(uuid string) (*PaymentService, error) {
+	payment, err := model.GetPaymentByUUIDForCallback(uuid)
+	if err != nil {
+		return nil, errors.New("payment not found")
+	}
+	return newPaymentService(payment)
+}
+
+func newPaymentService(payment *model.Payment) (*PaymentService, error) {
 
 	gateway, ok := Gateways[payment.Type]
 	if !ok {

@@ -72,7 +72,11 @@ func TestPaymentCallbackAtomicCreditAndReplay(t *testing.T) {
 	for _, attempt := range []struct{ gateway, amount, signature string }{
 		{"epay-1", "1.00", "invalid"}, {"epay-2", "1.00", ""}, {"epay-1", "0.01", ""}, {"epay-1", "NaN", ""},
 	} {
-		require.NotEqual(t, "success", callback(attempt.gateway, attempt.amount, attempt.signature).Body.String())
+		res := callback(attempt.gateway, attempt.amount, attempt.signature)
+		// 发到其他网关的回调找不到本网关的订单，只确认收到、不入账
+		if attempt.gateway == "epay-1" {
+			require.NotEqual(t, "success", res.Body.String())
+		}
 		order, err := model.GetOrderByTradeNo("order-1")
 		require.NoError(t, err)
 		require.Equal(t, model.OrderStatusPending, order.Status)

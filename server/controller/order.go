@@ -16,6 +16,7 @@ import (
 	"one-api/payment/types"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type OrderRequest struct {
@@ -115,7 +116,7 @@ func CreateOrder(c *gin.Context) {
 
 func PaymentCallback(c *gin.Context) {
 	uuid := c.Param("uuid")
-	paymentService, err := payment.NewPaymentService(uuid)
+	paymentService, err := payment.NewCallbackPaymentService(uuid)
 	if err != nil {
 		c.String(http.StatusBadRequest, "payment not found")
 		return
@@ -133,6 +134,12 @@ func PaymentCallback(c *gin.Context) {
 		return
 	}
 	order, credited, err := model.CompletePaidOrder(payNotify.TradeNo, payNotify.GatewayNo, paymentService.Payment.ID, payNotify.Amount, payNotify.Currency)
+	// 不属于本网关的订单（同一 Stripe 账户下其他网关或其他业务的付款）确认收到即可，返回错误会让网关反复重试并可能停用回调地址
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.SysLog(fmt.Sprintf("payment callback for unknown order ignored, gateway: %d, trade_no: %s", paymentService.Payment.ID, payNotify.TradeNo))
+		paymentService.AcknowledgeCallback(c)
+		return
+	}
 	if err != nil {
 		logger.SysError(fmt.Sprintf("payment settlement failed, trade_no: %s, error: %s", payNotify.TradeNo, err.Error()))
 		c.String(http.StatusInternalServerError, "payment settlement failed")
