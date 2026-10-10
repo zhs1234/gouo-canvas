@@ -68,13 +68,23 @@ describe('Agent SSE', () => {
     expect(result.calls).toEqual([{ id: 'call_1', name: 'create_image_task', arguments: '{"prompt":"哈哈哈哈哈哈"}', status: 'pending' }])
   })
 
-  it.each([
-    [{ id: 'call_2', function: { name: 'create_image_task', arguments: '}' } }, '工具调用 ID 在流式响应中发生变化'],
-    [{ id: 'call_1', function: { name: 'get_canvas', arguments: '}' } }, '工具名在流式响应中发生变化'],
-  ])('rejects conflicting metadata on the same tool index', async (fragment, message) => {
+  it('rejects a changed tool name on the same tool call', async () => {
     const frames = event({ tool_calls: [{ index: 0, id: 'call_1', function: { name: 'create_image_task', arguments: '{' } }] })
-      + event({ tool_calls: [{ index: 0, ...fragment }] }, 'tool_calls')
-    await expect(consumeChatStream(stream(frames), () => {}, new AbortController().signal)).rejects.toThrow(message)
+      + event({ tool_calls: [{ index: 0, id: 'call_1', function: { name: 'get_canvas', arguments: '}' } }] }, 'tool_calls')
+    await expect(consumeChatStream(stream(frames), () => {}, new AbortController().signal)).rejects.toThrow('工具名在流式响应中发生变化')
+  })
+
+  it('treats a new tool ID on an already used index as the next call', async () => {
+    // 旧版 Claude 渠道转换把同一回复里的多个工具调用都标成 index 0
+    const frames = event({ tool_calls: [{ index: 0, id: 'call_1', function: { name: 'get_canvas', arguments: '' } }] })
+      + event({ tool_calls: [{ index: 0, function: { arguments: '{}' } }] })
+      + event({ tool_calls: [{ index: 0, id: 'call_2', function: { name: 'get_task_status', arguments: '' } }] })
+      + event({ tool_calls: [{ index: 0, function: { arguments: '{"taskId":"t"}' } }] }, 'tool_calls')
+    const result = await consumeChatStream(stream(frames), () => {}, new AbortController().signal)
+    expect(result.calls).toEqual([
+      { id: 'call_1', name: 'get_canvas', arguments: '{}', status: 'pending' },
+      { id: 'call_2', name: 'get_task_status', arguments: '{"taskId":"t"}', status: 'pending' },
+    ])
   })
 
   it('accepts tool metadata and arguments exactly at their existing limits', async () => {
