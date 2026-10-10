@@ -30,9 +30,11 @@
 
 - 仓库没有在 PR 上运行的 CI；以上测试均为本地运行，不代表 CI 或线上验证通过
 
-- 原始 16 项中，GOUO-003、GOUO-004、GOUO-011、GOUO-014 为既有 PR #6 问题的独立复核，其余 12 项为该轮新增；本轮新增 GOUO-043 至 GOUO-059
+- 原始 16 项中，GOUO-003、GOUO-004、GOUO-011、GOUO-014 为既有 PR #6 问题的独立复核，其余 12 项为该轮新增；08:00 历史轮次新增 GOUO-043 至 GOUO-059
 
-## 本轮复核（2026-10-10，北京时间）
+## 历史复核（2026-10-10 08:00 北京时间，59 项/8 分支快照）
+
+以下保留当时的提交、计数与静态查询；当前状态以顶部及 14:37 增量复核为准，原“本轮”均指这一历史轮次。
 
 本轮主干仍为 [a496a116fa75e7d7db1e316803a5551d5682894f](https://github.com/zhs1234/gouo-canvas/commit/a496a116fa75e7d7db1e316803a5551d5682894f)，文档 PR #7 仍为开放草稿，更新前文档 head 为 [fa04bdec2c7c14726df9790017256ac99d348cd1](https://github.com/zhs1234/gouo-canvas/commit/fa04bdec2c7c14726df9790017256ac99d348cd1)。原登记 42 项的 7 项本地验证、34 项待验证、1 项不适用是此前验收范围的历史结果，不能扩展成下列新场景已通过。新增问题与候选补丁需另行计数。
 
@@ -57,9 +59,37 @@ main 并非完全没有工作流：存在仅以 v* tag push / 部分允许 workf
 
 私有清单 Page：待同步。本轮未读取或更新，不能认定其内容与仓库一致。
 
-策略待确认（不计入 59 项）：Turnstile 的通行复用时效及 IP/操作范围；支付配置管理是否限定 root。候选权限收紧和时效缩短不自动证明原策略违规。管理员删除消费日志的变更不能表述为可删除调额审计。
+历史策略备注（08:00 快照，不计入当时 59 项）：Turnstile 的通行复用时效及 IP/操作范围；支付配置管理是否限定 root。候选权限收紧和时效缩短不自动证明原策略违规。管理员删除消费日志的变更不能表述为可删除调额审计。
 
 第三轮修复会话补充：上述三项改动分别在 [PR #20](https://github.com/zhs1234/gouo-canvas/pull/20)（Turnstile 10 分钟）和 [PR #23](https://github.com/zhs1234/gouo-canvas/pull/23)（支付网关增删改查与批量删除日志仅限 root）中，是否采用由用户决定；核对 `DeleteOldLog` 确认只删除消费日志（`type = consume`），PR #23 描述已据此更正。
+
+## 增量复核（2026-10-10 14:37 北京时间，当前 86 项快照）
+
+- main 未变化：a496a116fa75e7d7db1e316803a5551d5682894f。
+- 更新前 PR #7 仍开放草稿，head 39861c7c2839cc6b889866a3a56dc2380d6247bd。当前文件 blob 83609f31f0a94a5bca9be6c8557be3f742cda46f。
+- 文档自 d86a206bade7456ea52d30af195db590bc4bddbd 后新增1提交，仅 docs/FIX-BACKLOG.md，447增/15删。
+- 文件编号连续唯一001–086。逐条统计14已验证修复、27待验证、38修复中、6暂缓、1不适用；与新摘要一致。
+- PR20–32全部开放、未合并、目标main。22/23/25/26各领先main 2提交，其余9条各1提交，均落后0。
+- PR #20 fix/auth-hardening: 7f703bcd4263936da91487f69614e1dac643fb06
+- PR #21 fix/image-form-duplicates: a8a52dd07adcc798ed4951ebcb56bca3d87c4ae7
+- PR #22 fix/payment-callbacks: d4df8cd628021f9339e6174ee0efac99caa5e6d2
+- PR #23 fix/admin-token-payment-scope: cfd758d6ef3f5e0d77e2d514cee42485aafe662c
+- PR #24 fix/mj-notify-ssrf: f9dc70333ce379b27a73e91a04d3384d684a1373
+- PR #25 fix/gouo-storage-limits: 29e2e28123dac833c9427244d19c26a90aae0f7e
+- PR #26 fix/frontend-sync-multitab: 6e71231d9fbbd8b304b4e7a7904cda0084ef29ab
+- PR #27 fix/task-watchdog-fal: e5d9360a409abc61f7de16f29e6eaa02d3922297
+- PR #28 fix/agent-round3: ff82b55ca07a1e6f429e37b9811deef30a16f2b6
+- PR #29 fix/canvas-review-round3: d7ffb7b6a8a2c80665d19948e10700efe01c3e43
+- PR #30 fix/url-settings-confirm: 502726c88eb44198cd91b1fabdc6ce4b607101c1
+- PR #31 fix/deploy-hardening: e67e103ac0a6c8f18c4891219b74a01661fdb23a
+- PR #32 fix/docs-consistency: a382f0904bc578e5e09ee495ca1b1465a0750f67
+
+
+上述13个PR head、main与文档head，共15个固定SHA：check-runs=0、statuses=[]，汇总pending/total_count=0，Actions runs=0。空结果不代表运行中或通过。未重新运行任何测试、浏览器验收、支付、模型请求。
+最近部署运行仍为旧a7132c1e7e290ef3c29abcdb8cc7c60da6ee696c：Pages37915140169失败、Docker37915139956成功、Vercel Hook37915140291成功；Hook成功不证实实际部署。
+
+
+本轮仅静态阅读代码及测试源码，未执行测试、浏览器验收、支付或模型请求。保留此前修复会话的 14 项本地已验证状态与原始记录；本轮没有独立重放其原始输出，不能将此前结果冒称为本轮执行，也不撤销它们。外部 OAuth/Stripe、MySQL、真实部署及供应商验收仍未完成。私有 Page 仍待同步，本轮未读取或更新。
 
 ## 优先处理顺序
 
@@ -1197,6 +1227,18 @@ PR #18 已修复“去重命中不刷新 updated_at”，但仍有另一段清�
 
 **修复记录（2026-10-10，第三轮修复会话）**：修复在 [PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)（按用户锁覆盖数据库删除和物理文件删除），并新增 `TestPurgeGouoTrashKeepsAssetTouchedDuringPurge`（清理事务挑出候选后、删除前刷新 updated_at，撤掉"删除时按 updated_at 过滤"后失败）及 GOUO-060 的用户行锁。上方要求的"数据库删除后、删文件前设屏障并发重传"的确定性测试和双进程验证尚未做；锁是进程内锁，多实例共享素材盘时文件删除与重传仍有窗口。
 
+**补充复核（2026-10-10，PR25 head 29e2e281）**：删除时增加 updated_at 过滤仍未覆盖文件删除清单。两个实例共享 PostgreSQL/MySQL 与素材目录时，候选选取后被另一实例去重复用的素材记录会保留，但物理文件仍被删除：paths 在 DELETE 过滤前已收集，提交后没有依据实际删除结果重新筛选。上传去重只持有进程内锁并更新素材行，不参与清理的用户行锁。新增 TestPurgeGouoTrashKeepsAssetTouchedDuringPurge 仅断言记录保留，不能证明图片可读取。本次为静态发现，未执行测试；此前测试报告不能覆盖本场景。
+
+**新增验收**：让双实例在“选出候选”和“执行删除”之间发生同内容去重上传，同时检查数据库记录、物理文件内容及鉴权下载。修复应使文件删除严格对应实际删除的记录，并在跨实例同步范围内保护重传；不得仅以行数断言证明图片完整性。
+
+
+证据：
+- 上传入口直接调用 SaveGouoAssetBytes：[controller L222–235](https://github.com/zhs1234/gouo-canvas/blob/29e2e28123dac833c9427244d19c26a90aae0f7e/server/controller/gouo_cloud.go#L222-L235)。
+- 上传仅拿进程内用户锁；去重命中直接更新素材 updated_at，没有清理所用的 users 行锁：[asset store L39–81](https://github.com/zhs1234/gouo-canvas/blob/29e2e28123dac833c9427244d19c26a90aae0f7e/server/model/gouo-asset-store.go#L39-L81)。
+- 清理先拿进程内用户锁，再在事务第一条语句锁 users 行：[trash L71–80](https://github.com/zhs1234/gouo-canvas/blob/29e2e28123dac833c9427244d19c26a90aae0f7e/server/model/gouo-trash.go#L71-L80)。
+- 清理收集全部候选文件路径，再在 DELETE 增加 updated_at 条件，最后无条件删除先前收集的文件：[trash L148–177](https://github.com/zhs1234/gouo-canvas/blob/29e2e28123dac833c9427244d19c26a90aae0f7e/server/model/gouo-trash.go#L148-L177)。
+- 新增测试用回调构造更新时间变化，只检查数据库行数，没有检查文件：[test L161–173](https://github.com/zhs1234/gouo-canvas/blob/29e2e28123dac833c9427244d19c26a90aae0f7e/server/model/gouo-trash_test.go#L161-L173)。
+
 ### GOUO-035 平台账号令牌明文留在本地存储和备份文件中
 
 优先级：P1。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境验证修复。
@@ -1595,7 +1637,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 [将空 client_reference_id 继续转换为通知](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/server/payment/gateway/stripe/payment.go#L190-L216)、[所有结算错误返回 500](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/server/controller/order.go#L131-L140)、[空参数及本网关订单匹配](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/server/model/order.go#L72-L93)。
 
-**候选修复与限制**
+**历史候选修复与限制（c6aa0d5，当前以增量复核为准）**
 
 候选提交 [c6aa0d5ec95fd7adffbc607b2005da5496e1f52e](https://github.com/zhs1234/gouo-canvas/commit/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e) 忽略空订单号，并对 [RecordNotFound 确认收到而不入账](https://github.com/zhs1234/gouo-canvas/blob/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e/server/controller/order.go#L136-L146)。但 [缺少 payment_intent 的检查仍早于空订单号判断](https://github.com/zhs1234/gouo-canvas/blob/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e/server/payment/gateway/stripe/payment.go#L203-L214)：合法签名、paid、没有本系统引用且没有 payment_intent 的无关会话仍返回 400。因此不能记为完全覆盖无关会话。RecordNotFound 的确认逻辑也应用于其他支付网关，需要确认是否会掩盖错配的回调地址或数据库缺单。
 
@@ -1604,6 +1646,16 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 空引用、未知引用、属于另一网关的有效签名事件均得到适当确认且余额不变；额外覆盖缺少 payment_intent、无关模式和零金额的事件，避免在识别归属前被本地结算校验拒绝；本系统订单的真实数据库错误保持可重试，错误金额、币种、签名不能入账；异常忽略有可查日志。新增 [TestStripeCallbackGatewayEdgeCases 的外来订单用例](https://github.com/zhs1234/gouo-canvas/blob/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e/server/controller/payment_callback_test.go#L58-L65) 本轮未运行；测试构造器总是包含 payment_intent，未覆盖上述缺口。
 
 **修复记录（2026-10-10，第三轮修复会话）**：[PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)，单元测试覆盖；本地运行环境用支付宝模拟验证：跨网关回调确认收到但不结算，原网关回调正常入账。 补充提交（同在 [PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)）：没有订单号的会话在检查 payment_intent 之前确认收到，测试新增无 payment_intent 的零金额外来会话，撤掉后失败。RecordNotFound 确认收到时写系统日志，错配回调地址可从日志发现；其他网关同样适用，是否需要告警由用户决定。
+
+**增量复核（2026-10-10 14:37，PR #22 head d4df8cd）**
+
+d4df8cd628021f9339e6174ee0efac99caa5e6d2已将空client_reference_id判断移到payment_intent之前，修掉原文点名的“空引用+无payment_intent”场景，并增加无引用零金额fixture。应将原候选缺口描述标为历史，不继续当作当前行为。仍有同根因边界：合法签名paid事件若client_reference_id非空但不属于本站，且没有payment_intent，会在查询本站订单归属前报错并由控制器返回400。新fixture没有设置client_reference_id，尚未覆盖此组合。建议仍在050追加待验证，勿新编号。
+- https://github.com/zhs1234/gouo-canvas/blob/d4df8cd628021f9339e6174ee0efac99caa5e6d2/server/payment/gateway/stripe/payment.go#L203-L214
+- https://github.com/zhs1234/gouo-canvas/blob/d4df8cd628021f9339e6174ee0efac99caa5e6d2/server/controller/order.go#L125-L146
+- https://github.com/zhs1234/gouo-canvas/blob/d4df8cd628021f9339e6174ee0efac99caa5e6d2/server/controller/payment_callback_test.go#L58-L73
+
+
+新增验收：有效签名 paid 事件携带非空外来 client_reference_id 且缺少 payment_intent，先识别订单归属再决定确认或拒绝；本系统订单的数据库故障仍需可重试。保持修复中，本轮未运行测试。
 
 ### GOUO-051 单次对话远程图片总量没有内存预算
 
@@ -1655,7 +1707,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 ### GOUO-054 清空本地任务后，增量游标阻止旧云作品重新下载
 
-优先级：P2。处理状态：修复中（候选分支未合并，仍有并发覆盖缺口）。验证状态：代码确认；本轮未运行测试或浏览器验收。
+优先级：P2。处理状态：修复中（PR #26 未合并；同页在途刷新场景已补，待验证）。验证状态：代码确认；本轮未运行测试或浏览器验收。
 
 **触发场景**
 
@@ -1669,7 +1721,9 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 main 的[清空操作](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/src/store.ts#L2315-L2329)未清理同步游标；[增量读取](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/src/lib/serverLibrary.ts#L217-L238)跳过不晚于已见时间的作品。
 
-**候选修复与剩余缺口**
+**历史候选复核（e6c292f；具体旧缺口已由 6e71231 增量处理）**
+
+以下为旧提交的历史复核，当前状态见后续增量复核。保留此前修复会话的测试记录，本轮没有重跑。
 
 候选提交 e6c292f116f48408797162fb578019188fa2ae71 在[清空后重置并刷新](https://github.com/zhs1234/gouo-canvas/blob/e6c292f116f48408797162fb578019188fa2ae71/src/store.ts#L2333-L2348)。
 
@@ -1683,9 +1737,14 @@ main 的[清空操作](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e
 
 **修复记录（2026-10-10，第三轮修复会话）**：[PR #26](https://github.com/zhs1234/gouo-canvas/pull/26)，单元测试撤掉修复后失败。 补充修复：清空时递增游标代次，旧读取不再写回游标，重置后的刷新排在旧读取之后从头读取；新增并发测试，撤掉后失败。
 
+**增量复核（2026-10-10 14:37，PR #26 head 6e71231）**
+
+054：修复中（PR #26 未合并；同页在途刷新场景已补，待验证）。验证状态仍为代码确认、本轮未运行测试或浏览器验收。[代次校验 221–243](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/lib/serverLibrary.ts#L221-L243)、[重置及排队刷新 263–280](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/lib/serverLibrary.ts#L263-L280)、[新测试 159–178](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/lib/serverLibrary.test.ts#L159-L178)。多标签、回收站任务和关闭云库等既有验收条件仍保留，不能从这一个同页测试推为全覆盖。
+本轮只读核对，未新增已验证状态。
+
 ### GOUO-055 已彻底删除的收藏夹被离线设备重新创建
 
-优先级：P2。处理状态：修复中（候选分支未合并，已上传但未记录的收藏夹仍有缺口）。验证状态：代码确认；本轮未运行测试或浏览器验收。
+优先级：P2。处理状态：修复中（PR #26 未合并；单项上传漏记已补，旧数据迁移及并发确认边界保留）。验证状态：代码确认；本轮未运行测试或浏览器验收。
 
 **触发场景**
 
@@ -1699,7 +1758,9 @@ main 的[清空操作](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e
 
 main [缺失即补交的判断](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/src/lib/serverLibrary.ts#L241-L253)；服务端[实际删除收藏夹记录](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/server/model/gouo-trash.go#L102-L113)。
 
-**候选修复与剩余缺口**
+**历史候选复核（e6c292f；具体旧缺口已由 6e71231 增量处理）**
+
+以下为旧提交的历史复核，当前状态见后续增量复核。保留此前修复会话的测试记录，本轮没有重跑。
 
 候选提交 e6c292f116f48408797162fb578019188fa2ae71 [记录并检查 `collections:seen`](https://github.com/zhs1234/gouo-canvas/blob/e6c292f116f48408797162fb578019188fa2ae71/src/lib/serverLibrary.ts#L241-L254)，避免重建此前读取过的服务端收藏夹。
 
@@ -1713,9 +1774,23 @@ main [缺失即补交的判断](https://github.com/zhs1234/gouo-canvas/blob/a496
 
 **修复记录（2026-10-10，第三轮修复会话）**：[PR #26](https://github.com/zhs1234/gouo-canvas/pull/26)，单元测试撤掉修复后失败。 补充修复：本设备上传成功的收藏夹立即记入 collections:seen；新增测试，撤掉后失败。升级前已有、没有记录的本地收藏夹仍会补交（保守保留用户数据），属已知限制。
 
+**本轮增量复核（2026-10-10，PR #26 head 6e71231）**：原“单个收藏夹上传成功但尚未再次刷新，确认状态没有保存”的缺口已由成功回调补记处理；旧数据没有历史记录的迁移限制仍保留。新增并发边界：连续创建收藏夹会发起不串行的上传，两个成功回调对 collections:seen 分别读取后整项覆盖，可能丢掉其中一个已上传 ID。若此后没有刷新修补历史记录，该夹在其他设备删除并清除后，原设备仍可将其当作未上传项补交。建议改为原子追加确认并补充并发验收。本轮只读代码，未运行测试。
+
+
+代码依据：
+真实并发入口：[createFavoriteCollection 1935–1949](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/store.ts#L1935-L1949)同步修改 store 并返回，不等待云上传。用户可在前一个云请求完成前再建一个收藏夹；[订阅 297–308](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/lib/serverLibrary.ts#L297-L308)每次上传均未串行等待。因此不要求人为直接调用内部函数或只依靠抽象 read-modify-write 风险。
+
+设初始 seen=S，两次上传 a、b 的成功 callback 接近完成：各自 getCloudMeta 读到 S，再分别 put S+a、S+b，后者覆盖前者。这里 get 和 put 是[两个独立 IndexedDB 事务](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/lib/db.ts#L260-L265)，不是同事务并集更新。
+
+丢 ID 后的可达后果有额外条件，必须一并写明：A 没有再进行一次成功 loadCollections 修补 seen；A 仍保留 a 的本地收藏夹，随后其他设备删除并由服务端清除 a。A 下次同步时，a 同时不在 remoteIds 和 seen，[loadCollections 246–257](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/lib/serverLibrary.ts#L246-L257)会把它当作本地未上传项再次 PUT，复活原夹。若删除前有正常刷新重新读到 a，此时序可被修补，不应描述为必然发生。
+
+新增[测试 181–192](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/lib/serverLibrary.test.ts#L181-L192)只创建一个 fresh，证明其设计覆盖单项确认路径，不覆盖两个确认同时更新 seen 的时序；本轮未执行该测试。
+
+建议：单事务 read-modify-write、逐收藏夹独立确认记录，或对所有 seen 修改统一串行协调，并验证多标签使用共享数据库时的行为。
+
 ### GOUO-056 旧标签页持久化覆盖另一页的收藏夹变化
 
-优先级：P2。处理状态：修复中（候选分支未合并，默认收藏夹单独变化仍未同步）。验证状态：代码确认；本轮未运行测试或浏览器验收。
+优先级：P2。处理状态：修复中（PR #26 未合并；默认收藏夹单独变化已补，待多标签浏览器验证）。验证状态：代码确认；本轮未运行测试或浏览器验收。
 
 **触发场景**
 
@@ -1729,7 +1804,9 @@ B 将旧收藏夹列表写回同一个 localStorage 项，覆盖 A 已保存的�
 
 main [持久化完整收藏夹列表与默认项](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/src/store.ts#L477-L500)，[所有标签页使用同一账号存储项](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e7d7db1e316803a5551d5682894f/src/store.ts#L983-L991)，尚无候选提交所加的跨页收藏夹监听。
 
-**候选修复与剩余缺口**
+**历史候选复核（e6c292f；具体旧缺口已由 6e71231 增量处理）**
+
+以下为旧提交的历史复核，当前状态见后续增量复核。保留此前修复会话的测试记录，本轮没有重跑。
 
 候选提交 e6c292f116f48408797162fb578019188fa2ae71 [监听 storage 并接收收藏夹变化](https://github.com/zhs1234/gouo-canvas/blob/e6c292f116f48408797162fb578019188fa2ae71/src/store.ts#L996-L1011)。
 
@@ -1742,6 +1819,11 @@ main [持久化完整收藏夹列表与默认项](https://github.com/zhs1234/gou
 两页依次测试新增、改名、删除、仅更改默认收藏夹；另一页继续操作后重载，结果仍保持最新，且不出现无限 storage 写回。补测两页近乎同时编辑时的合并或冲突策略。
 
 **修复记录（2026-10-10，第三轮修复会话）**：[PR #26](https://github.com/zhs1234/gouo-canvas/pull/26)，单元测试撤掉修复后失败。需在浏览器验证。 补充修复：只切换默认收藏夹也会同步；测试补充该场景，撤掉后失败。
+
+**增量复核（2026-10-10 14:37，PR #26 head 6e71231）**
+
+056：修复中（PR #26 未合并；默认收藏夹单独变化已补，待多标签浏览器验证）。[store.ts 996–1008](https://github.com/zhs1234/gouo-canvas/blob/6e71231d9fbbd8b304b4e7a7904cda0084ef29ab/src/store.ts#L996-L1008)已将默认 ID 纳入等值判断。旧“数组相同即返回，默认项未同步”的当前缺口文字应改成历史说明；近乎同时编辑的合并/冲突与事件回写仍作为验收条件，不在未执行时写成已验证。
+本轮只读核对，未新增已验证状态。
 
 ### GOUO-057 图片清理忽略其他标签页的任务及内存引用
 
@@ -1849,6 +1931,8 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 **修复记录（2026-10-10）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，单元测试 `TestPurgeGouoTrashKeepsAssetTouchedDuringPurge`、`TestUpsertGouoTaskRechecksAssetsAndTrimsText` 撤掉修复后失败，并在 PostgreSQL 16 上运行通过。
 
+**增量复核（2026-10-10 14:37，PR #25 head 29e2e281）**：用户行锁与锁内归属复查覆盖作品/文档引用写入，但不覆盖素材上传的跨实例文件竞态；后者见 GOUO-034 的 29e2e281 补充复核。此前 PostgreSQL 16 测试报告保留，其行数断言不能扩展为双实例图片文件与鉴权下载完整性已通过。本轮未运行测试，保持修复中。
+
 ### GOUO-061 作品提示词超出 MySQL TEXT 上限或含 NUL 时同步一直失败
 
 优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
@@ -1944,6 +2028,32 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 **代码依据**：[agentStore.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/stores/agentStore.ts)（基线 main a496a11）。
 
 **修复记录（2026-10-10）**：[PR #28](https://github.com/zhs1234/gouo-canvas/pull/28)，单元测试撤掉修复后失败。
+
+**本轮增量复核（2026-10-10，PR #28 head ff82b55）**：候选补丁在有 Web Locks 时避免新页 hydrate 直接把另一页正在运行的会话改为中断，并跳过该新页的任务回填。但运行所有权与完成交接尚不完整：A 完成或关闭后，B 没有在锁释放时重读会话，内存 running 继续阻止发送，B 的停止按钮也只能操作本页 controller，需整页重载恢复；B 的草稿输入仍保存整份会话，若在 A 等待 LLM 的持久化空档先提交，可合法推进共享 revision，使 A 下一次保存被 CAS 拒绝。CAS 没有失效，问题是它未限制运行会话的写入方。本轮为静态代码确认，未运行双标签浏览器验收；继续保持修复中，增加完成交接与并发草稿验收。
+
+
+新增验收：A 正常完成或关闭后 B 自动重新读取数据库并恢复可发送；B 在 A 等待 LLM 时编辑草稿，分别覆盖 A/B 先推进版本，既保留草稿又不让非运行页的整份保存中断运行页。无 Web Locks 时的行为另行核验。
+
+证据与补偿路径：
+1. [agentStore.ts 245–268](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/stores/agentStore.ts#L245-L268)：hydrate 只加载一次；发现别页锁时保留原 running，随后 hydrated=true。
+2. [agentStore.ts 328–335](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/stores/agentStore.ts#L328-L335)、[347–354](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/stores/agentStore.ts#L347-L354)：锁只用于本页 run；stop 只终止本页 controller；任务订阅无条件跳过 running 且本页无 activeRuns 的会话，没有检查锁是否已释放。
+3. [AgentWorkspace.tsx 134–160](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/components/agent/AgentWorkspace.tsx#L134-L160)：重新进入路由只调用上述有 hydrated 短路的 hydrate。[界面 214–228](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/components/agent/AgentWorkspace.tsx#L214-L228)按会话 status 判断是否显示停止、允许发送。
+4. [db.ts 374–378](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/lib/db.ts#L374-L378)：保存通知是写入页 window.dispatchEvent 的 CustomEvent，没有跨页广播。[Workspace.tsx 176–182](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/components/Workspace.tsx#L176-L182)即便收到通知，也只刷新侧栏自己的 React state，不会替换 useAgentStore 的会话。
+5. [serverDocuments.ts 220–236](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/lib/serverDocuments.ts#L220-L236)：启动才 pull；documents-changed 与 online 触发的是 push。即使另有一次 pull，[acceptRemote 的 busy 条件 79–90](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/lib/serverDocuments.ts#L79-L90)也拒绝替换内存中 running 的会话。
+6. [serverLibrary.ts 308–325](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/lib/serverLibrary.ts#L308-L325)：focus 只调用 refreshServerLibrary；[该函数 257–275](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/lib/serverLibrary.ts#L257-L275)仅刷新收藏夹与作品任务。startServerLibrary 在 enabled 后短路，不重新启动文档 hydrate。
+
+目前明确的恢复方式是整页重载，让内存重新读取已完成的数据库会话；不能写成“永远无法恢复”。本轮读取的相关 store、页面及同步路径没有锁释放后的自动交接。
+
+### 2. B 编辑草稿仍可能抢先推进版本，使 A 下一次保存失败（代码可达，依赖时序；未运行验证）
+
+不是“CAS 被绕过”或“任意覆盖”。具体顺序是：A 已保存 revision r 并等待 LLM；B 在此时 hydrate 到 r，保留 running；B 输入下一条草稿，300ms 后整份会话先保存为 r+1，expectedRevision=r 仍合法；A 下次持久化仍拿自己的 persistedRevisions=r，CAS 因数据库已是 r+1 而拒绝，执行到必须 await persistConversation 的工具边界时进入错误处理。反过来若 A 先推进版本，CAS 会拒绝 B 的草稿，所以不能声称每次输入都会打断 A。
+
+- [AgentWorkspace.tsx 215–216](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/components/agent/AgentWorkspace.tsx#L215-L216)：running 时 textarea 仍可编辑。
+- [agentStore.ts 292–295](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/stores/agentStore.ts#L292-L295)：updateDraft 不检查别页运行锁。
+- [agentStore.ts 38–75](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/stores/agentStore.ts#L38-L75)：草稿递增整份会话 revision，防抖后提交整份会话；期望版本来自本页 Map。
+- [db.ts 349–380](https://github.com/zhs1234/gouo-canvas/blob/ff82b55ca07a1e6f429e37b9811deef30a16f2b6/src/lib/db.ts#L349-L380)：数据库事务只比较 expectedRevision 与当前 revision，没有运行所有权检查；CAS 正常工作，但不能决定哪一页有权推进运行会话。
+
+建议：运行所有权应覆盖整份会话的写入；别页草稿可独立存储或明确只读。锁释放/持有页关闭后重新读取数据库，再解除只读及 running。验收需同时覆盖 A 完成、A 关闭、B 在 A 等待 LLM 时编辑草稿；避免只验“B 打开的一刻没有保存”。
 
 ### GOUO-067 画布逐项错误过长导致回填失败、一直显示生成中
 
@@ -2057,6 +2167,13 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 **修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)，`serviceWorker.test.mjs` 撤掉修复后失败；用 Nginx 1.24 实际加载配置验证。
 
+**补充复核（2026-10-10，PR31 head e67e103a）**：Nginx 修复目前覆盖 deploy/nginx.conf。按手动部署文档复制配置的站点仍缺少入口缓存策略、缺失 assets 的 404 规则及防嵌入响应头，须同步中英文示例，并分别验收两条部署路径。已有 Nginx 测试报告不能自动扩展为所有部署方式均覆盖。本次未执行 Nginx 或浏览器验收。
+
+
+证据：[deploy/nginx.conf L14–40](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/deploy/nginx.conf#L14-L40) 已增加安全头、入口 no-cache、缺失 assets 返回 404。但中英文手动安装示例仍只有通用 SPA fallback，没有上述配置：
+- [中文 manual L285–321](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/docs/zh-CN/deployment/manual.md#L285-L321)。
+- [英文 manual L283–319](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/docs/en/deployment/manual.md#L283-L319)。
+
 ### GOUO-074 HTTPS 部署文档未要求 Secure Cookie 与 HSTS
 
 优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
@@ -2121,6 +2238,13 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 **修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)，Nginx 实测。
 
+**补充复核（2026-10-10，PR31 head e67e103a）**：Nginx 修复目前覆盖 deploy/nginx.conf。按手动部署文档复制配置的站点仍缺少入口缓存策略、缺失 assets 的 404 规则及防嵌入响应头，须同步中英文示例，并分别验收两条部署路径。已有 Nginx 测试报告不能自动扩展为所有部署方式均覆盖。本次未执行 Nginx 或浏览器验收。
+
+
+证据：[deploy/nginx.conf L14–40](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/deploy/nginx.conf#L14-L40) 已增加安全头、入口 no-cache、缺失 assets 返回 404。但中英文手动安装示例仍只有通用 SPA fallback，没有上述配置：
+- [中文 manual L285–321](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/docs/zh-CN/deployment/manual.md#L285-L321)。
+- [英文 manual L283–319](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/docs/en/deployment/manual.md#L283-L319)。
+
 ### GOUO-078 多实例部署时改价和模型上下架不同步
 
 优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
@@ -2136,6 +2260,15 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 **代码依据**：[main.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/main.go)（基线 main a496a11）。
 
 **修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)；本地两实例共用 PostgreSQL：main 构建 75 秒内未同步，修复构建 32 秒同步。
+
+**补充复核（2026-10-10，PR31 head e67e103a）**：该补丁提供周期性最终同步。刷新前，请求若落到旧缓存实例，仍可能使用旧价格或已在另一实例下架的模型；只有请求版本与处理实例当前版本不一致时才返回 409。正常数据库条件下按分钟刷新，不保证即时全局生效。应补测改价/下架后、下一轮刷新前分别向两实例提交的行为，并据此更正中英文部署说明。本次未运行双实例测试，不改写既有外部测试报告。
+
+
+代码依据：
+[backend.md L136](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/docs/zh-CN/backend.md#L136) 写“期间按旧价格版本提交的请求会收到价格已更新”，实际取决于请求落到哪一实例：
+- [main L69–76](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/server/main.go#L69-L76) 每分钟刷新各实例内存。
+- [GetGouoModel L44–69](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/server/model/gouo-model.go#L44-L69) 只读取本实例缓存。
+- [版本校验 L141–146](https://github.com/zhs1234/gouo-canvas/blob/e67e103ac0a6c8f18c4891219b74a01661fdb23a/server/relay/gouo-image.go#L141-L146) 只与该缓存版本比较。
 
 ### GOUO-079 管理面板复制失败时把用户内容按 HTML 渲染
 
@@ -2170,6 +2303,20 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 **修复记录（2026-10-10）**：[PR #32](https://github.com/zhs1234/gouo-canvas/pull/32)，仅文档；数值与路由逐条对照代码。
 
 ### 只登记、暂不修复
+
+**补充复核（2026-10-10，PR32 head a382f090）**：生成成功不保证长期作品库入库成功。服务端保存失败时浏览器会尝试整条上传兜底；补交失败后作品可能只保留在本机，清除站点数据或换设备前应确认账号中可读取，或先导出备份。新生成作品也可能需要后续手动导入，不能仅提醒旧作品或 ZIP 导入。空间配额也约束用户提交的任务文本、画布/会话文档和元数据增长；豁免的是服务端保存的已付费生成结果，不能据此宣称其他云保存均不受配额影响。需同步更正中英文说明。本次为静态核对，未执行故障注入或配额测试。
+
+
+代码依据与边界：
+- [用户指南 L108–112](https://github.com/zhs1234/gouo-canvas/blob/a382f0904bc578e5e09ee495ca1b1465a0750f67/docs/zh-CN/user-guide.md#L108-L112) 与 [overview L111](https://github.com/zhs1234/gouo-canvas/blob/a382f0904bc578e5e09ee495ca1b1465a0750f67/docs/zh-CN/project-overview.md#L111) 将浏览器描述为“只做缓存”。
+- 浏览器遇到作品不存在会整条上传兜底，三次失败后明确“已保留在本地”：[serverLibrary L377–411](https://github.com/zhs1234/gouo-canvas/blob/a382f0904bc578e5e09ee495ca1b1465a0750f67/src/lib/serverLibrary.ts#L377-L411)。
+- 服务端图片入库失败只记日志并返回；该函数的错误不阻止图片原流程响应：[gouo-image L197–218](https://github.com/zhs1234/gouo-canvas/blob/a382f0904bc578e5e09ee495ca1b1465a0750f67/server/relay/gouo-image.go#L197-L218)。
+- 因此新生成作品也可能未进入账号作品库，不限于旧作品或 ZIP 导入。24 小时恢复缓存不等于长期云库保存。
+
+### 配额范围
+
+- [backend L127](https://github.com/zhs1234/gouo-canvas/blob/a382f0904bc578e5e09ee495ca1b1465a0750f67/docs/zh-CN/backend.md#L127) 和 [overview L121](https://github.com/zhs1234/gouo-canvas/blob/a382f0904bc578e5e09ee495ca1b1465a0750f67/docs/zh-CN/project-overview.md#L121) 将配额描述为只约束上传。
+- 画布/会话文档文本增长仍检查配额：[SaveGouoDocument L78–94](https://github.com/zhs1234/gouo-canvas/blob/a382f0904bc578e5e09ee495ca1b1465a0750f67/server/model/gouo-document.go#L78-L94)。任务及元数据同样存在文本增长配额检查。
 
 ### GOUO-081 退出登录不使会话失效，第三方登录无法撤销会话
 
@@ -2298,7 +2445,7 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 ## 维护与关闭标准
 
-- 新发现从当前最大编号顺序追加（本轮最大编号 GOUO-059），已有编号不重用；同根因问题合并到原条目并保留来源与更新记录。
+- 新发现从当前最大编号顺序追加（当前最大编号 GOUO-086），已有编号不重用；同根因问题合并到原条目并保留来源与更新记录。
 
 - 每次更新注明北京时间日期、适用提交、触发条件、影响范围及新增证据。若优先级变化，记录原级别与变更理由。
 
@@ -2341,3 +2488,6 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 | 2026-10-10 | 对 main a496a116 与 8 条未合并候选分支静态复核；新增 GOUO-043 至 GOUO-059（P1 6 项、P2 11 项），均修复中、待验证；GOUO-006 更正停用网关回调前提，GOUO-034 补充清理/重传竞态；保留原 42 项验收范围和历史，澄清已合并与未合并状态、空 CI 与历史部署边界；私有 Page 待同步。本轮没有执行测试、浏览器验收或模型/支付请求。 | 59 项：已验证修复 7 项，待验证 34 项，修复中 17 项，不适用 1 项；本轮新增已验证 0 项 |
 | 2026-10-10 | 第三轮修复会话：对 main a496a11 做 15 个方向的深度检查（账号与登录、计费、支付、管理端权限、中继与 SSRF、云端作品库、数据库兼容、前端同步、生成与恢复、Agent、画布、前端安全、部署与 CI、并发与多实例、文档一致性）。与同日静态复核登记的 GOUO-043 至 059 对齐编号：为这 17 项追加修复记录，并按复核意见补修 GOUO-050（无 payment_intent 的外来会话）、054（清空后并发同步）、055（已上传收藏夹）、056（默认收藏夹）；043 的未迁移旧账号、057 的手动清理跨页引用保留为已知限制。新增 GOUO-060 至 086：修复 21 项，只登记 6 项。开 [PR #20](https://github.com/zhs1234/gouo-canvas/pull/20) 至 [PR #32](https://github.com/zhs1234/gouo-canvas/pull/32)，未合并；13 个分支试合并无冲突，SQLite 与 PostgreSQL 上回归全部通过，GOUO-027 至 033 标记为已验证修复。更正：批量删除日志只删消费日志，PR #23 描述已改。排除的误报和上游设计：自动晋级分组按累计充值计算；渠道详情返回 key、日志与 MJ 任务对全体管理员可见、管理员可改价格与倍率；OIDC 注册不处理邀请码。低风险备注不单列：root 默认密码与账号可探测；后端容器以 root 运行、基础镜像未固定版本；`server/docker-compose.yml` 是上游遗留文件且带固定口令；GHCR 镜像只含前端；`/v1/realtime` 未配置 WebSocket；Agent 的 `get_canvas` 结果不截断、`maskImageId` 不在图片白名单、参考图未缩图；后端在客户端断开后取消上游请求（是否解耦需产品决定）；单模型售价校验规则未写入文档；用户指南未覆盖画布和 Agent；16 张参考图可能超过 32 MB 请求体上限；配额提示写死 25 MB。 | 86 项：已验证修复 14 项，待验证 27 项，修复中 38 项，暂缓 6 项，不适用 1 项 |
+
+
+| 2026-10-10 14:37 | 静态复核 PR #20 至 #32 的 13 个未合并 head 与 main/文档共 15 个固定 SHA，CI 结果为空；追加 GOUO-034/060 双实例文件删除、050 外来引用组合、055 并发确认、066 跨页运行交接与草稿 CAS、073/077 手动部署覆盖、078 价格传播、080 云保存边界；054/055/056 旧缺口标历史并更新候选覆盖。保留此前本地验证及用户修改，本轮未执行测试、不新增编号或已验证，Page 待同步。 | 86 项：已验证修复 14 项，待验证 27 项，修复中 38 项，暂缓 6 项，不适用 1 项 |
