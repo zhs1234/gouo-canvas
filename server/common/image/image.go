@@ -40,9 +40,8 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 		}
 		mimeType = resp.Header.Get("Content-Type")
 		if mimeType == "application/octet-stream" {
-			firstBytes := buffer.Bytes()[:512]
-			actualMime := http.DetectContentType(firstBytes)
-			mimeType = actualMime
+			// DetectContentType 只读前 512 字节；不足 512 字节时直接截取会越界
+			mimeType = http.DetectContentType(buffer.Bytes())
 		}
 		data = base64.StdEncoding.EncodeToString(buffer.Bytes())
 	} else {
