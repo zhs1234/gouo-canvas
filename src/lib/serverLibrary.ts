@@ -38,6 +38,9 @@ import { isStorageScopeCurrent } from './storageScope'
 let enabled = false
 let refreshing: Promise<void> | null = null
 let lastRefreshAt = 0
+// 清空本地任务时递增；按旧游标进行中的读取不再写回游标
+let cursorGeneration = 0
+let refreshingGeneration = 0
 // 服务端数据写回本地时不能再触发收藏/收藏夹的修改请求。
 let applyingServer = false
 
@@ -217,6 +220,7 @@ function applyServerTasks(serverTasks: TaskRecord[]) {
 // 服务端按更新时间倒序返回，读到上次已见过的记录即可停止；首次登录读取全部。
 async function loadTasks(hidden: boolean) {
   const key = hidden ? 'tasks:hidden:seen' : 'tasks:seen'
+  const generation = cursorGeneration
   const seen = await getCloudMeta<number>(key) || 0
   let cursor = ''
   let newest = seen
@@ -234,6 +238,7 @@ async function loadTasks(hidden: boolean) {
     }
     cursor = reachedSeen ? '' : page.next_cursor
   } while (cursor)
+  if (generation !== cursorGeneration) return
   applyServerTasks(loaded)
   await putCloudMeta(key, newest)
 }
@@ -257,14 +262,17 @@ async function loadCollections() {
 
 // 本地清空任务后从头拉取云端作品，否则游标停在已见过的位置，旧作品不会再下载
 export async function resetServerTaskCursors() {
+  cursorGeneration++
   await putCloudMeta('tasks:seen', 0)
   await putCloudMeta('tasks:hidden:seen', 0)
 }
 
-export function refreshServerLibrary() {
+export function refreshServerLibrary(): Promise<void> {
   if (!enabled) return Promise.resolve()
-  if (refreshing) return refreshing
+  // 进行中的读取用的是重置前的游标，结束后再从头读一次
+  if (refreshing) return refreshingGeneration === cursorGeneration ? refreshing : refreshing.then(() => refreshServerLibrary())
   lastRefreshAt = Date.now()
+  refreshingGeneration = cursorGeneration
   refreshing = (async () => {
     try {
       await loadCollections()
@@ -293,7 +301,11 @@ function installSubscriptions() {
       previousCollections = state.favoriteCollections
       if (!applyingServer) {
         for (const item of after.values()) {
-          if (before.get(item.id)?.name !== item.name) putCloudCollection(item.id, item.name).catch((err) => showError('收藏夹未能保存到服务器', err))
+          if (before.get(item.id)?.name === item.name) continue
+          // 上传成功即记为服务端已有，之后在别处删除并清除时不会被当成本地新建而补交
+          putCloudCollection(item.id, item.name)
+            .then(async () => putCloudMeta('collections:seen', [...new Set([...(await getCloudMeta<string[]>('collections:seen') || []), item.id])]))
+            .catch((err) => showError('收藏夹未能保存到服务器', err))
         }
         for (const id of before.keys()) {
           if (!after.has(id)) hideCloudCollection(id).catch((err) => showError('收藏夹未能从服务器删除', err))

@@ -1002,9 +1002,10 @@ if (typeof window !== 'undefined') {
       const persisted = JSON.parse(event.newValue)?.state
       const collections = normalizeFavoriteCollections(persisted?.favoriteCollections)
       const state = useStore.getState()
-      // 内容相同时不写回，避免两个标签页来回触发
-      if (!collections.length || JSON.stringify(collections) === JSON.stringify(state.favoriteCollections)) return
-      useStore.setState({ favoriteCollections: collections, defaultFavoriteCollectionId: resolveDefaultFavoriteCollectionId(collections, persisted.defaultFavoriteCollectionId) })
+      const defaultId = resolveDefaultFavoriteCollectionId(collections, persisted.defaultFavoriteCollectionId)
+      // 内容相同时不写回，避免两个标签页来回触发；只改默认收藏夹也要同步
+      if (!collections.length || (JSON.stringify(collections) === JSON.stringify(state.favoriteCollections) && defaultId === state.defaultFavoriteCollectionId)) return
+      useStore.setState({ favoriteCollections: collections, defaultFavoriteCollectionId: defaultId })
     } catch (err) {
       console.warn('同步其他标签页的收藏夹失败', err)
     }

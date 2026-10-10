@@ -772,6 +772,9 @@ describe('multi-tab favorite collections', () => {
       window.dispatchEvent(event)
       expect(fresh.getState().favoriteCollections.map((item) => item.id)).toEqual(['default', 'other-tab'])
       expect(fresh.getState().defaultFavoriteCollectionId).toBe('other-tab')
+      // 其他标签页只切换默认收藏夹，收藏夹列表不变
+      window.dispatchEvent(Object.assign(new Event('storage'), { key: getLoadedStorageName(), newValue: JSON.stringify({ state: { favoriteCollections: collections, defaultFavoriteCollectionId: 'default' }, version: 2 }) }))
+      expect(fresh.getState().defaultFavoriteCollectionId).toBe('default')
     } finally {
       vi.unstubAllGlobals()
     }

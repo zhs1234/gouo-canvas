@@ -156,6 +156,42 @@ describe('server library', () => {
     expect(state.favoriteCollections.map((item) => item.id)).toEqual(['new-album'])
   })
 
+  it('a sync started before local tasks were cleared does not write back its old cursor', async () => {
+    pages.visible = [cloudTask()]
+    const backend = await import('./gouoBackend')
+    const library = await import('./serverLibrary')
+    await library.startServerLibrary()
+    // 按旧游标的读取还在等待响应时，本地清空任务并重置游标
+    let release: (() => void) | undefined
+    vi.mocked(backend.listCloudTasks).mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => { release = resolve })
+      return { data: [], next_cursor: '' }
+    })
+    const stale = library.refreshServerLibrary()
+    await vi.waitFor(() => expect(release).toBeDefined())
+    state.setTasks([])
+    await library.resetServerTaskCursors()
+    const fresh = library.refreshServerLibrary()
+    release!()
+    await Promise.all([stale, fresh])
+    expect(state.tasks.map((task) => task.id)).toEqual(['task-1'])
+    expect(meta.get('tasks:seen')).toBe(10)
+  })
+
+  it('does not recreate a collection this device uploaded after it was purged elsewhere', async () => {
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.putCloudCollection).mockResolvedValue(undefined as never)
+    const library = await import('./serverLibrary')
+    await library.startServerLibrary()
+    state.setFavoriteCollections([{ id: 'fresh', name: '新', createdAt: 1, updatedAt: 1 }])
+    await vi.waitFor(() => expect(meta.get('collections:seen')).toContain('fresh'))
+    vi.mocked(backend.putCloudCollection).mockClear()
+    // 在其他设备删除并被服务端彻底清除后刷新
+    await library.refreshServerLibrary()
+    expect(backend.putCloudCollection).not.toHaveBeenCalled()
+    expect(state.favoriteCollections).toEqual([])
+  })
+
   it('writes favorite changes directly but not when applying server data', async () => {
     pages.visible = [cloudTask({ favorite_collection_ids: ['album'] })]
     const backend = await import('./gouoBackend')
