@@ -72,6 +72,11 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool, root string) error {
 	defer lockGouoAssets(userID)()
 	var paths []string
 	err := DB.Transaction(func(tx *gorm.DB) error {
+		// 与作品、文档保存一样先锁用户行，清理期间新增的图片引用会等清理结束后再确认归属；
+		// 必须是第一条语句，MySQL 的一致性快照才会在拿到锁之后建立。已删除账号也要锁，用 Unscoped
+		if err := tx.Unscoped().Model(&User{}).Where("id = ?", userID).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
+			return err
+		}
 		expired := func(model any) *gorm.DB {
 			query := tx.Model(model).Where("user_id = ?", userID)
 			if !all {
@@ -153,7 +158,12 @@ func purgeGouoUserTrash(userID int, cutoff int64, all bool, root string) error {
 			paths = append(paths, asset.StoragePath)
 		}
 		for start := 0; start < len(assetIDs); start += 500 {
-			if err := tx.Where("user_id = ? AND id IN ?", userID, assetIDs[start:min(start+500, len(assetIDs))]).Delete(&GouoAsset{}).Error; err != nil {
+			// 删除时再按时间过滤，期间被重新上传或去重复用的图片不删
+			query := tx.Where("user_id = ? AND id IN ?", userID, assetIDs[start:min(start+500, len(assetIDs))])
+			if !all {
+				query = query.Where("updated_at < ?", cutoff)
+			}
+			if err := query.Delete(&GouoAsset{}).Error; err != nil {
 				return err
 			}
 		}

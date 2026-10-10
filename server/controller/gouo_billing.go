@@ -20,6 +20,9 @@ func ListGouoAdminImageCharges(c *gin.Context) { listGouoImageCharges(c, true) }
 
 var gouoResultClientID = regexp.MustCompile(`^[a-zA-Z0-9_:-]{1,512}$`)
 
+// 素材 ID 由服务端生成（32 位小写十六进制）；MySQL 比较不区分大小写，而清理时在 Go 里按原样比较，大写 ID 会让被引用的图片被清理
+var gouoAssetIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
 func GetGouoImageResult(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	id := c.Query("client_request_id")

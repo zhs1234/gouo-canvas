@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,4 +77,34 @@ func TestGouoImageResultRejectsInvalidStorageAndPartialFiles(t *testing.T) {
 	config.GouoAssetDir = filepath.Join(config.GouoAssetDir, "not-a-directory")
 	require.NoError(t, os.WriteFile(config.GouoAssetDir, []byte("occupied"), 0o600))
 	require.Error(t, SaveGouoImageResult("cannot-save", response))
+}
+
+func TestCleanupGouoImageResultsIgnoresVanishingTempFiles(t *testing.T) {
+	root := t.TempDir()
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	// 模拟共享目录的另一实例：不断创建又改名或删除临时文件
+	go func() {
+		defer close(done)
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			path := filepath.Join(root, fmt.Sprintf(".result-%d", i))
+			_ = os.WriteFile(path, []byte("x"), 0o600)
+			_ = os.Remove(path)
+		}
+	}()
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if _, err := cleanupGouoImageResults(root); err != nil {
+			close(stop)
+			<-done
+			t.Fatal(err)
+		}
+	}
+	close(stop)
+	<-done
 }

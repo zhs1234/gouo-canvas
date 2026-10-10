@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -361,4 +362,25 @@ func TestGouoContentBytesMigrationBackfillsExistingRows(t *testing.T) {
 	used, _, err := GetGouoStorageUsage(1)
 	require.NoError(t, err)
 	require.EqualValues(t, task.contentBytes()+int64(len(doc.Document)+len(doc.Title)), used)
+}
+
+func TestUpsertGouoTaskRechecksAssetsAndTrimsText(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	// 控制器检查归属之后，回收站清理删掉了这张图
+	task := GouoTask{ID: "task", UserID: 1, ClientTaskID: "task", Status: "done", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}
+	err := UpsertGouoTask(&task, []GouoTaskAsset{{AssetID: strings.Repeat("b", 32), Role: "output"}}, nil)
+	require.ErrorIs(t, err, ErrGouoTaskAssets)
+
+	// MySQL 的 TEXT 最多 65535 字节，PostgreSQL 不能存 NUL
+	prompt := "a\x00" + strings.Repeat("光", 30000)
+	task = GouoTask{ID: "long", UserID: 1, ClientTaskID: "long", Status: "error", Prompt: prompt, ErrorMessage: strings.Repeat("错", 30000), Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}
+	require.NoError(t, UpsertGouoTask(&task, nil, nil))
+	var saved GouoTask
+	require.NoError(t, DB.First(&saved, "id = ?", "long").Error)
+	require.LessOrEqual(t, len(saved.Prompt), 60000)
+	require.LessOrEqual(t, len(saved.ErrorMessage), 60000)
+	require.True(t, utf8.ValidString(saved.Prompt))
+	require.True(t, utf8.ValidString(saved.ErrorMessage))
+	require.NotContains(t, saved.Prompt, "\x00")
+	require.True(t, strings.HasPrefix(saved.Prompt, "a光"))
 }

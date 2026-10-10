@@ -332,7 +332,7 @@ func PutGouoTask(c *gin.Context) {
 	outputCount := 0
 	assets := make([]model.GouoTaskAsset, 0, len(input.Assets))
 	for _, item := range input.Assets {
-		if !gouoAssetRoles[item.Role] || item.AssetID == "" || item.Position < 0 || len(item.ClientImageID) > 128 {
+		if !gouoAssetRoles[item.Role] || !gouoAssetIDPattern.MatchString(item.AssetID) || item.Position < 0 || len(item.ClientImageID) > 128 {
 			gouoFail(c, http.StatusBadRequest, "invalid_asset_link", "任务图片关系无效")
 			return
 		}
@@ -387,6 +387,10 @@ func PutGouoTask(c *gin.Context) {
 	if err := model.UpsertGouoTask(&task, assets, collectionIDs); err != nil {
 		if errors.Is(err, model.ErrGouoOriginalAssetConflict) {
 			gouoFail(c, http.StatusConflict, "original_asset_conflict", err.Error())
+			return
+		}
+		if errors.Is(err, model.ErrGouoTaskAssets) {
+			gouoFail(c, http.StatusForbidden, "asset_not_owned", err.Error())
 			return
 		}
 		if errors.Is(err, model.ErrGouoStorageQuota) {
