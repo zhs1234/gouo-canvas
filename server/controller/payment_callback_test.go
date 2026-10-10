@@ -62,6 +62,14 @@ func TestStripeCallbackGatewayEdgeCases(t *testing.T) {
 	for _, reference := range []string{"cny-order", "", "unknown-order"} {
 		require.Equal(t, http.StatusOK, send("usd", "whsec_usd", reference).Code, reference)
 	}
+	// 其他业务没有 payment_intent 的会话（如零金额）同样确认收到
+	foreign := fmt.Sprintf(`{"id":"evt_free","object":"event","api_version":%q,"type":"checkout.session.completed","data":{"object":{"id":"cs_free","payment_status":"paid","amount_total":0,"currency":"usd"}}}`, stripe.APIVersion)
+	signed := webhook.GenerateTestSignedPayload(&webhook.UnsignedPayload{Payload: []byte(foreign), Secret: "whsec_usd"})
+	req := httptest.NewRequest("POST", "/notify/usd", strings.NewReader(foreign))
+	req.Header.Set("Stripe-Signature", signed.Header)
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, req)
+	require.Equal(t, http.StatusOK, res.Code)
 	require.Zero(t, quota())
 
 	// 网关停用并删除后，已付款订单的回调仍按原配置验签入账
