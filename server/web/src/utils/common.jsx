@@ -75,8 +75,16 @@ export function copy(text, name = '') {
   try {
     navigator.clipboard.writeText(text);
   } catch (error) {
-    text = `复制${name}失败，请手动复制：<br /><br />${text}`;
-    enqueueSnackbar(<SnackbarHTMLContent htmlContent={text} />, getSnackbarOptions('COPY'));
+    // 被复制的内容可能是用户名、令牌名等用户可控文本，按纯文本渲染，不能拼进 HTML
+    enqueueSnackbar(
+      <div>
+        复制{name}失败，请手动复制：
+        <br />
+        <br />
+        {text}
+      </div>,
+      getSnackbarOptions('COPY')
+    );
     return;
   }
   showSuccess(`复制${name}成功！`);
