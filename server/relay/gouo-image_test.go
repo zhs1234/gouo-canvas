@@ -9,6 +9,7 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"mime/multipart"
 	"net/http/httptest"
 	"one-api/model"
 	"one-api/types"
@@ -57,6 +58,27 @@ func TestGouoImageRequestQuoteAndCapabilities(t *testing.T) {
 	edit := NewRelayImageEdits(c)
 	edit.setOriginalModel("image-a")
 	require.NotNil(t, prepareGouoImage(c, edit))
+
+	// 表单里重复的单值字段（如两个 n）会让校验与上游看到的值不同，必须拒绝
+	for _, fields := range [][2]string{{"n", "1"}, {"model", "image-a"}} {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		require.NoError(t, writer.WriteField("model", "image-a"))
+		require.NoError(t, writer.WriteField("prompt", "改色"))
+		require.NoError(t, writer.WriteField("n", "1"))
+		require.NoError(t, writer.WriteField(fields[0], fields[1]))
+		require.NoError(t, writer.Close())
+		dup, _ := gin.CreateTestContext(httptest.NewRecorder())
+		dup.Request = httptest.NewRequest("POST", "/v1/images/edits", &body)
+		dup.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		require.NoError(t, dup.Request.ParseMultipartForm(1<<20))
+		dupEdit := NewRelayImageEdits(dup)
+		dupEdit.request.N = 1
+		dupEdit.setOriginalModel("image-a")
+		errDup := prepareGouoImage(dup, dupEdit)
+		require.NotNil(t, errDup, fields[0])
+		require.Equal(t, "duplicate_form_field", errDup.Code)
+	}
 
 	// 其他入口不经过光构结算，按通用计费会免费放行，必须拒绝；普通模型不受影响
 	for _, path := range []string{"/recraftAI/v1/images/generations", "/v1/chat/completions", "/v1/responses"} {
