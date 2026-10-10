@@ -145,6 +145,11 @@ REDIS_CONN_STRING=redis://127.0.0.1:6379
 
 SESSION_SECRET=替换为第一段随机值
 USER_TOKEN_SECRET=替换为第二段不同的随机值
+# 通过 HTTPS 访问时必须为 true，登录 Cookie 才不会在 http:// 请求中明文发送。
+SESSION_COOKIE_SECURE=true
+
+# 首次迁移的默认模型，需与前端构建时的 VITE_GOUO_IMAGE_MODEL 一致。
+GOUO_IMAGE_MODEL=gpt-image-2
 
 GOUO_IMAGE_PRICE_CNY=0.10
 GOUO_CLOUD_LIBRARY_ENABLED=true
@@ -305,8 +310,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;
         proxy_cache off;
-        proxy_read_timeout 600s;
-        proxy_send_timeout 600s;
+        # 后端单次出图最长 15 分钟，代理超时需更长
+        proxy_read_timeout 960s;
+        proxy_send_timeout 960s;
     }
 
     location / {
@@ -328,7 +334,7 @@ curl -fsS -H 'Host: 你的域名' http://127.0.0.1/api/status
 
 ## 12. 配置 HTTPS
 
-使用你的证书管理工具为域名签发证书，并把 HTTP 永久重定向到 HTTPS。无论使用 Certbot、Caddy 还是云负载均衡，都要保留第 11 步中的 `/api`、`/v1`、请求体大小和超时配置。
+使用你的证书管理工具为域名签发证书，并把 HTTP 永久重定向到 HTTPS。HTTPS 站点建议加上 `add_header Strict-Transport-Security "max-age=31536000" always;`，并确认 `/etc/gouo/gouo.env` 中 `SESSION_COOKIE_SECURE=true`。无论使用 Certbot、Caddy 还是云负载均衡，都要保留第 11 步中的 `/api`、`/v1`、请求体大小和超时配置。
 
 配置完成后验证：
 
@@ -508,7 +514,7 @@ Nginx 的 `client_max_body_size` 必须至少为 32 MB。若前面还有 CDN 或
 
 ### 图片生成超时
 
-确认 `/v1/` 的 `proxy_read_timeout` 和 `proxy_send_timeout` 至少为 600 秒，并关闭代理缓冲。524 通常来自更上层的 CDN 或代理超时，还要检查域名前面的服务限制。
+确认 `/v1/` 的 `proxy_read_timeout` 和 `proxy_send_timeout` 至少为 960 秒，并关闭代理缓冲。524 通常来自更上层的 CDN 或代理超时，还要检查域名前面的服务限制。
 
 ### 图片生成成功但云端不显示
 

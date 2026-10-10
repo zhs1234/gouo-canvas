@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gouo-canvas-v0.1.0-assets-2'
+const CACHE_NAME = 'gouo-canvas-v0.1.0-assets-3'
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './gouo-logo-192.png']
 
 self.addEventListener('install', (event) => {
@@ -38,8 +38,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy))
+          // 只把应用页面存为离线首页；打开的文本、图片或网关错误页不能覆盖它
+          if (response.ok && (response.headers.get('content-type') || '').includes('text/html')) {
+            const copy = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy))
+          }
           return response
         })
         .catch(() => caches.match('./index.html')),
@@ -54,7 +57,8 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached
 
       return fetch(request).then((response) => {
-        if (response.ok) {
+        // 回落成 index.html 的旧脚本地址也是 200，按类型过滤，避免把 HTML 缓存成脚本
+        if (response.ok && !(response.headers.get('content-type') || '').includes('text/html')) {
           const copy = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
         }

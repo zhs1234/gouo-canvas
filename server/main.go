@@ -66,6 +66,14 @@ func main() {
 	// Initialize wenauthn
 	webauthn.InitWebAuthn()
 	model.NewPricing()
+	// 价格表在进程内存里，只在本实例改价时重载；多实例部署时其他实例按分钟重读，跟上改价和光构模型上下架
+	go func() {
+		for range time.Tick(time.Minute) {
+			if err := model.PricingInstance.Init(); err != nil {
+				logger.SysError("failed to reload pricing: " + err.Error())
+			}
+		}
+	}()
 
 	initMemoryCache()
 	initSync()

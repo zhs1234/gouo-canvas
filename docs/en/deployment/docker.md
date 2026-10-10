@@ -64,6 +64,9 @@ PUBLIC_PORT=127.0.0.1:8080
 # Compose already binds the admin backend to loopback.
 BACKEND_ADMIN_PORT=3000
 
+# Must be true when users reach the site over HTTPS, so the login cookie is never sent on http:// requests.
+SESSION_COOKIE_SECURE=true
+
 GOUO_IMAGE_MODEL=gpt-image-2
 GOUO_IMAGE_PRICE_CNY=0.10
 GOUO_CLOUD_LIBRARY_ENABLED=true
@@ -82,6 +85,7 @@ USER_TOKEN_SECRET=replace-with-the-second-random-value
 | --- | --- | --- |
 | `PUBLIC_PORT` | `127.0.0.1:8080` behind a host proxy; `8080` only for temporary private-network testing | Plain `8080` listens on every interface |
 | `BACKEND_ADMIN_PORT` | `3000` | Compose binds it to `127.0.0.1`; do not expose it publicly |
+| `SESSION_COOKIE_SECURE` | `true` when the site is served over HTTPS | With `false`, the first request a user makes over `http://` (old bookmark, typed address) carries the login cookie in clear text before the redirect; keep `false` only for private-network HTTP testing |
 | `GOUO_IMAGE_MODEL` | Initial frontend default and migration target | Rebuild `web` to change the frontend default; backend migration runs once and later choices/prices use the catalog |
 | `GOUO_IMAGE_PRICE_CNY` | Default model's initial migration price | Change later prices in the single-model editor; restarting preserves saved prices; validate cost and output limits |
 | `GOUO_ASSET_DIR` | `/data/gouo-assets` | `/data` is backed by `backend-data`; do not move it outside the mounted path |
@@ -169,10 +173,10 @@ http://127.0.0.1:8080
 
 The outer proxy must:
 
-- Permanently redirect HTTP to HTTPS.
+- Permanently redirect HTTP to HTTPS and send `Strict-Transport-Security: max-age=31536000` (enable it once HTTPS is stable for the whole site) so browsers stop making clear-text requests.
 - Preserve `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
 - Accept request bodies of at least 32 MiB so a 25 MiB asset reaches the backend.
-- Set `/v1/` read/send timeouts to at least 600 seconds and disable proxy buffering.
+- Set `/v1/` read/send timeouts to at least 960 seconds and disable proxy buffering. A backend image request can take up to 15 minutes; if the proxy disconnects first, the reserved charge ends up waiting for manual review.
 - Set `/api/` read timeout to at least 300 seconds.
 - Keep backend 3000, MySQL 3306, and Redis 6379 private.
 
