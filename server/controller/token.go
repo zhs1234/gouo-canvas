@@ -53,7 +53,12 @@ func GetTokensListByAdmin(c *gin.Context) {
 		return
 	}
 
-	tokens, err := model.GetTokensListByAdmin(&params)
+	// 令牌列表含明文 key，普通管理员只能查看权限比自己低的账号的令牌
+	belowRole := 0
+	if role := c.GetInt("role"); role != config.RoleRootUser {
+		belowRole = role
+	}
+	tokens, err := model.GetTokensListByAdmin(&params, belowRole)
 	if err != nil {
 		common.APIRespondWithError(c, http.StatusOK, err)
 		return
@@ -414,6 +419,15 @@ func UpdateTokenByAdmin(c *gin.Context) {
 			})
 			return
 		}
+	}
+
+	// 普通管理员只能修改权限比自己低的账号的令牌，也不能把令牌转给同级或更高等级的账号（否则消费会记到对方账上）
+	if !gouoAdminCanAccess(c, cleanToken.UserId) || (token.UserId > 0 && token.UserId != cleanToken.UserId && !gouoAdminCanAccess(c, token.UserId)) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "无权操作同级或更高等级用户的令牌",
+		})
+		return
 	}
 
 	// 验证目标用户是否存在（如果要转移token）
