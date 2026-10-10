@@ -14,6 +14,7 @@ import (
 	"one-api/model"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -531,7 +532,8 @@ type ChangePasswordRequest struct {
 
 func ChangePassword(c *gin.Context) {
 	var req ChangePasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.NewPassword) < 8 || len(req.NewPassword) > 20 {
+	// 与注册校验一致按字符数计算，len 按字节计会让 4 个汉字通过下限
+	if err := c.ShouldBindJSON(&req); err != nil || utf8.RuneCountInString(req.NewPassword) < 8 || utf8.RuneCountInString(req.NewPassword) > 20 {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "新密码必须为 8 到 20 个字符"})
 		return
 	}

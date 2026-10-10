@@ -340,6 +340,19 @@ func (user *User) FillUserByUsername() error {
 	return nil
 }
 
+// FindLegacyGitHubUser 按 GitHub 用户名查找尚未记录数字 ID 的旧绑定账号
+func FindLegacyGitHubUser(login string) (*User, error) {
+	if login == "" {
+		return nil, nil
+	}
+	user := &User{}
+	err := DB.Where("github_id = ? AND (github_id_new = 0 OR github_id_new IS NULL)", login).First(user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return user, err
+}
+
 func FindUserByField(field string, value any) (*User, error) {
 	user := &User{}
 	err := DB.Where(fmt.Sprintf("%s = ?", field), value).First(user).Error

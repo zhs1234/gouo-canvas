@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"one-api/common/config"
@@ -192,4 +193,37 @@ func TestOIDCLoginDoesNotTakeOverAccountsByUsername(t *testing.T) {
 	user, err = getUserByOIDC("subject-new", "newcomer")
 	require.NoError(t, err)
 	require.Nil(t, user)
+}
+
+func TestGitHubLoginDoesNotMatchRenamedUsername(t *testing.T) {
+	db := setupUserTestDB(t)
+	// 受害者绑定时 GitHub 用户名为 alice（数字 ID 100），之后改名，alice 被他人注册（数字 ID 200）
+	victim := model.User{Id: 1, Username: "victim", Password: "password", GitHubId: "alice", GitHubIdNew: 100, Status: config.UserStatusEnabled, AccessToken: "victim-token", AffCode: "victim"}
+	require.NoError(t, db.Create(&victim).Error)
+	legacy := model.User{Id: 2, Username: "legacy", Password: "password", GitHubId: "old-login", Status: config.UserStatusEnabled, AccessToken: "legacy-token", AffCode: "legacy"}
+	require.NoError(t, db.Create(&legacy).Error)
+
+	user, err := getUserByGitHub(&GitHubUser{Id: 200, Login: "alice"})
+	require.NoError(t, err)
+	require.Nil(t, user)
+
+	// 尚未记录数字 ID 的旧绑定仍按用户名登录
+	user, err = getUserByGitHub(&GitHubUser{Id: 300, Login: "old-login"})
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, legacy.Id, user.Id)
+}
+
+func TestChangePasswordCountsCharacters(t *testing.T) {
+	setupUserTestDB(t)
+	router := gin.New()
+	router.POST("/password", func(c *gin.Context) {
+		c.Set("id", 1)
+		ChangePassword(c)
+	})
+	res := httptest.NewRecorder()
+	// 4 个字符、8 个字节，不能绕过 8 位下限
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/password", strings.NewReader(`{"current_password":"whatever","new_password":"密码12"}`)))
+	require.Equal(t, http.StatusBadRequest, res.Code)
+	require.Contains(t, res.Body.String(), "8 到 20 个字符")
 }

@@ -169,7 +169,8 @@ func OIDCAuth(c *gin.Context) {
 		user.InviterId = inviterId
 	}
 	// 填充用户信息并创建账户
-	if email, ok := claims["email"].(string); ok {
+	// 只采用身份提供方已验证且未被占用的邮箱：未验证的邮箱可以占用他人邮箱，后续 GitHub 登录和重置密码都按邮箱匹配
+	if email, ok := claims["email"].(string); ok && claims["email_verified"] == true && email != "" && !model.IsEmailAlreadyTaken(email) {
 		user.Email = email
 	}
 	if displayName, ok := claims["displayName"].(string); ok {
