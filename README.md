@@ -89,7 +89,7 @@ npm test
 # Backend smoke checks, from server/
 Set-Location server
 go test ./controller -run '^$'
-go test ./relay/relay_util -run '^TestGetFixedImageQuota$'
+go test ./relay/relay_util -run '^TestGouoImage'
 ```
 
 ## Deploy

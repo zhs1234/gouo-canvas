@@ -34,7 +34,7 @@ npm run preview
 ```powershell
 Set-Location server
 go test ./controller -run '^$'
-go test ./relay/relay_util -run '^TestGetFixedImageQuota$'
+go test ./relay/relay_util -run '^TestGouoImage'
 ```
 
 第一条只编译 `controller` 包而不运行测试，适合发现路由或类型编译问题；第二条验证光构固定图片额度计算。涉及其他后端包时，应按 `server/AGENTS.md` 运行对应包测试，必要时再运行更大范围测试。

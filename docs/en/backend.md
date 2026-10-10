@@ -91,12 +91,12 @@ GOUO_IMAGE_PRICE_CNY=0.10
 GOUO_IMAGE_MODEL=gpt-image-2
 ```
 
-- Migration enables only the previous default model and price, with reference/mask support and an output limit of **1 image**. Increase the limit after checking upstream costs. It preserves balances and historical artworks, never enables other models automatically, and never re-enables a removed or disabled default on restart.
+- Migration enables only the previous default model and price, with reference/mask support and an output limit of **1 image**. Increase the limit after checking upstream costs. The limit applies to `n` in a single HTTP request; it does not cap the total images the product client generates, because the client splits them into single-image requests. It preserves balances and historical artworks, never enables other models automatically, and never re-enables a removed or disabled default on restart.
 - `VITE_GOUO_IMAGE_MODEL` supplies the initial frontend choice. Subsequent choices are remembered per account and survive login/token refresh. Tasks and retries retain their original model.
 - `GET /api/gouo/models` requires the login cookie and that account's relay token in `X-Gouo-Token`. It intersects enabled models, valid prices, the actual token allowlist, and channels available to its groups. Missing prices and disabled models fail closed instead of falling back to generic pricing.
-- The client submits `X-Gouo-Price-Version`. Changed prices or capabilities return `409 image_price_changed`; refresh the catalog and confirm by submitting again. Legacy task retries and changed retry prices require a confirmation dialog. Non-product API tokens may omit the version but still use a quote captured when the request starts.
+- The client submits `X-Gouo-Price-Version`. Changed prices or capabilities return `409 image_price_changed`; refresh the catalog and confirm by submitting again. In product mode every retry asks the user to confirm the cost of the new request, showing the new price when it changed. Non-product API tokens may omit the version but still use a quote captured when the request starts.
 - Quota is `ceil(CNY price / PaymentUSDRate × QuotaPerUnit)`. Conditional database updates reserve user/token balances in one transaction. Success settles the reservation, confirmed backend failure refunds it, and channel retries share one reservation. Logs preserve the public model, price, billing unit, version, and charged quota. The user center and CSV use the price snapshot; cumulative usage is consumed quota converted at the current rate.
-- Multiple outputs within the model limit cost one charge for one HTTP request. Product settings disable Codex CLI splitting and streaming. Frontend compatibility modes can split a task into separately charged requests.
+- The Gouo product client splits n images into n single-image requests, and each successful request is charged separately (billed per successful image), up to 10 images at a time. For direct API calls, multiple outputs within the model limit in one HTTP request cost one charge. Frontend compatibility modes can also split a task into separately charged requests.
 - Price synchronization and generic batch editing preserve enabled Gouo settings; change them in the single-model editor. Selling prices are independent of upstream costs, so operators must check actual upstream bills.
 
 Image reservations create a durable ledger row in the same transaction. Upstream requests have a 15-minute deadline. At startup and every minute, the primary node refunds unsent reservations older than 20 minutes and marks dispatched requests with unknown outcomes for review. Settlement/refund, balances, statistics, and logs commit atomically; repeated resolution does not repeat the balance change.
@@ -122,9 +122,11 @@ Defaults mean:
 - 32 assets attached to one task.
 - SHA-256 deduplication within one user; authorization remains isolated between users.
 
-Synchronization includes task metadata, outputs, references, masks, thumbnails, streaming previews, and collection membership. Assets are read through authenticated endpoints. Never expose `GOUO_ASSET_DIR` as an Nginx static directory.
+Successful images are written to the library by the server when they are generated; the browser only submits task metadata, references, and masks, and no longer uploads thumbnails or streaming previews. Canvases and Agent conversations are stored as documents in the database (up to 4 MB each, at most 2000 linked images). Assets are read through authenticated endpoints. Never expose `GOUO_ASSET_DIR` as an Nginx static directory.
 
-Deleting a synchronized task hides it in the recycle bin and retains its files. There is currently no user-facing physical purge flow, so operators need an explicit retention and cleanup policy.
+The storage quota and the 25 MiB per-file limit apply to user uploads such as references and masks. Paid generated images saved by the server are not limited by the quota (up to 64 MB each), so used storage can exceed the quota. Image results are also cached in `GOUO_ASSET_DIR/image-results` for 24 hours (4 GB total, 256 MB per result) so an interrupted request can recover its original result; include it in capacity and backup planning.
+
+Deleted artworks, canvases, conversations, and collections go to the recycle bin for 3 days. They can be restored during that time and still count toward storage. After that, a cleanup job that runs hourly on the master node permanently deletes the records and any images no longer referenced. Cloud data of deleted accounts is likewise removed after 3 days.
 
 Local-file storage is suitable for one backend instance. Multiple instances must mount the same shared filesystem or database records can point to files visible only on another instance. Gouo-specific object storage is not yet implemented.
 
@@ -154,9 +156,15 @@ Restoring only the database leaves library records without images. Restoring onl
 | `GET /api/log/self` | Current user's usage history |
 | `GET /api/gouo/storage` | Cloud storage summary |
 | `POST /api/gouo/assets` | Upload an account asset |
-| `GET /api/gouo/sync` | Pull task and collection changes |
-| `PUT /api/gouo/tasks/:clientId` | Create or update a task |
-| `PUT /api/gouo/collections/:id` | Create or update a collection |
+| `GET /api/gouo/tasks`, `GET /api/gouo/collections` | Cursor-paginated artworks and collections (`hidden=true` for the recycle bin) |
+| `PUT /api/gouo/tasks/:clientTaskId` | Create or update a task |
+| `PATCH /api/gouo/tasks/:clientTaskId/meta` | Submit metadata for an artwork the server already saved |
+| `POST /api/gouo/tasks/:id/hide`, `/restore` | Move an artwork to the recycle bin or restore it |
+| `PUT /api/gouo/collections/:id` | Create or update a collection (`/hide` and `/restore` as above) |
+| `/api/gouo/canvases[/:id]`, `/api/gouo/conversations[/:id]` | List, read, save, hide, and restore canvas and Agent conversation documents |
+| `GET /api/gouo/image-charges` | Current user's image charge records |
+| `GET /api/gouo/image-results` | Recover a paid image result by its original request ID |
+| `GET /api/gouo/agent/models` | Agent models available to the current user |
 
 Every user-data endpoint must enforce authentication and ownership on the server. Hiding a frontend control is not authorization.
 

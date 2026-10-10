@@ -75,7 +75,7 @@ PowerShell secret generation:
 - [ ] Run `npm run build` and `npm test`.
 - [ ] Run relevant backend checks and manually cover registration, sign-in, sign-out, credit, generation, charge, refund, and user center.
 - [ ] Test first visit in a clean browser and authorization boundaries with a regular user.
-- [ ] With an account that has local work, test migration, resumed sync, cross-browser restore, recycle bin, and quota exhaustion.
+- [ ] With an account that has local work, test "Import local works", cross-browser restore, recycle-bin purge after 3 days, and quota exhaustion.
 - [ ] Configure health, error-rate, upstream-latency, balance-anomaly, storage, and payment alerts.
 - [ ] Document rollback and retain the previous image/binary plus pre-migration database and asset backups.
 

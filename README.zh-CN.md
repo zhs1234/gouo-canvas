@@ -89,7 +89,7 @@ npm test
 # 后端冒烟检查，在 server/ 目录执行
 Set-Location server
 go test ./controller -run '^$'
-go test ./relay/relay_util -run '^TestGetFixedImageQuota$'
+go test ./relay/relay_util -run '^TestGouoImage'
 ```
 
 ## 部署

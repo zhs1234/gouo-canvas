@@ -27,7 +27,7 @@ New users see a three-step introduction, and an empty gallery provides starter p
 4. Check the estimated charge shown near the send control, then submit.
 5. When the task finishes, open an image to download, copy, collect, or edit it.
 
-The backend checks and reserves balance when a request starts, refunding confirmed failures. Use the model quote shown before submission. Choices are remembered per account; incompatible references, masks, or output counts block submission. If a price or capability changes, refresh and review the catalog before submitting again. Historical retries retain their original model and require confirmation of a changed price.
+The backend checks and reserves balance when a request starts, refunding confirmed failures. Use the model quote shown before submission. Choices are remembered per account; incompatible references or masks block submission. If a price or capability changes, refresh and review the catalog before submitting again. Historical retries retain their original model and require confirmation of a changed price.
 
 ## 3. Write an effective prompt
 
@@ -93,7 +93,7 @@ Task cards and the detail view expose actions according to task state:
 - Add a task to one or more collections.
 - Delete a local task or move a synchronized task to the recycle bin.
 
-Search matches prompts and parameter text. Status filters include all, complete, running, failed, pending synchronization, synchronization error, and recycle bin. Desktop supports box selection and `Ctrl`/`⌘` selection; mobile provides a selection flow. Configure which batch actions use ZIP under **设置 → 通用** (Settings → General).
+Search matches prompts and parameter text. Status filters include all, complete, running, failed, and recycle bin. Desktop supports box selection and `Ctrl`/`⌘` selection; mobile provides a selection flow. Configure which batch actions use ZIP under **设置 → 通用** (Settings → General).
 
 ## 8. Collections
 
@@ -102,24 +102,22 @@ Search matches prompts and parameter text. Status filters include all, complete,
 - Deleting a collection does not automatically delete its tasks.
 - In account mode, collections and task membership synchronize with the account.
 
-## 9. Cloud synchronization and recycle bin
+## 9. Cloud library and recycle bin
 
-After sign-in, tasks, outputs, references, masks, thumbnails, and collections synchronize automatically. IndexedDB remains a local cache and retry queue.
+After sign-in, successful images are saved to the account by the server when they are generated; IndexedDB in the browser is only a cache. Failed tasks are not stored in the cloud. Collections and their memberships are saved with the account as well.
 
-- The synchronization banner reports progress, errors, and cloud usage.
-- Cached work remains viewable during a network interruption; synchronization resumes later.
-- Signing into the same account in another browser restores synchronized work.
-- Unsynchronized work may exist only in the original browser. Before clearing site data, confirm synchronization or export a backup.
-- Deleting a synchronized task moves it to the recycle bin. It continues to consume storage and can be restored from the recycle-bin filter.
-- If the quota is full, a new task may remain local and show a synchronization error.
+- Signing into the same account in another browser or device shows the saved work.
+- Cached work remains viewable during a network interruption.
+- Older work from this browser and work imported from a ZIP are not uploaded automatically. Import them with **用户中心 → 导入本机旧作品** (User Center → Import local works); clearing site data before that loses them.
+- Deleted work moves to the recycle bin. It can be restored from the gallery filter's recycle bin and still counts toward cloud storage.
 
-The recycle bin is currently a recoverable hide operation, not physical asset deletion. Contact the operator about the server-side retention and purge policy when storage must be reclaimed.
+Items stay in the recycle bin for 3 days. After that they are permanently deleted together with any images no longer in use, and cannot be recovered.
 
 ## 10. Balance, redemption codes, and usage
 
 Operators can fill in redemption instructions and a support website, email, or contact handle under Settings → Operation settings. Both fields default to blank. The user center shows the instructions on the redemption screen and provides copyable support details; a standalone HTTP(S) URL is also clickable. Blank fields are shown as unconfigured and should be filled before public operation.
 
-The gallery shows 60 tasks per page. Search covers the entire library, filters reset pagination, and selections persist across pages for batch downloads. Collection renames and deletions synchronize without reviving deleted collections on stale devices. Temporary sync failures retry with backoff; HTTP 429 pauses work until the server's retry time. Sync has a separate rate-limit bucket from foreground model and recharge requests. Closed browsers resume work when opened again.
+The gallery shows 60 tasks per page. Search covers the entire library, filters reset pagination, and selections persist across pages for batch downloads. Collection renames and deletions synchronize without reviving deleted collections on stale devices.
 
 The user center shows:
 
@@ -129,15 +127,15 @@ The user center shows:
 - Redemption-code credit.
 - Recent usage with CSV export.
 
-One request within the model's output limit costs one successful-request charge, using prices configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
+Each successfully generated image is charged at the model price (generating several images splits them into single-image requests), and failed images are refunded once the server confirms the failure. Prices are configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
 
 ## 11. Settings, import, and export
 
 Hosted product mode hides provider and API-key configuration. Regular users do not need the platform key. General settings still control submission shortcuts, clearing after submit, draft persistence, reference-image editing behavior, ZIP download routes, retry buttons, and system notifications.
 
-**设置 → 数据管理** (Settings → Data Management) exports or imports ZIP backups and clears selected local data. Export retrieves cloud originals first and fails explicitly if an original is missing. Import validates the version, task references, and image files before committing new tasks and images together. Existing local task IDs are kept; an image ID with different content rejects the whole batch. In account mode, new tasks synchronize as independent copies, avoiding overwriting cloud tasks that have not been downloaded; repeated imports may create copies. Configuration backups may contain API keys; keep them private.
+**设置 → 数据管理** (Settings → Data Management) exports or imports ZIP backups and clears selected local data. Export retrieves cloud originals first and fails explicitly if an original is missing. Import validates the version, task references, and image files before committing new tasks and images together. Existing local task IDs are kept; an image ID with different content rejects the whole batch. In account mode, imported work is not uploaded automatically; import it into the account with **用户中心 → 导入本机旧作品** (User Center → Import local works). Repeated imports may create copies. Configuration backups may contain API keys; keep them private.
 
-Clearing local data does not delete synchronized cloud content, which may download again. Unsynchronized work without a backup is lost. Deleted cloud works can be restored through the gallery filter's recycle bin and continue using cloud storage while there.
+Clearing local data does not delete cloud work in the account, which loads again from the cloud. Work not yet imported into the account and not backed up is lost. Deleted cloud work can be restored within 3 days through the gallery filter's recycle bin and continues using cloud storage while there.
 
 ## 12. Install the app
 
@@ -175,4 +173,4 @@ This is expected in hosted product mode. The platform manages upstream credentia
 
 ## 14. Data and privacy
 
-In product mode, the backend stores account, balance, usage, and synchronized library data. The browser stores caches and pending synchronization data. Generation and editing send prompts and required images to the Gouo backend and the operator-configured upstream model provider. Operators should publish terms, a privacy policy, content rules, retention periods, refund terms, and an infringement-reporting process.
+In product mode, the backend stores account, balance, usage, and synchronized library data. The browser stores caches. Generation and editing send prompts and required images to the Gouo backend and the operator-configured upstream model provider. Operators should publish terms, a privacy policy, content rules, retention periods, refund terms, and an infringement-reporting process.
