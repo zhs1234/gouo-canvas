@@ -171,4 +171,28 @@ func TestPurgeGouoTrashKeepsAssetTouchedDuringPurge(t *testing.T) {
 	var count int64
 	require.NoError(t, DB.Model(&GouoAsset{}).Where("id = ?", asset.ID).Count(&count).Error)
 	require.EqualValues(t, 1, count)
+	// 记录保留时文件也要保留，否则这张图一直读不到
+	_, err = os.Stat(filepath.Join(config.GouoAssetDir, asset.StoragePath))
+	require.NoError(t, err)
+}
+
+func TestSaveGouoAssetRestoresMissingFileOnDeduplicate(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	oldDir := config.GouoAssetDir
+	config.GouoAssetDir = t.TempDir()
+	t.Cleanup(func() { config.GouoAssetDir = oldDir })
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 4, 4))))
+	asset, _, err := SaveGouoAssetBytes(1, buf.Bytes(), "a.png", false)
+	require.NoError(t, err)
+	// 文件丢失（如清理删文件后事务提交失败）但记录还在，重新上传同一张图时补写文件
+	path := filepath.Join(config.GouoAssetDir, asset.StoragePath)
+	require.NoError(t, os.Remove(path))
+	again, deduplicated, err := SaveGouoAssetBytes(1, buf.Bytes(), "a.png", false)
+	require.NoError(t, err)
+	require.True(t, deduplicated)
+	require.Equal(t, asset.ID, again.ID)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, buf.Bytes(), data)
 }

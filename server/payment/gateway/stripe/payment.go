@@ -209,14 +209,17 @@ func (e *Stripe) HandleCallback(c *gin.Context, gatewayConfig string) (*types.Pa
 		if orderID == "" {
 			return nil, nil
 		}
-		if session.PaymentIntent == nil || session.PaymentIntent.ID == "" {
-			return nil, fmt.Errorf("missing payment intent")
+		// 带订单号但没有 payment_intent 的会话仍要先按订单归属处理：外来订单由结算查不到而确认收到，
+		// 不能在识别归属前就拒绝。已验签且已支付的会话以会话 ID 作渠道流水号
+		gatewayNo := session.ID
+		if session.PaymentIntent != nil && session.PaymentIntent.ID != "" {
+			gatewayNo = session.PaymentIntent.ID
 		}
 
 		// 构造 PayNotify
 		payNotify := &types.PayNotify{
 			TradeNo:   orderID,
-			GatewayNo: session.PaymentIntent.ID,
+			GatewayNo: gatewayNo,
 			Amount:    decimal.NewFromInt(session.AmountTotal).Shift(-2).String(),
 			Currency:  model.CurrencyType(strings.ToUpper(string(session.Currency))),
 		}

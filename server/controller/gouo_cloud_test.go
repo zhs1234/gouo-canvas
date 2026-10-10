@@ -54,7 +54,7 @@ func TestGouoAssetUploadDeduplicatesAndEnforcesOwnership(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.GouoAsset{}, &model.GouoStorageQuota{}, &model.GouoTask{}, &model.GouoDocument{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoAsset{}, &model.GouoStorageQuota{}, &model.GouoTask{}, &model.GouoDocument{}))
 	model.DB = db
 
 	oldDir := config.GouoAssetDir
