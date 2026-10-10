@@ -1,6 +1,6 @@
 # 光构待修复清单
 
-截至 2026 年 10 月 10 日（北京时间），光构共登记 59 项问题：7 项已在此前本地运行环境验证修复；34 项待验证；17 项修复中（候选分支未合并，新增 P1 6 项、P2 11 项）；GOUO-025 不适用。原 42 项的历史验收范围保留，本轮没有新增已验证修复。
+截至 2026 年 10 月 10 日（北京时间），光构共登记 86 项问题：14 项已在本地运行环境验证修复（GOUO-027 至 033 为本日新增）；27 项待验证（修复已合并）；38 项修复中（[PR #20](https://github.com/zhs1234/gouo-canvas/pull/20) 至 [PR #32](https://github.com/zhs1234/gouo-canvas/pull/32)，未合并）；6 项只登记、暂缓；GOUO-025 不适用。原 42 项的历史验收范围保留。
 
 原始审查基线为 main 提交 [1f3c463](https://github.com/zhs1234/gouo-canvas/commit/1f3c463d4f5d5b51ede64622fab20cef265770b6)。原始结论均为静态代码发现；各条目的单元测试及复现情况见其"修复记录"；用户于 2026 年 10 月 9 日说明该项目没有线上运行；此部署状态为用户提供，尚未独立核实，实际部署版本及功能开关未核验。P1/P2 是修复优先级，不表示相关条件已在生产环境成立。
 
@@ -8,15 +8,17 @@
 
 - v2 路线：暂时废弃。用户明确重启前，不继续验收或开发；保留分支及历史，不做删除。
 
-- 已验证修复：7 项（GOUO-001、007、015、020、021、022、023），2026-10-09 在本地运行环境按验收检查验证，见"本地运行验证"一节
+- 已验证修复：14 项（GOUO-001、007、015、020、021、022、023，2026-10-09 验证；GOUO-027 至 033，2026-10-10 在 SQLite 与 PostgreSQL 16 上验证），均为本地运行环境，见"本地运行验证"与"第三轮运行时回归"两节
 
 - 待验证：18 项已合并（GOUO-002 至 006、008 至 014、016 至 019、024、026），修复见 [PR #8](https://github.com/zhs1234/gouo-canvas/pull/8) 身份权限、[PR #9](https://github.com/zhs1234/gouo-canvas/pull/9) 支付、[PR #10](https://github.com/zhs1234/gouo-canvas/pull/10) 图片中继、[PR #11](https://github.com/zhs1234/gouo-canvas/pull/11) 云同步、[PR #12](https://github.com/zhs1234/gouo-canvas/pull/12) 前端安全、[PR #13](https://github.com/zhs1234/gouo-canvas/pull/13) 存储与账号（叠加在 PR #11 之上）、[PR #14](https://github.com/zhs1234/gouo-canvas/pull/14) 来源 IP 与 Agent 确认，均已于 2026-10-09 合并到 main（合并后提交 [0b9b54f](https://github.com/zhs1234/gouo-canvas/commit/0b9b54f)）
 
-- 待验证（2026-10-09 合并到 main a496a11）：GOUO-027、028（[PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)，PR 构建已在本地通过全部验收）；GOUO-029、030 及 GOUO-006 的换商户说明（[PR #16](https://github.com/zhs1234/gouo-canvas/pull/16)）；GOUO-026 的费用显示与 GOUO-039（[PR #17](https://github.com/zhs1234/gouo-canvas/pull/17)）
+- 已合并到 main a496a11（2026-10-09）：GOUO-027、028（[PR #15](https://github.com/zhs1234/gouo-canvas/pull/15)）；GOUO-029、030 及 GOUO-006 的换商户说明（[PR #16](https://github.com/zhs1234/gouo-canvas/pull/16)）；GOUO-026 的费用显示与 GOUO-039（[PR #17](https://github.com/zhs1234/gouo-canvas/pull/17)）；其中 GOUO-027 至 030 已验证
 
-- 待验证（第二轮审查，2026-10-09 合并到 main a496a11）：GOUO-031 至 034（[PR #18](https://github.com/zhs1234/gouo-canvas/pull/18)）、GOUO-035 至 038 和 040 至 042（[PR #19](https://github.com/zhs1234/gouo-canvas/pull/19)）
+- 待验证（第二轮审查，2026-10-09 合并到 main a496a11）：GOUO-034（[PR #18](https://github.com/zhs1234/gouo-canvas/pull/18)，同 PR 的 031 至 033 已验证）、GOUO-035 至 038 和 040 至 042（[PR #19](https://github.com/zhs1234/gouo-canvas/pull/19)）
 
-- 修复中：17 项（GOUO-043 至 GOUO-059，8 条候选分支未合并；本轮未运行测试或验收）
+- 修复中：38 项（GOUO-043 至 080），已开 [PR #20](https://github.com/zhs1234/gouo-canvas/pull/20) 至 [PR #32](https://github.com/zhs1234/gouo-canvas/pull/32)，均未合并；13 个分支已试合并、跑过单元测试和本地运行回归，见"第三轮运行时回归"
+
+- 暂缓（只登记）：6 项（GOUO-081 至 086），其中 GOUO-084 通用对话可透支为 P1，属上游设计
 
 - 待修复：0 项（无候选补丁项）；修复中不等于已修复或已验证
 
@@ -24,7 +26,7 @@
 
 - 验证状态：19 项已由单元测试复现（撤掉修复后失败），GOUO-005 由脚本复现，GOUO-024 已用本地请求复现，GOUO-027 已用前端解析复现，GOUO-028 已由单元测试复现，GOUO-013、GOUO-015、GOUO-021、GOUO-022 待复现；2026-10-09 本地运行环境的验证结果见"本地运行验证"一节，支付沙箱和实际部署环境均未验证
 
-- 已完成并验证的修复：7 项（本地运行环境：SQLite、mock 上游、模拟代理头，未在实际部署环境验证）
+- 已完成并验证的修复：14 项（本地运行环境：SQLite、PostgreSQL 16、mock 上游、模拟代理头，未在实际部署环境验证）
 
 - 仓库没有在 PR 上运行的 CI；以上测试均为本地运行，不代表 CI 或线上验证通过
 
@@ -57,6 +59,8 @@ main 并非完全没有工作流：存在仅以 v* tag push / 部分允许 workf
 
 策略待确认（不计入 59 项）：Turnstile 的通行复用时效及 IP/操作范围；支付配置管理是否限定 root。候选权限收紧和时效缩短不自动证明原策略违规。管理员删除消费日志的变更不能表述为可删除调额审计。
 
+第三轮修复会话补充：上述三项改动分别在 [PR #20](https://github.com/zhs1234/gouo-canvas/pull/20)（Turnstile 10 分钟）和 [PR #23](https://github.com/zhs1234/gouo-canvas/pull/23)（支付网关增删改查与批量删除日志仅限 root）中，是否采用由用户决定；核对 `DeleteOldLog` 确认只删除消费日志（`type = consume`），PR #23 描述已据此更正。
+
 ## 优先处理顺序
 
 1. 先确认 GOUO-001 和 GOUO-002 的部署条件，修复身份边界；评估限制 GitHub OAuth 入口及轮换可能暴露的管理令牌。
@@ -73,7 +77,7 @@ main 并非完全没有工作流：存在仅以 v* tag push / 部分允许 workf
 
 7. GOUO-029、030 已合并，按当前 main 重新验收；GOUO-006 已选择方案 (a)，但本轮发现停用旧网关会阻断回调，按该条更正安排验收，不能直接执行旧停用建议。
 
-8. 优先复核 GOUO-043 至 GOUO-048 的身份、令牌、支付和中继边界，再覆盖 GOUO-049 至 GOUO-059 的资源、同步与并发场景；8 条候选分支尚无开放产品 PR，本次仅维护文档。
+8. 优先复核 GOUO-043 至 GOUO-048 的身份、令牌、支付和中继边界，再覆盖 GOUO-049 至 GOUO-059 的资源、同步与并发场景。第三轮修复已开 PR #20 至 #32（13 个分支已试合并无冲突）：先审阅含 P1 的 #20（043、044、049）、#21（047）、#22（046、050）、#23（045）、#24（048），再合并其余；Turnstile 时效、支付配置仅限 root、删除日志仅限 root 三项需先定策略。合并后按"交给用户验证"补做外部服务验证。
 
 ## P1 待修复
 
@@ -291,6 +295,7 @@ root、admin1、普通用户分别调用用户列表与详情：root 列表含�
 
 处理状态继续待验证，不改变本条历史本地验证记录。应补充验收：停用/软删后新下单被拒，旧订单正确签名仍可到账；延迟到达的 closed 订单正确处理；重复回调幂等；错误签名、金额和币种仍拒绝；商户配置不可被旧订单静默替换。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)，单元测试 `controller/payment_callback_test.go` 撤掉修复后失败。 历史商户配置快照仍未实现，原地改商户配置仍会破坏原商户回调；按上方"当前使用建议"操作。
 
 ### GOUO-007 供应商图片 URL 可触发后端内网请求
 
@@ -938,7 +943,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 ### GOUO-027 重置密码链接未编码邮箱，含"+"的邮箱无法通过链接重置
 
-优先级：P2。处理状态：待验证。验证状态：已复现（`new URLSearchParams('email=a+b@example.com').get('email')` 得到 `a b@example.com`），尚未在运行环境复现。
+优先级：P2。处理状态：已验证修复。验证状态：已验证（本地运行环境，main a496a11；2026-10-10 在 SQLite 与 PostgreSQL 16 上复跑通过，见"第三轮运行时回归"）。
 
 **触发场景**
 
@@ -970,7 +975,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 ### GOUO-028 管理员调整余额与核对账务不受角色范围限制
 
-优先级：P2。处理状态：待验证。验证状态：已复现（单元测试，撤掉修复后失败），尚未在运行环境复现。
+优先级：P2。处理状态：已验证修复。验证状态：已验证（本地运行环境，main a496a11；2026-10-10 在 SQLite 与 PostgreSQL 16 上复跑通过，见"第三轮运行时回归"）。
 
 **触发场景**
 
@@ -1002,7 +1007,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 ### GOUO-029 环境变量无法把 TRUSTED_PROXIES 设为空
 
-优先级：P2。处理状态：待验证。验证状态：已复现（本地运行环境，main 0b9b54f），尚未在实际部署复现。
+优先级：P2。处理状态：已验证修复。验证状态：已验证（本地运行环境，main a496a11；2026-10-10 在 SQLite 与 PostgreSQL 16 上复跑通过，见"第三轮运行时回归"）。
 
 **触发场景**
 
@@ -1034,7 +1039,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 ### GOUO-030 管理端空间用户列表与图片账务列表不按角色过滤
 
-优先级：P2。处理状态：待验证。验证状态：已复现（本地运行环境，main 0b9b54f 与 PR #15 head cbfa082），尚未在实际部署复现。
+优先级：P2。处理状态：已验证修复。验证状态：已验证（本地运行环境，main a496a11；2026-10-10 在 SQLite 与 PostgreSQL 16 上复跑通过，见"第三轮运行时回归"）。
 
 **触发场景**
 
@@ -1066,7 +1071,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 ### GOUO-031 光构图片模型可经其他入口免费调用
 
-优先级：P1。处理状态：待验证。验证状态：已复现（本地运行环境，main 0b9b54f），尚未在运行环境验证修复。
+优先级：P1。处理状态：已验证修复。验证状态：已验证（本地运行环境，main a496a11；2026-10-10 在 SQLite 与 PostgreSQL 16 上复跑通过，见"第三轮运行时回归"）。
 
 **触发场景**
 
@@ -1098,7 +1103,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 ### GOUO-032 补充作品信息接口不检查云端空间配额
 
-优先级：P2。处理状态：待验证。验证状态：代码确认，已补单元测试，尚未在运行环境验证修复。
+优先级：P2。处理状态：已验证修复。验证状态：已验证（本地运行环境，main a496a11；2026-10-10 在 SQLite 与 PostgreSQL 16 上复跑通过，见"第三轮运行时回归"）。
 
 **触发场景**
 
@@ -1126,7 +1131,7 @@ admin1 访问 root、admin2 的作品列表、图片内容、配额修改，均�
 
 ### GOUO-033 图片编辑的参考图和遮罩不受配额与单文件上限约束
 
-优先级：P2。处理状态：待验证。验证状态：代码确认，已补单元测试，尚未在运行环境验证修复。
+优先级：P2。处理状态：已验证修复。验证状态：已验证（本地运行环境，main a496a11；2026-10-10 在 SQLite 与 PostgreSQL 16 上复跑通过，见"第三轮运行时回归"）。
 
 **触发场景**
 
@@ -1190,6 +1195,7 @@ PR #18 已修复“去重命中不刷新 updated_at”，但仍有另一段清�
 
 新增验收：在数据库记录删除完成、物理文件删除尚未执行处设确定性屏障，并发重传同内容，验证新记录和文件始终一致；再以两个进程共享数据库/素材盘验证。不得仅以普通顺序重传测试代替该时序。
 
+**修复记录（2026-10-10，第三轮修复会话）**：修复在 [PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)（按用户锁覆盖数据库删除和物理文件删除），并新增 `TestPurgeGouoTrashKeepsAssetTouchedDuringPurge`（清理事务挑出候选后、删除前刷新 updated_at，撤掉"删除时按 updated_at 过滤"后失败）及 GOUO-060 的用户行锁。上方要求的"数据库删除后、删文件前设屏障并发重传"的确定性测试和双进程验证尚未做；锁是进程内锁，多实例共享素材盘时文件删除与重传仍有窗口。
 
 ### GOUO-035 平台账号令牌明文留在本地存储和备份文件中
 
@@ -1443,6 +1449,7 @@ GitHub 登录开启且旧用户名回退未关闭。已有本地账号绑定 Git
 
 已绑定数字 ID X 的账号不能被相同用户名、不同 ID Y 登录；X 改名后仍进入原账号；旧账号成功迁移后数字 ID 写入数据库，后续不能再被回收用户名登录；为尚未迁移旧账号明确并验证安全处理方式。检查存在的 [TestGitHubLoginDoesNotMatchRenamedUsername](https://github.com/zhs1234/gouo-canvas/blob/7f703bcd4263936da91487f69614e1dac643fb06/server/controller/user_test.go#L198-L215)，本轮未运行；该测试不覆盖 HTTP 登录后的 ID 持久化。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #20](https://github.com/zhs1234/gouo-canvas/pull/20)，单元测试 `TestGitHubLoginDoesNotMatchRenamedUsername` 撤掉修复后失败。真实 GitHub OAuth 未验证。 未迁移的旧账号（从未记录数字 ID）仍按用户名匹配，被回收用户名的现持有者仍可能登录；需决定关闭用户名回退或要求验证后重新绑定，本 PR 未处理。
 
 ### GOUO-044 OIDC 新账号接受未验证或已占用邮箱
 
@@ -1468,6 +1475,7 @@ GitHub 登录开启且旧用户名回退未关闭。已有本地账号绑定 Git
 
 email_verified 缺失、false、类型错误、空邮箱均不能占用邮箱；已被使用的邮箱不能再次写入；新鲜且已验证邮箱正常保存；不同 subject 并发使用同一邮箱不会产生重复；历史错误绑定另行检查。用真实邮箱持有者首次 GitHub 登录验证不会进入他人预先占用的 OIDC 账号。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #20](https://github.com/zhs1234/gouo-canvas/pull/20)，单元测试覆盖。真实 OIDC 未验证。
 
 ### GOUO-045 管理员可越级读取及转移模型调用令牌
 
@@ -1493,6 +1501,7 @@ email_verified 缺失、false、类型错误、空邮箱均不能占用邮箱；
 
 管理员无筛选、指定 user_id、指定 token_id 的列表均不返回 root、同级和自己的密钥；越级修改、status_only、向高/同级账号转移均被拒且数据库及缓存保持原状；对普通用户和 root 合法操作保持正常；确认转移后计费身份与缓存一致。新增 [TestAdminTokenEndpointsRespectRoleScope](https://github.com/zhs1234/gouo-canvas/blob/f96b5af4bf2b7991908f0403fab04d47a31790e5/server/controller/admin_token_scope_test.go#L19-L76) 是直接设置角色再调用控制器，本轮未运行；不能据此声称真实路由、中继消费或 Redis 已验收。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #23](https://github.com/zhs1234/gouo-canvas/pull/23)，单元测试 `controller/admin_token_scope_test.go` 撤掉修复后失败；本地运行环境 main 构建复现，修复构建通过（SQLite 与 PostgreSQL）。
 
 ### GOUO-046 Stripe 回调允许空签名密钥参与验签
 
@@ -1518,6 +1527,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 空值和缺失值配置的伪造回调不能入账；正确签名正常入账，错误签名、金额或币种不匹配仍失败；重复回调只入账一次；配置更新与下单对缺失签名密钥有明确处理。新增 [TestStripeCallbackGatewayEdgeCases 的空密钥用例](https://github.com/zhs1234/gouo-canvas/blob/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e/server/controller/payment_callback_test.go#L52-L56) 本轮未运行，也不是 Stripe 沙箱或真实付款验证。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)，单元测试覆盖。Stripe 创建网关需联网，未做端到端验证。
 
 ### GOUO-047 图片编辑重复单值字段导致校验与上游语义不一致
 
@@ -1533,6 +1543,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 验收：无映射/有映射各测试重复 n、model、quality、mask；到达上游之前明确拒绝，未派发、未预扣；合法多张参考图与 GOUO-015 的参数保真用例仍成功。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #21](https://github.com/zhs1234/gouo-canvas/pull/21)，单元测试撤掉修复后失败；本地运行环境 main 构建返回 200 出图，修复构建返回 400。
 
 ### GOUO-048 Midjourney 通知可改写他人任务，公开图片代理可请求内网
 
@@ -1548,6 +1559,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 验收：账号 B 无法通知更新 A 的任务；A 正常通知仍可工作。记录含回环、私网、链路本地、重定向到内网及 DNS 重绑定目标时，目标收到 0 次请求；公网图片正常；超时、64 MiB 边界及非200错误体受限，不泄露内网响应。验证真实 MJ 回调凭据与任务 owner 匹配。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #24](https://github.com/zhs1234/gouo-canvas/pull/24)，单元测试撤掉修复后失败；本地运行环境 main 构建返回 200 和内网图片，修复构建返回 500 `http_get_image_failed`。
 
 ### GOUO-049 改密与重置按字节计算长度，与注册规则不一致
 
@@ -1569,6 +1581,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 注册、改密和重置分别覆盖 7/8/20/21 个 ASCII 字符、中文及混合字符；“密码12”被拒绝；8–20 个普通汉字按相同规则处理；超过 bcrypt 字节上限给出明确且一致的输入错误。[TestChangePasswordCountsCharacters](https://github.com/zhs1234/gouo-canvas/blob/7f703bcd4263936da91487f69614e1dac643fb06/server/controller/user_test.go#L217-L229) 仅覆盖改密短字符场景，本轮未运行，重置和长多字节边界尚无新增覆盖。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #20](https://github.com/zhs1234/gouo-canvas/pull/20)，单元测试 `TestChangePasswordCountsCharacters` 撤掉修复后失败；本地运行环境中 main 构建可改成功，修复构建拒绝。
 
 ### GOUO-050 无关 Stripe 会话被当成结算失败
 
@@ -1590,6 +1603,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 空引用、未知引用、属于另一网关的有效签名事件均得到适当确认且余额不变；额外覆盖缺少 payment_intent、无关模式和零金额的事件，避免在识别归属前被本地结算校验拒绝；本系统订单的真实数据库错误保持可重试，错误金额、币种、签名不能入账；异常忽略有可查日志。新增 [TestStripeCallbackGatewayEdgeCases 的外来订单用例](https://github.com/zhs1234/gouo-canvas/blob/c6aa0d5ec95fd7adffbc607b2005da5496e1f52e/server/controller/payment_callback_test.go#L58-L65) 本轮未运行；测试构造器总是包含 payment_intent，未覆盖上述缺口。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)，单元测试覆盖；本地运行环境用支付宝模拟验证：跨网关回调确认收到但不结算，原网关回调正常入账。 补充提交（同在 [PR #22](https://github.com/zhs1234/gouo-canvas/pull/22)）：没有订单号的会话在检查 payment_intent 之前确认收到，测试新增无 payment_intent 的零金额外来会话，撤掉后失败。RecordNotFound 确认收到时写系统日志，错配回调地址可从日志发现；其他网关同样适用，是否需要告警由用户决定。
 
 ### GOUO-051 单次对话远程图片总量没有内存预算
 
@@ -1605,6 +1619,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 验收：32/33张、少量大图、多消息累计图片、并发请求、超时与取消时的内存释放；预期超限在昂贵下载前拒绝，保留合理合法请求的兼容性，并记录压测预算。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #24](https://github.com/zhs1234/gouo-canvas/pull/24)，单元测试 `relay/chat_images_test.go` 撤掉修复后失败。另把 `::/96`、`2002::/16`、`64:ff9b:1::/48` 视为非公网地址。
 
 ### GOUO-052 收藏夹及收藏关系不计配额且数量无限制
 
@@ -1620,6 +1635,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 验收：499/500/501 个、回收站也占数量、已有项改名不受影响；并发创建不得跨越批准的上限；明确已有超量账号的迁移策略及收藏关系的规模约束。未通过并发验收前保持待验证。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，单元测试 `TestGouoCollectionCountLimit` 撤掉修复后失败。
 
 ### GOUO-053 回收站清理单账号错误中止其余账号，并与全站出图共用锁
 
@@ -1635,6 +1651,7 @@ Stripe SDK 使用该字符串作为 HMAC 密钥；空密钥是可知值。可构
 
 验收：固定先让账号A发生删除失败，再检查B/C仍被清理；大量收藏夹不超过数据库参数上限；A清理期间B正常生成/上传不被全局锁阻塞；验证失败物理文件的重试或巡检回收策略；原3天保留期与共享引用保护不变。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，单元测试 `TestPurgeGouoTrashContinuesAfterOneUserFails` 撤掉修复后失败。
 
 ### GOUO-054 清空本地任务后，增量游标阻止旧云作品重新下载
 
@@ -1664,6 +1681,7 @@ main 的[清空操作](https://github.com/zhs1234/gouo-canvas/blob/a496a116fa75e
 
 正常清空后恢复全部可见作品及回收站作品；在云请求被延迟时清空，释放旧响应后仍完整恢复，且旧刷新不能覆盖重置后的游标。关闭云作品库时不产生错误恢复请求。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #26](https://github.com/zhs1234/gouo-canvas/pull/26)，单元测试撤掉修复后失败。 补充修复：清空时递增游标代次，旧读取不再写回游标，重置后的刷新排在旧读取之后从头读取；新增并发测试，撤掉后失败。
 
 ### GOUO-055 已彻底删除的收藏夹被离线设备重新创建
 
@@ -1693,6 +1711,7 @@ main [缺失即补交的判断](https://github.com/zhs1234/gouo-canvas/blob/a496
 
 分别覆盖刷新读取过的收藏夹、订阅上传成功但未再次刷新的收藏夹、升级前已有收藏夹；被服务端清除的旧夹不复活，真正未上传的新夹仍能补交。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #26](https://github.com/zhs1234/gouo-canvas/pull/26)，单元测试撤掉修复后失败。 补充修复：本设备上传成功的收藏夹立即记入 collections:seen；新增测试，撤掉后失败。升级前已有、没有记录的本地收藏夹仍会补交（保守保留用户数据），属已知限制。
 
 ### GOUO-056 旧标签页持久化覆盖另一页的收藏夹变化
 
@@ -1722,6 +1741,7 @@ main [持久化完整收藏夹列表与默认项](https://github.com/zhs1234/gou
 
 两页依次测试新增、改名、删除、仅更改默认收藏夹；另一页继续操作后重载，结果仍保持最新，且不出现无限 storage 写回。补测两页近乎同时编辑时的合并或冲突策略。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #26](https://github.com/zhs1234/gouo-canvas/pull/26)，单元测试撤掉修复后失败。需在浏览器验证。 补充修复：只切换默认收藏夹也会同步；测试补充该场景，撤掉后失败。
 
 ### GOUO-057 图片清理忽略其他标签页的任务及内存引用
 
@@ -1751,6 +1771,7 @@ main [删除任务时只依据本页任务、输入计算引用](https://github.
 
 B 新任务引用 A 任务的图片，A 删除原任务，B 的素材仍可读取；B 删除画布图片但保留可撤销历史，A 新开或手动清理，B 撤销后图片仍在；真正孤立图片可删除。分别验证有、无 Web Locks 的行为。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #26](https://github.com/zhs1234/gouo-canvas/pull/26)，单元测试撤掉修复后失败。 手动清理任务时仍只能看到本页的内存引用（其他页撤销历史或未保存编辑中的图片）；浏览器没有 Web Locks 时启动清理照常执行（与修复前一致）。两点未处理，保留为已知限制。
 
 ### GOUO-058 看门狗超时后丢弃迟到的已付费图片结果
 
@@ -1778,6 +1799,7 @@ main [看门狗只改变任务状态](https://github.com/zhs1234/gouo-canvas/blo
 
 用 mock 分别延迟请求结果、延迟本地图片保存；最终只保存正确结果，任务变为完成并清空错误，不追加生成请求。超时后启动恢复时，旧请求成功或失败都不能覆盖恢复中的状态和最终结果。
 
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #27](https://github.com/zhs1234/gouo-canvas/pull/27)，单元测试撤掉修复后失败。
 
 ### GOUO-059 并发 fal 任务串用全局客户端配置
 
@@ -1804,6 +1826,409 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 **验收检查**
 
 用 mock 交错运行两个不同 Key、默认/自定义地址的提交与恢复；每个请求的凭据、地址、requestId 始终属于原配置。分别覆盖 A 等待状态期间 B 开始恢复，以及 A 准备输入期间 B 开始提交。
+
+**修复记录（2026-10-10，第三轮修复会话）**：[PR #27](https://github.com/zhs1234/gouo-canvas/pull/27)，单元测试撤掉修复后失败。
+
+## 2026-10-10 第三轮修复会话新增（GOUO-060 起）
+
+以下条目来自同日第三轮深度检查的其余方向（数据库兼容、多实例、Agent、画布、前端安全、部署、文档一致性），编号接续 GOUO-059。修复已开 PR、未合并，按本清单惯例记为修复中；"本地运行环境"指会话容器中的 SQLite 与 PostgreSQL 16、mock 上游和模拟代理头，不等于实际部署验证。
+
+### GOUO-060 回收站清理期间新引用的图片被删
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：清理进行中，另一设备或实例把一张超过 3 天、当时无人引用的图片放进作品或文档。
+
+**影响**：保存成功返回，但图片记录和文件随后被删，作品指向缺失图片；MySQL 可重复读下窗口覆盖整个清理事务。
+
+**建议修复**：清理事务第一条语句锁用户行；删除时再按 updated_at 过滤；保存作品时在锁内重新确认图片归属。
+
+**验收检查**：并发场景下要么保存失败提示图片不属于用户，要么图片保留。
+
+**代码依据**：[gouo-trash.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/model/gouo-trash.go)、[gouo_cloud.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/model/gouo_cloud.go)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，单元测试 `TestPurgeGouoTrashKeepsAssetTouchedDuringPurge`、`TestUpsertGouoTaskRechecksAssetsAndTrimsText` 撤掉修复后失败，并在 PostgreSQL 16 上运行通过。
+
+### GOUO-061 作品提示词超出 MySQL TEXT 上限或含 NUL 时同步一直失败
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：提示词约 2.2 万汉字（MySQL）或含 `\u0000`（PostgreSQL）。
+
+**影响**：作品每次同步返回 500；付费生成的图片不进作品库。
+
+**建议修复**：提示词和错误信息去掉 NUL 并截断到 60000 字节。
+
+**验收检查**：超长提示词保存成功并被截断；含 NUL 的提示词在 PostgreSQL 上保存成功。
+
+**代码依据**：[gouo_cloud.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/model/gouo_cloud.go)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，单元测试撤掉修复后失败；本地运行环境 SQLite 与 PostgreSQL 通过。MySQL 未实际连接验证。
+
+### GOUO-062 素材 ID 大小写在 MySQL 与清理逻辑间不一致
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：客户端把 asset_id 写成大写。
+
+**影响**：MySQL 归属检查不区分大小写而通过，清理时按原样比较，被引用的图片被删除。
+
+**建议修复**：素材 ID 必须为 32 位小写十六进制。
+
+**验收检查**：大写 ID 的作品和文档请求返回 400。
+
+**代码依据**：[gouo_documents.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/controller/gouo_documents.go)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，文档接口用例撤掉修复后失败。
+
+### GOUO-063 多实例共享资产目录时付费图片结果保存失败
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：多个后端实例挂载同一 GOUO_ASSET_DIR，同时保存图片结果。
+
+**影响**：清理过程遇到另一实例刚删除的临时文件即报错，用户收到 500、额度进入待核对，上游已出的图丢失。
+
+**建议修复**：清理时跳过已不存在的文件。
+
+**验收检查**：并发创建删除临时文件时清理不报错。
+
+**代码依据**：[gouo-image-result.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/model/gouo-image-result.go)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #25](https://github.com/zhs1234/gouo-canvas/pull/25)，单元测试 `TestCleanupGouoImageResultsIgnoresVanishingTempFiles` 撤掉修复后失败。
+
+### GOUO-064 Agent 历史附件每轮重发原图
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：会话挂参考图后连续发送多条消息。
+
+**影响**：请求中的原图数随轮数增长（2、4、6 张），视觉 token 费用线性增长，最终超出上游请求上限。
+
+**建议修复**：只给最新一条用户消息附原图，历史消息只写图片 ID；附件仍保留在输入框，供未指定 inputImageIds 的生成使用。
+
+**验收检查**：连发 3 条消息，每次请求都只有 2 张图。
+
+**代码依据**：[agentStore.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/stores/agentStore.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #28](https://github.com/zhs1234/gouo-canvas/pull/28)，单元测试撤掉修复后失败。
+
+### GOUO-065 Claude 渠道一次返回多个工具调用时 Agent 必定中断
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：Agent 模型走 Claude 渠道，模型一次调用两个工具。
+
+**影响**：前端报"工具调用 ID 在流式响应中发生变化"，已付费的 LLM 请求白费。
+
+**建议修复**：`parallel_tool_calls` 改为指针保留 false 并映射为 `disable_parallel_tool_use`；流式工具调用 index 递增；前端同一 index 出现新 ID 视为下一个调用。
+
+**验收检查**：两个工具调用正确解析并依次执行。
+
+**代码依据**：[claude/chat.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/providers/claude/chat.go)、[agent/api.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/lib/agent/api.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #28](https://github.com/zhs1234/gouo-canvas/pull/28)，Go 与前端单元测试撤掉修复后失败。
+
+### GOUO-066 新开标签页中断其他标签页正在运行的 Agent 会话
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：标签页 A 的 Agent 正在运行时打开标签页 B。
+
+**影响**：B 把会话改成中断并写回，A 下次保存版本冲突而停止，之后一直无法保存。
+
+**建议修复**：运行期间持有 `gouo-agent-run:<id>` 锁；加载时锁被占用的会话保持原样不写回，任务回填也跳过。
+
+**验收检查**：B 打开后 A 继续运行完成。
+
+**代码依据**：[agentStore.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/stores/agentStore.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #28](https://github.com/zhs1234/gouo-canvas/pull/28)，单元测试撤掉修复后失败。
+
+### GOUO-067 画布逐项错误过长导致回填失败、一直显示生成中
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：自定义服务商返回整页 HTML 错误，或一次回填中某张画布保存失败。
+
+**影响**：超过元数据长度上限，整次回填失败，节点停在生成中；一张画布失败也阻断其他画布。
+
+**建议修复**：逐项错误截断到 100 条、每条 10000 字符；按画布单独捕获保存失败。
+
+**验收检查**：长错误回填为失败状态；其他画布照常回填。
+
+**代码依据**：[generation.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/lib/canvas/generation.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #29](https://github.com/zhs1234/gouo-canvas/pull/29)，单元测试撤掉修复后失败。
+
+### GOUO-068 画布移入回收站和恢复进入撤销历史
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：画布恢复后按撤销。
+
+**影响**：画布被放回回收站，并还原为最初的删除时间。
+
+**建议修复**：回收站操作不记入撤销历史。
+
+**验收检查**：恢复后撤销不影响回收站状态。
+
+**代码依据**：[canvasStore.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/stores/canvasStore.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #29](https://github.com/zhs1234/gouo-canvas/pull/29)，单元测试撤掉修复后失败。
+
+### GOUO-069 小图标和细长横幅插入画布被拒
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：拖入 16×16 图标或 4000×100 横幅。
+
+**影响**：节点尺寸低于校验下限 20，整批插入被拒绝。
+
+**建议修复**：节点尺寸最小 20。
+
+**验收检查**：小图和横幅正常插入。
+
+**代码依据**：[nodeSize.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/lib/canvas/nodeSize.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #29](https://github.com/zhs1234/gouo-canvas/pull/29)，单元测试撤掉修复后失败。
+
+### GOUO-070 分组或解组时删除画布上无关的空分组
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：画布上有预先建好的空画框，再对其他节点分组或解组。
+
+**影响**：空画框被删除。
+
+**建议修复**：只清理本次操作后变空的分组。
+
+**验收检查**：分组解组后空画框仍在。
+
+**代码依据**：[nodeGeometry.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/lib/canvas/nodeGeometry.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #29](https://github.com/zhs1234/gouo-canvas/pull/29)，单元测试撤掉修复后失败。
+
+### GOUO-071 生成配置节点可被"上传到此节点"替换
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：在生成配置节点上点上传按钮。
+
+**影响**：节点被替换为图片节点，提示词、模型等配置丢失。
+
+**建议修复**：上传按钮只在图片节点显示。
+
+**验收检查**：配置节点没有上传按钮。
+
+**代码依据**：[canvasEditor.tsx](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/components/canvas/canvasEditor.tsx)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #29](https://github.com/zhs1234/gouo-canvas/pull/29)；Playwright 验证：main 有 2 个上传按钮，修复后只剩图片节点的 1 个。
+
+### GOUO-072 链接参数静默切换图片服务地址
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：非平台部署下打开带 `apiUrl`/`apiKey`/`settings` 参数的链接。
+
+**影响**：当前服务被切到链接地址，之后的提示词和参考图发给对方。
+
+**建议修复**：地址变化时先确认并显示目标地址；不确认时只导入不切换。
+
+**验收检查**：打开此类链接弹出确认框；不切换时当前服务不变。
+
+**代码依据**：[App.tsx](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/App.tsx)、[urlSettings.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/lib/urlSettings.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #30](https://github.com/zhs1234/gouo-canvas/pull/30)，单元测试与 Playwright 验证。
+
+### GOUO-073 Service Worker 与发版缓存导致离线首页或脚本被错误缓存
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：用户打开站内文本或图片链接、遇到 502；或发版后旧页面请求已删除的脚本。
+
+**影响**：离线首页变成文本或错误页；HTML 被当作脚本缓存后白屏。
+
+**建议修复**：SW 只缓存 HTML 应用页，不把 HTML 缓存为脚本；Nginx 入口页 no-cache，/assets/ 缺失返回 404。
+
+**验收检查**：见 PR 中 Nginx 实测与 SW 模拟结果。
+
+**代码依据**：[sw.js](https://github.com/zhs1234/gouo-canvas/blob/a496a11/public/sw.js)、[nginx.conf](https://github.com/zhs1234/gouo-canvas/blob/a496a11/deploy/nginx.conf)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)，`serviceWorker.test.mjs` 撤掉修复后失败；用 Nginx 1.24 实际加载配置验证。
+
+### GOUO-074 HTTPS 部署文档未要求 Secure Cookie 与 HSTS
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：按文档配好 HTTPS 后用户经 http:// 访问。
+
+**影响**：30 天会话 Cookie 在跳转前以明文发送。
+
+**建议修复**：文档与示例要求 HTTPS 部署设 `SESSION_COOKIE_SECURE=true` 并加 HSTS。
+
+**验收检查**：登录响应 Set-Cookie 带 Secure。
+
+**代码依据**：[docker.md](https://github.com/zhs1234/gouo-canvas/blob/a496a11/docs/zh-CN/deployment/docker.md)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)，仅文档和示例配置。
+
+### GOUO-075 出图超时链不一致导致正常长任务进入待核对
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：单张出图超过 600 秒。
+
+**影响**：前端或代理先断开，后端取消上游请求，额度进入待核对。
+
+**建议修复**：平台模式前端固定等待 960 秒，文档统一为 960 秒。
+
+**验收检查**：长任务完成并结算。
+
+**代码依据**：[openaiCompatibleImageApi.ts](https://github.com/zhs1234/gouo-canvas/blob/a496a11/src/lib/openaiCompatibleImageApi.ts)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)，单元测试撤掉修复后失败。后端与客户端断开解耦属产品决定，未改。
+
+### GOUO-076 trusted_header 可被伪造
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：设置 `trusted_header=CF-Connecting-IP` 且源站可被直连。
+
+**影响**：攻击者自带该头伪造 IP，绕过限流与令牌 IP 白名单。
+
+**建议修复**：文档写明源站必须只能经对应平台访问。
+
+**验收检查**：—
+
+**代码依据**：[backend.md](https://github.com/zhs1234/gouo-canvas/blob/a496a11/docs/zh-CN/backend.md)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)，仅文档。
+
+### GOUO-077 缺少防嵌入等安全响应头
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：跨站 Cookie 模式下攻击站点用 iframe 嵌入前端。
+
+**影响**：可诱导点击触发付费操作。
+
+**建议修复**：Nginx 加 X-Frame-Options、frame-ancestors、nosniff、Referrer-Policy。
+
+**验收检查**：各路径响应带安全头。
+
+**代码依据**：[nginx.conf](https://github.com/zhs1234/gouo-canvas/blob/a496a11/deploy/nginx.conf)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)，Nginx 实测。
+
+### GOUO-078 多实例部署时改价和模型上下架不同步
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：多实例部署，管理员在实例 A 改价或下架模型。
+
+**影响**：实例 B 一直按旧价扣费，下架模型照常可用。
+
+**建议修复**：所有实例每分钟重读价格表；文档写明主从设置。
+
+**验收检查**：A 改价后 B 一分钟内生效。
+
+**代码依据**：[main.go](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/main.go)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #31](https://github.com/zhs1234/gouo-canvas/pull/31)；本地两实例共用 PostgreSQL：main 构建 75 秒内未同步，修复构建 32 秒同步。
+
+### GOUO-079 管理面板复制失败时把用户内容按 HTML 渲染
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：管理员经 http 访问面板（剪贴板不可用），点击令牌名、用户名或 MJ 提示词的复制。
+
+**影响**：普通用户设置的 `<img onerror>` 令牌名在管理员页面执行。
+
+**建议修复**：改为纯文本渲染。
+
+**验收检查**：复制失败提示中 HTML 被转义。
+
+**代码依据**：[common.jsx](https://github.com/zhs1234/gouo-canvas/blob/a496a11/server/web/src/utils/common.jsx)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #23](https://github.com/zhs1234/gouo-canvas/pull/23)；面板无测试框架，用 esbuild 打包渲染对照验证。
+
+### GOUO-080 文档与实现不一致（回收站、计费拆分、作品库同步、路由、配额、冒烟命令）
+
+优先级：P2。处理状态：修复中（PR 未合并，待验证）。验证状态：见修复记录。
+
+**触发场景**：用户或运营方按文档理解产品行为。
+
+**影响**：以为回收站可无限恢复、导入的作品已上云、按请求而非按张计费；冒烟测试实际什么都没测。
+
+**建议修复**：逐条修正中英文文档，详见 PR。
+
+**验收检查**：—
+
+**代码依据**：[backend.md](https://github.com/zhs1234/gouo-canvas/blob/a496a11/docs/zh-CN/backend.md)、[user-guide.md](https://github.com/zhs1234/gouo-canvas/blob/a496a11/docs/zh-CN/user-guide.md)（基线 main a496a11）。
+
+**修复记录（2026-10-10）**：[PR #32](https://github.com/zhs1234/gouo-canvas/pull/32)，仅文档；数值与路由逐条对照代码。
+
+### 只登记、暂不修复
+
+### GOUO-081 退出登录不使会话失效，第三方登录无法撤销会话
+
+优先级：P2。处理状态：暂缓。验证状态：代码确认。
+
+**说明**：退出只清浏览器 Cookie，旧会话 Cookie 在 30 天内仍有效；改密码、封禁之外没有让其他会话失效的办法。
+
+**暂缓原因**：需要在用户表加会话版本字段并在鉴权中比对，改动面大，只登记。
+
+### GOUO-082 换绑邮箱、注册通行密钥不要求重新验证
+
+优先级：P2。处理状态：暂缓。验证状态：代码确认。
+
+**说明**：会话被盗后可直接换绑邮箱或添加通行密钥，进一步接管账号。
+
+**暂缓原因**：属交互设计，需产品决定，只登记。
+
+### GOUO-083 敏感接口共用 IP 限流桶，没有按账号的失败次数限制
+
+优先级：P2。处理状态：暂缓。验证状态：代码确认。
+
+**说明**：登录、注册、验证码共用同一 IP 桶；同一账号可从多个 IP 持续猜密码。
+
+**暂缓原因**：需调整限流模型，只登记。
+
+### GOUO-084 通用对话计费可透支
+
+优先级：P1。处理状态：暂缓。验证状态：代码确认。
+
+**说明**：对话请求按估算预扣，实际用量超出时仍完成结算，余额可透支；批量写入开启时更明显。上游 One Hub 设计。
+
+**暂缓原因**：需改预扣模型，只登记；光构图片计费不受影响。
+
+### GOUO-085 MySQL 上作品 content_bytes 前后算法不一致
+
+优先级：P2。处理状态：暂缓。验证状态：代码确认。
+
+**说明**：MySQL 的 JSON 列会重排键并加空格，写入时按原始字节计、补丁时按读回文本计，已用空间漂移，接近配额时无改动的补丁也可能报空间不足。
+
+**暂缓原因**：需统一计量口径并迁移，MySQL 未实际验证，只登记。
+
+### GOUO-086 大画布性能
+
+优先级：P2。处理状态：暂缓。验证状态：代码确认。
+
+**说明**：上千节点时部分操作整体重算，交互卡顿。
+
+**暂缓原因**：属性能优化，只登记。
+
+### 第三轮运行时回归（2026-10-10）
+
+- 构建：13 个修复分支（PR #20 至 #32）试合并（无冲突）后的二进制；另用 main a496a11 构建做对照。
+- SQLite 与 PostgreSQL 16 各跑一遍：`v_auth` 22、`v_image` 31、`v_claude` 6、`v_register` 11、`v_trash` 12、`v_pay` 6、`v_reset` 4、`v_admin_scope` 11、`v_round2` 13、`v_ip` proxy 4，全部通过；`v_ip` direct 模式（环境变量设空、config.yaml 设空）各 2 项通过。
+- 新增 `v_round3`（9 项：MJ 图片代理 2 项、管理员令牌 2 项、支付网关、订单列表、删除日志、重复 n、改密码长度）：修复构建全部通过；main 构建 7 项失败，复现 GOUO-045、047、048、049 及两项策略待确认的权限收紧。
+- 新增 `v_price_sync`：两实例共用 PostgreSQL，main 构建 75 秒内未同步价格，修复构建 32 秒同步（GOUO-078）。
+- 脚本调整：`v_pay` 跨网关回调一项改为只检查不结算（GOUO-050 修复后外来订单会确认收到）；`v_image` 超额作品改用超大参数制造（GOUO-061 修复后提示词会截断），并新增截断检查。
+- 浏览器（Playwright + Chromium）：GOUO-071 上传按钮、GOUO-072 链接确认框。
+- 合并后 `npm test` 478 项、`npm run build`、`go vet ./...` 通过；`go test ./...` 仅 `common/image`、`common/notify/channel`、`common/storage`、`providers/ali` 失败，需要外网或凭据，main 上同样失败。之后 PR #22、#26 补充的提交单独跑过相关测试。
+- GOUO-027 至 033 在本轮回归中再次全部通过，标记为已验证修复（本地运行环境）。
 
 ## 本地运行验证（2026-10-09，历史快照）
 
@@ -1863,7 +2288,13 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 - **GOUO-018 公网图片**：在 Claude 或 Gemini 渠道的对话中发送一张公网图片 URL：能正常识别。
 - **GOUO-024 nginx 部署**：按仓库 `deploy/nginx.conf` 部署后，从外部用 curl 带伪造的 X-Forwarded-For 连续登录 21 次：第 21 次返回 429；后台日志里的 IP 为真实客户端地址。GOUO-029 已合并；直连部署应在当前 main 分别验证环境变量 `TRUSTED_PROXIES=""` 与 config.yaml 中 `trusted_proxies: ""`，不再等待已合并修复。
 - **GOUO-026 Agent 确认**：让 Agent 在一次对话中生成超过 4 张图片：超过时弹出确认框，取消不提交，确认后提交。PR #17 已合并金额显示；在当前 main 核对模型单价、本次预计扣费与实际扣费一致，价格读取失败仍需确认，确认后价格变动应拒绝而非按新价扣费。
-- **GOUO-027、028**：PR #15 构建曾在本地通过全部验收，现已合并；应在当前 main 重新执行原验收并记录版本与结果，不能仅凭合并标记已验证修复。
+- **GOUO-027、028**：PR #15 构建曾在本地通过全部验收，现已合并；应在当前 main 重新执行原验收并记录版本与结果，不能仅凭合并标记已验证修复。（2026-10-10 已用 main a496a11 构建在 SQLite 与 PostgreSQL 上重新执行并通过，见"第三轮运行时回归"。）
+- **GOUO-043 GitHub 改名**：用 GitHub 账号 X 登录本站后，在 GitHub 把 X 改名为 Y；另一个 GitHub 账号注册用户名 X 并登录本站：进入新用户注册，不能进入原账号；用 Y 登录仍进入原账号。
+- **GOUO-044 OIDC 邮箱**：在 OIDC 提供方建一个邮箱未验证的主体首次登录：新账号邮箱为空。
+- **GOUO-046、050、006 Stripe**：Stripe 测试模式建两个网关；清空其中一个的 webhook 密钥后发测试事件：被拒绝；向另一网关推送不属于它的会话（含零金额会话）：返回 200 不入账；停用网关后补发已付款会话：正常入账。
+- **GOUO-060 至 062 MySQL**：用 MySQL 8 跑一遍云端作品库：超长提示词作品能同步，大写 asset_id 被拒绝。
+- **GOUO-054 至 057、066 多标签页**：同一账号开两个标签页，分别新建收藏夹、切换默认收藏夹、删除任务、运行 Agent，另一个标签页的收藏夹、图片和会话不受影响。
+- **GOUO-073 至 078 部署**：按新的 `deploy/nginx.conf` 部署，`curl -I` 确认入口页 no-cache 与安全头；发版后旧页面不白屏；多实例时在一个实例改价，其他实例一分钟内生效。
 
 ## 维护与关闭标准
 
@@ -1909,3 +2340,4 @@ main [直接修改全局 fal.config](https://github.com/zhs1234/gouo-canvas/blob
 
 
 | 2026-10-10 | 对 main a496a116 与 8 条未合并候选分支静态复核；新增 GOUO-043 至 GOUO-059（P1 6 项、P2 11 项），均修复中、待验证；GOUO-006 更正停用网关回调前提，GOUO-034 补充清理/重传竞态；保留原 42 项验收范围和历史，澄清已合并与未合并状态、空 CI 与历史部署边界；私有 Page 待同步。本轮没有执行测试、浏览器验收或模型/支付请求。 | 59 项：已验证修复 7 项，待验证 34 项，修复中 17 项，不适用 1 项；本轮新增已验证 0 项 |
+| 2026-10-10 | 第三轮修复会话：对 main a496a11 做 15 个方向的深度检查（账号与登录、计费、支付、管理端权限、中继与 SSRF、云端作品库、数据库兼容、前端同步、生成与恢复、Agent、画布、前端安全、部署与 CI、并发与多实例、文档一致性）。与同日静态复核登记的 GOUO-043 至 059 对齐编号：为这 17 项追加修复记录，并按复核意见补修 GOUO-050（无 payment_intent 的外来会话）、054（清空后并发同步）、055（已上传收藏夹）、056（默认收藏夹）；043 的未迁移旧账号、057 的手动清理跨页引用保留为已知限制。新增 GOUO-060 至 086：修复 21 项，只登记 6 项。开 [PR #20](https://github.com/zhs1234/gouo-canvas/pull/20) 至 [PR #32](https://github.com/zhs1234/gouo-canvas/pull/32)，未合并；13 个分支试合并无冲突，SQLite 与 PostgreSQL 上回归全部通过，GOUO-027 至 033 标记为已验证修复。更正：批量删除日志只删消费日志，PR #23 描述已改。排除的误报和上游设计：自动晋级分组按累计充值计算；渠道详情返回 key、日志与 MJ 任务对全体管理员可见、管理员可改价格与倍率；OIDC 注册不处理邀请码。低风险备注不单列：root 默认密码与账号可探测；后端容器以 root 运行、基础镜像未固定版本；`server/docker-compose.yml` 是上游遗留文件且带固定口令；GHCR 镜像只含前端；`/v1/realtime` 未配置 WebSocket；Agent 的 `get_canvas` 结果不截断、`maskImageId` 不在图片白名单、参考图未缩图；后端在客户端断开后取消上游请求（是否解耦需产品决定）；单模型售价校验规则未写入文档；用户指南未覆盖画布和 Agent；16 张参考图可能超过 32 MB 请求体上限；配额提示写死 25 MB。 | 86 项：已验证修复 14 项，待验证 27 项，修复中 38 项，暂缓 6 项，不适用 1 项 |
