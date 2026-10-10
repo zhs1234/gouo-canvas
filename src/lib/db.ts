@@ -1,6 +1,7 @@
 import type { TaskRecord, StoredImage, StoredImageThumbnail, CanvasProject, AgentConversation } from '../types'
 import { loadImage } from './canvasImage'
 import { getLoadedStorageName, isStorageScopeCurrent } from './storageScope'
+import { addTaskReferencedImageIds } from './taskImages'
 import { getDocumentImageIds, getLiveDocumentImageIds } from './documentAssets'
 
 const DB_NAME = getLoadedStorageName()
@@ -297,18 +298,20 @@ export function deleteImage(id: string): Promise<undefined> {
   return deleteImages([id])
 }
 
-// 批量删除只读取一次画布/对话引用，避免启动清理时逐张反序列化全部文档。
+// 批量删除只读取一次引用，避免启动清理时逐张反序列化全部文档。
+// 引用按库里的数据判断（含任务表），其他标签页新建、本页内存里还没有的任务和文档引用的图片也会保留。
 export async function deleteImages(ids: string[]): Promise<undefined> {
   if (!ids.length) return undefined
   const db = await openDB()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_IMAGES, STORE_THUMBNAILS, STORE_CANVASES, STORE_AGENT_CONVERSATIONS], 'readwrite')
-    let remaining = 2
+    const tx = db.transaction([STORE_IMAGES, STORE_THUMBNAILS, STORE_CANVASES, STORE_AGENT_CONVERSATIONS, STORE_TASKS], 'readwrite')
+    let remaining = 3
     const referenced = new Set<string>()
-    for (const name of [STORE_CANVASES, STORE_AGENT_CONVERSATIONS]) {
+    for (const name of [STORE_CANVASES, STORE_AGENT_CONVERSATIONS, STORE_TASKS]) {
       const req = tx.objectStore(name).getAll()
       req.onsuccess = () => {
-        for (const imageId of getDocumentImageIds(req.result)) referenced.add(imageId)
+        if (name === STORE_TASKS) for (const task of req.result as TaskRecord[]) addTaskReferencedImageIds(referenced, task)
+        else for (const imageId of getDocumentImageIds(req.result)) referenced.add(imageId)
         remaining--
         if (remaining) return
         const live = getLiveDocumentImageIds()
