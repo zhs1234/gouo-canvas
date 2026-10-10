@@ -202,7 +202,7 @@ type ChatCompletionRequest struct {
 	FunctionCall        any                           `json:"function_call,omitempty"`
 	Tools               []*ChatCompletionTool         `json:"tools,omitempty"`
 	ToolChoice          any                           `json:"tool_choice,omitempty"`
-	ParallelToolCalls   bool                          `json:"parallel_tool_calls,omitempty"`
+	ParallelToolCalls   *bool                         `json:"parallel_tool_calls,omitempty"`
 	Modalities          []string                      `json:"modalities,omitempty"`
 	Audio               *ChatAudio                    `json:"audio,omitempty"`
 	ReasoningEffort     *string                       `json:"reasoning_effort,omitempty"`
@@ -468,7 +468,7 @@ func (c *ChatCompletionRequest) ToResponsesRequest() *OpenAIResponsesRequest {
 	res := &OpenAIResponsesRequest{
 		Model:             c.Model,
 		MaxOutputTokens:   c.MaxTokens,
-		ParallelToolCalls: c.ParallelToolCalls,
+		ParallelToolCalls: c.ParallelToolCalls != nil && *c.ParallelToolCalls,
 		Stream:            c.Stream,
 		Temperature:       c.Temperature,
 		ToolChoice:        c.ToolChoice,

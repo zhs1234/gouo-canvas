@@ -358,6 +358,52 @@ describe('Agent durable runtime', () => {
     expect(useAgentStore.getState().conversations[0].error).toContain('8 次')
   })
 
+  it('attaches image data only to the latest user message', async () => {
+    useAgentStore.setState({ conversations: [{ ...structuredClone(base), referenceImageIds: ['img-a', 'img-b'] }] })
+    mocks.stream.mockResolvedValue({ content: '好的', calls: [] })
+    for (const text of ['第一条', '第二条', '第三条']) {
+      await useAgentStore.getState().send('conversation', text)
+      await vi.waitFor(() => expect(useAgentStore.getState().conversations[0].status).toBe('completed'))
+    }
+    const counts = mocks.stream.mock.calls.map(([input]) => (input.messages as { content: unknown }[]).flatMap((message) => Array.isArray(message.content) ? message.content : []).filter((part) => part.type === 'image_url').length)
+    expect(counts).toEqual([2, 2, 2])
+    const last = mocks.stream.mock.calls[2][0].messages as { role: string; content: unknown }[]
+    expect(last.filter((message) => message.role === 'user').map((message) => typeof message.content === 'string')).toEqual([true, true, false])
+    expect(last[1].content).toContain('img-a')
+  })
+
+  it('leaves a conversation running in another tab untouched and holds the run lock while running', async () => {
+    const call = { id: 'busy-call', name: 'create_image_task', arguments: '{"prompt":"海报"}', status: 'running' as const }
+    mocks.stored = [
+      { ...base, status: 'running', messages: [{ id: 'assistant', role: 'assistant', content: '', createdAt: 1, toolCalls: [call] }] },
+      { ...base, id: 'abandoned', status: 'running', messages: [] },
+    ]
+    const names: string[] = []
+    vi.stubGlobal('navigator', { locks: {
+      query: async () => ({ held: [{ name: 'gouo-agent-run:conversation' }] }),
+      request: async (name: string, _opts: unknown, callback: () => Promise<void>) => { names.push(name); return callback() },
+    } })
+    try {
+      useAgentStore.setState({ hydrated: false, conversations: [] })
+      await useAgentStore.getState().hydrate()
+      const byId = Object.fromEntries(useAgentStore.getState().conversations.map((item) => [item.id, item]))
+      expect(byId.conversation.status).toBe('running')
+      expect(byId.conversation.messages[0].toolCalls?.[0].status).toBe('running')
+      expect(byId.abandoned.status).toBe('interrupted')
+      expect(mocks.put.mock.calls.map(([saved]) => saved.id)).toEqual(['abandoned'])
+      mocks.onTasks?.({ tasks: [] }, { tasks: [] as TaskRecord[] })
+      await useAgentStore.getState().flush()
+      expect(mocks.put.mock.calls.map(([saved]) => saved.id)).toEqual(['abandoned'])
+
+      mocks.stream.mockResolvedValue({ content: '好的', calls: [] })
+      await useAgentStore.getState().send('abandoned', '继续')
+      await vi.waitFor(() => expect(useAgentStore.getState().conversations.find((item) => item.id === 'abandoned')?.status).toBe('completed'))
+      expect(names).toEqual(['gouo-agent-run:abandoned'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('omits unfinished tool calls from resumed API history', async () => {
     const messages = await buildAgentMessages({ ...base, messages: [
       { id: 'user', role: 'user', content: '画海报', createdAt: 1 },

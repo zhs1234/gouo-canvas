@@ -94,14 +94,17 @@ type ResponsesTextFormat struct {
 func (r *OpenAIResponsesRequest) ToChatCompletionRequest() (*ChatCompletionRequest, error) {
 
 	chat := &ChatCompletionRequest{
-		Model:             r.Model,
-		MaxTokens:         r.MaxOutputTokens,
-		ParallelToolCalls: r.ParallelToolCalls,
-		Stream:            r.Stream,
-		Temperature:       r.Temperature,
+		Model:       r.Model,
+		MaxTokens:   r.MaxOutputTokens,
+		Stream:      r.Stream,
+		Temperature: r.Temperature,
 		// ResponseFormat:    r.Text,
 		ToolChoice: r.ToolChoice,
 		TopP:       r.TopP,
+	}
+	// Responses 的布尔字段无法区分未传和 false，只透传显式开启
+	if r.ParallelToolCalls {
+		chat.ParallelToolCalls = &r.ParallelToolCalls
 	}
 
 	if r.Text != nil && r.Text.Format != nil {

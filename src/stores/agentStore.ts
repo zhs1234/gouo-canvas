@@ -12,6 +12,7 @@ const activeRuns = new Map<string, AbortController>()
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const saveQueues = new Map<string, Promise<void>>()
 const persistedRevisions = new Map<string, number>()
+const AGENT_LOCK_PREFIX = 'gouo-agent-run:'
 let hydratePromise: Promise<void> | undefined
 
 export function markAgentPersisted(conversation: AgentConversation) {
@@ -88,7 +89,8 @@ export async function buildAgentMessages(conversation: AgentConversation, model:
   if (unstartedCallIds.size) result[0].content += '\n先前有工具调用在执行前中断，未提交任务。用户要求继续时，可完成尚未提交的生成请求；已提交的任务仍不可重复执行。'
   const acknowledged = conversation.messages.flatMap((msg) => msg.toolCalls || []).filter((call) => call.recovery === 'acknowledged' && call.execution !== 'not_started').map((call) => call.id)
   if (acknowledged.length) result[0].content += `\n用户已手动核对以下原图片请求：${acknowledged.join(', ')}。这些原请求仍不可重复执行；只有用户明确的新生成需求才可使用新的工具调用提交。`
-  for (const msg of messages) {
+  const lastUserIndex = messages.map((msg) => msg.role).lastIndexOf('user')
+  for (const [idx, msg] of messages.entries()) {
     if (msg.role === 'tool') {
       if (msg.toolCallId && callExecutions.get(msg.toolCallId) !== 'not_started') result.push({ role: 'tool', tool_call_id: msg.toolCallId, content: msg.content })
       continue
@@ -101,8 +103,9 @@ export async function buildAgentMessages(conversation: AgentConversation, model:
       continue
     }
     const refs = msg.referenceImageIds || []
-    if (!model.vision || !refs.length) {
-      result.push({ role: 'user', content: `${msg.content}${refs.length ? `\n[附件图片 ID：${refs.join(', ')}；当前模型无法直接查看图片，可用于图片编辑工具。]` : ''}` })
+    // 只有最新一条用户消息附原图；附件在输入框里会保留到下一条，历史消息也附图会让每轮请求重发全部旧图
+    if (!model.vision || !refs.length || idx !== lastUserIndex) {
+      result.push({ role: 'user', content: `${msg.content}${refs.length ? `\n[附件图片 ID：${refs.join(', ')}；${model.vision ? '较早消息的附件不再重复附图' : '当前模型无法直接查看图片'}，可用于图片编辑工具。]` : ''}` })
       continue
     }
     const parts: Exclude<ChatMessage['content'], string | null> = [{ type: 'text', text: `${msg.content}\n[附件图片 ID：${refs.join(', ')}]` }]
@@ -243,14 +246,19 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (get().hydrated) return
     if (hydratePromise) return hydratePromise
     hydratePromise = (async () => {
-      const [stored, storedTasks] = await Promise.all([getAllAgentConversations(), getAllTasks()])
+      const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+      const [stored, storedTasks, lockState] = await Promise.all([getAllAgentConversations(), getAllTasks(), locks?.query()])
       if (!isStorageScopeCurrent()) return
+      const held = (lockState?.held ?? []).map((lock) => lock.name ?? '')
+      const runningElsewhere = new Set(held.filter((name) => name.startsWith(AGENT_LOCK_PREFIX)).map((name) => name.slice(AGENT_LOCK_PREFIX.length)))
       for (const conversation of stored) markAgentPersisted(conversation)
       const tasks = [...new Map([...storedTasks, ...useAppStore.getState().tasks].map((task) => [task.id, task])).values()]
       const changed: string[] = []
       const conversations = stored.flatMap((value) => {
         const normalized = normalizeAgentConversation(value)
         if (!normalized) return []
+        // 其他标签页正在运行的会话保持原样，不改成中断也不写回，否则对方下次保存会版本冲突而停止
+        if (runningElsewhere.has(normalized.id)) return [{ ...normalized, status: value.status, messages: value.messages, error: value.error }]
         const recovered = reconcileAgentTasks(normalized, tasks)
         if (value.status !== 'running' && recovered === normalized) return [recovered]
         changed.push(recovered.id)
@@ -317,7 +325,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       updateConversation(id, () => ({ status: 'error', draft: prompt, error: `保存会话失败，尚未发送请求${error instanceof Error ? `：${error.message}` : ''}` }), false)
       throw error
     }
-    void runConversation(id, controller)
+    // 运行期间持有会话锁，其他标签页加载时据此判断会话仍在运行
+    const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+    void (locks ? locks.request(AGENT_LOCK_PREFIX + id, { ifAvailable: true }, () => runConversation(id, controller)) : runConversation(id, controller))
   },
   stop: (id) => { activeRuns.get(id)?.abort() },
   flush: async () => {
@@ -337,6 +347,8 @@ registerDocumentImageReferences(() => useAgentStore.getState().conversations.fla
 useAppStore.subscribe((state, previous) => {
   if (state.tasks === previous.tasks || !isStorageScopeCurrent()) return
   for (const conversation of useAgentStore.getState().conversations) {
+    // 本页没有运行却是运行中，说明会话在其他标签页运行，由那边回填
+    if (conversation.status === 'running' && !activeRuns.has(conversation.id)) continue
     const recovered = reconcileAgentTasks(conversation, state.tasks, !activeRuns.has(conversation.id))
     if (recovered !== conversation) updateConversation(conversation.id, () => ({ messages: recovered.messages }))
   }

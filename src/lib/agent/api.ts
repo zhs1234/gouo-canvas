@@ -31,7 +31,8 @@ export async function consumeChatStream(
   let buffer = ''
   let content = ''
   let finished = false
-  const calls = new Map<number, AgentToolCall>()
+  const calls: AgentToolCall[] = []
+  const slots = new Map<number, AgentToolCall>()
   const cancel = () => { void reader.cancel().catch(() => {}) }
   signal.addEventListener('abort', cancel, { once: true })
   const consume = (event: string) => {
@@ -50,12 +51,16 @@ export async function consumeChatStream(
     if (Array.isArray(delta.tool_calls)) {
       for (const fragment of delta.tool_calls) {
         if (!Number.isInteger(fragment.index) || fragment.index < 0 || fragment.index > 7) throw new Error('Agent 工具调用数量或格式无效')
-        const current = calls.get(fragment.index) || { id: '', name: '', arguments: '', status: 'pending' as const }
-        // ID 和工具名是同一次调用的元数据；兼容渠道可能在每帧重复返回。
-        if (typeof fragment.id === 'string' && fragment.id) {
-          if (current.id && current.id !== fragment.id) throw new Error('Agent 工具调用 ID 在流式响应中发生变化，已停止执行')
-          current.id = fragment.id
+        let current = slots.get(fragment.index)
+        // 旧版 Claude 转换让同一回复的多个调用共用 index，同一 index 出现新 ID 视为下一个调用
+        if (!current || (typeof fragment.id === 'string' && fragment.id && current.id && current.id !== fragment.id)) {
+          if (calls.length >= 8) throw new Error('Agent 工具调用数量或格式无效')
+          current = { id: '', name: '', arguments: '', status: 'pending' as const }
+          calls.push(current)
+          slots.set(fragment.index, current)
         }
+        // ID 和工具名是同一次调用的元数据；兼容渠道可能在每帧重复返回。
+        if (typeof fragment.id === 'string' && fragment.id) current.id = fragment.id
         if (typeof fragment.function?.name === 'string' && fragment.function.name) {
           if (current.name && current.name !== fragment.function.name) throw new Error('Agent 工具名在流式响应中发生变化，已停止执行')
           current.name = fragment.function.name
@@ -64,10 +69,9 @@ export async function consumeChatStream(
         if (current.id.length > 200) throw new Error('Agent 工具调用 ID 超过长度上限（200）')
         if (current.name.length > 100) throw new Error('Agent 工具名超过长度上限（100）')
         if (current.arguments.length > 100_000) throw new Error('Agent 工具参数超过长度上限（100000）')
-        calls.set(fragment.index, current)
       }
     }
-    onUpdate(content, [...calls.values()].map((call) => ({ ...call })))
+    onUpdate(content, calls.map((call) => ({ ...call })))
     // 终态已包含完整回复；部分兼容渠道随后仍保持连接，不必等待 [DONE]。
     if (choice.finish_reason) finished = true
   }
@@ -91,7 +95,7 @@ export async function consumeChatStream(
     }
     signal.throwIfAborted()
     if (!finished) throw new Error('连接意外中断，已保留收到的内容；请手动继续')
-    const result = [...calls.values()]
+    const result = calls
     if (result.some((call) => !call.id || !call.name || !call.arguments)) throw new Error('Agent 工具调用不完整，已停止执行')
     if (new Set(result.map((call) => call.id)).size !== result.length) throw new Error('Agent 返回重复的工具调用标识')
     return { content, calls: result }

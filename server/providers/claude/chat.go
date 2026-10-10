@@ -28,6 +28,8 @@ type ClaudeStreamHandler struct {
 	Request     *types.ChatCompletionRequest
 	StreamTolls int
 	Prefix      string
+	// 已开始的工具调用数；OpenAI 流式格式按 tool_calls[].index 区分同一回复里的多个调用
+	ToolCalls int
 }
 
 func (p *ClaudeProvider) CreateChatCompletion(request *types.ChatCompletionRequest) (*types.ChatCompletionResponse, *types.OpenAIErrorWithStatusCode) {
@@ -194,6 +196,13 @@ func ConvertFromChatOpenai(request *types.ChatCompletionRequest) (*ClaudeRequest
 	if request.ToolChoice != nil {
 		toolType, toolFunc := request.ParseToolChoice()
 		claudeRequest.ToolChoice = ConvertToolChoice(toolType, toolFunc)
+	}
+	// OpenAI 的 parallel_tool_calls=false 对应 Claude 的 disable_parallel_tool_use
+	if request.ParallelToolCalls != nil && !*request.ParallelToolCalls && len(claudeRequest.Tools) > 0 {
+		if claudeRequest.ToolChoice == nil {
+			claudeRequest.ToolChoice = &ToolChoice{Type: "auto"}
+		}
+		claudeRequest.ToolChoice.DisableParallelToolUse = true
 	}
 
 	if claudeRequest.MaxTokens == 0 {
@@ -522,7 +531,9 @@ func (h *ClaudeStreamHandler) convertToOpenaiStream(claudeResponse *ClaudeStream
 				Name:      claudeResponse.ContentBlock.Name,
 				Arguments: "",
 			},
+			Index: h.ToolCalls,
 		})
+		h.ToolCalls++
 		h.StreamTolls = StreamTollsUse
 	}
 
@@ -536,6 +547,7 @@ func (h *ClaudeStreamHandler) convertToOpenaiStream(claudeResponse *ClaudeStream
 			Function: &types.ChatCompletionToolCallsFunction{
 				Arguments: claudeResponse.Delta.PartialJson,
 			},
+			Index: max(h.ToolCalls-1, 0),
 		})
 		h.StreamTolls = StreamTollsArg
 	case ContentStreamTypeSignatureDelta:
@@ -552,6 +564,7 @@ func (h *ClaudeStreamHandler) convertToOpenaiStream(claudeResponse *ClaudeStream
 				Function: &types.ChatCompletionToolCallsFunction{
 					Arguments: "{}",
 				},
+				Index: max(h.ToolCalls-1, 0),
 			})
 		}
 
