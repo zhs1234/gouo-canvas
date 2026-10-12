@@ -3,7 +3,7 @@ import type { TaskRecord } from '../types'
 import { DEFAULT_PARAMS } from '../types'
 import { DEFAULT_SETTINGS } from './apiProfiles'
 
-const fixtures = vi.hoisted(() => ({ state: {} as Record<string, unknown>, saved: [] as TaskRecord[], execute: vi.fn(), backend: false, quote: vi.fn() }))
+const fixtures = vi.hoisted(() => ({ state: {} as Record<string, unknown>, saved: [] as TaskRecord[], execute: vi.fn(), backend: false, quote: vi.fn(), user: vi.fn() }))
 vi.mock('../store', () => ({
   useStore: { getState: () => fixtures.state, setState: vi.fn() },
   ensureImageCached: vi.fn(async () => 'data:image/png;base64,aA=='),
@@ -12,15 +12,19 @@ vi.mock('../store', () => ({
   executeTask: fixtures.execute,
 }))
 vi.mock('./db', () => ({ putTask: vi.fn(async (task: TaskRecord) => { fixtures.saved.push(task) }), storeImage: vi.fn(async () => 'image') }))
-vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote }))
+vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user }))
+vi.mock('./userGuidance', () => ({ getActionableErrorMessage: (message: string) => message, requestUserCenter: vi.fn() }))
 vi.mock('./canvasImage', () => ({ validateMaskMatchesImage: vi.fn(async () => 'partial') }))
 
 import { submitImageTask } from './imageTasks'
 import { validateMaskMatchesImage } from './canvasImage'
+import { requestUserCenter } from './userGuidance'
 
 beforeEach(() => {
   fixtures.backend = false
   fixtures.quote.mockReset()
+  fixtures.user.mockReset()
+  fixtures.user.mockResolvedValue({ balance_cny: 100 })
   fixtures.saved.length = 0
   fixtures.execute.mockClear()
   vi.mocked(validateMaskMatchesImage).mockResolvedValue('partial')
@@ -38,6 +42,19 @@ describe('统一图片任务入口', () => {
     await submitImageTask({ prompt: '海报', model: 'image-b', priceVersion: 'quote-b', source: { kind: 'canvas' } })
     expect(fixtures.quote).toHaveBeenCalledWith('image-b', 0, false, 1, 'quote-b')
     expect(fixtures.saved[0]).toMatchObject({ gouoPriceVersion: 'quote-b' })
+  })
+
+  it('余额不足时不建任务，直接打开兑换页', async () => {
+    fixtures.backend = true
+    fixtures.quote.mockResolvedValue({ id: 'gpt-image-2', price_cny: 0.1, price_version: 'v1' })
+    fixtures.user.mockResolvedValue({ balance_cny: 0.15 })
+    await expect(submitImageTask({ prompt: '海报', params: { n: 2 }, source: { kind: 'canvas' } })).rejects.toThrow('余额不足')
+    expect(fixtures.saved).toHaveLength(0)
+    expect(fixtures.execute).not.toHaveBeenCalled()
+    expect(requestUserCenter).toHaveBeenCalledWith('topup')
+    fixtures.user.mockRejectedValue(new Error('网络错误'))
+    await submitImageTask({ prompt: '海报', params: { n: 2 }, source: { kind: 'canvas' } })
+    expect(fixtures.execute).toHaveBeenCalledTimes(1)
   })
 
   it('并发相同 requestId 只提交一次，保留首页草稿', async () => {
