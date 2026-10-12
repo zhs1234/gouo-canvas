@@ -598,7 +598,7 @@ describe('mask draft lifecycle in store actions', () => {
 
     const state = useStore.getState()
     expect(state.tasks).toHaveLength(1)
-    expect(state.showToast).toHaveBeenCalledWith('任务已提交，可在「我的作品」查看进度', 'success')
+    expect(state.showToast).toHaveBeenCalledWith('任务已提交，生成结果会显示在输入框下方', 'success')
   })
 
   it('stores decoded image size as actual size when the API omits size', async () => {
