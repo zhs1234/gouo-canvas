@@ -16,18 +16,12 @@ const SCENES = [
   { icon: Palette, label: '插画' },
 ]
 
-// 产品预览轮播用灵感库示例图；每个模板只有一张图，用不同裁切和色调模拟多张候选
+// 产品预览轮播，每轮 4 张为同一提示词的实际生成结果，见 public/landing
+const previewImage = (round: number, i: number) => `${import.meta.env.BASE_URL}landing/preview-${round + 1}-${i + 1}.webp`
 const PREVIEW_PROMPTS = [
-  { text: '黑金质感的牛排海报，雪花纹理特写，高级餐厅风格', image: 'case373' },
-  { text: '立体刺绣风格的花鸟插画，米白底色，柔和配色', image: 'case346' },
-  { text: '古希腊哲人在廊柱下交谈，暖色油画质感', image: 'case375' },
-]
-
-const PREVIEW_VARIANTS: CSSProperties[] = [
-  {},
-  { objectPosition: '25% 40%', filter: 'hue-rotate(-14deg) saturate(1.15)', scale: '1.08' },
-  { objectPosition: '75% 60%', filter: 'brightness(1.08) contrast(0.95)', scale: '1.14' },
-  { objectPosition: '50% 20%', filter: 'sepia(0.2) saturate(0.9)', scale: '1.06' },
+  '黑金质感的牛排商品图，雪花纹理特写，高级餐厅风格',
+  '立体刺绣风格的花鸟插画，米白底色，柔和配色',
+  '雨后的城市街角，霓虹倒影，电影感',
 ]
 
 const FEATURES = [
@@ -118,8 +112,13 @@ function ProductPreview() {
   const [typed, setTyped] = useState(0)
   const prompt = PREVIEW_PROMPTS[index]
 
+  // 提前加载下一轮的图，切换时不会出现空白卡片
   useEffect(() => {
-    if (typed < prompt.text.length) {
+    for (let i = 0; i < 4; i++) new Image().src = previewImage((index + 1) % PREVIEW_PROMPTS.length, i)
+  }, [index])
+
+  useEffect(() => {
+    if (typed < prompt.length) {
       const timer = setTimeout(() => setTyped((value) => value + 1), 70)
       return () => clearTimeout(timer)
     }
@@ -128,9 +127,9 @@ function ProductPreview() {
       setTyped(0)
     }, 4200)
     return () => clearTimeout(timer)
-  }, [typed, prompt.text.length])
+  }, [typed, prompt.length])
 
-  const done = typed >= prompt.text.length
+  const done = typed >= prompt.length
   return (
     <div className="overflow-hidden rounded-[32px] border border-[var(--line)] bg-white/70 shadow-[0_40px_100px_rgb(66_49_37/0.12)]" aria-hidden="true">
       <div className="flex items-center gap-1.5 border-b border-[var(--line)] px-5 py-3.5">
@@ -147,7 +146,7 @@ function ProductPreview() {
         </div>
         <div className="p-5 sm:p-7">
           <div className="rounded-2xl border border-[var(--line)] bg-white p-4 shadow-sm">
-            <p className={`min-h-[3rem] text-[15px] leading-6 ${done ? '' : 'gouo-caret'}`}>{prompt.text.slice(0, typed)}</p>
+            <p className={`min-h-[3rem] text-[15px] leading-6 ${done ? '' : 'gouo-caret'}`}>{prompt.slice(0, typed)}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
               {['1024 × 1536', '高清', '4 张'].map((chip) => <span key={chip} className="rounded-lg border border-[var(--line)] px-2.5 py-1">{chip}</span>)}
               <span className={`ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition ${done ? 'bg-[#171719]' : 'bg-[#a0a0a3]'}`}>
@@ -157,8 +156,8 @@ function ProductPreview() {
           </div>
           <div key={index} className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.9 + i * 0.35}s`)}>
-                <img src={`${import.meta.env.BASE_URL}inspiration/${prompt.image}.webp`} alt="" className="h-full w-full object-cover" style={PREVIEW_VARIANTS[i]} />
+              <div key={i} className="gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl bg-[#e9e5de] shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.9 + i * 0.35}s`)}>
+                <img src={previewImage(index, i)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                 {i === 1 && <Heart className="absolute right-2.5 top-2.5 h-4 w-4 fill-white text-white drop-shadow" />}
               </div>
             ))}
