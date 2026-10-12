@@ -3,6 +3,7 @@ import * as Yup from 'yup';
 import { Formik } from 'formik';
 import { useTheme } from '@mui/material/styles';
 import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import {
   Dialog,
   DialogTitle,
@@ -18,7 +19,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 
-import { renderQuotaWithPrompt, showSuccess, showError, downloadTextAsFile, trims } from 'utils/common';
+import { GOUO_POINTS_PER_CNY, renderGouoPoints, renderQuotaWithPrompt, showSuccess, showError, downloadTextAsFile, trims } from 'utils/common';
 import { API } from 'utils/api';
 
 const getValidationSchema = (t) =>
@@ -44,6 +45,10 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const [inputs, setInputs] = useState(originInputs);
+  const [points, setPoints] = useState('');
+  const siteInfo = useSelector((state) => state.siteInfo);
+  // 用户端按积分展示余额：额度 × 汇率 ÷ 每单位额度 = 人民币
+  const cnyPerQuota = Number(siteInfo.PaymentUSDRate) / Number(siteInfo.quota_per_unit);
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
     setSubmitting(true);
@@ -99,6 +104,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
   };
 
   useEffect(() => {
+    setPoints('');
     if (redemptiondId) {
       loadRedemptiond().then();
     } else {
@@ -115,7 +121,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
       <Divider />
       <DialogContent>
         <Formik initialValues={inputs} enableReinitialize validationSchema={getValidationSchema(t)} onSubmit={submit}>
-          {({ errors, handleBlur, handleChange, handleSubmit, touched, values, isSubmitting }) => (
+          {({ errors, handleBlur, handleChange, handleSubmit, setFieldValue, touched, values, isSubmitting }) => (
             <form noValidate onSubmit={handleSubmit}>
               <FormControl fullWidth error={Boolean(touched.name && errors.name)} sx={{ ...theme.typography.otherInput }}>
                 <InputLabel htmlFor="channel-name-label">{t('redemptionPage.headLabels.name')}</InputLabel>
@@ -137,6 +143,26 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
                 )}
               </FormControl>
 
+              {cnyPerQuota > 0 && Number.isFinite(cnyPerQuota) && (
+                <FormControl fullWidth sx={{ ...theme.typography.otherInput }}>
+                  <InputLabel htmlFor="redemption-points-label">按积分填写</InputLabel>
+                  <OutlinedInput
+                    id="redemption-points-label"
+                    label="按积分填写"
+                    type="number"
+                    value={points}
+                    onChange={(event) => {
+                      setPoints(event.target.value);
+                      // 向上取整，保证兑换后显示的积分不少于填写值
+                      setFieldValue('quota', Math.ceil(Number(event.target.value) / GOUO_POINTS_PER_CNY / cnyPerQuota) || 0);
+                    }}
+                    endAdornment={<InputAdornment position="end">积分</InputAdornment>}
+                    disabled={values.unlimited_quota}
+                  />
+                  <FormHelperText>1 元 = {GOUO_POINTS_PER_CNY} 积分，自动换算为下方额度</FormHelperText>
+                </FormControl>
+              )}
+
               <FormControl fullWidth error={Boolean(touched.quota && errors.quota)} sx={{ ...theme.typography.otherInput }}>
                 <InputLabel htmlFor="channel-quota-label">{t('redemptionPage.headLabels.quota')}</InputLabel>
                 <OutlinedInput
@@ -145,9 +171,16 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
                   type="number"
                   value={values.quota}
                   name="quota"
-                  endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(values.quota)}</InputAdornment>}
+                  endAdornment={
+                    <InputAdornment position="end">
+                      {cnyPerQuota > 0 && Number.isFinite(cnyPerQuota) ? `约 ${renderGouoPoints(values.quota * cnyPerQuota)}` : renderQuotaWithPrompt(values.quota)}
+                    </InputAdornment>
+                  }
                   onBlur={handleBlur}
-                  onChange={handleChange}
+                  onChange={(event) => {
+                    handleChange(event);
+                    setPoints('');
+                  }}
                   aria-describedby="helper-text-channel-quota-label"
                   disabled={values.unlimited_quota}
                 />

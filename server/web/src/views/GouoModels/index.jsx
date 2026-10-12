@@ -23,7 +23,7 @@ import {
   Typography
 } from '@mui/material';
 import { API } from 'utils/api';
-import { showError, showSuccess } from 'utils/common';
+import { GOUO_POINTS_PER_CNY, renderGouoPoints, showError, showSuccess } from 'utils/common';
 
 // 客户端能看到的条件：开启光构、配置有效、至少一个启用中的渠道支持它（还需用户分组匹配、令牌未限制）
 const visibility = (row) => {
@@ -68,7 +68,8 @@ export default function GouoModels() {
       const response = await API.put('/api/gouo/admin/models', {
         model: values.model,
         gouo_enabled: values.gouo_enabled,
-        gouo_price_cny: Number(values.gouo_price_cny),
+        // 下架时沿用原售价，避免积分往返换算改动价格
+        gouo_price_cny: values.gouo_points === undefined ? values.gouo_price_cny : Number(values.gouo_points) / GOUO_POINTS_PER_CNY,
         gouo_reference: values.gouo_reference,
         gouo_mask: values.gouo_mask,
         gouo_max_outputs: Number(values.gouo_max_outputs)
@@ -103,8 +104,8 @@ export default function GouoModels() {
   );
   const valid =
     editing &&
-    Number(editing.gouo_price_cny) > 0 &&
-    Number(editing.gouo_price_cny) <= 10000 &&
+    Number(editing.gouo_points) > 0 &&
+    Number(editing.gouo_points) <= 10000 * GOUO_POINTS_PER_CNY &&
     Number.isInteger(Number(editing.gouo_max_outputs)) &&
     Number(editing.gouo_max_outputs) >= 1 &&
     Number(editing.gouo_max_outputs) <= 10 &&
@@ -156,7 +157,7 @@ export default function GouoModels() {
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell>{row.gouo_enabled ? `¥${row.gouo_price_cny}/张` : '—'}</TableCell>
+                  <TableCell>{row.gouo_enabled ? `${renderGouoPoints(row.gouo_price_cny)}/张` : '—'}</TableCell>
                   <TableCell>
                     {row.gouo_enabled
                       ? `${row.gouo_reference ? '参考图' : '无参考图'} · ${row.gouo_mask ? '遮罩' : '无遮罩'} · 单次最多 ${row.gouo_max_outputs} 张`
@@ -193,7 +194,8 @@ export default function GouoModels() {
                         onClick={() =>
                           setEditing({
                             ...row,
-                            gouo_price_cny: row.gouo_price_cny || '',
+                            // 避免 0.07 × 100 这类浮点误差出现在输入框里
+                            gouo_points: row.gouo_price_cny ? Number((row.gouo_price_cny * GOUO_POINTS_PER_CNY).toPrecision(12)) : '',
                             gouo_max_outputs: row.gouo_max_outputs || 1,
                             gouo_enabled: true
                           })
@@ -249,11 +251,12 @@ export default function GouoModels() {
                 <Alert severity="info">按每张成功生成的图片收费，生成与编辑同价，不叠加分组倍率；上游价格同步不会覆盖这里的配置。</Alert>
                 <TextField
                   required
-                  label="售价（元/张）"
+                  label="售价（积分/张）"
                   type="number"
-                  inputProps={{ min: 0.000001, max: 10000, step: 'any' }}
-                  value={editing.gouo_price_cny}
-                  onChange={(event) => setEditing({ ...editing, gouo_price_cny: event.target.value })}
+                  inputProps={{ min: 0.0001, max: 10000 * GOUO_POINTS_PER_CNY, step: 'any' }}
+                  value={editing.gouo_points}
+                  onChange={(event) => setEditing({ ...editing, gouo_points: event.target.value })}
+                  helperText={`1 元 = ${GOUO_POINTS_PER_CNY} 积分${Number(editing.gouo_points) > 0 ? `，折合 ¥${Number((editing.gouo_points / GOUO_POINTS_PER_CNY).toPrecision(12))}/张` : ''}`}
                 />
                 <TextField
                   required

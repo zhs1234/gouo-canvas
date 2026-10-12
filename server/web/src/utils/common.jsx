@@ -582,6 +582,15 @@ export function renderQuotaWithPrompt(quota, digits) {
   return '';
 }
 
+// 光构积分制：1 元 = 100 积分。后端仍按人民币售价折算额度记账，界面只做换算
+export const GOUO_POINTS_PER_CNY = 100;
+
+export function renderGouoPoints(cny) {
+  const value = Number(cny);
+  if (!Number.isFinite(value)) return '—';
+  return `${(Math.round(value * GOUO_POINTS_PER_CNY * 100) / 100).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 积分`;
+}
+
 export function downloadTextAsFile(text, filename) {
   let blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
   let url = URL.createObjectURL(blob);

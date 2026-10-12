@@ -4,7 +4,7 @@ import { Box, Typography, Chip, IconButton, alpha, useTheme, Tooltip, TableRow, 
 import LockIcon from '@mui/icons-material/Lock';
 import { Icon } from '@iconify/react';
 import { useTranslation } from 'react-i18next';
-import { ValueFormatter } from 'utils/common';
+import { renderGouoPoints, ValueFormatter } from 'utils/common';
 
 const PriceCard = ({ price, onEdit, onDelete, ownedby, unit = 'K' }) => {
   const theme = useTheme();
@@ -169,7 +169,7 @@ const PriceCard = ({ price, onEdit, onDelete, ownedby, unit = 'K' }) => {
           )}
         </Stack>
 
-        {price.gouo_enabled && <Typography variant="caption" color="primary" sx={{ display: 'block', mt: 0.5 }}>光构 ¥{price.gouo_price_cny}/次成功请求</Typography>}
+        {price.gouo_enabled && <Typography variant="caption" color="primary" sx={{ display: 'block', mt: 0.5 }}>光构 {renderGouoPoints(price.gouo_price_cny)}/张</Typography>}
 
         <Stack direction="row" spacing={0.5} mt={0.5}>
           <Chip

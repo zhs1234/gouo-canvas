@@ -9,7 +9,7 @@ import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { CloseIcon, RefreshIcon, UserIcon } from './icons'
 import ImageBillingRecords from './ImageBillingRecords'
 import { copyTextToClipboard } from '../lib/clipboard'
-import { formatCNY, getUsageDisplay } from '../lib/accountUsage'
+import { formatPoints, getUsageDisplay, toPoints } from '../lib/accountUsage'
 import { createLatestRequest } from '../lib/latestRequest'
 import TurnstileChallenge from './TurnstileChallenge'
 
@@ -189,7 +189,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
       const quota = await redeemCode(redemptionCode)
       setRedemptionCode('')
       const rate = user?.quota_cny_rate
-      setRedeemMessage(typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? `充值成功，已增加 ${formatCNY(quota * rate)}` : `充值成功，已增加 ${quota.toLocaleString('zh-CN')} 额度，人民币折算暂不可用`)
+      setRedeemMessage(typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? `充值成功，已增加 ${formatPoints(quota * rate)}` : `充值成功，已增加 ${quota.toLocaleString('zh-CN')} 额度，积分折算暂不可用`)
       await loadUser()
     } catch (redeemError) {
       setError(redeemError instanceof Error ? redeemError.message : String(redeemError))
@@ -270,10 +270,10 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const exportLogs = () => {
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [
-      ['时间', '类型', '模型', '金额', '计费单位', '单价', '实际扣费额度', '退款额度', '耗时', 'Request ID', '内容'],
+      ['时间', '类型', '模型', '积分', '计费单位', '单价（积分）', '实际扣费额度', '退款额度', '耗时', 'Request ID', '内容'],
       ...logs.map((log) => {
         const display = getUsageDisplay(log, user?.quota_cny_rate)
-        return [formatTime(log.created_at), display.label, log.model_name || '', display.delta === null ? '金额不可用' : display.delta.toFixed(2), display.unit, log.metadata?.price_cny ?? '', log.metadata?.charged_quota ?? (log.type === 2 ? log.quota : ''), log.metadata?.billing_status === 'refunded' ? log.quota : '', log.request_time ?? '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']
+        return [formatTime(log.created_at), display.label, log.model_name || '', display.delta === null ? '积分不可用' : toPoints(display.delta), display.unit, typeof log.metadata?.price_cny === 'number' ? toPoints(log.metadata.price_cny) : '', log.metadata?.charged_quota ?? (log.type === 2 ? log.quota : ''), log.metadata?.billing_status === 'refunded' ? log.quota : '', log.request_time ?? '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']
       }),
     ]
     const blob = new Blob([`\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
@@ -331,13 +331,13 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
               <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 p-5 text-white shadow-lg shadow-blue-500/15">
                   <p className="text-sm text-white/70">账户余额</p>
-                  <p className="mt-3 text-2xl font-bold tracking-tight">{formatCNY(user.balance_cny)}</p>
-                  <p className="mt-1 text-xs text-white/55">{typeof user.balance_cny === 'number' && Number.isFinite(user.balance_cny) ? '人民币余额' : '余额暂不可用，请刷新账户'}</p>
+                  <p className="mt-3 text-2xl font-bold tracking-tight">{formatPoints(user.balance_cny)}</p>
+                  <p className="mt-1 text-xs text-white/55">{typeof user.balance_cny === 'number' && Number.isFinite(user.balance_cny) ? '可用积分' : '余额暂不可用，请刷新账户'}</p>
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">累计消费</p>
-                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{formatCNY(user.used_cny)}</p>
-                  <p className="mt-1 text-xs text-gray-400">已消耗额度按当前兑换率折合</p>
+                  <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{formatPoints(user.used_cny)}</p>
+                  <p className="mt-1 text-xs text-gray-400">已消耗额度按当前兑换率折合为积分</p>
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">图片计费</p>
@@ -442,7 +442,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                             </div>
                             <p className="mt-1 truncate text-xs text-gray-400">{formatTime(log.created_at)}{log.content ? ` · ${log.content}` : ''}</p>
                             {Boolean(log.metadata?.request_id || log.metadata?.requestId) && <p className="mt-1 truncate font-mono text-[11px] text-gray-400">Request ID: {String(log.metadata?.request_id || log.metadata?.requestId)}</p>}
-                            {log.metadata?.billing_unit === 'successful_request' && <p className="mt-1 text-xs text-gray-400">单价 ¥{String(log.metadata.price_cny)}/次成功请求</p>}
+                            {log.metadata?.billing_unit === 'successful_request' && <p className="mt-1 text-xs text-gray-400">单价 {formatPoints(Number(log.metadata.price_cny))}/张</p>}
                           </div>
                           <div className="text-left sm:text-right">
                             <p className={`text-sm font-semibold ${(getUsageDisplay(log, user.quota_cny_rate).delta ?? 0) > 0 ? 'text-emerald-500' : 'text-gray-700 dark:text-gray-300'}`}>{getUsageDisplay(log, user.quota_cny_rate).amountText}</p>

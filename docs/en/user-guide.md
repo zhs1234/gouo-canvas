@@ -121,13 +121,13 @@ The gallery shows 60 tasks per page. Search covers the entire library, filters r
 
 The user center shows:
 
-- Current balance and cumulative usage.
+- Available points and cumulative usage (1 CNY = 100 points).
 - Model-specific billing information and the actual price in individual usage records.
 - Cloud storage consumption.
 - Redemption-code credit.
 - Recent usage with CSV export.
 
-Each successfully generated image is charged at the model price (generating several images splits them into single-image requests), and failed images are refunded once the server confirms the failure. Prices are configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
+Balance, prices, and charges are shown in points (积分). Each successfully generated image is charged at the model price (generating several images splits them into single-image requests), and failed images are refunded once the server confirms the failure. Prices are configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
 
 ## 11. Settings, import, and export
 

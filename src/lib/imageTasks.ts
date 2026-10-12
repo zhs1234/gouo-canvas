@@ -10,6 +10,7 @@ import { getChangedParams, normalizeParamsForSettings } from './paramCompatibili
 import { getTransparentRequestParams, createTransparentOutputMeta } from './transparentImage'
 import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
 import { isStorageScopeCurrent } from './storageScope'
+import { formatPoints } from './accountUsage'
 
 export interface ImageTaskInput {
   prompt: string
@@ -131,7 +132,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       const user = await getCurrentUser().catch(() => null)
       const cost = quote.price_cny * params.n
       if (typeof user?.balance_cny === 'number' && user.balance_cny + 1e-9 < cost) {
-        const message = `余额不足：本次预计 ¥${cost.toFixed(2)}，当前余额 ¥${user.balance_cny.toFixed(2)}`
+        const message = `余额不足：本次预计 ${formatPoints(cost)}，当前余额 ${formatPoints(user.balance_cny)}`
         requestUserCenter('topup')
         if (input) throw new Error(message)
         showToast(`${message}，请先兑换额度`, 'error')
