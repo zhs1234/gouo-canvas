@@ -5,10 +5,10 @@ import { normalizeSettings, getActiveApiProfile, validateApiProfile } from './ap
 import { putTask, storeImage } from './db'
 import { orderInputImagesForMask } from './mask'
 import { validateMaskMatchesImage } from './canvasImage'
-import { getImageModelQuote, isBackendAuthEnabled } from './gouoBackend'
+import { getCurrentUser, getImageModelQuote, isBackendAuthEnabled } from './gouoBackend'
 import { getChangedParams, normalizeParamsForSettings } from './paramCompatibility'
 import { getTransparentRequestParams, createTransparentOutputMeta } from './transparentImage'
-import { getActionableErrorMessage } from './userGuidance'
+import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
 import { isStorageScopeCurrent } from './storageScope'
 
 export interface ImageTaskInput {
@@ -125,6 +125,16 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       } catch (err) {
         if (input) throw err
         showToast(err instanceof Error ? err.message : String(err), 'error')
+        return
+      }
+      // 余额明显不够时不建任务，免得先提示"已提交"再失败；读不到余额就交给服务端判断
+      const user = await getCurrentUser().catch(() => null)
+      const cost = quote.price_cny * params.n
+      if (typeof user?.balance_cny === 'number' && user.balance_cny + 1e-9 < cost) {
+        const message = `余额不足：本次预计 ¥${cost.toFixed(2)}，当前余额 ¥${user.balance_cny.toFixed(2)}`
+        requestUserCenter('topup')
+        if (input) throw new Error(message)
+        showToast(`${message}，请先兑换额度`, 'error')
         return
       }
     }
