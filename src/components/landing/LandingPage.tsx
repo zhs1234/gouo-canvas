@@ -213,7 +213,7 @@ function InspirationGallery({ onRegister }: { onRegister: () => void }) {
           const el = event.currentTarget
           setProgress(el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth))
         }}
-        className="gouo-reveal -mx-4 mt-8 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-10 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="gouo-reveal -ml-4 -mr-5 mt-8 flex sm:mr-[min(-2.5rem,calc(640px-50vw))] snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-10 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={delay('0.1s')}
       >
         {GALLERY.map((item) => (
@@ -330,6 +330,17 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           </div>
         </nav>
 
+        {/* 窄屏没有右侧空间，在标题上方放一组较小的作品卡片 */}
+        <div className="pointer-events-none flex flex-1 items-center justify-center py-8 lg:hidden" aria-hidden="true">
+          {HERO_CARDS.slice(0, 3).map((card, i) => (
+            <div key={card.name} className={`gouo-fade-up w-[34%] max-w-[170px] ${i === 1 ? 'z-10 -mx-4 -translate-y-3' : ''}`} style={{ rotate: ['-7deg', '2deg', '7deg'][i], ...delay(`${0.5 + i * 0.12}s`) }}>
+              <div className="gouo-float overflow-hidden rounded-2xl border-4 border-white/75 shadow-[0_20px_44px_rgb(90_40_25/0.3)]" style={delay(`${-i * 1.3}s`)}>
+                <img src={`${import.meta.env.BASE_URL}${card.item.previewImage}`} alt="" className="block aspect-[4/5] w-full object-cover" />
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div className="mx-auto w-full max-w-[1600px]">
           <h1 className="text-[clamp(3.4rem,9vw,8.4rem)] font-semibold leading-[0.94] tracking-[-0.06em]">
             <span className="gouo-line-mask"><span className="gouo-line-text" style={delay('0.25s')}>把灵感</span></span>
@@ -381,11 +392,11 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
             </div>
             <WorkflowHub />
           </div>
-          <div className="gouo-reveal mt-14 grid grid-cols-1 border-l border-t border-[var(--line)] sm:grid-cols-2 lg:grid-cols-4" style={delay('0.1s')}>
+          <div className="gouo-reveal mt-14 grid grid-cols-2 border-l border-t border-[var(--line)] lg:grid-cols-4" style={delay('0.1s')}>
             {FEATURES.map((item) => (
-              <div key={item.title} className="group border-b border-r border-[var(--line)] bg-white/40 p-7 transition hover:bg-white">
+              <div key={item.title} className="group border-b border-r border-[var(--line)] bg-white/40 p-5 transition hover:bg-white sm:p-7">
                 <item.icon className="h-6 w-6 text-[#c26855] transition group-hover:-translate-y-0.5" strokeWidth={1.6} />
-                <h3 className="mt-10 text-lg font-semibold tracking-[-0.02em]">{item.title}</h3>
+                <h3 className="mt-6 text-[17px] font-semibold tracking-[-0.02em] sm:mt-10 sm:text-lg">{item.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">{item.desc}</p>
               </div>
             ))}
@@ -401,7 +412,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <h2 className="gouo-reveal max-w-3xl text-[clamp(2.2rem,4.4vw,3.6rem)] font-semibold leading-[1.05] tracking-[-0.05em]">为认真创作的人设计的细节</h2>
           <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STATS.map((stat, index) => (
-              <div key={stat.title} className={`gouo-reveal grid min-h-[340px] content-between gap-10 rounded-[28px] border border-white/80 bg-gradient-to-b ${stat.tone} p-7 shadow-[0_20px_50px_rgb(66_49_37/0.07)]`} style={delay(`${index * 0.08}s`)}>
+              <div key={stat.title} className={`gouo-reveal grid min-h-[230px] content-between gap-10 sm:min-h-[340px] rounded-[28px] border border-white/80 bg-gradient-to-b ${stat.tone} p-7 shadow-[0_20px_50px_rgb(66_49_37/0.07)]`} style={delay(`${index * 0.08}s`)}>
                 <div className="flex items-baseline gap-2">
                   <strong className="text-[clamp(4rem,6vw,5.6rem)] font-semibold leading-[0.82] tracking-[-0.075em] tabular-nums">{stat.value}</strong>
                   <span className="text-[clamp(1.2rem,1.8vw,1.8rem)] font-semibold text-[#a0a0a3]">{stat.unit}</span>
