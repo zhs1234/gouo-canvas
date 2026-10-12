@@ -247,8 +247,8 @@ func recordGouoGeneration(c *gin.Context, capture *gouoImageCapture, response *t
 		asset, err := readUpload(header)
 		if err != nil {
 			logger.LogError(c.Request.Context(), "保存参考图失败: "+err.Error())
-			continue
 		}
+		// 失败时追加 nil 占位，客户端按下标绑定参考图编号
 		record.Inputs = append(record.Inputs, asset)
 	}
 	if capture.mask != nil {

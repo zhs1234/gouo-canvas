@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -578,21 +579,21 @@ func RecordGouoGeneration(record GouoGenerationRecord) error {
 		if err := tx.Omit("Assets").Save(&task).Error; err != nil {
 			return err
 		}
-		hasRole := map[string]bool{}
+		linked := map[string]bool{}
 		for _, link := range task.Assets {
-			hasRole[link.Role] = true
+			linked[fmt.Sprintf("%s:%d", link.Role, link.Position)] = true
 		}
 		links := make([]GouoTaskAsset, 0, len(record.Outputs)+len(record.Inputs)+1)
 		for i, asset := range record.Outputs {
 			links = append(links, GouoTaskAsset{TaskID: task.ID, AssetID: asset.ID, Role: "output", Position: record.Index + i})
 		}
-		// 批量请求的参考图相同，只在首次写入时保存。
-		if !hasRole["input"] {
-			for i, asset := range record.Inputs {
+		// 批量请求的参考图相同，只补写尚未保存的位置；保存失败的为 nil，占位保证后面的位置不前移。
+		for i, asset := range record.Inputs {
+			if asset != nil && !linked[fmt.Sprintf("input:%d", i)] {
 				links = append(links, GouoTaskAsset{TaskID: task.ID, AssetID: asset.ID, Role: "input", Position: i})
 			}
 		}
-		if record.Mask != nil && !hasRole["mask"] {
+		if record.Mask != nil && !linked["mask:0"] {
 			links = append(links, GouoTaskAsset{TaskID: task.ID, AssetID: record.Mask.ID, Role: "mask", Position: 0})
 		}
 		if len(links) == 0 {
@@ -627,31 +628,28 @@ func UpdateGouoTaskMeta(userID int, clientTaskID string, meta GouoTaskMeta) (*Go
 		if err := tx.Where("user_id = ? AND client_task_id = ?", userID, clientTaskID).First(&task).Error; err != nil {
 			return err
 		}
-		updates := map[string]any{"updated_at": now}
+		next := task
 		if meta.Prompt != "" {
-			updates["prompt"] = trimGouoText(meta.Prompt)
+			next.Prompt = trimGouoText(meta.Prompt)
 		}
 		if len(meta.Params) > 0 {
-			updates["params"] = meta.Params
+			next.Params = meta.Params
 		}
 		if len(meta.ResultMeta) > 0 {
-			updates["result_meta"] = meta.ResultMeta
+			next.ResultMeta = meta.ResultMeta
 		}
+		// 提示词和参数由客户端提交，变大时同样受云端空间配额限制。
+		// 超出时只放弃这些文本，图片编号和收藏仍要绑定，否则靠付费结果占满空间的作品永远关联不上本地数据。
+		if err := checkGouoStorageQuota(tx, userID, next.contentBytes()-task.ContentBytes); errors.Is(err, ErrGouoStorageQuota) {
+			next = task
+		} else if err != nil {
+			return err
+		}
+		updates := map[string]any{"updated_at": now, "prompt": next.Prompt, "params": next.Params, "result_meta": next.ResultMeta, "content_bytes": next.contentBytes()}
 		if meta.ClientCreatedAt > 0 {
 			updates["client_created_at"] = meta.ClientCreatedAt
 		}
 		if err := tx.Model(&task).Updates(updates).Error; err != nil {
-			return err
-		}
-		previousBytes := task.ContentBytes
-		if err := tx.First(&task, "id = ?", task.ID).Error; err != nil {
-			return err
-		}
-		// 提示词和参数由客户端提交，变大时同样受云端空间配额限制
-		if err := checkGouoStorageQuota(tx, userID, task.contentBytes()-previousBytes); err != nil {
-			return err
-		}
-		if err := tx.Model(&task).UpdateColumn("content_bytes", task.contentBytes()).Error; err != nil {
 			return err
 		}
 		for role, ids := range meta.ClientImageIDs {
