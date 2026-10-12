@@ -18,7 +18,7 @@ This document helps maintainers and new contributors understand the product scop
 | Cloud library | Server-saved artworks, storage usage, and account isolation | [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | Admin application | One Hub user, channel, and quota administration, plus Gouo storage management | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
 
-The frontend also includes an inspiration library, onboarding, dark theme, and PWA installation. The service worker caches pages and static assets while bypassing `/api`, `/v1`, and `/panel`; it does not generate images offline. See [main.tsx](../../src/main.tsx) and [sw.js](../../public/sw.js).
+The frontend also includes an inspiration library, dark theme, and PWA installation. The service worker caches pages and static assets while bypassing `/api`, `/v1`, and `/panel`; it does not generate images offline. See [main.tsx](../../src/main.tsx) and [sw.js](../../public/sw.js).
 
 ## Runtime modes
 

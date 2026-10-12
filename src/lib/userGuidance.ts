@@ -1,14 +1,5 @@
 export type UserCenterSection = 'overview' | 'topup' | 'logs' | 'security'
 
-const FLAG_PREFIX = 'gouo-canvas.guide.'
-
-export const GUIDE_FLAGS = {
-  onboarding: 'onboarding-v1',
-  referenceUpload: 'reference-upload-v1',
-  maskEditor: 'mask-editor-v1',
-  firstGeneration: 'first-generation-v1',
-} as const
-
 export const EMPTY_GALLERY_PROMPTS = [
   { title: '电影感人像', prompt: '一位年轻创意工作者站在雨后的城市街角，蓝调时刻，35mm 电影摄影，路面反射暖色店铺灯光，人物姿态自然，真实皮肤纹理，浅景深，不要文字和水印。' },
   { title: '高级产品图', prompt: '一只无品牌的磨砂玻璃香水瓶放在深色石材台面，侧后方柔光勾勒轮廓，少量水汽和克制倒影，高端商业产品摄影，背景干净，标签区域留白。' },
@@ -18,33 +9,9 @@ export const EMPTY_GALLERY_PROMPTS = [
   { title: '知识图解', prompt: '竖版三步知识图解，主题是从灵感到成品，依次表现想法、草图和完成作品，象牙白、深蓝与亮橙配色，清晰信息层级，预留文字区域但不要生成具体文字。' },
 ]
 
-export function hasGuideFlag(flag: string) {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(`${FLAG_PREFIX}${flag}`) === '1'
-  } catch {
-    return false
-  }
-}
-
-export function setGuideFlag(flag: string) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(`${FLAG_PREFIX}${flag}`, '1')
-  } catch {
-    // localStorage 不可用时只在当前会话显示引导。
-  }
-}
-
 export function requestUserCenter(section: UserCenterSection = 'overview') {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent<UserCenterSection>('gouo:open-user-center', { detail: section }))
-}
-
-export function notifyFirstGeneration(taskId: string) {
-  if (typeof window === 'undefined') return
-  if (hasGuideFlag(GUIDE_FLAGS.firstGeneration)) return
-  window.dispatchEvent(new CustomEvent<string>('gouo:first-generation-complete', { detail: taskId }))
 }
 
 export function isBalanceError(message: string) {

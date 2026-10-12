@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { HashRouter } from 'react-router-dom'
 import Workspace from './components/Workspace'
 import { initStore } from './store'
@@ -12,15 +12,10 @@ import ImageContextMenu from './components/ImageContextMenu'
 import OverlayLayer from './components/OverlayLayer'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 import { startServerLibrary } from './lib/serverLibrary'
-import FirstGenerationGuide from './components/FirstGenerationGuide'
-import { GUIDE_FLAGS, hasGuideFlag } from './lib/userGuidance'
-
-const OnboardingModal = lazy(() => import('./components/OnboardingModal'))
 
 let customProviderConfigUrlImportStarted = false
 
 export default function App() {
-  const [showOnboarding, setShowOnboarding] = useState(() => !hasGuideFlag(GUIDE_FLAGS.onboarding))
   const setSettings = useStore((s) => s.setSettings)
   useGlobalClickSuppression()
 
@@ -121,12 +116,6 @@ export default function App() {
       <OverlayLayer />
       <Toast />
       <ImageContextMenu />
-      <FirstGenerationGuide />
-      {showOnboarding && (
-        <Suspense fallback={null}>
-          <OnboardingModal onClose={() => setShowOnboarding(false)} />
-        </Suspense>
-      )}
     </>
   )
 }
