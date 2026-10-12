@@ -223,7 +223,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
     input?.signal?.throwIfAborted()
     await putTask(task)
     useStore.getState().setTasks([task, ...useStore.getState().tasks])
-    useStore.getState().showToast('任务已提交，可在「我的作品」查看进度', 'success')
+    useStore.getState().showToast(input ? '任务已提交，可在「我的作品」查看进度' : '任务已提交，生成结果会显示在输入框下方', 'success')
 
     const latest = useStore.getState()
     // 等待报价或保存期间编辑的新草稿不能随旧任务一起清空。

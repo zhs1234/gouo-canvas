@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { BRAND } from '../config/brand'
-import { useStore } from '../store'
+import { editOutputs, reuseConfig, useStore } from '../store'
 import { getAllAgentConversations, getAllCanvasProjects } from '../lib/db'
 import { INSPIRATION_TEMPLATES } from '../lib/inspirationTemplates'
 import { requestUserCenter } from '../lib/userGuidance'
@@ -9,7 +9,8 @@ import type { AgentConversation, CanvasProject } from '../types'
 import Header from './Header'
 import InputBar from './InputBar'
 import SearchBar from './SearchBar'
-import TaskGrid from './TaskGrid'
+import TaskCard from './TaskCard'
+import TaskGrid, { confirmRemoveTask } from './TaskGrid'
 import { FavoriteCollectionsView } from './favorites/FavoriteCollectionsView'
 import { useFavoriteCollectionTitle } from './favorites/useFavoriteCollectionTitle'
 import SelectionActions from './input/selectionActions'
@@ -50,6 +51,21 @@ function AgentRoute() {
   const location = useLocation()
   const navigate = useNavigate()
   return <AgentWorkspace conversationId={id} projectId={new URLSearchParams(location.search).get('canvas') || undefined} onOpenConversation={(next) => navigate(`/agent/${encodeURIComponent(next)}`)} />
+}
+
+// 本次进入创作页后提交的任务直接显示在输入框下方，不用去「我的作品」找
+function RecentResults() {
+  const [since] = useState(() => Date.now())
+  const tasks = useStore((s) => s.tasks)
+  const setDetailTaskId = useStore((s) => s.setDetailTaskId)
+  const recent = tasks.filter((task) => (task.createdAt >= since || task.status === 'running') && (task.source?.kind ?? 'generate') === 'generate').sort((a, b) => b.createdAt - a.createdAt).slice(0, 6)
+  if (!recent.length) return null
+  return <section className="recent-results" aria-label="本次生成">
+    <div className="section-label">本次生成<span><Link to="/works">全部作品 ↗</Link></span></div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {recent.map((task) => <TaskCard key={task.id} task={task} onClick={() => setDetailTaskId(task.id)} onReuse={() => reuseConfig(task)} onEditOutputs={() => editOutputs(task)} onDelete={() => confirmRemoveTask(task)} />)}
+    </div>
+  </section>
 }
 
 function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: string) => void }) {
@@ -104,6 +120,7 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
             <div className="creation-input"><div className="composer-heading"><SparklesIcon className="h-4 w-4" /> AI 图像<span>从一个想法开始</span></div><InputBar inline /></div>
             <div className="prompt-shortcuts">{INSPIRATION_TEMPLATES.slice(0, 6).map((item) => <button key={item.id} onClick={() => applyTemplate(item.prompt)}>/ {item.title}</button>)}</div>
           </div>
+          <RecentResults />
           <section className="inspiration-strip" aria-label="灵感精选">
             <div className="section-label">灵感精选<span>让想法有迹可循</span></div>
             <div className="inspiration-cards">{[3, 4, 7, 10].map((index) => INSPIRATION_TEMPLATES[index]).filter(Boolean).map((item) => <button key={item.id} className="inspiration-card" onClick={() => applyTemplate(item.prompt)}>

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
+import type { TaskRecord } from '../types'
 import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds, useStore, reuseConfig, editOutputs, removeTask } from '../store'
 import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
 import TaskCard from './TaskCard'
@@ -7,6 +8,25 @@ import { EMPTY_GALLERY_PROMPTS } from '../lib/userGuidance'
 
 const PAGE_SIZE = 60
 
+export function confirmRemoveTask(task: TaskRecord) {
+  const setConfirmDialog = useStore.getState().setConfirmDialog
+  if (task.cloudHiddenAt) {
+    setConfirmDialog({
+      title: '恢复作品',
+      message: '将这个作品恢复到云端画廊吗？',
+      confirmText: '恢复',
+      action: () => restoreServerTask(task),
+    })
+    return
+  }
+  setConfirmDialog({
+    title: task.cloudId ? '移入回收站' : '删除任务',
+    message: task.cloudId ? '确定将这个任务移入云端回收站吗？3 天内可以恢复，期间仍占用云端空间，之后连同图片彻底删除。' : '确定要删除这个任务吗？关联的图片资源也会被清理（如果没有其他任务引用）。',
+    confirmText: task.cloudId ? '移入回收站' : '删除',
+    action: () => removeTask(task),
+  })
+}
+
 export default function TaskGrid() {
   const tasks = useStore((s) => s.tasks)
   const searchQuery = useStore((s) => s.searchQuery)
@@ -14,7 +34,6 @@ export default function TaskGrid() {
   const filterFavorite = useStore((s) => s.filterFavorite)
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const setDetailTaskId = useStore((s) => s.setDetailTaskId)
-  const setConfirmDialog = useStore((s) => s.setConfirmDialog)
   const selectedTaskIds = useStore((s) => s.selectedTaskIds)
   const setSelectedTaskIds = useStore((s) => s.setSelectedTaskIds)
   const clearSelection = useStore((s) => s.clearSelection)
@@ -65,24 +84,6 @@ export default function TaskGrid() {
     <button type="button" disabled={page === pageCount} onClick={() => changePage(page + 1)} className="rounded-lg border px-3 py-1.5 disabled:opacity-40 dark:border-white/10">下一页</button>
     <span className="text-xs">每页 {PAGE_SIZE} 条，选择可跨页保留</span>
   </nav>
-
-  const handleDelete = (task: typeof tasks[0]) => {
-    if (task.cloudHiddenAt) {
-      setConfirmDialog({
-        title: '恢复作品',
-        message: '将这个作品恢复到云端画廊吗？',
-        confirmText: '恢复',
-        action: () => restoreServerTask(task),
-      })
-      return
-    }
-    setConfirmDialog({
-      title: task.cloudId ? '移入回收站' : '删除任务',
-      message: task.cloudId ? '确定将这个任务移入云端回收站吗？3 天内可以恢复，期间仍占用云端空间，之后连同图片彻底删除。' : '确定要删除这个任务吗？关联的图片资源也会被清理（如果没有其他任务引用）。',
-      confirmText: task.cloudId ? '移入回收站' : '删除',
-      action: () => removeTask(task),
-    })
-  }
 
   const getPagePoint = (clientX: number, clientY: number) => ({
     pageX: clientX + window.scrollX,
@@ -359,7 +360,7 @@ export default function TaskGrid() {
               }}
               onReuse={() => reuseConfig(task)}
               onEditOutputs={() => editOutputs(task)}
-              onDelete={() => handleDelete(task)}
+              onDelete={() => confirmRemoveTask(task)}
               isSelected={selectedTaskIds.includes(task.id)}
             />
           </div>

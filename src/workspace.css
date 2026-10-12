@@ -70,6 +70,8 @@ html.dark, .dark body { background: #111; color: #eee; }
 .prompt-shortcuts button:hover { background: #2b2b2b; }
 .section-label { font-size: 13px; margin: 0 12px 18px; color: #eee; }
 .section-label span { float: right; color: #707070; font-size: 11px; }
+.section-label a:hover { color: #ddd; }
+.recent-results { margin: 0 0 40px; }
 .inspiration-cards { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3px; overflow: hidden; border-radius: 18px; }
 .inspiration-card { position: relative; text-align: left; aspect-ratio: 1.65; overflow: hidden; background: #242424; }
 .inspiration-card img { width: 100%; height: 100%; object-fit: cover; transition: transform 250ms ease; }
