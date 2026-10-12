@@ -370,6 +370,8 @@ http://127.0.0.1:3000/panel
 
 Immediately change the `root` password from `123456`, then follow the [post-start configuration order](./index.md#configuration-order-after-first-start).
 
+If you open the admin panel (`127.0.0.1:3000`) and the client (for example `127.0.0.1:8080`) in the same browser, they share one sign-in, because browsers scope cookies by host, not port. Use a private window or another browser for one of them.
+
 ## 14. Back up
 
 ```bash

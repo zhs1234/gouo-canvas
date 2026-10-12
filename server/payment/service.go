@@ -109,5 +109,6 @@ func (s *PaymentService) getNotifyURL() string {
 
 func (s *PaymentService) getReturnURL() string {
 	serverAdd := strings.TrimSuffix(config.ServerAddress, "/")
-	return fmt.Sprintf("%s/panel/log", serverAdd)
+	// 服务器地址指向客户端，支付后回到客户端的充值页
+	return fmt.Sprintf("%s/topup", serverAdd)
 }

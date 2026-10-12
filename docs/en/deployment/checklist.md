@@ -32,6 +32,7 @@ PowerShell secret generation:
 
 - [ ] Enable HTTPS and permanently redirect HTTP to HTTPS.
 - [ ] Serve the frontend, `/api`, and `/v1` from one public origin where possible.
+- [ ] Set the admin Server Address to the public client URL, and confirm the link in a password-reset email opens the client reset page.
 - [ ] Expose only 80/443; do not expose database, Redis, or backend admin port 3000.
 - [ ] Restrict SSH and management ports with a firewall or cloud security group.
 - [ ] Configure trusted proxy headers, real client IP, request-body limits, and image-request timeouts.
