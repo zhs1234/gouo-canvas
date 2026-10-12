@@ -10,7 +10,7 @@ import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import BackendModelSelector from './BackendModelSelector'
-import { getActionableErrorMessage, GUIDE_FLAGS, hasGuideFlag, setGuideFlag } from '../lib/userGuidance'
+import { getActionableErrorMessage } from '../lib/userGuidance'
 import { useHintTooltip } from '../hooks/useHintTooltip'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { CloseIcon, PlusIcon, SettingsIcon } from './icons'
@@ -768,22 +768,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       const accepted = Array.from(files).filter((f) => f.type.startsWith('image/'))
       const toAdd = accepted.slice(0, remaining)
       const discarded = accepted.length - toAdd.length
-      const showFirstUploadGuide = currentCount === 0 && toAdd.length > 0 && !hasGuideFlag(GUIDE_FLAGS.referenceUpload)
 
       for (const file of toAdd) {
         await addImageFromFile(file)
-      }
-
-      if (showFirstUploadGuide) {
-        setGuideFlag(GUIDE_FLAGS.referenceUpload)
-        setConfirmDialog({
-          title: '参考图已经添加',
-          message: '请在提示词中说明图片的用途，模型才更容易理解你的意图。\n\n例如：\n- “保留图 1 的人物和姿势，改成夜晚街景”\n- “使用图 1 的产品，采用图 2 的配色”\n- “只参考构图，不复制图片中的文字”',
-          confirmText: '知道了',
-          showCancel: false,
-          icon: 'info',
-          action: () => {},
-        })
       }
 
       if (discarded > 0) {
