@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { BRAND } from '../../config/brand'
 import { INSPIRATION_TEMPLATES } from '../../lib/inspirationTemplates'
-import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt, NeonStreetArt, PerfumeArt, PicnicPosterArt, SleepingCatArt } from './artwork'
+import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt, SleepingCatArt } from './artwork'
 import './landing.css'
 
 const SCENES = [
@@ -16,10 +16,18 @@ const SCENES = [
   { icon: Palette, label: '插画' },
 ]
 
+// 产品预览轮播用灵感库示例图；每个模板只有一张图，用不同裁切和色调模拟多张候选
 const PREVIEW_PROMPTS = [
-  { text: '雨后的城市街角，霓虹倒影，电影感广角', Art: NeonStreetArt },
-  { text: '白色背景上的香水瓶产品图，柔和侧光，高级质感', Art: PerfumeArt },
-  { text: '扁平插画风格的春日野餐海报，留出标题位置', Art: PicnicPosterArt },
+  { text: '黑金质感的牛排海报，雪花纹理特写，高级餐厅风格', image: 'case373' },
+  { text: '立体刺绣风格的花鸟插画，米白底色，柔和配色', image: 'case346' },
+  { text: '古希腊哲人在廊柱下交谈，暖色油画质感', image: 'case375' },
+]
+
+const PREVIEW_VARIANTS: CSSProperties[] = [
+  {},
+  { objectPosition: '25% 40%', filter: 'hue-rotate(-14deg) saturate(1.15)', scale: '1.08' },
+  { objectPosition: '75% 60%', filter: 'brightness(1.08) contrast(0.95)', scale: '1.14' },
+  { objectPosition: '50% 20%', filter: 'sepia(0.2) saturate(0.9)', scale: '1.06' },
 ]
 
 const FEATURES = [
@@ -150,7 +158,7 @@ function ProductPreview() {
           <div key={index} className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.9 + i * 0.35}s`)}>
-                <prompt.Art variant={i} />
+                <img src={`${import.meta.env.BASE_URL}inspiration/${prompt.image}.webp`} alt="" className="h-full w-full object-cover" style={PREVIEW_VARIANTS[i]} />
                 {i === 1 && <Heart className="absolute right-2.5 top-2.5 h-4 w-4 fill-white text-white drop-shadow" />}
               </div>
             ))}
