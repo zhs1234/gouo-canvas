@@ -63,7 +63,7 @@ The backend rate-limits sign-in, registration and verification emails by client 
 
 ## 3. Initial admin setup
 
-The backend exposes the admin UI at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure.
+The backend exposes the admin UI at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure. Only administrators can sign in to the admin UI: regular users are rejected at its login form, and a regular user who already has a session is signed out when opening it. Regular users use only the Gouo client, where all amounts are shown in points. The admin login page no longer links to registration.
 
 Recommended order:
 

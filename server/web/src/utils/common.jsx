@@ -480,6 +480,9 @@ export async function onLarkOAuthClicked(lark_client_id) {
   window.open(`https://open.feishu.cn/open-apis/authen/v1/authorize?redirect_uri=${redirect_uri}&app_id=${lark_client_id}&state=${state}`);
 }
 
+// 后台仅限管理员；普通用户只使用光构客户端，账务统一按积分展示
+export const ADMIN_ONLY_MESSAGE = '后台仅限管理员登录，普通用户请使用光构客户端';
+
 export function useIsAdmin() {
   const { user } = useSelector((state) => state.account);
   if (!user) return false;
