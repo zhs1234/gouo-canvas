@@ -48,8 +48,17 @@ const USE_CASES = [
 ]
 
 // 灵感库示例图；含真人名人肖像的示例不放在首页
-const GALLERY = ['case355', 'case346', 'case373', 'case377', 'case362', 'case331', 'case375', 'case370']
-  .flatMap((name) => INSPIRATION_TEMPLATES.filter((item) => item.previewImage === `inspiration/${name}.webp`))
+const byImage = (name: string) => INSPIRATION_TEMPLATES.filter((item) => item.previewImage === `inspiration/${name}.webp`)
+const GALLERY = ['case355', 'case346', 'case373', 'case377', 'case362', 'case331', 'case375', 'case370'].flatMap(byImage)
+
+// 首屏右侧漂浮的作品卡片；位置按视口比例，避开左下标题和右下介绍
+const HERO_CARDS = [
+  { name: 'case362', pos: 'right-[36%] top-[13%] w-[11.5vw]', rotate: '4deg', aspect: 'aspect-[4/5]' },
+  { name: 'case355', pos: 'right-[20%] top-[17%] w-[13.5vw]', rotate: '-6deg', aspect: 'aspect-[4/5]', label: true },
+  { name: 'case346', pos: 'right-[4%] top-[12%] w-[14vw]', rotate: '5deg', aspect: 'aspect-[4/5]' },
+  { name: 'case373', pos: 'right-[25%] top-[52%] w-[15vw]', rotate: '3deg', aspect: 'aspect-[3/2]' },
+  { name: 'case377', pos: 'right-[7%] top-[45%] w-[11vw]', rotate: '-4deg', aspect: 'aspect-[4/5]' },
+].flatMap((card) => byImage(card.name).map((item) => ({ ...card, item })))
 
 const STEPS = [
   { title: '注册并兑换额度', desc: '创建账户后在用户中心输入兑换码，额度即时到账。' },
@@ -293,6 +302,16 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
     <div ref={rootRef} className="gouo-public min-h-[100dvh] overflow-x-hidden">
       <section id="top" className="gouo-grainient m-2.5 flex min-h-[calc(100dvh-20px)] flex-col justify-between rounded-[28px] px-5 pb-10 pt-4 text-white sm:px-10 sm:pb-12">
         <div className="gouo-liquid" aria-hidden="true">{Array.from({ length: 7 }, (_, i) => <i key={i} />)}</div>
+        <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
+          {HERO_CARDS.map((card, i) => (
+            <div key={card.name} className={`gouo-fade-up absolute max-w-[240px] ${card.pos}`} style={{ rotate: card.rotate, ...delay(`${0.5 + i * 0.12}s`) }}>
+              <div className="gouo-float relative overflow-hidden rounded-[20px] border-[5px] border-white/75 shadow-[0_30px_70px_rgb(90_40_25/0.3)]" style={delay(`${-i * 1.3}s`)}>
+                <img src={`${import.meta.env.BASE_URL}${card.item.previewImage}`} alt="" className={`block w-full object-cover ${card.aspect}`} />
+                {card.label && <span className="gouo-glass-dark absolute inset-x-2 bottom-2 rounded-xl px-3 py-2 text-[11px] font-semibold text-white">灵感库 · {card.item.title}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
         <nav className="gouo-glass-dark gouo-fade-up mx-auto flex w-full max-w-[1600px] items-center gap-3 rounded-2xl py-2 pl-3 pr-2" style={delay('0.1s')}>
           <button type="button" onClick={() => scrollToSection('top')} className="flex items-center gap-2.5 font-semibold">
             <img src={BRAND.logoUrl} alt="" className="h-8 w-8 rounded-lg" />
