@@ -829,18 +829,56 @@ describe('interrupted OpenAI running tasks', () => {
     await putDbTask(task({ id: 'other-tab', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
     await putDbTask(task({ id: 'abandoned', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
     // 另一个标签页正在执行 other-tab，持有它的任务锁
+    let release = () => {}
+    const released = new Promise<void>((resolve) => { release = resolve })
+    let reloaded: Promise<unknown> = Promise.resolve()
     vi.stubGlobal('navigator', { locks: {
       query: async () => ({ held: [{ name: 'gouo-task:other-tab' }, { name: 'gouo-tab' }] }),
-      // 其他标签页持有共享的标签页锁：申请排他锁拿不到
-      request: async (...args: unknown[]) => (args[args.length - 1] as (lock: null) => unknown)(null),
+      request: async (...args: unknown[]) => {
+        const callback = args[args.length - 1] as (lock: null) => unknown
+        // 等待其他标签页释放任务锁
+        if (args[0] === 'gouo-task:other-tab') {
+          reloaded = released.then(() => callback(null))
+          return reloaded
+        }
+        // 其他标签页持有共享的标签页锁：申请排他锁拿不到
+        return callback(null)
+      },
     } })
     try {
       await initStore()
+      const byId = Object.fromEntries(useStore.getState().tasks.map((item) => [item.id, item.status]))
+      expect(byId).toMatchObject({ 'other-tab': 'running', abandoned: 'error' })
+      // 其他标签页完成后释放锁，本页取回结果
+      await putDbTask(task({ id: 'other-tab', apiProvider: 'openai', status: 'done', outputImages: ['out'] }))
+      release()
+      await reloaded
+      expect(useStore.getState().tasks.find((item) => item.id === 'other-tab')).toMatchObject({ status: 'done', outputImages: ['out'] })
     } finally {
       vi.unstubAllGlobals()
     }
-    const byId = Object.fromEntries(useStore.getState().tasks.map((item) => [item.id, item.status]))
-    expect(byId).toMatchObject({ 'other-tab': 'running', abandoned: 'error' })
+  })
+
+  it('marks a task interrupted when the other tab closes mid-run', async () => {
+    await clearTasks()
+    await putDbTask(task({ id: 'closed-tab', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
+    let reloaded: Promise<unknown> = Promise.resolve()
+    vi.stubGlobal('navigator', { locks: {
+      query: async () => ({ held: [{ name: 'gouo-task:closed-tab' }] }),
+      request: async (...args: unknown[]) => {
+        const result = (args[args.length - 1] as (lock: null) => unknown)(null)
+        if (args[0] === 'gouo-task:closed-tab') reloaded = Promise.resolve(result)
+        return result
+      },
+    } })
+    try {
+      await initStore()
+      await reloaded
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    expect(useStore.getState().tasks.find((item) => item.id === 'closed-tab')?.status).toBe('error')
+    expect((await getAllTasks()).find((item) => item.id === 'closed-tab')?.status).toBe('error')
   })
 
   it('marks legacy and OpenAI running tasks as interrupted', () => {
