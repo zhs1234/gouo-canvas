@@ -205,9 +205,9 @@
   transform: perspective(1200px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
 }
 
-/* 产品预览：候选图依次“显影” */
+/* 产品预览：点击生成后候选图依次“显影” */
 .gouo-develop {
-  animation: gouo-develop 6.4s var(--ease-out) infinite;
+  animation: gouo-develop 1.4s var(--ease-out) both;
   animation-delay: var(--delay, 0s);
 }
 
@@ -269,9 +269,8 @@
 }
 
 @keyframes gouo-develop {
-  0%, 8% { opacity: 0.35; filter: blur(18px) saturate(0.4); transform: scale(0.96); }
-  30%, 88% { opacity: 1; filter: none; transform: none; }
-  100% { opacity: 0.35; filter: blur(18px) saturate(0.4); transform: scale(0.96); }
+  from { opacity: 0; filter: blur(18px) saturate(0.4); transform: scale(0.96); }
+  to { opacity: 1; filter: none; transform: none; }
 }
 
 @keyframes gouo-caret {
