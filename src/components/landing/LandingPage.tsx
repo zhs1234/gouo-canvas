@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { BRAND } from '../../config/brand'
 import { INSPIRATION_TEMPLATES } from '../../lib/inspirationTemplates'
-import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt, SleepingCatArt } from './artwork'
+import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt } from './artwork'
 import './landing.css'
 
 const SCENES = [
@@ -480,10 +480,9 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
                   )}
                   {index === 1 && (
                     <div className="w-full max-w-[260px] rounded-2xl border border-[var(--line)] bg-white p-4 shadow-sm">
-                      <p className="text-sm leading-6">一只在晨雾里打盹的橘猫，胶片质感，柔和逆光</p>
+                      <p className="text-sm leading-6">雨后的城市街角，霓虹倒影，电影感</p>
                       <div className="mt-3 flex items-center gap-2">
-                        <span className="h-8 w-8 overflow-hidden rounded-lg"><SleepingCatArt variant={0} /></span>
-                        <span className="h-8 w-8 overflow-hidden rounded-lg"><SleepingCatArt variant={1} /></span>
+                        {[0, 1].map((i) => <img key={i} src={previewImage(2, i)} alt="" loading="lazy" className="h-8 w-8 rounded-lg object-cover" />)}
                         <span className="ml-auto grid h-8 w-8 place-items-center rounded-lg bg-[#171719] text-white"><ArrowRight className="h-4 w-4" /></span>
                       </div>
                     </div>
@@ -492,7 +491,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
                     <div className="grid grid-cols-2 gap-2">
                       {[0, 1, 2, 3].map((i) => (
                         <div key={i} className="relative h-[72px] w-[72px] overflow-hidden rounded-xl shadow-sm">
-                          <SleepingCatArt variant={i} />
+                          <img src={previewImage(2, i)} alt="" loading="lazy" className="h-full w-full object-cover" />
                           {i === 0 && <Heart className="absolute right-1.5 top-1.5 h-4 w-4 fill-white text-white drop-shadow" />}
                         </div>
                       ))}
