@@ -4,6 +4,7 @@ import { BRAND } from '../config/brand'
 import { useStore } from '../store'
 import { getAllAgentConversations, getAllCanvasProjects } from '../lib/db'
 import { INSPIRATION_TEMPLATES } from '../lib/inspirationTemplates'
+import { requestUserCenter } from '../lib/userGuidance'
 import type { AgentConversation, CanvasProject } from '../types'
 import Header from './Header'
 import InputBar from './InputBar'
@@ -21,6 +22,12 @@ const InspirationLibraryPage = lazy(() => import('./InspirationLibraryModal').th
 const canvasEnabled = import.meta.env.VITE_CANVAS_ENABLED !== 'false'
 const agentEnabled = import.meta.env.VITE_AGENT_ENABLED !== 'false'
 const creationModes = [{ id: 'generate', label: '生成图片', enabled: true }, { id: 'canvas', label: '画布', enabled: canvasEnabled }, { id: 'agent', label: 'Agent', enabled: agentEnabled }].filter((item) => item.enabled)
+
+// 服务端邮件和支付返回的链接指向 /topup，打开用户中心的充值页
+function TopupRoute() {
+  useEffect(() => { requestUserCenter('topup') }, [])
+  return <Navigate to="/generate" replace />
+}
 
 function CanvasRoute() {
   const { id } = useParams()
@@ -204,6 +211,7 @@ export default function Workspace() {
       <Route path="/generate" element={<GenerateWorkspace mode={mode} setMode={setMode} />} />
       <Route path="/works" element={<WorksWorkspace />} />
       <Route path="/favorites" element={<FavoritesWorkspace />} />
+      <Route path="/topup" element={<TopupRoute />} />
       <Route path="/inspiration" element={<InspirationLibraryPage onApply={() => navigate('/generate')} />} />
       {canvasEnabled && <Route path="/canvas/:id?" element={<CanvasRoute />} />}
       {agentEnabled && <Route path="/agent/:id?" element={<AgentRoute />} />}

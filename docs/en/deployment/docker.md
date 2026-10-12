@@ -163,6 +163,8 @@ http://127.0.0.1:3000/panel
 
 An empty database creates `root` with password `123456`. Change it immediately, then follow the [post-start configuration order](./index.md#configuration-order-after-first-start). Never change the Compose backend mapping to `0.0.0.0:3000:3000` for convenience.
 
+If you open the admin panel (`127.0.0.1:3000`) and the client (for example `127.0.0.1:8080`) in the same browser, they share one sign-in, because browsers scope cookies by host, not port. Use a private window or another browser for one of them.
+
 ## 8. Add a domain and HTTPS
 
 Use host Caddy/Nginx, Nginx Proxy Manager, or a cloud load balancer to terminate HTTPS and proxy the entire origin to:

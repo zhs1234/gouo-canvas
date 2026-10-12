@@ -39,13 +39,14 @@ A running service is not ready for public registration. Configure it in this ord
 
 1. Reach the One Hub admin panel `/panel` through localhost or an SSH tunnel.
 2. Sign in with the bootstrap account and immediately change the `root` password from `123456`.
-3. Add the upstream channel and map `gpt-image-2`, or the model selected for your deployment.
-4. Validate generation, edit, and variation endpoints.
-5. Validate each model's price, output limit, price-change confirmation, successful charge, failure refund, and insufficient balance.
-6. In the Gouo storage admin view, verify asset writes, per-user quota, and artwork inspection.
-7. Configure HTTPS, backups, monitoring, firewall, and rate limits.
-8. With a regular account, test registration, sign-in, generation, synchronization, recycle bin, and cross-browser restore.
-9. Complete the [production checklist](./checklist.md) before opening registration.
+3. In Settings → System Settings, set Server Address to the public URL of the Gouo client (for example `https://your-domain.com`). Do not keep the default `http://localhost:3000` or use the SSH tunnel address. Password-reset emails, low-balance emails, and payment callbacks build their links from it; it is also the admin OIDC callback, so sign in to the admin panel with a password.
+4. Add the upstream channel and map `gpt-image-2`, or the model selected for your deployment.
+5. Validate generation, edit, and variation endpoints.
+6. Validate each model's price, output limit, price-change confirmation, successful charge, failure refund, and insufficient balance.
+7. In the Gouo storage admin view, verify asset writes, per-user quota, and artwork inspection.
+8. Configure HTTPS, backups, monitoring, firewall, and rate limits.
+9. With a regular account, test registration, sign-in, generation, synchronization, recycle bin, and cross-browser restore.
+10. Complete the [production checklist](./checklist.md) before opening registration.
 
 ## Critical data
 
