@@ -14,7 +14,7 @@ import TaskGrid, { confirmRemoveTask } from './TaskGrid'
 import { FavoriteCollectionsView } from './favorites/FavoriteCollectionsView'
 import { useFavoriteCollectionTitle } from './favorites/useFavoriteCollectionTitle'
 import SelectionActions from './input/selectionActions'
-import { ChevronLeftIcon, CollectionManageIcon, PlusIcon, SparklesIcon, CodeIcon, FavoriteIcon, EditIcon } from './icons'
+import { ChevronLeftIcon, CollectionManageIcon, PlusIcon, SparklesIcon, ChatIcon, FavoriteIcon, EditIcon } from './icons'
 import '../workspace.css'
 
 const CanvasWorkspace = lazy(() => import('./canvas/CanvasWorkspace'))
@@ -205,6 +205,8 @@ export default function Workspace() {
     return () => { active = false; window.removeEventListener('gouo:documents-changed', refresh) }
   }, [])
   useEffect(() => { document.documentElement.classList.add('dark'); window.scrollTo(0, 0) }, [location.key])
+  // 浏览器后退等切换页面时，收藏夹选择窗口不应留在新页面上
+  useEffect(() => { useStore.getState().closeFavoritePicker() }, [location.pathname])
   return <div className={`workspace-shell ${narrow ? 'sidebar-collapsed' : ''} ${canvas ? 'canvas-mode' : ''} ${location.pathname.startsWith('/agent') ? 'agent-mode-page' : ''}`}>
     {banner && location.pathname === '/generate' && !canvas && <div className="workspace-announcement"><span>光构创作空间</span> 把灵感构造成图像 · 生成、画布与 Agent，一处完成<button aria-label="关闭提示" onClick={() => setBanner(false)}>×</button></div>}
     <aside className="workspace-sidebar" aria-label="主导航">
@@ -217,7 +219,7 @@ export default function Workspace() {
         <Link title="灵感库" to="/inspiration" className={inspiration ? 'active' : ''} aria-current={inspiration ? 'page' : undefined}><SparklesIcon className="h-5 w-5" /><span>灵感库</span></Link>
       </nav>
       <div className="sidebar-records"><div className="sidebar-section-title">创作会话{agentEnabled && <Link to="/agent" aria-label="新会话"><PlusIcon className="h-4 w-4" /></Link>}</div>
-        {agentEnabled && conversations.filter((item) => !item.hiddenAt && (item.messages.length || item.draft.trim())).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8).map((item) => <Link className={location.pathname.endsWith(item.id) ? 'active' : ''} key={item.id} to={`/agent/${item.id}`}><CodeIcon className="h-4 w-4" /><span>{item.title}</span></Link>)}
+        {agentEnabled && conversations.filter((item) => !item.hiddenAt && (item.messages.length || item.draft.trim())).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8).map((item) => <Link className={location.pathname.endsWith(item.id) ? 'active' : ''} key={item.id} to={`/agent/${item.id}`}><ChatIcon className="h-4 w-4" /><span>{item.title}</span></Link>)}
         {!conversations.some((item) => !item.hiddenAt && (item.messages.length || item.draft.trim())) && <p>你的对话会显示在这里</p>}
         <div className="sidebar-section-title">我的画布{canvasEnabled && <Link to="/canvas" aria-label="画布项目"><PlusIcon className="h-4 w-4" /></Link>}</div>
         {canvasEnabled && projects.filter((item) => !item.hiddenAt).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8).map((item) => <Link key={item.id} to={`/canvas/${item.id}`}><CollectionManageIcon className="h-4 w-4" /><span>{item.title}</span></Link>)}

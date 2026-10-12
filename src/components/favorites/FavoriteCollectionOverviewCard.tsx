@@ -251,7 +251,7 @@ export function FavoriteCollectionOverviewCard({
                   <span className="truncate" title={card.name}>{card.name}</span>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{card.tasks.length} 条任务</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{card.tasks.length} 个作品</p>
             </div>
             <div className="mt-auto flex items-center justify-end gap-1">
               {!isVirtualAll && card.collection && (
