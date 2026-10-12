@@ -198,7 +198,8 @@ func ConvertFromChatOpenai(request *types.ChatCompletionRequest) (*ClaudeRequest
 		claudeRequest.ToolChoice = ConvertToolChoice(toolType, toolFunc)
 	}
 	// OpenAI 的 parallel_tool_calls=false 对应 Claude 的 disable_parallel_tool_use
-	if request.ParallelToolCalls != nil && !*request.ParallelToolCalls && len(claudeRequest.Tools) > 0 {
+	// tool_choice 为 none 时 Claude 不接受该字段
+	if request.ParallelToolCalls != nil && !*request.ParallelToolCalls && len(claudeRequest.Tools) > 0 && (claudeRequest.ToolChoice == nil || claudeRequest.ToolChoice.Type != "none") {
 		if claudeRequest.ToolChoice == nil {
 			claudeRequest.ToolChoice = &ToolChoice{Type: "auto"}
 		}

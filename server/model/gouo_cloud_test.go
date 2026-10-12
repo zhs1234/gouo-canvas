@@ -97,6 +97,28 @@ func TestGouoGenerationRecordMergesBatchAndClientMeta(t *testing.T) {
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
+func TestGouoGenerationRecordKeepsInputPositions(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	assets := []*GouoAsset{}
+	for _, id := range []string{"out", "ref-0", "ref-1"} {
+		asset := &GouoAsset{ID: id, UserID: 1, SHA256: id, StoragePath: id, MimeType: "image/png", FileSize: 1}
+		require.NoError(t, InsertGouoAsset(asset))
+		assets = append(assets, asset)
+	}
+	// 第一张参考图保存失败时后面的不前移，下一个子请求补上缺的位置
+	require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "task", Index: 0, Outputs: []*GouoAsset{assets[0]}, Inputs: []*GouoAsset{nil, assets[2]}}))
+	require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "task", Index: 1, Inputs: []*GouoAsset{assets[1], assets[2]}}))
+	task, err := GetGouoTask(1, "task")
+	require.NoError(t, err)
+	inputs := map[int]string{}
+	for _, link := range task.Assets {
+		if link.Role == "input" {
+			inputs[link.Position] = link.AssetID
+		}
+	}
+	require.Equal(t, map[int]string{0: "ref-0", 1: "ref-1"}, inputs)
+}
+
 func TestGouoCollectionStaleUpdateDoesNotRestoreDeletedCollection(t *testing.T) {
 	setupGouoCloudTestDB(t)
 	collection := GouoFavoriteCollection{ID: "album", UserID: 1, Name: "原名", CreatedAt: 1, UpdatedAt: 1}
@@ -341,12 +363,15 @@ func TestGouoDocumentsAndTasksCountTowardStorageQuota(t *testing.T) {
 	require.NoError(t, SaveGouoDocument(&doc, 1, nil))
 	// 服务端保存的付费生成结果不受配额限制
 	require.NoError(t, RecordGouoGeneration(GouoGenerationRecord{UserID: 1, ClientTaskID: "paid", Prompt: strings.Repeat("y", 3000), Params: datatypes.JSON(`{}`)}))
-	// 客户端补充的作品信息变大时受配额限制，原内容不变；缩小不受限制
-	_, err = UpdateGouoTaskMeta(1, "client-1", GouoTaskMeta{Params: datatypes.JSON(`{"note":"` + strings.Repeat("z", 3000) + `"}`)})
-	require.ErrorIs(t, err, ErrGouoStorageQuota)
-	stored, err := GetGouoTask(1, "client-1")
+	// 客户端补充的作品信息超出配额时放弃文本、原内容不变，但收藏仍要绑定；缩小不受限制
+	collection := GouoFavoriteCollection{ID: "album", UserID: 1, Name: "收藏"}
+	require.NoError(t, UpsertGouoCollection(&collection))
+	stored, err := UpdateGouoTaskMeta(1, "client-1", GouoTaskMeta{Params: datatypes.JSON(`{"note":"` + strings.Repeat("z", 3000) + `"}`), CollectionIDs: []string{"album"}})
 	require.NoError(t, err)
 	require.JSONEq(t, `{}`, string(stored.Params))
+	favorites, err := ListGouoFavoriteItems(1)
+	require.NoError(t, err)
+	require.Len(t, favorites, 1)
 	_, err = UpdateGouoTaskMeta(1, "client-1", GouoTaskMeta{Prompt: "猫"})
 	require.NoError(t, err)
 }
