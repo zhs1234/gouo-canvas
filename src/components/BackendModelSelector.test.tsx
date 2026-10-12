@@ -6,7 +6,9 @@ const mocks = vi.hoisted(() => ({
   values: [] as unknown[],
   index: 0,
   effects: [] as (() => void | (() => void))[],
-  state: { settings: { model: 'image-b' }, params: { n: 1 }, inputImages: [] as string[], maskDraft: null as object | null },
+  state: { settings: { model: 'image-b' } as { model: string; gouoModelSelected?: boolean }, params: { n: 1 }, inputImages: [] as string[], maskDraft: null as object | null },
+  setSettings: vi.fn(),
+  getImageModels: vi.fn(),
 }))
 
 vi.mock('react', async (original) => ({
@@ -14,13 +16,14 @@ vi.mock('react', async (original) => ({
   useState: () => [mocks.values[mocks.index++], vi.fn()],
   useEffect: (effect: () => void | (() => void)) => { mocks.effects.push(effect) },
 }))
-vi.mock('../store', () => ({ useStore: (select: (state: typeof mocks.state) => unknown) => select(mocks.state) }))
-vi.mock('../lib/gouoBackend', () => ({ getImageModels: vi.fn() }))
+vi.mock('../store', () => ({ useStore: Object.assign((select: (state: typeof mocks.state) => unknown) => select(mocks.state), { getState: () => ({ settings: mocks.state.settings, setSettings: mocks.setSettings }) }) }))
+vi.mock('../lib/gouoBackend', async (original) => ({ ...await original<typeof import('../lib/gouoBackend')>(), getImageModels: mocks.getImageModels }))
 
 beforeEach(() => {
   mocks.values = [[{ id: 'image-b', name: '图片 B', price_cny: 0.1, price_version: 'version-b', reference: false, mask: false, max_outputs: 1, quota: 100 }], '', false]
   mocks.index = 0
   mocks.effects = []
+  mocks.setSettings.mockReset()
   mocks.state = { settings: { model: 'image-b' }, params: { n: 1 }, inputImages: [], maskDraft: null }
 })
 
@@ -60,4 +63,18 @@ it('keeps the home estimate out of the compact Agent selector by default', () =>
   mocks.state.params.n = 2
   const markup = renderToStaticMarkup(<BackendModelSelector compact onReady={() => {}} />)
   expect(markup).not.toContain('预计 ¥')
+})
+
+it('switches to the backend default model when the user has not picked one', async () => {
+  const model = (id: string, isDefault = false) => ({ id, name: id, price_cny: 0.1, price_version: `v-${id}`, reference: true, mask: true, max_outputs: 1, quota: 1, ...(isDefault ? { default: true } : {}) })
+  mocks.getImageModels.mockResolvedValue([model('image-a'), model('image-c', true)])
+  mocks.state.settings = { model: 'gpt-image-2' }
+  renderToStaticMarkup(<BackendModelSelector onReady={() => {}} />)
+  vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() })
+  try {
+    mocks.effects[0]()
+    await vi.waitFor(() => expect(mocks.setSettings).toHaveBeenCalledWith({ model: 'image-c', gouoModelSelected: false, gouoPriceVersion: 'v-image-c' }))
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })

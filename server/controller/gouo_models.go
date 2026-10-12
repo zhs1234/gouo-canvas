@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"one-api/common/config"
 	"one-api/common/utils"
 	"one-api/model"
 	"slices"
@@ -81,5 +82,20 @@ func GetGouoModels(c *gin.Context) {
 			}
 		}
 	}
+	markGouoDefaultModel(data, config.GouoDefaultImageModel)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "billing_unit": "successful_request", "currency": "CNY"})
+}
+
+// markGouoDefaultModel 标出客户端默认使用的模型：后台设置的默认模型对当前令牌可用时用它，否则用目录中的第一个
+func markGouoDefaultModel(models []*model.GouoImageModel, preferred string) {
+	if len(models) == 0 {
+		return
+	}
+	for _, entry := range models {
+		if entry.ID == strings.TrimSpace(preferred) {
+			entry.Default = true
+			return
+		}
+	}
+	models[0].Default = true
 }

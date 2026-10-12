@@ -20,6 +20,9 @@ var Logo = ""
 var TopUpLink = ""
 var GouoRedemptionHelp = ""
 var GouoSupportContact = ""
+
+// GouoDefaultImageModel 是客户端未手动选择模型时使用的图片模型；为空或不可用时取目录中的第一个
+var GouoDefaultImageModel = ""
 var ChatLink = ""
 var ChatLinks = ""
 var AnalyticsCode = ""
