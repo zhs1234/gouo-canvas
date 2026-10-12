@@ -14,14 +14,66 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background:
-    radial-gradient(55% 75% at 12% 18%, #ffb38a 0%, transparent 62%),
-    radial-gradient(45% 65% at 88% 12%, #a596ff 0%, transparent 60%),
-    radial-gradient(60% 80% at 72% 92%, #ff8a70 0%, transparent 62%),
-    radial-gradient(50% 60% at 25% 98%, #8a4fb3 0%, transparent 65%),
-    linear-gradient(160deg, #6b3f6e 0%, #d4705c 52%, #f4ad7f 100%);
-  background-size: 160% 160%;
-  animation: gouo-grainient-drift 26s ease-in-out infinite alternate;
+  background: linear-gradient(150deg, #f2b37f 0%, #e9a07f 40%, #d9a98f 70%, #e8b98a 100%);
+}
+
+/* 首屏流体彩雾：几团大色块重度模糊后缓慢漂移 */
+.gouo-liquid {
+  position: absolute;
+  inset: -12%;
+  z-index: -2;
+  pointer-events: none;
+  filter: blur(70px) saturate(115%);
+}
+
+.gouo-liquid i {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  animation: gouo-blob 24s ease-in-out infinite alternate;
+}
+
+.gouo-liquid i:nth-child(1) { left: 0; top: 2%; width: 52%; height: 48%; background: #f5a65c; }
+.gouo-liquid i:nth-child(2) { left: 46%; top: -4%; width: 50%; height: 44%; background: #86aedb; animation-duration: 28s; animation-delay: -6s; }
+.gouo-liquid i:nth-child(3) { left: 58%; top: 30%; width: 44%; height: 46%; background: #f08a78; animation-duration: 22s; animation-delay: -10s; }
+.gouo-liquid i:nth-child(4) { left: 8%; top: 46%; width: 46%; height: 50%; background: #e98aa3; animation-duration: 30s; animation-delay: -3s; }
+.gouo-liquid i:nth-child(5) { left: 34%; top: 58%; width: 40%; height: 40%; background: #76bfae; animation-duration: 26s; animation-delay: -14s; }
+.gouo-liquid i:nth-child(6) { left: 24%; top: 18%; width: 34%; height: 36%; background: #f0b866; animation-duration: 20s; animation-delay: -8s; }
+.gouo-liquid i:nth-child(7) { left: 70%; top: 66%; width: 36%; height: 38%; background: #f39257; animation-duration: 32s; animation-delay: -18s; }
+
+/* 底部压暗，保证白色文字在浅色彩雾上可读 */
+.gouo-grainient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to top, rgb(110 46 34 / 0.32), transparent 55%), linear-gradient(to right, rgb(110 46 34 / 0.12), transparent 60%);
+}
+
+@keyframes gouo-blob {
+  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate(8%, -6%) scale(1.15) rotate(20deg); }
+  100% { transform: translate(-6%, 8%) scale(0.92) rotate(-12deg); }
+}
+
+/* 能力关系图：连线流动、节点轻微浮动 */
+.gouo-hub-line {
+  animation: gouo-hub-flow 3s linear infinite;
+}
+
+.gouo-hub-node {
+  animation: gouo-hub-float 5s ease-in-out infinite alternate;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes gouo-hub-flow {
+  to { stroke-dashoffset: -5.2; }
+}
+
+@keyframes gouo-hub-float {
+  from { margin-top: -3px; }
+  to { margin-top: 3px; }
 }
 
 .gouo-grainient-light {
@@ -223,7 +275,10 @@
   }
 
   .gouo-develop,
-  .gouo-caret::after {
+  .gouo-caret::after,
+  .gouo-liquid i,
+  .gouo-hub-line,
+  .gouo-hub-node {
     animation: none;
   }
 

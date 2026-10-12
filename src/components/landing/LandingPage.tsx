@@ -1,9 +1,11 @@
 import { type CSSProperties, type PointerEvent, useEffect, useRef, useState } from 'react'
 import {
-  ArrowRight, Bot, Brush, Cloud, Heart, ImagePlus, Images, Layers, Lock, Megaphone, Package, Palette, Plus,
+  ArrowRight, Bot, Brush, ChevronLeft, ChevronRight, Cloud, Heart, ImagePlus, Images, Layers, Lock, Megaphone, Package, Palette, Plus,
   ReceiptText, RotateCcw, Shapes, ShoppingBag, Sparkles, UserRound,
 } from 'lucide-react'
 import { BRAND } from '../../config/brand'
+import { INSPIRATION_TEMPLATES } from '../../lib/inspirationTemplates'
+import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt, NeonStreetArt, PerfumeArt, PicnicPosterArt, SleepingCatArt } from './artwork'
 import './landing.css'
 
 const SCENES = [
@@ -15,9 +17,9 @@ const SCENES = [
 ]
 
 const PREVIEW_PROMPTS = [
-  { text: '雨后的城市街角，霓虹倒影，电影感广角', tiles: ['from-[#8fa8ff] to-[#2a2f6e]', 'from-[#c08cff] to-[#3b2a6e]', 'from-[#5fd3e6] to-[#1f3a5e]', 'from-[#ff8fb3] to-[#40285c]'] },
-  { text: '白色背景上的香水瓶产品图，柔和侧光，高级质感', tiles: ['from-[#fff4e8] to-[#e8c9a8]', 'from-[#f6efe9] to-[#d6b8a0]', 'from-[#fdf2ec] to-[#e7b9a3]', 'from-[#f4ede3] to-[#cdb59a]'] },
-  { text: '扁平插画风格的春日野餐海报，留出标题位置', tiles: ['from-[#c8f0a8] to-[#5fb37a]', 'from-[#ffe79a] to-[#8fcf6b]', 'from-[#bfe9d7] to-[#f6c45f]', 'from-[#f9f1a0] to-[#6ec2a0]'] },
+  { text: '雨后的城市街角，霓虹倒影，电影感广角', Art: NeonStreetArt },
+  { text: '白色背景上的香水瓶产品图，柔和侧光，高级质感', Art: PerfumeArt },
+  { text: '扁平插画风格的春日野餐海报，留出标题位置', Art: PicnicPosterArt },
 ]
 
 const FEATURES = [
@@ -32,18 +34,22 @@ const FEATURES = [
 ]
 
 const STATS = [
-  { value: '10', unit: '张', title: '单次最多出图', desc: '一次提交最多生成 10 张候选，并排比较，挑出最好的一张。' },
-  { value: '24', unit: '小时', title: '原图可找回', desc: '网络中断或页面关闭后，24 小时内可取回已生成的结果，不会重新生成扣费。' },
-  { value: '0', unit: '元', title: '失败不扣费', desc: '明确失败的生成会自动退回预扣额度，只为成功出图付费。' },
-  { value: '∞', unit: '画布', title: '不限尺寸的创作空间', desc: '把参考、草图与成片放在同一张画布上，随时回到任何一步继续。' },
+  { value: '10', unit: '张', title: '单次最多出图', desc: '一次提交最多生成 10 张候选，并排比较，挑出最好的一张。', tone: 'from-[#e3f4ea] via-[#f4f8f1] to-[#fbfbf9]' },
+  { value: '24', unit: '小时', title: '原图可找回', desc: '网络中断或页面关闭后，24 小时内可取回已生成的结果，不会重新生成扣费。', tone: 'from-[#ebe4fb] via-[#f5f1fb] to-[#fbfbf9]' },
+  { value: '0', unit: '元', title: '失败不扣费', desc: '明确失败的生成会自动退回预扣额度，只为成功出图付费。', tone: 'from-[#fde4d3] via-[#fcf1e8] to-[#fbfbf9]' },
+  { value: '∞', unit: '画布', title: '不限尺寸的创作空间', desc: '把参考、草图与成片放在同一张画布上，随时回到任何一步继续。', tone: 'from-[#dcedf7] via-[#eef5f8] to-[#fbfbf9]' },
 ]
 
 const USE_CASES = [
-  { label: '电商主图', icon: ShoppingBag, prompt: '白底主图，45° 拍摄的无线耳机，柔和反光，商业摄影质感', chips: ['1:1', '高清', '透明背景'], note: '开启透明背景，直接得到可上架的抠图素材。', art: 'from-[#f4f4f6] to-[#d9dbe3]', transparent: true },
-  { label: '海报设计', icon: Megaphone, prompt: '复古印刷风格的音乐节海报，顶部留出标题区域，暖色调', chips: ['2:3', '4 张候选'], note: '一次出多张候选，挑中一张再局部重绘细节。', art: 'from-[#ffb38a] via-[#e8735d] to-[#6b3f6e]', transparent: false },
-  { label: '头像插画', icon: UserRound, prompt: '参考上传的照片，生成手绘动画风格的半身头像，柔和光线', chips: ['参考图编辑', '1:1'], note: '把照片作为参考图，保留人物特征，换成插画风格。', art: 'from-[#cfe7ff] via-[#a596ff] to-[#ff99b7]', transparent: false },
-  { label: '产品精修', icon: Package, prompt: '把背景换成大理石台面，产品本身保持不变', chips: ['局部重绘', '蒙版'], note: '用蒙版圈出背景，只改动需要修改的区域。', art: 'from-[#f2efe9] via-[#d8d2c6] to-[#9f9688]', transparent: false },
+  { label: '电商主图', icon: ShoppingBag, prompt: '白底主图，45° 拍摄的无线耳机，柔和反光，商业摄影质感', chips: ['1:1', '高清', '透明背景'], note: '开启透明背景，直接得到可上架的抠图素材。', Art: EarbudsArt, transparent: true },
+  { label: '海报设计', icon: Megaphone, prompt: '复古印刷风格的音乐节海报，顶部留出标题区域，暖色调', chips: ['2:3', '4 张候选'], note: '一次出多张候选，挑中一张再局部重绘细节。', Art: FestivalPosterArt, transparent: false },
+  { label: '头像插画', icon: UserRound, prompt: '参考上传的照片，生成手绘动画风格的半身头像，柔和光线', chips: ['参考图编辑', '1:1'], note: '把照片作为参考图，保留人物特征，换成插画风格。', Art: AvatarArt, transparent: false },
+  { label: '产品精修', icon: Package, prompt: '把背景换成大理石台面，产品本身保持不变', chips: ['局部重绘', '蒙版'], note: '用蒙版圈出背景，只改动需要修改的区域。', Art: MarbleProductArt, transparent: false },
 ]
+
+// 灵感库示例图；含真人名人肖像的示例不放在首页
+const GALLERY = ['case355', 'case346', 'case373', 'case377', 'case362', 'case331', 'case375', 'case370']
+  .flatMap((name) => INSPIRATION_TEMPLATES.filter((item) => item.previewImage === `inspiration/${name}.webp`))
 
 const STEPS = [
   { title: '注册并兑换额度', desc: '创建账户后在用户中心输入兑换码，额度即时到账。' },
@@ -133,9 +139,9 @@ function ProductPreview() {
             </div>
           </div>
           <div key={index} className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {prompt.tiles.map((tone, i) => (
-              <div key={tone} className={`gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl bg-gradient-to-br ${tone}`} style={delay(`${0.9 + i * 0.35}s`)}>
-                <span className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/15 to-transparent" />
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.9 + i * 0.35}s`)}>
+                <prompt.Art variant={i} />
                 {i === 1 && <Heart className="absolute right-2.5 top-2.5 h-4 w-4 fill-white text-white drop-shadow" />}
               </div>
             ))}
@@ -144,6 +150,83 @@ function ProductPreview() {
         </div>
       </div>
     </div>
+  )
+}
+
+// 能力围绕工作台排成一圈，连线表示都从同一个入口进入
+function WorkflowHub() {
+  const nodes = FEATURES.map((item, i) => {
+    const angle = (i / FEATURES.length) * Math.PI * 2 - Math.PI / 2
+    return { ...item, x: 50 + Math.cos(angle) * 38, y: 50 + Math.sin(angle) * 38 }
+  })
+  return (
+    <div className="relative mx-auto aspect-square w-full max-w-[460px]" aria-hidden="true">
+      <div className="absolute inset-[18%] rounded-full bg-[radial-gradient(circle,rgb(255_179_138/0.35),transparent_70%)] blur-2xl" />
+      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
+        <circle cx="50" cy="50" r="38" fill="none" stroke="rgb(23 23 25 / 0.08)" strokeWidth="0.25" />
+        {nodes.map((node) => <line key={node.title} className="gouo-hub-line" x1="50" y1="50" x2={node.x} y2={node.y} stroke="#c26855" strokeOpacity="0.45" strokeWidth="0.3" strokeDasharray="1.2 1.4" />)}
+      </svg>
+      <div className="absolute left-1/2 top-1/2 grid h-[22%] w-[22%] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[28%] border border-white bg-white/90 shadow-[0_20px_50px_rgb(194_104_85/0.25)]">
+        <img src={BRAND.logoUrl} alt="" className="h-1/2 w-1/2 rounded-xl" />
+      </div>
+      {nodes.map((node, i) => (
+        <div key={node.title} className="gouo-hub-node absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5" style={{ left: `${node.x}%`, top: `${node.y}%`, ...delay(`${i * 0.4}s`) }}>
+          <span className="grid h-11 w-11 place-items-center rounded-2xl border border-white bg-white/90 shadow-[0_10px_24px_rgb(66_49_37/0.12)] sm:h-12 sm:w-12">
+            <node.icon className="h-5 w-5 text-[#c26855]" strokeWidth={1.7} />
+          </span>
+          <span className="whitespace-nowrap text-[11px] font-semibold text-[var(--ink-soft)]">{node.title}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function InspirationGallery({ onRegister }: { onRegister: () => void }) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [progress, setProgress] = useState(0)
+  const scroll = (dir: number) => trackRef.current?.scrollBy({ left: dir * trackRef.current.clientWidth * 0.8, behavior: 'smooth' })
+  const current = Math.round(progress * (GALLERY.length - 1)) + 1
+  return (
+    <>
+      <div className="gouo-reveal grid gap-6 md:grid-cols-[1fr_auto] md:items-end">
+        <div>
+          <h2 className="text-[clamp(2.2rem,4.4vw,3.6rem)] font-semibold leading-[1.05] tracking-[-0.05em]">从灵感库出发</h2>
+          <p className="mt-4 max-w-xl text-[16px] leading-[1.7] text-[var(--ink-soft)]">海报、商品、摄影、插画到产品拆解，精选提示词模板都附示例图。登录后在灵感库一键套用，改几个词就能出图。</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" aria-label="上一组" onClick={() => scroll(-1)} className="grid h-11 w-11 place-items-center rounded-full border border-[var(--line)] bg-white transition hover:shadow-md"><ChevronLeft className="h-5 w-5" /></button>
+          <button type="button" aria-label="下一组" onClick={() => scroll(1)} className="grid h-11 w-11 place-items-center rounded-full border border-[var(--line)] bg-white transition hover:shadow-md"><ChevronRight className="h-5 w-5" /></button>
+        </div>
+      </div>
+      <div
+        ref={trackRef}
+        onScroll={(event) => {
+          const el = event.currentTarget
+          setProgress(el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth))
+        }}
+        className="gouo-reveal -mx-4 mt-8 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-10 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={delay('0.1s')}
+      >
+        {GALLERY.map((item) => (
+          <figure key={item.id} className="group relative aspect-[4/5] w-[78%] shrink-0 snap-start overflow-hidden rounded-[24px] bg-[#e7e5df] shadow-[0_10px_24px_rgb(40_30_20/0.12)] sm:w-[320px]">
+            <img src={`${import.meta.env.BASE_URL}${item.previewImage}`} alt={`${item.title}示例`} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.04]" />
+            <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent" />
+            <figcaption className="gouo-glass-dark absolute inset-x-3 bottom-3 rounded-2xl px-4 py-3.5 text-white">
+              <span className="text-[11px] text-white/70">{item.category}</span>
+              <strong className="mt-0.5 block text-lg font-semibold tracking-[-0.02em]">{item.title}</strong>
+              <span className="mt-1 block truncate text-[10px] text-white/55">示例图来源：{item.previewSourceLabel}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      <div className="flex items-center gap-5">
+        <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
+          <div className="h-full rounded-full bg-[#171719] transition-[width] duration-300" style={{ width: `${(current / GALLERY.length) * 100}%` }} />
+        </div>
+        <span className="text-xs tabular-nums text-[#8a8a8d]">{String(current).padStart(2, '0')} / {String(GALLERY.length).padStart(2, '0')}</span>
+        <button type="button" onClick={onRegister} className="inline-flex items-center gap-1.5 text-sm font-semibold hover:underline">浏览全部模板 <ArrowRight className="h-4 w-4" /></button>
+      </div>
+    </>
   )
 }
 
@@ -178,11 +261,10 @@ function UseCases() {
           <p className="mt-auto pt-8 text-[15px] leading-[1.65] text-[var(--ink-soft)]">{item.note}</p>
         </div>
         <div
-          className={`relative aspect-[3/4] overflow-hidden rounded-2xl sm:aspect-auto ${item.transparent ? '' : `bg-gradient-to-br ${item.art}`}`}
+          className="relative aspect-[4/5] overflow-hidden rounded-2xl shadow-[0_16px_40px_rgb(40_30_20/0.12)] sm:aspect-auto sm:min-h-[250px]"
           style={item.transparent ? { backgroundImage: 'conic-gradient(#e8e8ec 25%, #fff 0 50%, #e8e8ec 0 75%, #fff 0)', backgroundSize: '18px 18px' } : undefined}
         >
-          {item.transparent && <span className={`absolute inset-[22%] rounded-[40%] bg-gradient-to-br ${item.art} shadow-xl`} />}
-          <item.icon className="absolute bottom-4 right-4 h-6 w-6 text-white/80 drop-shadow" strokeWidth={1.6} />
+          <item.Art />
         </div>
       </div>
     </div>
@@ -210,6 +292,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
   return (
     <div ref={rootRef} className="gouo-public min-h-[100dvh] overflow-x-hidden">
       <section id="top" className="gouo-grainient m-2.5 flex min-h-[calc(100dvh-20px)] flex-col justify-between rounded-[28px] px-5 pb-10 pt-4 text-white sm:px-10 sm:pb-12">
+        <div className="gouo-liquid" aria-hidden="true">{Array.from({ length: 7 }, (_, i) => <i key={i} />)}</div>
         <nav className="gouo-glass-dark gouo-fade-up mx-auto flex w-full max-w-[1600px] items-center gap-3 rounded-2xl py-2 pl-3 pr-2" style={delay('0.1s')}>
           <button type="button" onClick={() => scrollToSection('top')} className="flex items-center gap-2.5 font-semibold">
             <img src={BRAND.logoUrl} alt="" className="h-8 w-8 rounded-lg" />
@@ -218,6 +301,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <div className="ml-6 hidden gap-6 text-sm text-white/80 md:flex">
             <button type="button" onClick={() => scrollToSection('preview')} className="hover:text-white">产品</button>
             <button type="button" onClick={() => scrollToSection('features')} className="hover:text-white">能力</button>
+            <button type="button" onClick={() => scrollToSection('gallery')} className="hover:text-white">灵感</button>
             <button type="button" onClick={() => scrollToSection('how')} className="hover:text-white">使用流程</button>
             <button type="button" onClick={() => scrollToSection('faq')} className="hover:text-white">常见问题</button>
           </div>
@@ -271,9 +355,12 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
 
       <section id="features" className="bg-[#fbfbf9] px-5 pb-24 sm:px-10 sm:pb-28">
         <div className="mx-auto max-w-[1280px]">
-          <div className="gouo-reveal grid gap-6 md:grid-cols-2 md:items-end">
-            <h2 className="text-[clamp(2.4rem,5vw,4.2rem)] font-semibold leading-[1] tracking-[-0.05em]">一个工作台，<br />从灵感到成片</h2>
-            <p className="max-w-md text-[16px] leading-[1.7] text-[var(--ink-soft)] md:justify-self-end">不用在多个工具之间来回切换。生成、修改、排版与归档都在同一处完成，每一步都能回溯。</p>
+          <div className="gouo-reveal grid gap-10 md:grid-cols-2 md:items-center">
+            <div>
+              <h2 className="text-[clamp(2.4rem,5vw,4.2rem)] font-semibold leading-[1] tracking-[-0.05em]">一个工作台，<br />从灵感到成片</h2>
+              <p className="mt-6 max-w-md text-[16px] leading-[1.7] text-[var(--ink-soft)]">不用在多个工具之间来回切换。生成、修改、排版与归档都在同一处完成，每一步都能回溯。</p>
+            </div>
+            <WorkflowHub />
           </div>
           <div className="gouo-reveal mt-14 grid grid-cols-1 border-l border-t border-[var(--line)] sm:grid-cols-2 lg:grid-cols-4" style={delay('0.1s')}>
             {FEATURES.map((item) => (
@@ -293,16 +380,16 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         </div>
         <div className="relative mx-auto max-w-[1280px]">
           <h2 className="gouo-reveal max-w-3xl text-[clamp(2.2rem,4.4vw,3.6rem)] font-semibold leading-[1.05] tracking-[-0.05em]">为认真创作的人设计的细节</h2>
-          <div className="mt-14 grid border-t border-[var(--line)] md:grid-cols-2">
+          <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STATS.map((stat, index) => (
-              <div key={stat.title} className={`gouo-reveal grid content-between gap-10 border-b border-[var(--line)] bg-white/[0.12] px-2 py-10 md:min-h-[320px] md:px-8 md:py-12 ${index % 2 === 0 ? 'md:border-r' : ''}`} style={delay(`${(index % 2) * 0.1}s`)}>
-                <div className="flex items-baseline gap-3">
-                  <strong className="text-[clamp(5rem,9vw,8.5rem)] font-semibold leading-[0.82] tracking-[-0.075em] tabular-nums">{stat.value}</strong>
-                  <span className="text-[clamp(1.5rem,2.6vw,2.6rem)] font-semibold text-[#a0a0a3]">{stat.unit}</span>
+              <div key={stat.title} className={`gouo-reveal grid min-h-[340px] content-between gap-10 rounded-[28px] border border-white/80 bg-gradient-to-b ${stat.tone} p-7 shadow-[0_20px_50px_rgb(66_49_37/0.07)]`} style={delay(`${index * 0.08}s`)}>
+                <div className="flex items-baseline gap-2">
+                  <strong className="text-[clamp(4rem,6vw,5.6rem)] font-semibold leading-[0.82] tracking-[-0.075em] tabular-nums">{stat.value}</strong>
+                  <span className="text-[clamp(1.2rem,1.8vw,1.8rem)] font-semibold text-[#a0a0a3]">{stat.unit}</span>
                 </div>
                 <div>
-                  <h3 className="text-2xl font-semibold tracking-[-0.02em]">{stat.title}</h3>
-                  <p className="mt-3 max-w-[460px] text-[15px] leading-[1.65] text-[var(--ink-soft)]">{stat.desc}</p>
+                  <h3 className="text-xl font-semibold tracking-[-0.02em]">{stat.title}</h3>
+                  <p className="mt-2.5 text-sm leading-[1.65] text-[var(--ink-soft)]">{stat.desc}</p>
                 </div>
               </div>
             ))}
@@ -319,6 +406,12 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <div className="gouo-reveal mt-14" style={delay('0.1s')}>
             <UseCases />
           </div>
+        </div>
+      </section>
+
+      <section id="gallery" className="bg-[#fbfbf9] px-5 pb-24 sm:px-10 sm:pb-28">
+        <div className="mx-auto max-w-[1280px]">
+          <InspirationGallery onRegister={onRegister} />
         </div>
       </section>
 
@@ -343,17 +436,18 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
                     <div className="w-full max-w-[260px] rounded-2xl border border-[var(--line)] bg-white p-4 shadow-sm">
                       <p className="text-sm leading-6">一只在晨雾里打盹的橘猫，胶片质感，柔和逆光</p>
                       <div className="mt-3 flex items-center gap-2">
-                        <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#ffcfb3] to-[#c26855]" />
-                        <span className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#dcd6ff] to-[#6d3d9d]" />
+                        <span className="h-8 w-8 overflow-hidden rounded-lg"><SleepingCatArt variant={0} /></span>
+                        <span className="h-8 w-8 overflow-hidden rounded-lg"><SleepingCatArt variant={1} /></span>
                         <span className="ml-auto grid h-8 w-8 place-items-center rounded-lg bg-[#171719] text-white"><ArrowRight className="h-4 w-4" /></span>
                       </div>
                     </div>
                   )}
                   {index === 2 && (
                     <div className="grid grid-cols-2 gap-2">
-                      {['from-[#ffb38a] to-[#c26855]', 'from-[#9c8cff] to-[#3a2747]', 'from-[#ffd9e6] to-[#ff7a6b]', 'from-[#ffc98e] to-[#f0a476]'].map((tone, i) => (
-                        <div key={tone} className={`relative h-[68px] w-[68px] rounded-xl bg-gradient-to-br ${tone}`}>
-                          {i === 0 && <Heart className="absolute right-2 top-2 h-4 w-4 fill-white text-white" />}
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="relative h-[72px] w-[72px] overflow-hidden rounded-xl shadow-sm">
+                          <SleepingCatArt variant={i} />
+                          {i === 0 && <Heart className="absolute right-1.5 top-1.5 h-4 w-4 fill-white text-white drop-shadow" />}
                         </div>
                       ))}
                     </div>
@@ -383,13 +477,13 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
                 key={item.title}
                 onPointerMove={(event) => trackSpotlight(event, 6)}
                 onPointerLeave={resetSpotlight}
-                className="gouo-reveal gouo-spotlight flex min-h-[320px] flex-col justify-between rounded-[28px] bg-[#e4e5e1] p-8 hover:shadow-[0_24px_60px_rgb(66_49_37/0.12)]"
+                className={`gouo-reveal gouo-spotlight flex min-h-[320px] flex-col justify-between rounded-[28px] p-8 hover:shadow-[0_24px_60px_rgb(66_49_37/0.12)] ${index === TRUST.length - 1 ? 'bg-[#1d1d20] text-white' : 'border border-white/80 bg-gradient-to-br from-white/80 to-[#e7e8e3]'}`}
                 style={delay(`${index * 0.1}s`)}
               >
-                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/70"><item.icon className="h-5 w-5" strokeWidth={1.7} /></span>
+                <span className={`grid h-12 w-12 place-items-center rounded-2xl ${index === TRUST.length - 1 ? 'bg-white/10' : 'bg-white/80'}`}><item.icon className="h-5 w-5" strokeWidth={1.7} /></span>
                 <div>
                   <h3 className="text-2xl font-semibold tracking-[-0.02em]">{item.title}</h3>
-                  <p className="mt-3 text-[15px] leading-[1.65] text-[var(--ink-soft)]">{item.desc}</p>
+                  <p className={`mt-3 text-[15px] leading-[1.65] ${index === TRUST.length - 1 ? 'text-white/65' : 'text-[var(--ink-soft)]'}`}>{item.desc}</p>
                 </div>
               </div>
             ))}
@@ -422,7 +516,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         <div
           onPointerMove={(event) => trackSpotlight(event, 3)}
           onPointerLeave={resetSpotlight}
-          className="gouo-reveal gouo-spotlight mx-auto max-w-[1280px] rounded-[40px] border border-[var(--line)] bg-gradient-to-br from-[#f2f2ee] to-[#e7e8e3] p-8 sm:p-[72px]"
+          className="gouo-reveal gouo-spotlight gouo-grainient-light mx-auto max-w-[1280px] rounded-[40px] border border-white/70 p-8 sm:p-[72px]"
         >
           <span className="gouo-dots" />
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(310px,0.72fr)] lg:items-end">
