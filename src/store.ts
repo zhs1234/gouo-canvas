@@ -1443,6 +1443,18 @@ export async function initStore() {
   useStore.getState().setTasks(tasks)
   showSupportPromptForExistingLocalData(tasks)
 
+  // 其他标签页执行完或被关闭时释放任务锁，再从 IndexedDB 取回最新记录；仍是 running 说明那边中途关闭，按中断处理
+  for (const id of runningElsewhere) {
+    if (!tasks.some((task) => task.id === id)) continue
+    void locks?.request(TASK_LOCK_PREFIX + id, async () => {
+      const stored = (await getAllTasks()).find((task) => task.id === id)
+      if (!stored) return
+      const latest = markInterruptedOpenAIRunningTasks([stored]).tasks[0]
+      if (latest !== stored) await dbPutTask(latest)
+      useStore.getState().setTasks(useStore.getState().tasks.map((task) => (task.id === id ? latest : task)))
+    })
+  }
+
   for (const task of tasks) {
     if (
       task.apiProvider === 'fal' &&
