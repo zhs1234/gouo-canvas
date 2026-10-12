@@ -330,7 +330,14 @@ function installSubscriptions() {
   })
 }
 
-export async function startServerLibrary() {
+// 启动时可能被调用两次（开发模式下 effect 会执行两遍）；共用同一次启动，避免并发拉取文档互相冲突
+let starting: Promise<void> | undefined
+export function startServerLibrary() {
+  starting ??= startOnce().finally(() => { if (!enabled) starting = undefined })
+  return starting
+}
+
+async function startOnce() {
   if (!isBackendAuthEnabled() || enabled) return
   try {
     if (!(await getCloudStorage()).enabled) return
