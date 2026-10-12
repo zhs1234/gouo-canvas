@@ -110,6 +110,7 @@ const delay = (value: string) => ({ '--delay': value } as CSSProperties)
 function ProductPreview() {
   const [index, setIndex] = useState(0)
   const [typed, setTyped] = useState(0)
+  const [finished, setFinished] = useState(false)
   const prompt = PREVIEW_PROMPTS[index]
 
   // 提前加载下一轮的图，切换时不会出现空白卡片
@@ -122,12 +123,16 @@ function ProductPreview() {
       const timer = setTimeout(() => setTyped((value) => value + 1), 70)
       return () => clearTimeout(timer)
     }
-    const timer = setTimeout(() => {
-      setIndex((value) => (value + 1) % PREVIEW_PROMPTS.length)
-      setTyped(0)
-    }, 4200)
+    // 打完字进入生成，4 张依次显影后标记完成，停留一会再换下一轮
+    const timer = finished
+      ? setTimeout(() => {
+        setIndex((value) => (value + 1) % PREVIEW_PROMPTS.length)
+        setTyped(0)
+        setFinished(false)
+      }, 3200)
+      : setTimeout(() => setFinished(true), 3400)
     return () => clearTimeout(timer)
-  }, [typed, prompt.length])
+  }, [typed, prompt.length, finished])
 
   const done = typed >= prompt.length
   return (
@@ -150,19 +155,23 @@ function ProductPreview() {
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
               {['1024 × 1536', '高清', '4 张'].map((chip) => <span key={chip} className="rounded-lg border border-[var(--line)] px-2.5 py-1">{chip}</span>)}
               <span className={`ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition ${done ? 'bg-[#171719]' : 'bg-[#a0a0a3]'}`}>
-                {done ? '生成中…' : '生成'} <ArrowRight className="h-3.5 w-3.5" />
+                {done && !finished ? '生成中…' : '生成'} <ArrowRight className="h-3.5 w-3.5" />
               </span>
             </div>
           </div>
           <div key={index} className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl bg-[#e9e5de] shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.9 + i * 0.35}s`)}>
-                <img src={previewImage(index, i)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-                {i === 1 && <Heart className="absolute right-2.5 top-2.5 h-4 w-4 fill-white text-white drop-shadow" />}
+              <div key={i} className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-[#ece9e3]">
+                {done && (
+                  <div className="gouo-develop absolute inset-0 shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.4 + i * 0.6}s`)}>
+                    <img src={previewImage(index, i)} alt="" decoding="async" className="h-full w-full object-cover" />
+                    {i === 1 && <Heart className="absolute right-2.5 top-2.5 h-4 w-4 fill-white text-white drop-shadow" />}
+                  </div>
+                )}
               </div>
             ))}
           </div>
-          <p className="mt-4 text-right text-xs text-[#8a8a8d]">生成完成，共 4 张 · 已保存到账户</p>
+          <p className="mt-4 text-right text-xs text-[#8a8a8d]">{finished ? '生成完成，共 4 张 · 已保存到账户' : done ? '正在生成 4 张候选…' : ' '}</p>
         </div>
       </div>
     </div>
