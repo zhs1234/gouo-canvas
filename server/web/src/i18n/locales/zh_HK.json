@@ -633,6 +633,7 @@
     "userIdLabel": "用戶ID"
   },
   "paySetting": "支付設定",
+  "gouo": "光構",
   "payment": "付款",
   "paymentGatewayPage": {
     "createPayment": "新建支付",
