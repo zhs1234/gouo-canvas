@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { formatPoints, getUsageDisplay, toPoints } from './accountUsage'
+import { formatPoints, getLogContent, getUsageDisplay, toPoints } from './accountUsage'
 
 describe('account usage display', () => {
   it.each([[1_000_000, '+200 积分'], [-1_000_000, '-200 积分'], [0, '0 积分']])('keeps the direction of quota adjustments: %s', (quota, amountText) => {
-    expect(getUsageDisplay({ created_at: 1, type: 3, quota: Number(quota) }, 0.000002)).toMatchObject({ label: '额度调整', amountText })
+    expect(getUsageDisplay({ created_at: 1, type: 3, quota: Number(quota) }, 0.000002)).toMatchObject({ label: '积分调整', amountText })
   })
 
   it('separates text consumption, image consumption, and refunds with matching signed CSV values', () => {
@@ -18,6 +18,11 @@ describe('account usage display', () => {
     // 折算出的零头最多保留两位
     expect(formatPoints(0.123456)).toBe('12.35 积分')
     expect(toPoints(0.07)).toBe(7)
+  })
+
+  it('hides legacy log text written in dollars or raw quota', () => {
+    for (const content of ['兑换码 #3 充值 ＄2.000000 额度', '新用户注册赠送 500000 点额度', '在线充值成功，充值积分: 684932，支付金额：10.00 CNY']) expect(getLogContent({ created_at: 1, type: 1, content })).toBe('')
+    expect(getLogContent({ created_at: 1, type: 1, content: '兑换码 #3 充值 1000 积分' })).toBe('兑换码 #3 充值 1000 积分')
   })
 
   it('does not replace missing or invalid money with zero', () => {

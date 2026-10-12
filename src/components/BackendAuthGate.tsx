@@ -21,7 +21,7 @@ import LandingPage from './landing/LandingPage'
 type AuthMode = 'login' | 'register' | 'reset'
 
 const AUTH_INTRO: Record<AuthMode, { lines: string[]; desc: string; panel: string }> = {
-  login: { lines: ['欢迎回来'], desc: '登录后继续使用你的额度、作品与画布。', panel: '登录光构' },
+  login: { lines: ['欢迎回来'], desc: '登录后继续使用你的积分、作品与画布。', panel: '登录光构' },
   register: { lines: ['创建你的', '光构账户'], desc: '', panel: '注册账户' },
   reset: { lines: ['找回账号'], desc: '输入邮件中的验证码，并设置新的登录密码。', panel: '重置密码' },
 }
@@ -218,7 +218,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
             ))}
           </h1>
           <p className="gouo-fade-up mt-6 max-w-[34rem] text-[17px] font-medium leading-[1.65] tracking-[-0.02em] text-[var(--ink-soft)]" style={{ '--delay': '0.3s' } as CSSProperties}>
-            {mode === 'register' ? `用户名最多 12 个字符，密码 8–20 位${emailVerification ? '，需验证邮箱' : ''}。注册后兑换额度即可开始创作。` : intro.desc}
+            {mode === 'register' ? `用户名最多 12 个字符，密码 8–20 位${emailVerification ? '，需验证邮箱' : ''}。注册后兑换积分即可开始创作。` : intro.desc}
           </p>
         </section>
 

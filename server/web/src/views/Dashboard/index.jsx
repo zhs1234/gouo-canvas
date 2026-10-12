@@ -278,7 +278,7 @@ function getBarDataGroup(data) {
     }
   }
 
-  let chartData = generateBarChartOptions(lastSevenDays, result, 'USD', 3);
+  let chartData = generateBarChartOptions(lastSevenDays, result, '积分', 2);
   chartData.options.title.text = 'Total：$' + renderChartNumber(totalCosts, 3);
 
   return chartData;
@@ -323,7 +323,7 @@ function getLineCardOption(lineDataGroup, field) {
     case 'Quota':
       // chartData = generateLineChartOptions(lineData, '美元');
       lastDayValue = parseFloat(lastDayValue);
-      todayValue = '$' + parseFloat(todayValue);
+      todayValue = parseFloat(todayValue) + ' 积分';
       break;
     case 'PromptTokens':
       // chartData = generateLineChartOptions(lineData, '');

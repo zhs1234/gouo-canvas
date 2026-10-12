@@ -521,33 +521,30 @@ export function timestamp2string(timestamp) {
   return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
 }
 
-export function calculateQuota(quota, digits = 2) {
-  let quotaPerUnit = localStorage.getItem('quota_per_unit');
-  quotaPerUnit = parseFloat(quotaPerUnit);
+// 积分制：额度 ÷ 每单位额度 × 支付汇率 = 人民币，1 元 = 100 积分。状态未加载时按后端默认值换算
+function pointsPerQuota() {
+  let info = {};
+  try {
+    info = JSON.parse(localStorage.getItem('siteInfo') || '{}') || {};
+  } catch (e) {
+    info = {};
+  }
+  return ((Number(info.PaymentUSDRate) || 7.3) / (Number(info.quota_per_unit) || 500000)) * GOUO_POINTS_PER_CNY;
+}
 
-  return (quota / quotaPerUnit).toFixed(digits);
+// 返回额度折合的积分数（字符串），图表和统计直接使用
+export function calculateQuota(quota, digits = 2) {
+  return (quota * pointsPerQuota()).toFixed(digits);
 }
 
 export function renderQuota(quota, digits = 2) {
-  let displayInCurrency = localStorage.getItem('display_in_currency');
-  displayInCurrency = displayInCurrency === 'true';
-  if (displayInCurrency) {
-    if (quota < 0) {
-      return '-$' + calculateQuota(Math.abs(quota), digits);
-    }
-    return '$' + calculateQuota(quota, digits);
-  }
-  return renderNumber(quota);
+  return `${Number(calculateQuota(quota, digits)).toLocaleString('zh-CN', { maximumFractionDigits: digits })} 积分`;
 }
 
-export function renderQuotaByMoney(money) {
-  money = Number(money);
-  let quotaPerUnit = localStorage.getItem('quota_per_unit');
-  quotaPerUnit = parseFloat(quotaPerUnit);
-
-  const result = new Decimal(money).mul(quotaPerUnit);
-
-  return result.toFixed(0);
+// 积分换算成额度，按绝对值向上取整，保证到账显示的积分不少于填写值
+export function renderQuotaByPoints(points) {
+  const value = Number(points) || 0;
+  return Math.sign(value) * Math.ceil(Math.abs(value) / pointsPerQuota());
 }
 
 export const verifyJSON = (str) => {
@@ -577,12 +574,7 @@ export function thousandsSeparator(num) {
 }
 
 export function renderQuotaWithPrompt(quota, digits) {
-  let displayInCurrency = localStorage.getItem('display_in_currency');
-  displayInCurrency = displayInCurrency === 'true';
-  if (displayInCurrency) {
-    return `（等价金额：${renderQuota(quota, digits)}）`;
-  }
-  return '';
+  return `（约 ${renderQuota(quota, digits)}）`;
 }
 
 // 光构积分制：1 元 = 100 积分。后端仍按人民币售价折算额度记账，界面只做换算

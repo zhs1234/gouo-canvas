@@ -12,9 +12,10 @@ import {
   Alert,
   Select,
   MenuItem,
-  Chip
+  Chip,
+  InputAdornment
 } from '@mui/material';
-import { showSuccess, showError, verifyJSON } from 'utils/common';
+import { renderQuotaWithPrompt, showSuccess, showError, verifyJSON } from 'utils/common';
 import { API } from 'utils/api';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -721,6 +722,7 @@ const OperationSetting = () => {
                 name="QuotaRemindThreshold"
                 type="number"
                 value={inputs.QuotaRemindThreshold}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaRemindThreshold)}</InputAdornment>}
                 onChange={handleInputChange}
                 label={t('setting_index.operationSettings.monitoringSettings.quotaRemindThreshold.label')}
                 placeholder={t('setting_index.operationSettings.monitoringSettings.quotaRemindThreshold.placeholder')}
@@ -768,6 +770,7 @@ const OperationSetting = () => {
                 name="QuotaForNewUser"
                 type="number"
                 value={inputs.QuotaForNewUser}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaForNewUser)}</InputAdornment>}
                 onChange={handleInputChange}
                 label={t('setting_index.operationSettings.quotaSettings.quotaForNewUser.label')}
                 placeholder={t('setting_index.operationSettings.quotaSettings.quotaForNewUser.placeholder')}
@@ -783,6 +786,7 @@ const OperationSetting = () => {
                 name="PreConsumedQuota"
                 type="number"
                 value={inputs.PreConsumedQuota}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.PreConsumedQuota)}</InputAdornment>}
                 onChange={handleInputChange}
                 label={t('setting_index.operationSettings.quotaSettings.preConsumedQuota.label')}
                 placeholder={t('setting_index.operationSettings.quotaSettings.preConsumedQuota.placeholder')}
@@ -797,6 +801,7 @@ const OperationSetting = () => {
                 type="number"
                 label={t('setting_index.operationSettings.quotaSettings.quotaForInviter.label')}
                 value={inputs.QuotaForInviter}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaForInviter)}</InputAdornment>}
                 onChange={handleInputChange}
                 placeholder={t('setting_index.operationSettings.quotaSettings.quotaForInviter.placeholder')}
                 disabled={loading}
@@ -810,6 +815,7 @@ const OperationSetting = () => {
                 type="number"
                 label={t('setting_index.operationSettings.quotaSettings.quotaForInvitee.label')}
                 value={inputs.QuotaForInvitee}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaForInvitee)}</InputAdornment>}
                 onChange={handleInputChange}
                 autoComplete="new-password"
                 placeholder={t('setting_index.operationSettings.quotaSettings.quotaForInvitee.placeholder')}

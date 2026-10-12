@@ -135,7 +135,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
         const message = `余额不足：本次预计 ${formatPoints(cost)}，当前余额 ${formatPoints(user.balance_cny)}`
         requestUserCenter('topup')
         if (input) throw new Error(message)
-        showToast(`${message}，请先兑换额度`, 'error')
+        showToast(`${message}，请先兑换积分`, 'error')
         return
       }
     }

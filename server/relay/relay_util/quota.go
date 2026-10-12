@@ -234,7 +234,7 @@ func (q *Quota) Undo(c *gin.Context) {
 			q.MarkImageUnknown(c, "上游结果或结算未确认，请核对请求记录")
 			return
 		}
-		if err := model.FinishGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, model.GouoChargeRefunded, nil, 0, "生成失败，恢复预扣额度"); err != nil {
+		if err := model.FinishGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, model.GouoChargeRefunded, nil, 0, "生成失败，退回预扣积分"); err != nil {
 			logger.LogError(c.Request.Context(), "图片预扣退款失败: "+err.Error())
 			return
 		}

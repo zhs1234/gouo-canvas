@@ -9,7 +9,7 @@ import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { CloseIcon, RefreshIcon, UserIcon } from './icons'
 import ImageBillingRecords from './ImageBillingRecords'
 import { copyTextToClipboard } from '../lib/clipboard'
-import { formatPoints, getUsageDisplay, toPoints } from '../lib/accountUsage'
+import { formatPoints, getLogContent, getUsageDisplay, toPoints } from '../lib/accountUsage'
 import { createLatestRequest } from '../lib/latestRequest'
 import TurnstileChallenge from './TurnstileChallenge'
 
@@ -189,7 +189,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
       const quota = await redeemCode(redemptionCode)
       setRedemptionCode('')
       const rate = user?.quota_cny_rate
-      setRedeemMessage(typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? `充值成功，已增加 ${formatPoints(quota * rate)}` : `充值成功，已增加 ${quota.toLocaleString('zh-CN')} 额度，积分折算暂不可用`)
+      setRedeemMessage(typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? `充值成功，已增加 ${formatPoints(quota * rate)}` : '充值成功，余额已更新')
       await loadUser()
     } catch (redeemError) {
       setError(redeemError instanceof Error ? redeemError.message : String(redeemError))
@@ -270,10 +270,13 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const exportLogs = () => {
     const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
     const rows = [
-      ['时间', '类型', '模型', '积分', '计费单位', '单价（积分）', '实际扣费额度', '退款额度', '耗时', 'Request ID', '内容'],
+      ['时间', '类型', '模型', '积分', '计费单位', '单价（积分）', '实际扣费（积分）', '退款（积分）', '耗时', 'Request ID', '内容'],
       ...logs.map((log) => {
-        const display = getUsageDisplay(log, user?.quota_cny_rate)
-        return [formatTime(log.created_at), display.label, log.model_name || '', display.delta === null ? '积分不可用' : toPoints(display.delta), display.unit, typeof log.metadata?.price_cny === 'number' ? toPoints(log.metadata.price_cny) : '', log.metadata?.charged_quota ?? (log.type === 2 ? log.quota : ''), log.metadata?.billing_status === 'refunded' ? log.quota : '', log.request_time ?? '', log.metadata?.request_id || log.metadata?.requestId || '', log.content || '']
+        const rate = user?.quota_cny_rate
+        // 原始额度按当前兑换率折合成积分，不让用户看到内部额度单位
+        const points = (quota: unknown) => typeof quota === 'number' && typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? toPoints(quota * rate) : ''
+        const display = getUsageDisplay(log, rate)
+        return [formatTime(log.created_at), display.label, log.model_name || '', display.delta === null ? '积分不可用' : toPoints(display.delta), display.unit, typeof log.metadata?.price_cny === 'number' ? toPoints(log.metadata.price_cny) : '', points(log.metadata?.charged_quota ?? (log.type === 2 ? log.quota : undefined)), log.metadata?.billing_status === 'refunded' ? points(log.quota) : '', log.request_time ?? '', log.metadata?.request_id || log.metadata?.requestId || '', getLogContent(log)]
       }),
     ]
     const blob = new Blob([`\uFEFF${rows.map((row) => row.map(escape).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
@@ -297,7 +300,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
             <div>
               <p className="text-xs font-semibold tracking-[0.18em] text-blue-500">GOUO ACCOUNT</p>
               <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-3xl">光构用户中心</h2>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">管理账户资料、额度与使用记录</p>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">管理账户资料、积分与使用记录</p>
             </div>
             <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-gray-200" aria-label="关闭用户中心">
               <CloseIcon className="h-5 w-5" />
@@ -337,7 +340,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">累计消费</p>
                   <p className="mt-3 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{formatPoints(user.used_cny)}</p>
-                  <p className="mt-1 text-xs text-gray-400">已消耗额度按当前兑换率折合为积分</p>
+                  <p className="mt-1 text-xs text-gray-400">按当前兑换率折合为积分</p>
                 </div>
                 <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-sm text-gray-500 dark:text-gray-400">图片计费</p>
@@ -360,8 +363,8 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                 <button type="button" onClick={() => setActiveSection(activeSection === 'topup' ? 'overview' : 'topup')} className={`group rounded-2xl border p-5 text-left transition ${activeSection === 'topup' ? 'border-blue-300 bg-blue-50 dark:border-blue-400/30 dark:bg-blue-500/10' : 'border-blue-100 bg-blue-50/70 hover:border-blue-200 hover:bg-blue-50 dark:border-blue-500/15 dark:bg-blue-500/[0.08]'}`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-semibold text-blue-700 dark:text-blue-300">充值额度</p>
-                      <p className="mt-1 text-sm text-blue-600/65 dark:text-blue-300/55">在光构内兑换新的创作额度</p>
+                      <p className="font-semibold text-blue-700 dark:text-blue-300">充值积分</p>
+                      <p className="mt-1 text-sm text-blue-600/65 dark:text-blue-300/55">在光构内兑换创作积分</p>
                     </div>
                     <span className={`text-xl text-blue-500 transition-transform ${activeSection === 'topup' ? 'rotate-90' : 'group-hover:translate-x-1'}`}>→</span>
                   </div>
@@ -370,7 +373,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-gray-800 dark:text-gray-200">使用记录</p>
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看请求明细与额度消耗</p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">查看请求明细与积分消耗</p>
                     </div>
                     <span className={`text-xl text-gray-400 transition-transform ${activeSection === 'logs' ? 'rotate-90' : 'group-hover:translate-x-1'}`}>→</span>
                   </div>
@@ -389,7 +392,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
               {activeSection === 'topup' && (
                 <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-blue-100/60 p-5 dark:border-blue-500/15 dark:from-blue-500/[0.08] dark:to-blue-700/[0.04]">
                   <p className="font-semibold text-gray-900 dark:text-white">兑换码充值</p>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">输入兑换码，额度将充入当前账户。每个兑换码只能使用一次。</p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">输入兑换码，积分将充入当前账户。每个兑换码只能使用一次。</p>
                   <p className="mt-3 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{redemptionHelp || '兑换码获取说明暂未配置。'}</p>
                   <form onSubmit={handleRedeem} className="mt-4 flex flex-col gap-3 sm:flex-row">
                     <input value={redemptionCode} onChange={(event) => setRedemptionCode(event.target.value)} autoComplete="off" placeholder="请输入光构兑换码" className="min-w-0 flex-1 rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 dark:border-white/10 dark:bg-gray-950/60 dark:text-white" />
@@ -420,9 +423,9 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                     <input value={logModel} onChange={(event) => { setLogModel(event.target.value); setLogsPage(1) }} placeholder="按模型筛选" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
                     <select value={logType} onChange={(event) => { setLogType(Number(event.target.value)); setLogsPage(1) }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900">
                       <option value={0}>全部类型</option>
-                      <option value={1}>额度充值</option>
+                      <option value={1}>积分充值</option>
                       <option value={2}>模型消费</option>
-                      <option value={3}>额度调整</option>
+                      <option value={3}>积分调整</option>
                     </select>
                     <input type="date" value={logStart} max={logEnd || undefined} onChange={(event) => { setLogStart(event.target.value); setLogsPage(1) }} aria-label="开始日期" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900" />
                     <input type="date" value={logEnd} min={logStart || undefined} onChange={(event) => { setLogEnd(event.target.value); setLogsPage(1) }} aria-label="结束日期" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 dark:border-white/10 dark:bg-gray-900" />
@@ -440,7 +443,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
                               <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{getUsageDisplay(log, user.quota_cny_rate).label}</span>
                               {log.model_name && <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{log.model_name}</span>}
                             </div>
-                            <p className="mt-1 truncate text-xs text-gray-400">{formatTime(log.created_at)}{log.content ? ` · ${log.content}` : ''}</p>
+                            <p className="mt-1 truncate text-xs text-gray-400">{formatTime(log.created_at)}{getLogContent(log) ? ` · ${getLogContent(log)}` : ''}</p>
                             {Boolean(log.metadata?.request_id || log.metadata?.requestId) && <p className="mt-1 truncate font-mono text-[11px] text-gray-400">Request ID: {String(log.metadata?.request_id || log.metadata?.requestId)}</p>}
                             {log.metadata?.billing_unit === 'successful_request' && <p className="mt-1 text-xs text-gray-400">单价 {formatPoints(Number(log.metadata.price_cny))}/张</p>}
                           </div>

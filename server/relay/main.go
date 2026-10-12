@@ -161,7 +161,7 @@ func RelayHandler(relay RelayBaseInterface) (err *types.OpenAIErrorWithStatusCod
 				diagnostic := imageUnknownDiagnostic(relay.getContext(), err)
 				logger.LogError(relay.getContext().Request.Context(), fmt.Sprintf("image result uncertain: channel_id=%d %s", relay.getContext().GetInt("channel_id"), diagnostic))
 				quota.MarkImageUnknown(relay.getContext(), "请求已发送但响应未确认，请先核对渠道记录；"+diagnostic)
-				err = common.StringErrorWrapperLocal("生成结果未确认，预扣额度待核对。请在使用记录中查看请求状态，避免直接重复提交", "image_result_unknown", http.StatusBadGateway)
+				err = common.StringErrorWrapperLocal("生成结果未确认，预扣积分待核对。请在使用记录中查看请求状态，避免直接重复提交", "image_result_unknown", http.StatusBadGateway)
 				done = true
 			} else {
 				quota.MarkImageFailed()

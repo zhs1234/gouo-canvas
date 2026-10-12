@@ -210,7 +210,7 @@ func RecoverGouoImageCharges() error {
 		return err
 	}
 	for _, charge := range reserved {
-		if err := FinishGouoImageCharge(charge.ID, GouoChargeReserved, GouoChargeRefunded, nil, 0, "请求中断且未发送上游，自动恢复额度"); err != nil && !errors.Is(err, ErrGouoChargeState) {
+		if err := FinishGouoImageCharge(charge.ID, GouoChargeReserved, GouoChargeRefunded, nil, 0, "请求中断且未发送上游，自动退回积分"); err != nil && !errors.Is(err, ErrGouoChargeState) {
 			return err
 		}
 	}

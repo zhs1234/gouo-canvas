@@ -22,7 +22,7 @@ describe('userGuidance', () => {
   })
 
   it('adds an actionable next step to common errors', () => {
-    expect(getActionableErrorMessage('余额不足')).toContain('打开用户中心兑换额度')
+    expect(getActionableErrorMessage('余额不足')).toContain('打开用户中心兑换积分')
     expect(getActionableErrorMessage('request rejected by safety system')).toContain('删除可能涉及敏感内容的描述')
     expect(getActionableErrorMessage('Failed to fetch')).toContain('检查网络连接')
     expect(getActionableErrorMessage('未知错误')).toContain('复制完整报错')

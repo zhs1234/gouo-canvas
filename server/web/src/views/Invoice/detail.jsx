@@ -327,7 +327,7 @@ export default function InvoiceDetail() {
                     {(item.request_time / 1000).toFixed(3)}s
                   </TableCell>
                   <TableCell align="right" sx={{ p: 2 }}>
-                    ${calculateQuota(item.quota, 6)}
+                    {calculateQuota(item.quota, 2)} 积分
                   </TableCell>
                 </TableRow>
               ))}
@@ -357,7 +357,7 @@ export default function InvoiceDetail() {
               fontSize: '1.65rem'
             }}
           >
-            ${calculateQuota(totalQuota, 6)}
+            {calculateQuota(totalQuota, 2)} 积分
           </Typography>
         </Box>
       </Paper>

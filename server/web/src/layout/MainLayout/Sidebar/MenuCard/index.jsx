@@ -8,6 +8,7 @@ import User1 from 'assets/images/users/user-round.svg';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Icon } from '@iconify/react';
+import { calculateQuota } from 'utils/common';
 
 const CardStyle = styled(Card)(({ theme }) => ({
   background: theme.palette.mode === 'dark' ? alpha(theme.palette.background.paper, 0.8) : alpha(theme.palette.background.paper, 0.9),
@@ -69,18 +70,16 @@ const MenuCard = () => {
   const [usedQuota, setUsedQuota] = useState(0);
   const [requestCount, setRequestCount] = useState(0);
 
-  const quotaPerUnit = localStorage.getItem('quota_per_unit') || 500000;
-
   const totalQuota = parseFloat(balance) + parseFloat(usedQuota);
   const progressValue = (parseFloat(usedQuota) / totalQuota) * 100;
 
   useEffect(() => {
     if (user) {
-      setBalance(((user.quota || 0) / quotaPerUnit).toFixed(2));
-      setUsedQuota(((user.used_quota || 0) / quotaPerUnit).toFixed(2));
+      setBalance(calculateQuota(user.quota || 0));
+      setUsedQuota(calculateQuota(user.used_quota || 0));
       setRequestCount(user.request_count || 0);
     }
-  }, [user, quotaPerUnit]);
+  }, [user]);
 
   const getProgressColor = () => {
     if (progressValue < 60) return theme.palette.success.main;
@@ -168,7 +167,7 @@ const MenuCard = () => {
               sx={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 0.5, mr: 'auto' }}
             >
               <Icon icon="solar:wallet-money-linear" width={12} />
-              {t('sidebar.remainingBalance')}: ${balance}
+              {t('sidebar.remainingBalance')}: {Number(balance).toLocaleString('zh-CN')} 积分
             </Typography>
             <Tooltip title={t('dashboard_index.calls')}>
               <Typography
@@ -205,7 +204,7 @@ const MenuCard = () => {
                 mt: 0.5
               }}
             >
-              {`$${usedQuota} (${Math.round(progressValue)}%)`}
+              {`${Number(usedQuota).toLocaleString('zh-CN')} 积分 (${Math.round(progressValue)}%)`}
             </Typography>
           </Box>
         </Box>
