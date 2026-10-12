@@ -49,6 +49,15 @@ const Setting = {
       isAdmin: true,
       children: [
         {
+          id: 'gouo_settings',
+          title: '光构设置',
+          type: 'item',
+          url: '/panel/gouo_settings',
+          icon: icons.IconSettingsCog,
+          breadcrumbs: false,
+          isAdmin: true
+        },
+        {
           id: 'gouo_models',
           title: '光构模型',
           type: 'item',

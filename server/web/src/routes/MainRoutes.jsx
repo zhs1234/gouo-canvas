@@ -34,6 +34,7 @@ const SystemInfo = Loadable(lazy(() => import('views/SystemInfo')));
 const GouoStorage = Loadable(lazy(() => import('views/GouoStorage')));
 const GouoBilling = Loadable(lazy(() => import('views/GouoBilling')));
 const GouoModels = Loadable(lazy(() => import('views/GouoModels')));
+const GouoSettings = Loadable(lazy(() => import('views/GouoSettings')));
 
 // ==============================|| MAIN ROUTING ||============================== //
 
@@ -144,6 +145,10 @@ const MainRoutes = {
     {
       path: 'system_info',
       element: <SystemInfo />
+    },
+    {
+      path: 'gouo_settings',
+      element: <GouoSettings />
     },
     {
       path: 'gouo_models',

@@ -115,7 +115,7 @@ Items stay in the recycle bin for 3 days. After that they are permanently delete
 
 ## 10. Balance, redemption codes, and usage
 
-Operators can fill in redemption instructions and a support website, email, or contact handle under Settings → Operation settings. Both fields default to blank. The user center shows the instructions on the redemption screen and provides copyable support details; a standalone HTTP(S) URL is also clickable. Blank fields are shown as unconfigured and should be filled before public operation.
+Operators can fill in redemption instructions and a support website, email, or contact handle under 光构 → 光构设置 (Gouo settings) in the admin panel. Both fields default to blank. The user center shows the instructions on the redemption screen and provides copyable support details; a standalone HTTP(S) URL is also clickable. Blank fields are shown as unconfigured and should be filled before public operation.
 
 The gallery shows 60 tasks per page. Search covers the entire library, filters reset pagination, and selections persist across pages for batch downloads. Collection renames and deletions synchronize without reviving deleted collections on stale devices.
 
