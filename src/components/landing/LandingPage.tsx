@@ -1,9 +1,10 @@
 import { type CSSProperties, type PointerEvent, useEffect, useRef, useState } from 'react'
 import {
-  ArrowRight, Bot, Brush, Cloud, Heart, ImagePlus, Images, Layers, Lock, Megaphone, Package, Palette, Plus,
+  ArrowRight, Bot, Brush, ChevronLeft, ChevronRight, Cloud, Heart, ImagePlus, Images, Layers, Lock, Megaphone, Package, Palette, Plus,
   ReceiptText, RotateCcw, Shapes, ShoppingBag, Sparkles, UserRound,
 } from 'lucide-react'
 import { BRAND } from '../../config/brand'
+import { INSPIRATION_TEMPLATES } from '../../lib/inspirationTemplates'
 import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt, NeonStreetArt, PerfumeArt, PicnicPosterArt, SleepingCatArt } from './artwork'
 import './landing.css'
 
@@ -45,6 +46,10 @@ const USE_CASES = [
   { label: '头像插画', icon: UserRound, prompt: '参考上传的照片，生成手绘动画风格的半身头像，柔和光线', chips: ['参考图编辑', '1:1'], note: '把照片作为参考图，保留人物特征，换成插画风格。', Art: AvatarArt, transparent: false },
   { label: '产品精修', icon: Package, prompt: '把背景换成大理石台面，产品本身保持不变', chips: ['局部重绘', '蒙版'], note: '用蒙版圈出背景，只改动需要修改的区域。', Art: MarbleProductArt, transparent: false },
 ]
+
+// 灵感库示例图；含真人名人肖像的示例不放在首页
+const GALLERY = ['case355', 'case346', 'case373', 'case377', 'case362', 'case331', 'case375', 'case370']
+  .flatMap((name) => INSPIRATION_TEMPLATES.filter((item) => item.previewImage === `inspiration/${name}.webp`))
 
 const STEPS = [
   { title: '注册并兑换额度', desc: '创建账户后在用户中心输入兑换码，额度即时到账。' },
@@ -176,6 +181,55 @@ function WorkflowHub() {
   )
 }
 
+function InspirationGallery({ onRegister }: { onRegister: () => void }) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [progress, setProgress] = useState(0)
+  const scroll = (dir: number) => trackRef.current?.scrollBy({ left: dir * trackRef.current.clientWidth * 0.8, behavior: 'smooth' })
+  const current = Math.round(progress * (GALLERY.length - 1)) + 1
+  return (
+    <>
+      <div className="gouo-reveal grid gap-6 md:grid-cols-[1fr_auto] md:items-end">
+        <div>
+          <h2 className="text-[clamp(2.2rem,4.4vw,3.6rem)] font-semibold leading-[1.05] tracking-[-0.05em]">从灵感库出发</h2>
+          <p className="mt-4 max-w-xl text-[16px] leading-[1.7] text-[var(--ink-soft)]">海报、商品、摄影、插画到产品拆解，精选提示词模板都附示例图。登录后在灵感库一键套用，改几个词就能出图。</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" aria-label="上一组" onClick={() => scroll(-1)} className="grid h-11 w-11 place-items-center rounded-full border border-[var(--line)] bg-white transition hover:shadow-md"><ChevronLeft className="h-5 w-5" /></button>
+          <button type="button" aria-label="下一组" onClick={() => scroll(1)} className="grid h-11 w-11 place-items-center rounded-full border border-[var(--line)] bg-white transition hover:shadow-md"><ChevronRight className="h-5 w-5" /></button>
+        </div>
+      </div>
+      <div
+        ref={trackRef}
+        onScroll={(event) => {
+          const el = event.currentTarget
+          setProgress(el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth))
+        }}
+        className="gouo-reveal -mx-4 mt-8 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-10 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={delay('0.1s')}
+      >
+        {GALLERY.map((item) => (
+          <figure key={item.id} className="group relative aspect-[4/5] w-[78%] shrink-0 snap-start overflow-hidden rounded-[24px] bg-[#e7e5df] shadow-[0_10px_24px_rgb(40_30_20/0.12)] sm:w-[320px]">
+            <img src={`${import.meta.env.BASE_URL}${item.previewImage}`} alt={`${item.title}示例`} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.04]" />
+            <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent" />
+            <figcaption className="gouo-glass-dark absolute inset-x-3 bottom-3 rounded-2xl px-4 py-3.5 text-white">
+              <span className="text-[11px] text-white/70">{item.category}</span>
+              <strong className="mt-0.5 block text-lg font-semibold tracking-[-0.02em]">{item.title}</strong>
+              <span className="mt-1 block truncate text-[10px] text-white/55">示例图来源：{item.previewSourceLabel}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      <div className="flex items-center gap-5">
+        <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
+          <div className="h-full rounded-full bg-[#171719] transition-[width] duration-300" style={{ width: `${(current / GALLERY.length) * 100}%` }} />
+        </div>
+        <span className="text-xs tabular-nums text-[#8a8a8d]">{String(current).padStart(2, '0')} / {String(GALLERY.length).padStart(2, '0')}</span>
+        <button type="button" onClick={onRegister} className="inline-flex items-center gap-1.5 text-sm font-semibold hover:underline">浏览全部模板 <ArrowRight className="h-4 w-4" /></button>
+      </div>
+    </>
+  )
+}
+
 function UseCases() {
   const [active, setActive] = useState(0)
   const item = USE_CASES[active]
@@ -247,6 +301,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <div className="ml-6 hidden gap-6 text-sm text-white/80 md:flex">
             <button type="button" onClick={() => scrollToSection('preview')} className="hover:text-white">产品</button>
             <button type="button" onClick={() => scrollToSection('features')} className="hover:text-white">能力</button>
+            <button type="button" onClick={() => scrollToSection('gallery')} className="hover:text-white">灵感</button>
             <button type="button" onClick={() => scrollToSection('how')} className="hover:text-white">使用流程</button>
             <button type="button" onClick={() => scrollToSection('faq')} className="hover:text-white">常见问题</button>
           </div>
@@ -351,6 +406,12 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <div className="gouo-reveal mt-14" style={delay('0.1s')}>
             <UseCases />
           </div>
+        </div>
+      </section>
+
+      <section id="gallery" className="bg-[#fbfbf9] px-5 pb-24 sm:px-10 sm:pb-28">
+        <div className="mx-auto max-w-[1280px]">
+          <InspirationGallery onRegister={onRegister} />
         </div>
       </section>
 
