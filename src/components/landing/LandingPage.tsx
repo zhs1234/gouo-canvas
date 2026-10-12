@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { BRAND } from '../../config/brand'
 import { INSPIRATION_TEMPLATES } from '../../lib/inspirationTemplates'
-import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt, NeonStreetArt, PerfumeArt, PicnicPosterArt, SleepingCatArt } from './artwork'
+import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt, SleepingCatArt } from './artwork'
 import './landing.css'
 
 const SCENES = [
@@ -16,10 +16,12 @@ const SCENES = [
   { icon: Palette, label: '插画' },
 ]
 
+// 产品预览轮播，每轮 4 张为同一提示词的实际生成结果，见 public/landing
+const previewImage = (round: number, i: number) => `${import.meta.env.BASE_URL}landing/preview-${round + 1}-${i + 1}.webp`
 const PREVIEW_PROMPTS = [
-  { text: '雨后的城市街角，霓虹倒影，电影感广角', Art: NeonStreetArt },
-  { text: '白色背景上的香水瓶产品图，柔和侧光，高级质感', Art: PerfumeArt },
-  { text: '扁平插画风格的春日野餐海报，留出标题位置', Art: PicnicPosterArt },
+  '黑金质感的牛排商品图，雪花纹理特写，高级餐厅风格',
+  '立体刺绣风格的花鸟插画，米白底色，柔和配色',
+  '雨后的城市街角，霓虹倒影，电影感',
 ]
 
 const FEATURES = [
@@ -48,8 +50,17 @@ const USE_CASES = [
 ]
 
 // 灵感库示例图；含真人名人肖像的示例不放在首页
-const GALLERY = ['case355', 'case346', 'case373', 'case377', 'case362', 'case331', 'case375', 'case370']
-  .flatMap((name) => INSPIRATION_TEMPLATES.filter((item) => item.previewImage === `inspiration/${name}.webp`))
+const byImage = (name: string) => INSPIRATION_TEMPLATES.filter((item) => item.previewImage === `inspiration/${name}.webp`)
+const GALLERY = ['case355', 'case346', 'case373', 'case377', 'case362', 'case331', 'case375', 'case370'].flatMap(byImage)
+
+// 首屏右侧漂浮的作品卡片；位置按视口比例，避开左下标题和右下介绍
+const HERO_CARDS = [
+  { name: 'case362', pos: 'right-[36%] top-[13%] w-[11.5vw]', rotate: '4deg', aspect: 'aspect-[4/5]' },
+  { name: 'case355', pos: 'right-[20%] top-[17%] w-[13.5vw]', rotate: '-6deg', aspect: 'aspect-[4/5]', label: true },
+  { name: 'case346', pos: 'right-[4%] top-[12%] w-[14vw]', rotate: '5deg', aspect: 'aspect-[4/5]' },
+  { name: 'case373', pos: 'right-[25%] top-[52%] w-[15vw]', rotate: '3deg', aspect: 'aspect-[3/2]' },
+  { name: 'case377', pos: 'right-[7%] top-[45%] w-[11vw]', rotate: '-4deg', aspect: 'aspect-[4/5]' },
+].flatMap((card) => byImage(card.name).map((item) => ({ ...card, item })))
 
 const STEPS = [
   { title: '注册并兑换额度', desc: '创建账户后在用户中心输入兑换码，额度即时到账。' },
@@ -101,8 +112,13 @@ function ProductPreview() {
   const [typed, setTyped] = useState(0)
   const prompt = PREVIEW_PROMPTS[index]
 
+  // 提前加载下一轮的图，切换时不会出现空白卡片
   useEffect(() => {
-    if (typed < prompt.text.length) {
+    for (let i = 0; i < 4; i++) new Image().src = previewImage((index + 1) % PREVIEW_PROMPTS.length, i)
+  }, [index])
+
+  useEffect(() => {
+    if (typed < prompt.length) {
       const timer = setTimeout(() => setTyped((value) => value + 1), 70)
       return () => clearTimeout(timer)
     }
@@ -111,9 +127,9 @@ function ProductPreview() {
       setTyped(0)
     }, 4200)
     return () => clearTimeout(timer)
-  }, [typed, prompt.text.length])
+  }, [typed, prompt.length])
 
-  const done = typed >= prompt.text.length
+  const done = typed >= prompt.length
   return (
     <div className="overflow-hidden rounded-[32px] border border-[var(--line)] bg-white/70 shadow-[0_40px_100px_rgb(66_49_37/0.12)]" aria-hidden="true">
       <div className="flex items-center gap-1.5 border-b border-[var(--line)] px-5 py-3.5">
@@ -130,7 +146,7 @@ function ProductPreview() {
         </div>
         <div className="p-5 sm:p-7">
           <div className="rounded-2xl border border-[var(--line)] bg-white p-4 shadow-sm">
-            <p className={`min-h-[3rem] text-[15px] leading-6 ${done ? '' : 'gouo-caret'}`}>{prompt.text.slice(0, typed)}</p>
+            <p className={`min-h-[3rem] text-[15px] leading-6 ${done ? '' : 'gouo-caret'}`}>{prompt.slice(0, typed)}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
               {['1024 × 1536', '高清', '4 张'].map((chip) => <span key={chip} className="rounded-lg border border-[var(--line)] px-2.5 py-1">{chip}</span>)}
               <span className={`ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition ${done ? 'bg-[#171719]' : 'bg-[#a0a0a3]'}`}>
@@ -140,8 +156,8 @@ function ProductPreview() {
           </div>
           <div key={index} className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.9 + i * 0.35}s`)}>
-                <prompt.Art variant={i} />
+              <div key={i} className="gouo-develop relative aspect-[4/5] overflow-hidden rounded-2xl bg-[#e9e5de] shadow-[0_10px_30px_rgb(40_30_20/0.12)]" style={delay(`${0.9 + i * 0.35}s`)}>
+                <img src={previewImage(index, i)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                 {i === 1 && <Heart className="absolute right-2.5 top-2.5 h-4 w-4 fill-white text-white drop-shadow" />}
               </div>
             ))}
@@ -204,7 +220,7 @@ function InspirationGallery({ onRegister }: { onRegister: () => void }) {
           const el = event.currentTarget
           setProgress(el.scrollLeft / Math.max(1, el.scrollWidth - el.clientWidth))
         }}
-        className="gouo-reveal -mx-4 mt-8 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-10 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="gouo-reveal -ml-4 -mr-5 mt-8 flex sm:mr-[min(-2.5rem,calc(640px-50vw))] snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-10 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={delay('0.1s')}
       >
         {GALLERY.map((item) => (
@@ -293,6 +309,16 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
     <div ref={rootRef} className="gouo-public min-h-[100dvh] overflow-x-hidden">
       <section id="top" className="gouo-grainient m-2.5 flex min-h-[calc(100dvh-20px)] flex-col justify-between rounded-[28px] px-5 pb-10 pt-4 text-white sm:px-10 sm:pb-12">
         <div className="gouo-liquid" aria-hidden="true">{Array.from({ length: 7 }, (_, i) => <i key={i} />)}</div>
+        <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
+          {HERO_CARDS.map((card, i) => (
+            <div key={card.name} className={`gouo-fade-up absolute max-w-[240px] ${card.pos}`} style={{ rotate: card.rotate, ...delay(`${0.5 + i * 0.12}s`) }}>
+              <div className="gouo-float relative overflow-hidden rounded-[20px] border-[5px] border-white/75 shadow-[0_30px_70px_rgb(90_40_25/0.3)]" style={delay(`${-i * 1.3}s`)}>
+                <img src={`${import.meta.env.BASE_URL}${card.item.previewImage}`} alt="" className={`block w-full object-cover ${card.aspect}`} />
+                {card.label && <span className="gouo-glass-dark absolute inset-x-2 bottom-2 rounded-xl px-3 py-2 text-[11px] font-semibold text-white">灵感库 · {card.item.title}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
         <nav className="gouo-glass-dark gouo-fade-up mx-auto flex w-full max-w-[1600px] items-center gap-3 rounded-2xl py-2 pl-3 pr-2" style={delay('0.1s')}>
           <button type="button" onClick={() => scrollToSection('top')} className="flex items-center gap-2.5 font-semibold">
             <img src={BRAND.logoUrl} alt="" className="h-8 w-8 rounded-lg" />
@@ -310,6 +336,17 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
             <button type="button" onClick={onRegister} className="rounded-xl bg-white px-4 py-2 text-[13px] font-bold text-[#171719] transition hover:-translate-y-px hover:shadow-lg">免费注册</button>
           </div>
         </nav>
+
+        {/* 窄屏没有右侧空间，在标题上方放一组较小的作品卡片 */}
+        <div className="pointer-events-none flex flex-1 items-center justify-center py-8 lg:hidden" aria-hidden="true">
+          {HERO_CARDS.slice(0, 3).map((card, i) => (
+            <div key={card.name} className={`gouo-fade-up w-[34%] max-w-[170px] ${i === 1 ? 'z-10 -mx-4 -translate-y-3' : ''}`} style={{ rotate: ['-7deg', '2deg', '7deg'][i], ...delay(`${0.5 + i * 0.12}s`) }}>
+              <div className="gouo-float overflow-hidden rounded-2xl border-4 border-white/75 shadow-[0_20px_44px_rgb(90_40_25/0.3)]" style={delay(`${-i * 1.3}s`)}>
+                <img src={`${import.meta.env.BASE_URL}${card.item.previewImage}`} alt="" className="block aspect-[4/5] w-full object-cover" />
+              </div>
+            </div>
+          ))}
+        </div>
 
         <div className="mx-auto w-full max-w-[1600px]">
           <h1 className="text-[clamp(3.4rem,9vw,8.4rem)] font-semibold leading-[0.94] tracking-[-0.06em]">
@@ -362,11 +399,11 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
             </div>
             <WorkflowHub />
           </div>
-          <div className="gouo-reveal mt-14 grid grid-cols-1 border-l border-t border-[var(--line)] sm:grid-cols-2 lg:grid-cols-4" style={delay('0.1s')}>
+          <div className="gouo-reveal mt-14 grid grid-cols-2 border-l border-t border-[var(--line)] lg:grid-cols-4" style={delay('0.1s')}>
             {FEATURES.map((item) => (
-              <div key={item.title} className="group border-b border-r border-[var(--line)] bg-white/40 p-7 transition hover:bg-white">
+              <div key={item.title} className="group border-b border-r border-[var(--line)] bg-white/40 p-5 transition hover:bg-white sm:p-7">
                 <item.icon className="h-6 w-6 text-[#c26855] transition group-hover:-translate-y-0.5" strokeWidth={1.6} />
-                <h3 className="mt-10 text-lg font-semibold tracking-[-0.02em]">{item.title}</h3>
+                <h3 className="mt-6 text-[17px] font-semibold tracking-[-0.02em] sm:mt-10 sm:text-lg">{item.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">{item.desc}</p>
               </div>
             ))}
@@ -382,7 +419,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <h2 className="gouo-reveal max-w-3xl text-[clamp(2.2rem,4.4vw,3.6rem)] font-semibold leading-[1.05] tracking-[-0.05em]">为认真创作的人设计的细节</h2>
           <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STATS.map((stat, index) => (
-              <div key={stat.title} className={`gouo-reveal grid min-h-[340px] content-between gap-10 rounded-[28px] border border-white/80 bg-gradient-to-b ${stat.tone} p-7 shadow-[0_20px_50px_rgb(66_49_37/0.07)]`} style={delay(`${index * 0.08}s`)}>
+              <div key={stat.title} className={`gouo-reveal grid min-h-[230px] content-between gap-10 sm:min-h-[340px] rounded-[28px] border border-white/80 bg-gradient-to-b ${stat.tone} p-7 shadow-[0_20px_50px_rgb(66_49_37/0.07)]`} style={delay(`${index * 0.08}s`)}>
                 <div className="flex items-baseline gap-2">
                   <strong className="text-[clamp(4rem,6vw,5.6rem)] font-semibold leading-[0.82] tracking-[-0.075em] tabular-nums">{stat.value}</strong>
                   <span className="text-[clamp(1.2rem,1.8vw,1.8rem)] font-semibold text-[#a0a0a3]">{stat.unit}</span>

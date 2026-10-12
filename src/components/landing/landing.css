@@ -57,6 +57,17 @@
   100% { transform: translate(-6%, 8%) scale(0.92) rotate(-12deg); }
 }
 
+/* 首屏作品卡片缓慢浮动 */
+.gouo-float {
+  animation: gouo-float 7s ease-in-out infinite alternate;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes gouo-float {
+  from { transform: translateY(-8px); }
+  to { transform: translateY(8px); }
+}
+
 /* 能力关系图：连线流动、节点轻微浮动 */
 .gouo-hub-line {
   animation: gouo-hub-flow 3s linear infinite;
@@ -277,6 +288,7 @@
   .gouo-develop,
   .gouo-caret::after,
   .gouo-liquid i,
+  .gouo-float,
   .gouo-hub-line,
   .gouo-hub-node {
     animation: none;
