@@ -278,3 +278,103 @@ func TestGouoAdminAgentModels(t *testing.T) {
 	require.Equal(t, "通用助手", price.ModelInfo.Name)
 	require.Equal(t, "未上架", list()["chat-a"]["reason"])
 }
+
+func TestGouoModelKind(t *testing.T) {
+	agentInfo := &model.ModelInfoResponse{OutputModalities: []string{"text"}, Tags: []string{"tools"}}
+	cases := []struct {
+		name  string
+		id    string
+		price *model.Price
+		info  *model.ModelInfoResponse
+		want  string
+	}{
+		{"已启用的图片模型", "chat-x", &model.Price{GouoEnabled: true, Type: model.TokensPriceType}, nil, "image"},
+		{"已上架的 Agent 模型", "gpt-image-1", nil, agentInfo, "text"},
+		{"资料只输出图片", "chat-y", nil, &model.ModelInfoResponse{OutputModalities: []string{"image"}}, "image"},
+		{"资料只输出文本", "flux-chat", nil, &model.ModelInfoResponse{OutputModalities: []string{"text"}}, "text"},
+		{"按名称识别图片模型", "black-forest-labs/FLUX.1-dev", nil, nil, "image"},
+		{"按 token 计费的是文本模型", "gpt-4o", &model.Price{Type: model.TokensPriceType}, nil, "text"},
+		{"主流文本模型没有价格也能识别", "gpt-5.5", nil, nil, "text"},
+		{"带供应商前缀的主流文本模型", "anthropic/claude-sonnet-4-6", nil, nil, "text"},
+		{"图片名称特征优先于文本前缀", "gemini-3-pro-image-preview", nil, nil, "image"},
+		{"豆包图片模型不算豆包文本模型", "doubao-seedream-4-0-250828", nil, nil, "image"},
+		{"即梦", "jimeng-4.0", nil, nil, "image"},
+		{"通义万相", "wan2.5-t2i-preview", nil, nil, "image"},
+		{"dall-e 即使按 token 计费也是图片模型", "dall-e-3", &model.Price{Type: model.TokensPriceType}, nil, "image"},
+		{"无法判断", "mystery", &model.Price{Type: model.TimesPriceType}, nil, ""},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.want, gouoModelKind(tc.id, tc.price, tc.info), tc.name)
+	}
+}
+
+func TestGouoAdminModelKindSeparation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Price{}, &model.ModelInfo{}, &model.Channel{}))
+	oldDB, oldPricing := model.DB, model.PricingInstance
+	oldGroups := model.GlobalUserGroupRatio.UserGroup
+	model.DB = db
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{}}
+	model.GlobalUserGroupRatio.UserGroup = map[string]*model.UserGroup{"default": {Symbol: "default", Ratio: 1}}
+	t.Cleanup(func() {
+		model.DB, model.PricingInstance = oldDB, oldPricing
+		model.GlobalUserGroupRatio.UserGroup = oldGroups
+	})
+	require.NoError(t, db.Create(&model.Channel{Name: "混合", Status: 1, Models: "gpt-image-1,gpt-4o,chat-agent,mystery", Group: "default"}).Error)
+	require.NoError(t, db.Create(&model.Price{Model: "gpt-4o", Type: model.TokensPriceType, Input: 1, Output: 2}).Error)
+	require.NoError(t, db.Create(&model.Price{Model: "chat-agent", Type: model.TokensPriceType, Input: 1, Output: 2}).Error)
+	require.NoError(t, db.Create(&model.ModelInfo{Model: "chat-agent", OutputModalities: `["text"]`, Tags: `["tools"]`}).Error)
+	require.NoError(t, model.PricingInstance.Init())
+
+	router := gin.New()
+	router.GET("/models", ListGouoAdminModels)
+	router.PUT("/models", UpdateGouoAdminModel)
+	router.GET("/agent-models", ListGouoAdminAgentModels)
+	router.PUT("/agent-models", UpdateGouoAdminAgentModel)
+	kinds := func(path string) map[string]string {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest("GET", path, nil))
+		require.Equal(t, http.StatusOK, res.Code)
+		var body struct {
+			Data struct {
+				Models []map[string]any `json:"models"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &body))
+		byID := map[string]string{}
+		for _, item := range body.Data.Models {
+			byID[item["model"].(string)] = item["kind"].(string)
+		}
+		return byID
+	}
+	update := func(path, body string) *httptest.ResponseRecorder {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest("PUT", path, strings.NewReader(body)))
+		return res
+	}
+	want := map[string]string{"gpt-image-1": "image", "gpt-4o": "text", "chat-agent": "text", "mystery": ""}
+	require.Equal(t, want, kinds("/models"))
+	require.Equal(t, want, kinds("/agent-models"))
+
+	// 已上架为 Agent 的模型不能再作为图片模型启用
+	res := update("/models", `{"model":"chat-agent","gouo_enabled":true,"gouo_price_cny":0.1,"gouo_max_outputs":1}`)
+	require.Equal(t, http.StatusBadRequest, res.Code)
+	require.Contains(t, res.Body.String(), "agent_model_listed")
+	require.False(t, model.PricingInstance.Prices["chat-agent"].GouoEnabled)
+	// 在 Agent 里下架后可以启用；启用后反过来也不能再上架为 Agent
+	require.Equal(t, http.StatusOK, update("/agent-models", `{"model":"chat-agent","listed":false}`).Code)
+	// 别的实例刚重新上架、本实例价格缓存还没刷新时，也以数据库为准
+	require.NotNil(t, model.PricingInstance.Prices["chat-agent"].ModelInfo)
+	require.NoError(t, db.Model(&model.ModelInfo{}).Where("model = ?", "chat-agent").Update("tags", `["tools"]`).Error)
+	require.Equal(t, http.StatusBadRequest, update("/models", `{"model":"chat-agent","gouo_enabled":true,"gouo_price_cny":0.1,"gouo_max_outputs":1}`).Code)
+	require.NoError(t, db.Model(&model.ModelInfo{}).Where("model = ?", "chat-agent").Update("tags", `[]`).Error)
+	require.Equal(t, http.StatusOK, update("/models", `{"model":"chat-agent","gouo_enabled":true,"gouo_price_cny":0.1,"gouo_max_outputs":1}`).Code)
+	require.Equal(t, "image", kinds("/models")["chat-agent"])
+	require.NotContains(t, kinds("/agent-models"), "chat-agent")
+	require.Equal(t, http.StatusBadRequest, update("/agent-models", `{"model":"chat-agent","listed":true,"input_points":1,"output_points":1}`).Code)
+	// 未上架为 Agent 的模型照常启用，已启用的模型再次保存不受影响
+	require.Equal(t, http.StatusOK, update("/models", `{"model":"gpt-image-1","gouo_enabled":true,"gouo_price_cny":0.2,"gouo_max_outputs":1}`).Code)
+	require.Equal(t, http.StatusOK, update("/models", `{"model":"gpt-image-1","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1}`).Code)
+}
