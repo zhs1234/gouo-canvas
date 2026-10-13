@@ -4,173 +4,224 @@
 
 This guide is for creators using the hosted, account-based product mode. Operators should use the [deployment overview](./deployment/index.md) and [backend integration guide](./backend.md).
 
-The current application interface is Chinese. English instructions therefore include the Chinese label for important controls.
+The application interface is Chinese, so these instructions include the Chinese label for important controls.
+
+> Screenshots come from a local demo environment (October 2026). Accounts, works, and points are demo data; the artwork was drawn for the documentation and is not real model output.
 
 ## 1. Register and sign in
 
-1. Open Gouo Canvas and select **立即注册** (Register now).
-2. Enter a username and password. Length and verification requirements shown by the UI reflect the active server configuration.
-3. Return to the login view and sign in with the new account.
-4. Open **用户中心** (User center) in the header to view the account, balance, cloud storage, redemption codes, and usage history.
+Opening Gouo Canvas while signed out shows the product home page. Use **免费注册** (Register for free) or **登录** (Sign in) in the header or hero section.
 
-If the operator enabled email delivery, users can bind an email address and reset a forgotten password by email. If email delivery is disabled, contact the operator for account recovery.
+![Gouo Canvas home page](../images/screenshots/client-landing.webp)
 
-The backend maintains the login with a cookie. Changing `SESSION_SECRET` invalidates existing sessions; changing `USER_TOKEN_SECRET` invalidates existing generation tokens. If the UI reports an invalid token, sign out and sign in again first.
+1. Choose **免费注册**, then enter a username (up to 12 characters) and a password (8–20 characters). Complete email verification or the human check if the operator enabled them.
+2. After registering you enter the creation workspace. The operator can grant points to new users.
+3. Existing users choose **登录**.
 
-## 2. Create the first image
+![Sign-in page](../images/screenshots/client-login.webp)
 
-New users see a three-step introduction, and an empty gallery provides starter prompts.
+- When the operator closes registration, **免费注册** shows "暂未开放注册" (registration is not open) and the sign-in page hides its registration link.
+- When the operator pauses password sign-in, the sign-in page shows a notice and the sign-in button is disabled.
+- With email delivery enabled, users can bind an email address in the user center and reset a forgotten password from **忘记密码** (Forgot password) on the sign-in page. Without email delivery that link is hidden; contact the operator for account recovery.
 
-1. Describe the subject, scene, composition, light, and constraints in the bottom prompt box.
-2. Select a model under **模型**, check its per-request price, and set size, quality, output format, and an output count within that model's limit.
-3. Optionally add reference images or draw a mask on one reference.
-4. Check the estimated charge shown near the send control, then submit.
-5. When the task finishes, open an image to download, copy, collect, or edit it.
+The backend keeps the session in a cookie. Changing `SESSION_SECRET` invalidates existing sessions; changing `USER_TOKEN_SECRET` invalidates existing generation tokens. If the UI reports an invalid token, sign out and sign in again.
 
-The backend checks and reserves balance when a request starts, refunding confirmed failures. Use the model quote shown before submission. Choices are remembered per account; incompatible references or masks block submission. If a price or capability changes, refresh and review the catalog before submitting again. Historical retries retain their original model and require confirmation of a changed price.
+## 2. The creation workspace
 
-## 3. Write an effective prompt
+After signing in you land on **创作** (Create). The sidebar holds Create, **我的作品** (My works), **收藏** (Favorites), and **灵感库** (Inspiration), plus **创作会话** (Agent conversations) and **我的画布** (My canvases). The top right shows your available points and the user center button.
 
-A useful prompt normally identifies:
+![Creation page](../images/screenshots/client-create.webp)
 
-- **Subject**: who or what appears in the image.
-- **Environment**: location and surrounding objects.
+- The banner at the top shows the operator's announcement. A dismissed announcement reappears when its text changes. Without an announcement, a default introduction is shown.
+- The **生成图片 / 画布 / Agent** switch selects one of three ways of working. The deployment decides which of them are available.
+- Below the prompt box are the model menu, the estimated charge, parameters, and the reference image entry.
+
+## 3. Create the first image
+
+1. Describe the subject, scene, composition, light, and constraints in the prompt box.
+2. Pick a model from the model menu. The estimated charge appears below the box, for example "预计 20 积分（1 张 · 20 积分/张）· 按成功张数计费" (about 20 points, 1 image at 20 points each, billed per successful image).
+3. Optionally set size, quality, format, and image count (up to 10 per submission) under **自定义参数** (Custom parameters).
+4. Optionally add reference images or draw a mask on a reference.
+5. Click the arrow to submit. Results appear under **本次生成** (This session) below the prompt box and in **我的作品**.
+
+Before submitting, the client checks your balance; if it is too low, no task is created and the redemption page opens. The server reserves points when a request starts and refunds images it confirms as failed. Several images are split into single-image requests and billed per successful image.
+
+Your model choice is remembered per account. The operator can set a default model, which users who never picked a model use automatically; if your chosen model is withdrawn, the client also falls back to the default. Submission is blocked when the chosen model cannot handle references or masks. When a model's price or capabilities change, the UI asks you to confirm again. Retrying an older task keeps its original model and shows the new price for separate confirmation if it changed.
+
+## 4. Writing prompts
+
+A clear prompt usually covers:
+
+- **Subject**: who or what appears.
+- **Environment**: where the subject is and what surrounds it.
 - **Medium**: photography, illustration, 3D, poster, infographic, and so on.
-- **Composition**: close-up, full body, top-down, wide angle, centered layout, and so on.
-- **Lighting and mood**: soft light, backlight, neon, calm, energetic, and so on.
-- **Constraints**: no text, no watermark, preserve a pose, retain product geometry, and so on.
+- **Composition**: close-up, full body, overhead, wide angle, centered, and so on.
+- **Light and mood**: soft light, backlight, neon, calm, energetic, and so on.
+- **Constraints**: no text, no watermark, keep a pose or product structure, and so on.
 
 Example:
 
 ```text
 A transparent acrylic music player on a dark metal desk.
-Premium product photography, centered composition, soft side light,
-blue rim light, minimal background, no text, logo, or watermark.
+Premium product photography, centered composition, soft side light and a blue rim light,
+plain background, no text, logos, or watermarks.
 ```
 
-Describe visible results. Specific materials, viewpoints, colors, and whitespace are more actionable than broad requests such as “make it better.”
+Describe the visible result. Saying "make it nicer" or "more professional" is usually less effective than naming materials, viewpoint, colors, and empty space.
 
-## 4. Use the inspiration library
+## 5. Inspiration library
 
-Select **灵感** (Inspiration) in the header. Search prompts or browse photography, portrait, product, poster, illustration, space, and knowledge categories.
+**灵感库** (Inspiration) holds 22 prompt templates. Search them or browse by category, such as UI & interfaces, charts & infographics, posters & typography, and products & e-commerce. The **灵感精选** (Featured) cards and quick tags on the creation page come from this library.
 
-- Open a card to inspect the complete prompt.
-- **立即使用** (Use now) copies it into the home prompt box without sending it.
-- The copy button copies text without replacing the current draft.
-- Adapt the subject, branding constraints, colors, and composition before use.
+![Inspiration library](../images/screenshots/client-inspiration.webp)
 
-## 5. Add and reference images
+- Click a card to see the full prompt, usage tips, and the source of the example image.
+- **填入提示词** (Fill in prompt) writes the template into the creation prompt box without sending it.
+- The copy button copies the text only and does not replace your current draft.
+- Square brackets in a template are placeholders; replace them with your own subject, brand, colors, and composition before submitting. Example images keep their original authors' attribution and are not outputs of the template.
 
-Use the file picker, drag and drop, or paste to add up to 16 images. The upstream channel can impose stricter count, format, and payload limits.
+## 6. Reference images and image references
 
-- Explain each image's role, for example: “Keep the person from image 1 and use the palette from image 2.”
+Add up to 16 images with **上传图片** (Upload image), drag and drop, or paste. Upstream channels may impose stricter limits on count, format, and size.
+
+- Explain each image's role in the prompt, for example "keep the person from image 1 and use the colors of image 2".
 - Type `@` to insert an explicit reference to one of the current images.
-- On desktop, drag thumbnails to reorder them. Existing image mentions are updated with the order.
-- Use a reference thumbnail's edit action to replace it or add a mask, depending on the general setting.
-- Upload only content that you are authorized to process and willing to send to the platform and its upstream provider.
+- On desktop, drag thumbnails to reorder them; existing references update automatically.
+- **编辑输出** (Edit output) on a work card adds that work as a reference so you can keep editing it.
+- Only upload images you are allowed to process, and nothing you do not want sent to the platform or upstream providers.
 
-A reference image does not implicitly tell the model what to preserve. Put identity, pose, silhouette, or layout requirements in the prompt.
+A reference image does not tell the model what to keep. If identity, pose, product outline, or composition must stay the same, say so in the prompt.
 
-## 6. Make a masked edit
+## 7. Masked edits
 
-1. Add the image to edit.
-2. Open its edit action and choose **添加遮罩** (Add mask).
-3. Paint the region to change. The blue overlay is the editable region.
-4. Save the mask and describe the desired replacement in the prompt.
+![Mask editor](../images/screenshots/client-mask-editor.webp)
+
+1. Add the image you want to change as a reference.
+2. Click that reference's edit control and choose **添加遮罩** (Add mask). Tick "以后默认执行此选择" (always do this) to skip the question next time.
+3. Paint the area to change; the blue area is the region to be edited. Use the eraser, brush size, undo/redo, or clear the mask; scroll to zoom and hold Alt to pan.
+4. Click **保存** (Save) and describe what the masked area should become, for example "turn only the masked area into a red coat".
 5. Submit the edit.
 
-The UI warns when a mask covers the full image because the provider may redraw everything. A mask identifies an area; it does not replace the written edit instruction.
+The chosen model must support masked edits. If the mask covers the whole image, the UI warns that the entire image may be redrawn and asks for confirmation.
 
-## 7. Inspect and manage tasks
+## 8. My works
 
-Task cards and the detail view expose actions according to task state:
+![My works](../images/screenshots/client-works.webp)
 
-- Download one image, all outputs, or retained streaming previews.
-- Copy an image or prompt.
-- Retry a failed task.
-- Reuse task parameters for a new request.
-- Edit an output as a new reference image.
-- Add a task to one or more collections.
-- Delete a local task or move a synchronized task to the recycle bin.
+**我的作品** (My works) lists all works by time, 60 per page. Search prompts and parameters, or filter by status: all, completed, running, failed, or recycle bin. Each card can be favorited, have its settings reused, have its output edited, or be deleted.
 
-Search matches prompts and parameter text. Status filters include all, complete, running, failed, and recycle bin. Desktop supports box selection and `Ctrl`/`⌘` selection; mobile provides a selection flow. Configure which batch actions use ZIP under **设置 → 通用** (Settings → General).
+Click an image to open its details: the full prompt, actual parameters, model, and creation time. You can download, reuse settings, edit the output, or delete from there.
 
-## 8. Collections
+![Work details](../images/screenshots/client-work-detail.webp)
 
-- A task can belong to multiple collections.
-- The collection overview supports search, management, and batch download.
-- Deleting a collection does not automatically delete its tasks.
-- In account mode, collections and task membership synchronize with the account.
+Desktop supports marquee selection and `Ctrl`/`⌘` multi-select; mobile has a multi-select mode. Selections can be downloaded, favorited, or deleted together. Changing the search or filter returns to the first page, and selections persist across pages.
 
-## 9. Cloud library and recycle bin
+## 9. Favorites
 
-After sign-in, successful images are saved to the account by the server when they are generated; IndexedDB in the browser is only a cache. Failed tasks are not stored in the cloud. Collections and their memberships are saved with the account as well.
+- One work can belong to several favorite folders.
+- The favorites page supports searching, managing folders, and batch download.
+- Deleting a folder does not delete the works in it.
+- Folders and their contents sync with the account. Renames and deletions sync too, and a deleted folder is not recreated when an old device reconnects.
 
-- Signing into the same account in another browser or device shows the saved work.
-- Cached work remains viewable during a network interruption.
-- Older work from this browser and work imported from a ZIP are not uploaded automatically. Import them with **用户中心 → 导入本机旧作品** (User Center → Import local works); clearing site data before that loses them.
-- Deleted work moves to the recycle bin. It can be restored from the gallery filter's recycle bin and still counts toward cloud storage.
+## 10. Canvas
 
-Items stay in the recycle bin for 3 days. After that they are permanently deleted together with any images no longer in use, and cannot be recovered.
+**画布** (Canvas) lays out images, text, and generation settings on an infinite board, which suits planning and multi-round revisions. **我的画布** (My canvases) in the sidebar lists your canvases; click **+** to create one.
 
-## 10. Balance, redemption codes, and usage
+![Canvas](../images/screenshots/client-canvas.webp)
 
-Operators can fill in redemption instructions and a support website, email, or contact handle under 光构 → 光构设置 (Gouo settings) in the admin panel. Both fields default to blank. The user center shows the instructions on the redemption screen and provides copyable support details; a standalone HTTP(S) URL is also clickable. Blank fields are shown as unconfigured and should be filled before public operation.
+- The bottom toolbar adds text, image, generation-settings, and group nodes, uploads assets, changes the canvas look, or clears the canvas. The bottom left controls zoom, view reset, and the minimap.
+- A generation-settings node takes a prompt, model, size, and count, and shows the estimated charge. **生成图片** (Generate) adds the result as a new image node connected on the right. Connected text and image nodes are used as extra prompt text and references.
+- The left panel's **画布 / 素材 / 提示词** (Canvas / Assets / Prompts) tabs browse nodes, existing works, and prompts.
+- **Agent** at the top right opens a conversation linked to this canvas, so the Agent can read and arrange it.
+- Canvases are saved to your account and can be continued on another device; deleted canvases go to the recycle bin.
 
-The gallery shows 60 tasks per page. Search covers the entire library, filters reset pagination, and selections persist across pages for batch downloads. Collection renames and deletions synchronize without reviving deleted collections on stale devices.
+## 11. Agent
 
-The user center shows:
+The Agent is a conversational assistant. Describe what you need; it proposes ideas and, when needed, calls tools to generate images or to read and edit a linked canvas.
 
-- Available points and cumulative usage (1 CNY = 100 points).
-- Model-specific billing information and the actual price in individual usage records.
-- Cloud storage consumption.
-- Redemption-code credit.
-- Recent usage with CSV export.
+![Agent conversation](../images/screenshots/client-agent.webp)
 
-Balance, prices, and charges are shown in points (积分). Each successfully generated image is charged at the model price (generating several images splits them into single-image requests), and failed images are refunded once the server confirms the failure. Prices are configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
+- Below the input you choose the chat model (configured by the operator) and the image model, and you can link a canvas. **+** adds reference images or picks existing works as references.
+- `Enter` sends and `Shift + Enter` adds a new line. You can stop a reply while it is generating.
+- Image tasks the Agent submits are charged at the selected image model's price and also appear in **我的作品**. If one message would create more than 4 images in total, you are asked to confirm first. The chat itself is billed by platform text usage.
+- **创作会话** (Agent conversations) in the sidebar keeps your history; the top right starts a new conversation or opens the history. Conversations sync with the account.
 
-## 11. Settings, import, and export
+## 12. Cloud library and recycle bin
 
-Hosted product mode hides provider and API-key configuration. Regular users do not need the platform key. General settings still control submission shortcuts, clearing after submit, draft persistence, reference-image editing behavior, ZIP download routes, retry buttons, and system notifications.
+When you are signed in, successful images are saved to your account by the server as soon as they are produced; the browser only caches them. Failed tasks are not uploaded. Favorites, canvases, and Agent conversations are saved with the account too.
 
-**设置 → 数据管理** (Settings → Data Management) exports or imports ZIP backups and clears selected local data. Export retrieves cloud originals first and fails explicitly if an original is missing. Import validates the version, task references, and image files before committing new tasks and images together. Existing local task IDs are kept; an image ID with different content rejects the whole batch. In account mode, imported work is not uploaded automatically; import it into the account with **用户中心 → 导入本机旧作品** (User Center → Import local works). Repeated imports may create copies. Configuration backups may contain API keys; keep them private.
+- Sign in with the same account in another browser or device to see saved content.
+- Cached works remain viewable during network interruptions.
+- Older local works and works imported from ZIP are not uploaded automatically. Import them from **用户中心 → 导入本机旧作品** (User center → Import local works); clearing site data before that loses them.
+- Deleted works, canvases, and conversations go to the recycle bin. Restore them from **回收站** (Recycle bin) in the works filter menu; they still count toward cloud storage meanwhile.
 
-Clearing local data does not delete cloud work in the account, which loads again from the cloud. Work not yet imported into the account and not backed up is lost. Deleted cloud work can be restored within 3 days through the gallery filter's recycle bin and continues using cloud storage while there.
+Recycle-bin items are kept for 3 days, then permanently deleted together with images that are no longer referenced. They cannot be recovered after that.
 
-## 12. Install the app
+## 13. Points, redemption codes, and usage
 
-Browsers with PWA support expose an install action in the header. On iPhone and iPad, use Safari's Share menu and **Add to Home Screen**. If the browser does not expose an install event, Gouo Canvas displays manual platform instructions.
+Gouo Canvas bills in points (积分): **1 CNY = 100 points**. Balance, model prices, estimated charges, usage records, and exported CSV are all shown in points.
 
-## 13. Troubleshooting
+Click the balance or avatar at the top right to open the user center:
 
-### Invalid token or HTTP 401
+![User center](../images/screenshots/client-user-center.webp)
 
-Sign out and sign in again. If it persists, the operator may have changed the token secret or reset the account token.
+- **账户余额** (Balance): available points.
+- **累计消费** (Total spent): points consumed so far, converted at the current rate.
+- **图片计费** (Image billing): priced per model, confirmed before generating, charged per successful request.
+- **云端空间** (Cloud storage): used space and limit, plus **导入本机旧作品**.
 
-### Insufficient balance
+Enter a redemption code under **充值积分** (Add points) to credit your account. The page shows the operator's instructions for obtaining codes, and **充值与账务帮助** (Top-up and billing help) at the bottom shows how to contact support.
 
-Open the user center, add credit with a valid redemption code or an operator-enabled method, then retry the task.
+![Redeeming points](../images/screenshots/client-redeem.webp)
 
-### Safety rejection
+**使用记录** (Usage records) lists the status of each image request (settled, refunded, awaiting review, and so on) and every point top-up, point adjustment, image generation, and model charge. Filter by type, model, and date, or export to CSV.
 
-Remove sexual, violent, illegal, infringing, or sensitive-identity content and try again. Include the error's request ID when reporting the problem, but never publish a password, cookie, or full token.
+![Usage records](../images/screenshots/client-usage.webp)
 
-### Image upload failure
+Each successful image is charged at the model price, and images the server confirms as failed are refunded. Usage records and CSV keep the unit price of each charge. If the operator has not opened online payment, use the redemption codes they provide.
 
-Try PNG, JPEG, or WebP, reduce image count or size, and ensure that a mask's target image still exists in the reference list.
+## 14. Import and export
 
-### Timeout
+Product mode hides API keys and provider settings; regular users never enter platform keys.
 
-Reduce size, quality, or output count. If failures occur at a consistent elapsed time, the operator should inspect CDN and reverse-proxy timeouts.
+ZIP backup export, import, and local data clearing are under **数据管理** (Data management) in settings. The current creation workspace header does not expose a settings button, so contact the operator if you need them. Export first fetches original images from the cloud and reports a failure if any are missing. Import checks the version, task references, and image files before saving new tasks and images together. Local tasks with the same ID are kept; an image with the same ID but different content rejects the whole import.
 
-### Work is missing on another device
+Imported works are not uploaded automatically; import them into your account from **用户中心 → 导入本机旧作品**, and note that importing twice can create duplicates. Clearing local data does not delete cloud works, which reload from the server; content that was never imported or backed up is lost.
 
-Confirm that both devices use the same account and inspect the original browser's synchronization status. Only synchronized tasks can be restored elsewhere.
+## 15. Install as an app
 
-### There is no API configuration screen
+Browsers that support PWAs show **安装为应用** (Install as app) at the top right. On iPhone/iPad, use Safari's **Share → Add to Home Screen**. If the browser does not offer an install event, the UI shows manual steps for the platform.
 
-This is expected in hosted product mode. The platform manages upstream credentials. Developers who need direct API profiles should use the frontend-only mode in the [development guide](./development.md).
+## 16. Troubleshooting
 
-## 14. Data and privacy
+### "Invalid token" or HTTP 401
 
-In product mode, the backend stores account, balance, usage, and synchronized library data. The browser stores caches. Generation and editing send prompts and required images to the Gouo backend and the operator-configured upstream model provider. Operators should publish terms, a privacy policy, content rules, retention periods, refund terms, and an infringement-reporting process.
+Sign out and sign in again. If it persists, the operator may have rotated the token secret or reset your account token.
+
+### Not enough points
+
+The client checks your balance before submitting and opens the redemption page when it is too low. Redeem a valid code, then click **重试** (Retry) on the task.
+
+### Request rejected by the safety system
+
+Remove content that may involve sexual material, violence, illegal acts, infringement, or sensitive identities, then try again. When contacting the operator, include the request ID from the error, but never share passwords, cookies, or full tokens.
+
+### Image upload fails
+
+Try PNG, JPEG, or WebP, or reduce the number or size of images. When using a mask, keep the masked image in the reference list.
+
+### Timeout or unconfirmed result
+
+A timeout, failed download, or local save failure does not mean you were refunded. Check the request status under **用户中心 → 使用记录**; give the request ID of anything marked "待核对" (awaiting review) to the operator. Retrying creates a new paid request.
+
+### A finished image is missing on another device
+
+Make sure you are signed in to the same account and that the original browser finished syncing. Only works saved to the cloud are visible across devices.
+
+### There is no API configuration
+
+This is expected in product mode. The platform manages upstream APIs, and users never handle platform API keys. Developers who need to test APIs directly should use the frontend-only mode in the [development guide](./development.md).
+
+## 17. Data and privacy
+
+In production, the server stores accounts, points, usage records, and synced works; the browser only keeps a cache. Prompts and required images are sent to the Gouo backend and the upstream model service configured by the operator. Operators should publish terms of service, a privacy policy, content rules, retention periods, refund terms, and an infringement-report channel.

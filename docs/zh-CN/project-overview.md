@@ -2,9 +2,9 @@
 
 [English](../en/project-overview.md) · [文档中心](../README.md)
 
-光构是一套带账号、额度结算和云端作品库的 AI 图片工作台。用户在 React 前端完成提示词输入、参考图和遮罩编辑、作品整理；基于 One Hub 的 Go 后端负责认证、渠道选择、上游请求和数据归属。图片模型由配置的上游服务提供，仓库本身不包含模型训练或推理服务。
+光构是一套带账号、积分结算和云端作品库的 AI 图片工作台，提供生成图片、无限画布和 Agent 三种创作方式。用户在 React 前端完成提示词输入、参考图和遮罩编辑、画布排版和作品整理；基于 One Hub 的 Go 后端负责认证、渠道选择、上游请求和数据归属。图片模型由配置的上游服务提供，仓库本身不包含模型训练或推理服务。
 
-本文面向项目维护者和新接手的开发者，说明产品范围、代码分工、主要数据流及部署边界。依据为 `main` 分支提交 `67cd4d1` 的源码和现有文档，核对日期为 2026-10-05；实际线上配置和运行效果未在本次梳理中验证。
+本文面向项目维护者和新接手的开发者，说明产品范围、代码分工、主要数据流及部署边界。依据为 2026-10-13 的源码（包含积分制、后台控制客户端第一批和删除新手引导等改动），并在本地演示环境中实际运行核对；线上配置和真实上游的运行效果未在本次梳理中验证。
 
 ## 产品范围
 
@@ -14,9 +14,13 @@
 | 图片创作 | 文生图、参考图编辑、局部遮罩编辑，尺寸、质量和输出格式参数 | [InputBar.tsx](../../src/components/InputBar.tsx)、[MaskEditorModal.tsx](../../src/components/MaskEditorModal.tsx) |
 | 任务与作品 | 状态展示、失败详情、重试、参数复用、搜索筛选、下载和回收站恢复 | [store.ts](../../src/store.ts)、[TaskGrid.tsx](../../src/components/TaskGrid.tsx) |
 | 收藏与数据 | 收藏夹、批量操作、ZIP 数据导入导出 | [favorites](../../src/components/favorites)、[DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
-| 用户中心 | 余额、当前图片价格、兑换码、使用记录和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
+| 画布 | 无限画布，文本、图片、生成配置和组节点，节点内生成并显示预计扣费，关联 Agent | [canvas](../../src/components/canvas)、[lib/canvas](../../src/lib/canvas) |
+| Agent | 对话式创作，调用图片生成和画布读写工具，模型由后台配置 | [agent](../../src/components/agent)、[lib/agent](../../src/lib/agent) |
+| 用户中心 | 积分余额、图片计费、兑换码、使用记录、图片请求状态和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | 云端作品库 | 任务及关联图片同步、空间用量、账号隔离 | [serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo_cloud.go](../../server/controller/gouo_cloud.go) |
-| 运营后台 | 用户、渠道、额度等 One Hub 管理能力，以及光构存储管理 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
+| 管理后台 | 仅限管理员登录；用户、渠道、兑换码、日志等 One Hub 管理能力，以及光构设置、光构模型、图片账务和光构存储 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
+
+![创作页](../images/screenshots/client-create.webp)
 
 前端还提供灵感库、深色主题和 PWA 安装。PWA 缓存页面与静态资源，并跳过 `/api`、`/v1` 和 `/panel`；它不提供离线图片生成。实现见 [main.tsx](../../src/main.tsx) 和 [sw.js](../../public/sw.js)。
 
@@ -26,7 +30,7 @@
 | --- | --- | --- |
 | 开关 | `VITE_GOUO_BACKEND_ENABLED=true` | `false` 或未设置 |
 | 身份 | 后端 Cookie 会话，进入工作台前检查登录 | 不经过产品登录门禁 |
-| 图片配置 | 平台后端渠道，默认模型 `gpt-image-2` | 用户配置 OpenAI 兼容、fal.ai 或自定义服务商 |
+| 图片配置 | 平台后端渠道，默认模型由后台“光构设置”指定 | 用户配置 OpenAI 兼容、fal.ai 或自定义服务商 |
 | API Key | 平台上游密钥保存在服务端，浏览器使用用户中继令牌 | 用户配置的服务商凭据可进入浏览器本地设置 |
 | 数据 | 账号作用域的本地缓存，以及启用后的云端作品库 | 当前浏览器本地数据 |
 | 适用场景 | 托管产品、账号与计费联调 | 接口兼容、流式响应、异步轮询和模拟 API 调试 |
@@ -140,12 +144,15 @@
 
 ## 验证状态和后续工作
 
-2026-10-05 在当前 Windows 工作区及 Docker Linux/CGO 环境完成以下检查。使用隔离数据库和模拟图片上游，不代表生产服务或真实上游计费已经通过回归。
+2026-10-13 在 Linux 工作区完成以下检查，使用隔离的 SQLite 数据库和本地模拟上游，不代表生产服务或真实上游计费已经通过回归。更早的 2026-10-05 检查（Windows 与 Docker Linux/CGO 环境）见下表后半部分。
 
 | 检查 | 结果 |
 | --- | --- |
-| 根前端 `npm ci` 和 `npm run build` | 通过 |
-| 根前端 `npm test` | 19 个测试文件、194 项测试通过 |
+| 根前端 `npm run build`、`npx tsc --noEmit` | 通过（2026-10-13） |
+| 根前端 `npm test` | 47 个测试文件、485 项测试通过（2026-10-13） |
+| 后端 `go vet`，`go test ./controller/ ./model/ ./common/` | 通过（2026-10-13） |
+| 浏览器端到端：注册登录、生成、遮罩编辑、画布生成、Agent 工具调用、兑换积分、使用记录，以及后台光构设置、光构模型、图片账务、光构存储、用户积分调整和兑换码 | 通过（2026-10-13，本文档截图即取自该环境） |
+| 根前端 `npm ci` | 通过（2026-10-05） |
 | 管理后台 Yarn 锁定安装和构建 | 通过，已生成嵌入所需文件 |
 | Go 1.25.14 与后端 `go mod download`、`go mod verify` | 完成，模块校验通过 |
 | Docker Linux/CGO 后端编译及 model/controller/relay/relay_util 包测试 | 通过 |

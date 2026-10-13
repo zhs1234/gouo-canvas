@@ -11,7 +11,7 @@ Follow either [Docker Compose](./docker.md) or [manual Linux deployment](./manua
 - [ ] After initializing a new database, sign in and immediately change the `root` password from `123456`.
 - [ ] Create a separate day-to-day administrator; do not share a regular-user account.
 - [ ] Disable unused registration methods, OAuth providers, and admin access paths.
-- [ ] Confirm that regular users cannot open admin functions or change another user's balance.
+- [ ] Confirm that regular users cannot sign in to the admin panel (they are rejected and signed out) or change another user's points.
 - [ ] Apply reasonable rate limits to login, registration, redemption, upload, and generation.
 
 ## 2. Secrets and environment

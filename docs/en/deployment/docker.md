@@ -198,7 +198,7 @@ docker compose exec backend sh -c 'du -sh /data/gouo-assets'
 docker volume ls
 ```
 
-Create a regular user and generate a test image. In the Gouo storage admin view, verify that:
+Create a regular user and generate a test image. In 光构 → 光构存储 (Gouo storage) in the admin panel, verify that:
 
 - Task count increases.
 - Asset count increases.

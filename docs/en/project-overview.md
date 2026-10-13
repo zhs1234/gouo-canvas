@@ -2,9 +2,9 @@
 
 [简体中文](../zh-CN/project-overview.md) · [Documentation index](../README.md)
 
-Gouo Canvas is an AI image workspace with accounts, balance settlement, and a cloud library. Users enter prompts, edit reference images and masks, and organize artwork in the React frontend. The Go backend, derived from One Hub, handles authentication, channel selection, upstream requests, and data ownership. Configured upstream services provide image models; this repository does not contain model training or inference services.
+Gouo Canvas is an AI image workspace with accounts, points-based billing, and a cloud library, offering three ways to create: image generation, an infinite canvas, and an Agent. Users enter prompts, edit reference images and masks, lay out canvases, and organize artwork in the React frontend. The Go backend, derived from One Hub, handles authentication, channel selection, upstream requests, and data ownership. Configured upstream services provide image models; this repository does not contain model training or inference services.
 
-This document helps maintainers and new contributors understand the product scope, code ownership, main data flows, and deployment boundaries. It was checked on 2026-10-05 against source and existing documentation at `main` commit `67cd4d1`. Live configuration and production behavior were not verified during this review.
+This document helps maintainers and new contributors understand the product scope, code ownership, main data flows, and deployment boundaries. It was checked against the source as of 2026-10-13 (including the points billing, the first batch of admin-controlled client settings, and the removal of onboarding guides) and verified by running a local demo environment. Live configuration and real upstream behavior were not verified during this review.
 
 ## Product scope
 
@@ -14,9 +14,13 @@ This document helps maintainers and new contributors understand the product scop
 | Image creation | Text-to-image, reference-image editing, masked editing, size, quality, and output-format controls | [InputBar.tsx](../../src/components/InputBar.tsx), [MaskEditorModal.tsx](../../src/components/MaskEditorModal.tsx) |
 | Tasks and artwork | Status, error details, retries, parameter reuse, search, filters, downloads, and recycle-bin restoration | [store.ts](../../src/store.ts), [TaskGrid.tsx](../../src/components/TaskGrid.tsx) |
 | Collections and data | Collections, batch actions, ZIP data import and export | [favorites](../../src/components/favorites), [DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
-| User center | Balance, current image price, redemption codes, usage history, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
+| Canvas | Infinite canvas with text, image, generation-settings, and group nodes; in-node generation with estimated charge; linked Agent | [canvas](../../src/components/canvas), [lib/canvas](../../src/lib/canvas) |
+| Agent | Conversational creation that calls image-generation and canvas tools; models configured in the admin panel | [agent](../../src/components/agent), [lib/agent](../../src/lib/agent) |
+| User center | Points balance, image billing, redemption codes, usage history, image request status, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | Cloud library | Server-saved artworks, storage usage, and account isolation | [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo_cloud.go](../../server/controller/gouo_cloud.go) |
-| Admin application | One Hub user, channel, and quota administration, plus Gouo storage management | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
+| Admin panel | Administrators only; One Hub user, channel, redemption-code, and log administration, plus Gouo settings, Gouo models, image billing, and Gouo storage | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
+
+![Creation page](../images/screenshots/client-create.webp)
 
 The frontend also includes an inspiration library, dark theme, and PWA installation. The service worker caches pages and static assets while bypassing `/api`, `/v1`, and `/panel`; it does not generate images offline. See [main.tsx](../../src/main.tsx) and [sw.js](../../public/sw.js).
 
@@ -26,7 +30,7 @@ The frontend also includes an inspiration library, dark theme, and PWA installat
 | --- | --- | --- |
 | Switch | `VITE_GOUO_BACKEND_ENABLED=true` | `false` or unset |
 | Identity | Backend Cookie session; login is checked before opening the workspace | No product login gate |
-| Image configuration | Backend channels; default model `gpt-image-2` | User-configured OpenAI-compatible, fal.ai, or custom providers |
+| Image configuration | Backend channels; default model set in the admin panel's Gouo settings | User-configured OpenAI-compatible, fal.ai, or custom providers |
 | API keys | Platform upstream keys remain on the server; the browser uses a user relay token | Provider credentials supplied by the user may enter local browser settings |
 | Data | Local cache scoped to the account, plus the cloud library when enabled | Data in the current browser |
 | Use | Hosted product and account/billing integration | Protocol compatibility, streaming, async polling, and mock API debugging |
@@ -140,12 +144,15 @@ See the [development guide](./development.md), [Docker Compose deployment](./dep
 
 ## Verification and next steps
 
-These checks completed in the Windows workspace and Docker Linux/CGO environment on 2026-10-05, using isolated databases and a mock image upstream. They do not establish production readiness or real upstream billing behavior.
+These checks completed in a Linux workspace on 2026-10-13 using an isolated SQLite database and a local mock upstream; they do not establish production readiness or real upstream billing behavior. Earlier checks from 2026-10-05 (Windows workspace and Docker Linux/CGO) appear in the second half of the table.
 
 | Check | Result |
 | --- | --- |
-| Root `npm ci` and `npm run build` | Passed |
-| Root `npm test` | 19 test files and 194 tests passed |
+| Root `npm run build` and `npx tsc --noEmit` | Passed (2026-10-13) |
+| Root `npm test` | 47 test files and 485 tests passed (2026-10-13) |
+| Backend `go vet` and `go test ./controller/ ./model/ ./common/` | Passed (2026-10-13) |
+| Browser end-to-end: sign-up/sign-in, generation, mask editing, canvas generation, Agent tool calls, redeeming points, usage records, plus admin Gouo settings, Gouo models, image billing, Gouo storage, user point adjustment, and redemption codes | Passed (2026-10-13; the screenshots in these docs come from that environment) |
+| Root `npm ci` | Passed (2026-10-05) |
 | Admin Yarn installation with frozen lockfile and build | Passed; generated the files required for embedding |
 | Go 1.25.14, `go mod download`, and `go mod verify` | Completed; all modules verified |
 | Docker Linux/CGO backend compilation and model/controller/relay/relay_util package tests | Passed |

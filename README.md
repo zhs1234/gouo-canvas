@@ -2,7 +2,7 @@
 
 [简体中文](./README.zh-CN.md) · **English** · [Documentation](./docs/README.md)
 
-An AI creation app with three workspaces: image generation, an infinite canvas, and Agent. Built with React and a Go backend derived from One Hub. Accounts, balances, and cloud libraries are managed by the backend; platform API keys stay on the server.
+An AI creation app with three workspaces: image generation, an infinite canvas, and Agent. Built with React and a Go backend derived from One Hub. Accounts, points (1 CNY = 100 points), and cloud libraries are managed by the backend; platform API keys stay on the server. The admin panel is for administrators only and controls models, prices, announcements, and other client settings.
 
 - **Generate images**: text-to-image generation, reference-image and masked editing, and library management.
 - **Canvas**: reuse Infinite Canvas's interface and interactions to organize images, text, and connections across projects.
@@ -10,13 +10,19 @@ An AI creation app with three workspaces: image generation, an infinite canvas, 
 
 ![Gouo Canvas logo](./docs/images/gouo-logo-source.png)
 
-[Live demo](https://canvas.wcnmb.top/) — an account is required; image generation uses your balance.
+[Live demo](https://canvas.wcnmb.top/) — an account is required; image generation is charged in points.
 
 ## Preview
 
-Public sign-in page, captured on 2026-09-30. No private account data is shown.
+Captured from a local demo environment in October 2026 with demo accounts and data; the artwork was drawn for the documentation, not produced by a model. More screenshots are in the [user guide](./docs/en/user-guide.md) and [backend guide](./docs/en/backend.md#3-admin-panel).
 
-![Gouo Canvas sign-in page](./docs/images/demo-login.png)
+| Creation | My works |
+| --- | --- |
+| ![Creation page](./docs/images/screenshots/client-create.webp) | ![My works](./docs/images/screenshots/client-works.webp) |
+| **Canvas** | **Agent** |
+| ![Canvas](./docs/images/screenshots/client-canvas.webp) | ![Agent](./docs/images/screenshots/client-agent.webp) |
+| **User center** | **Admin: Gouo models** |
+| ![User center](./docs/images/screenshots/client-user-center.webp) | ![Gouo models](./docs/images/screenshots/panel-gouo-models.webp) |
 
 ## Run locally
 
@@ -41,7 +47,7 @@ npm run dev
 
 Open `http://127.0.0.1:5173`. Vite proxies `/api`, `/v1`, and `/panel` to `VITE_GOUO_BACKEND_DEV_TARGET` (default: `http://127.0.0.1:3000`).
 
-An empty database creates `root` / `123456`. **Change this password immediately, before exposing the service.** In `http://127.0.0.1:3000/panel`, configure an image channel and its upstream API key, matching `VITE_GOUO_IMAGE_MODEL`. Generation needs a working channel and account balance.
+An empty database creates `root` / `123456`. **Change this password immediately, before exposing the service.** In `http://127.0.0.1:3000/panel`, configure an image channel and its upstream API key, then enable the model and set its price in points under 光构 → 光构模型 (Gouo models). Generation needs a working channel and enough points.
 
 See the [development guide](./docs/en/development.md) for full setup, frontend-only mode, and frontend variables. Backend settings, cloud storage limits, and backups are in the [backend guide](./docs/en/backend.md); environment examples are in [`.env.example`](./.env.example) and [`deploy/.env.example`](./deploy/.env.example).
 
@@ -53,7 +59,7 @@ In the backend admin panel, configure a text model's pricing, available channel,
 
 ### Free local mock
 
-The bundled mock listens only on localhost and never forwards requests upstream. It needs no real API keys or account balance. Create `.env.mock.local` at the repository root, leaving your existing `.env.local` unchanged:
+The bundled mock listens only on localhost and never forwards requests upstream. It needs no real API keys or points. Create `.env.mock.local` at the repository root, leaving your existing `.env.local` unchanged:
 
 ```dotenv
 VITE_GOUO_BACKEND_ENABLED=true

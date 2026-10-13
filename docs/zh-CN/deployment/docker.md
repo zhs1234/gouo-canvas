@@ -206,7 +206,7 @@ docker compose exec backend sh -c 'du -sh /data/gouo-assets'
 docker volume ls
 ```
 
-随后使用普通用户生成一张测试图片，在管理端“运营 → 光构存储”检查：
+随后使用普通用户生成一张测试图片，在管理端“光构 → 光构存储”检查：
 
 - 任务数量增加。
 - 图片资产数量增加。

@@ -2,7 +2,7 @@
 
 **简体中文** · [English](./README.md) · [文档中心](./docs/README.md)
 
-AI 创作工作台，提供生成图片、无限画布和 Agent 三个工作区。使用 React 前端和基于 One Hub 的 Go 后端；账号、额度和云端作品库由后端管理，平台 API Key 保存在服务端。
+AI 创作工作台，提供生成图片、无限画布和 Agent 三个工作区。使用 React 前端和基于 One Hub 的 Go 后端；账号、积分（1 元 = 100 积分）和云端作品库由后端管理，平台 API Key 保存在服务端。管理后台仅限管理员登录，用于管理模型、售价、公告等客户端设置。
 
 - **生成图片**：文生图、参考图编辑、局部遮罩编辑和作品管理。
 - **画布**：复用 Infinite Canvas 的界面与交互，组织图片、文字和连线，支持多个项目。
@@ -10,13 +10,19 @@ AI 创作工作台，提供生成图片、无限画布和 Agent 三个工作区�
 
 ![光构 Logo](./docs/images/gouo-logo-source.png)
 
-[在线演示](https://canvas.wcnmb.top/) · 需要账号登录，图片生成按账户额度结算。
+[在线演示](https://canvas.wcnmb.top/) · 需要账号登录，图片生成按积分结算。
 
 ## 预览
 
-公开登录页，截图于 2026-09-30，不含私有账号数据。
+截图来自 2026 年 10 月的本地演示环境，账号和数据均为演示数据；作品图片是为文档绘制的示意图，不是模型输出。更多截图见[用户指南](./docs/zh-CN/user-guide.md)和[后端说明](./docs/zh-CN/backend.md#3-管理后台)。
 
-![光构登录页](./docs/images/demo-login.png)
+| 创作 | 我的作品 |
+| --- | --- |
+| ![创作页](./docs/images/screenshots/client-create.webp) | ![我的作品](./docs/images/screenshots/client-works.webp) |
+| **画布** | **Agent** |
+| ![画布](./docs/images/screenshots/client-canvas.webp) | ![Agent](./docs/images/screenshots/client-agent.webp) |
+| **用户中心** | **后台：光构模型** |
+| ![用户中心](./docs/images/screenshots/client-user-center.webp) | ![光构模型](./docs/images/screenshots/panel-gouo-models.webp) |
 
 ## 本地运行
 
@@ -41,7 +47,7 @@ npm run dev
 
 访问 `http://127.0.0.1:5173`。Vite 将 `/api`、`/v1` 和 `/panel` 代理到 `VITE_GOUO_BACKEND_DEV_TARGET`，默认是 `http://127.0.0.1:3000`。
 
-空数据库首次启动会创建 `root` / `123456`。**立即修改初始密码，改好前不要对外开放。** 在 `http://127.0.0.1:3000/panel` 配置图片渠道和上游 API Key，并匹配 `VITE_GOUO_IMAGE_MODEL`。生成图片需要可用渠道和账户额度。
+空数据库首次启动会创建 `root` / `123456`。**立即修改初始密码，改好前不要对外开放。** 在 `http://127.0.0.1:3000/panel` 配置图片渠道和上游 API Key，然后在“光构 → 光构模型”启用模型并设置积分售价。生成图片需要可用渠道和足够的积分。
 
 完整启动步骤、纯前端模式和前端变量见[开发指南](./docs/zh-CN/development.md)。后端配置、云库限额和备份见[后端说明](./docs/zh-CN/backend.md)，环境示例见 [`.env.example`](./.env.example) 和 [`deploy/.env.example`](./deploy/.env.example)。
 
@@ -53,7 +59,7 @@ npm run dev
 
 ### 免费本地模拟
 
-仓库提供只监听本机、不转发上游请求的模拟服务，无需真实密钥或账户额度。在根目录新建 `.env.mock.local`，保持现有 `.env.local` 不变：
+仓库提供只监听本机、不转发上游请求的模拟服务，无需真实密钥或积分。在根目录新建 `.env.mock.local`，保持现有 `.env.local` 不变：
 
 ```dotenv
 VITE_GOUO_BACKEND_ENABLED=true
@@ -78,7 +84,7 @@ npm run dev -- --mode mock --host 127.0.0.1 --port 5175 --strictPort
 
 访问 `http://127.0.0.1:5175`，确认账号和模型名称带有 `MOCK`。可测试“生成一张图片”、关联画布后输入“画布添加文字”，或输入“慢速”后停止流式回复。独立自检命令为 `node scripts/mock-workspace-api.mjs --self-test`。模拟结果使用仓库图片，显示的额度和价格均为测试数据；此模式不验证真实上游、实际扣费或云端文档同步。
 
-MOCK 用户中心支持图片请求状态、使用记录筛选/分页、修改显示名称、兑换测试额度、修改测试密码和退出/登录。初始账号 `MOCK-local`、密码 `MOCK-password-123`；兑换码 `MOCK-TOPUP-10` 可使用一次。数据只保存在该进程内存，重启会重置，使用浏览器 Cookie 保留退出状态。注册、邮件、人机验证和云库未在此模拟服务启用，应使用隔离的真实后端验收。图片编辑会校验并回显上传的首张参考图，提示词明确说明未执行真实编辑；不能把回显当作模型理解参考图的证明。Agent 仅按固定规则测试工具链，画布操作按每批最多 50 项拆分，仍受每轮 8 次工具调用上限约束。
+MOCK 用户中心支持图片请求状态、使用记录筛选/分页、修改显示名称、兑换测试积分、修改测试密码和退出/登录。初始账号 `MOCK-local`、密码 `MOCK-password-123`；兑换码 `MOCK-TOPUP-10` 可使用一次。数据只保存在该进程内存，重启会重置，使用浏览器 Cookie 保留退出状态。注册、邮件、人机验证和云库未在此模拟服务启用，应使用隔离的真实后端验收。图片编辑会校验并回显上传的首张参考图，提示词明确说明未执行真实编辑；不能把回显当作模型理解参考图的证明。Agent 仅按固定规则测试工具链，画布操作按每批最多 50 项拆分，仍受每轮 8 次工具调用上限约束。
 
 ## 检查
 
