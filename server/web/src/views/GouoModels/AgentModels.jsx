@@ -87,10 +87,11 @@ export default function AgentModels() {
       (!listedOnly || row.listed) &&
       `${row.model} ${row.name}`.toLowerCase().includes(keyword.trim().toLowerCase())
   );
+  // 按次计费的模型两个价格都留空时保持按次计费，只保存其他字段
+  const keepTimes = editing && editing.times_points !== null && editing.input_points === '' && editing.output_points === '';
   const valid =
     editing &&
-    validPoints(editing.input_points) &&
-    validPoints(editing.output_points) &&
+    (keepTimes || (validPoints(editing.input_points) && validPoints(editing.output_points))) &&
     Number.isInteger(Number(editing.gouo_max_tokens || 0)) &&
     Number(editing.gouo_max_tokens || 0) >= 0 &&
     Number(editing.gouo_max_tokens || 0) <= 1000000 &&
@@ -299,8 +300,9 @@ export default function AgentModels() {
                   gouo_sort: Number(editing.gouo_sort || 0),
                   vision: editing.vision,
                   gouo_max_tokens: Number(editing.gouo_max_tokens || 0),
-                  ...(editing.initial_points?.[0] === Number(editing.input_points) &&
-                  editing.initial_points?.[1] === Number(editing.output_points)
+                  ...(keepTimes ||
+                  (editing.initial_points?.[0] === Number(editing.input_points) &&
+                    editing.initial_points?.[1] === Number(editing.output_points))
                     ? {}
                     : { input_points: Number(editing.input_points), output_points: Number(editing.output_points) })
                 },
@@ -313,8 +315,8 @@ export default function AgentModels() {
               <Stack spacing={2} sx={{ mt: 1 }}>
                 {editing.times_points !== null && (
                   <Alert severity="warning">
-                    该模型当前按次计费（每次 {formatPoints(editing.times_points)} 积分）。保存后改为按 token 计费，请填写每百万 token
-                    的输入和输出价格。
+                    该模型当前按次计费（每次 {formatPoints(editing.times_points)} 积分）。两个价格都留空则保持按次计费；填写每百万 token
+                    的输入和输出价格则改为按 token 计费。
                   </Alert>
                 )}
                 <TextField
@@ -340,7 +342,7 @@ export default function AgentModels() {
                   helperText="数字小的排在前面"
                 />
                 <TextField
-                  required
+                  required={editing.times_points === null}
                   label="输入价格（积分/百万 token）"
                   type="number"
                   value={editing.input_points}
@@ -352,7 +354,7 @@ export default function AgentModels() {
                   }
                 />
                 <TextField
-                  required
+                  required={editing.times_points === null}
                   label="输出价格（积分/百万 token）"
                   type="number"
                   value={editing.output_points}
