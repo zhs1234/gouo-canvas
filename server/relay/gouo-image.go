@@ -120,8 +120,17 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		}
 		return nil
 	}
+	form := c.Request.MultipartForm
+	// 编辑和变体只收 multipart：JSON 请求体会原样转发给上游，而 JSON 键名不区分大小写、重复键取最后一个，
+	// 这里校验的提示词、张数等可能和上游实际读到的不一致，画质、遮罩、参考图也查不到
+	switch relay.(type) {
+	case *relayImageEdits, *relayImageVariations:
+		if form == nil {
+			return common.StringErrorWrapperLocal("图片编辑请使用 multipart/form-data 提交", "image_edit_multipart_required", http.StatusBadRequest)
+		}
+	}
 	// 表单字段重复时，校验和计费用的是第一个值，转发给上游的却是全部值（上游常取最后一个），可绕过输出数量上限等检查
-	if form := c.Request.MultipartForm; form != nil {
+	if form != nil {
 		for _, values := range form.Value {
 			if len(values) > 1 {
 				return common.StringErrorWrapperLocal("请求参数重复", "duplicate_form_field", http.StatusBadRequest)
@@ -129,6 +138,12 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		}
 		if len(form.File["mask"]) > 1 {
 			return common.StringErrorWrapperLocal("请求参数重复", "duplicate_form_field", http.StatusBadRequest)
+		}
+		// 表单里的文件全部转发给上游，其他字段名的文件不在参考图计数里
+		for name := range form.File {
+			if name != "image" && name != "image[]" && name != "mask" {
+				return common.StringErrorWrapperLocal("不支持的上传字段 "+name, "invalid_form_file", http.StatusBadRequest)
+			}
 		}
 	}
 	// 内容审查在扣费前完成，未通过的请求不产生费用；开关和关键词沿用后台“运营设置”
@@ -171,14 +186,14 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		// 编辑请求的画质和审核强度不在结构体里，从表单读取
 		n, size, quality, moderation = r.request.N, r.request.Size, c.PostForm("quality"), c.PostForm("moderation")
 		edit = true
-		mask = r.request.Mask != nil
-		inputs = len(r.request.Images)
-		if r.request.Image != nil {
-			inputs++
-		}
 	case *relayImageVariations:
 		n, size = r.request.N, r.request.Size
-		edit, inputs = true, 1
+		edit = true
+	}
+	if edit {
+		// 按表单里实际的文件数计：同名的 image 字段可以重复，绑定到结构体时只保留第一个，但会全部转发给上游
+		inputs = len(form.File["image"]) + len(form.File["image[]"])
+		mask = len(form.File["mask"]) > 0
 	}
 	if n == 0 {
 		n = 1
@@ -225,10 +240,7 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		case *relayImageEdits:
 			capture.prompt, capture.model, capture.operation = r.request.Prompt, r.request.Model, "edit"
 			capture.params["size"], capture.params["quality"], capture.params["output_format"] = r.request.Size, c.PostForm("quality"), c.PostForm("output_format")
-			if r.request.Image != nil {
-				capture.inputs = append(capture.inputs, r.request.Image)
-			}
-			capture.inputs = append(capture.inputs, r.request.Images...)
+			capture.inputs = append(slices.Clone(form.File["image"]), form.File["image[]"]...)
 			capture.mask = r.request.Mask
 		default:
 			return nil

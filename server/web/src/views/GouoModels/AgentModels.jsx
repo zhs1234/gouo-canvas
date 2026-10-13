@@ -87,10 +87,11 @@ export default function AgentModels() {
       (!listedOnly || row.listed) &&
       `${row.model} ${row.name}`.toLowerCase().includes(keyword.trim().toLowerCase())
   );
+  // 按次计费的模型两个价格都留空时保持按次计费，只保存其他字段
+  const keepTimes = editing && editing.times_points !== null && editing.input_points === '' && editing.output_points === '';
   const valid =
     editing &&
-    validPoints(editing.input_points) &&
-    validPoints(editing.output_points) &&
+    (keepTimes || (validPoints(editing.input_points) && validPoints(editing.output_points))) &&
     Number.isInteger(Number(editing.gouo_max_tokens || 0)) &&
     Number(editing.gouo_max_tokens || 0) >= 0 &&
     Number(editing.gouo_max_tokens || 0) <= 1000000 &&
@@ -164,6 +165,13 @@ export default function AgentModels() {
                       <Typography variant="body2" color="error.main" fontWeight={600}>
                         免费（输入、输出均为 0）
                       </Typography>
+                    ) : row.price_type === 'times' ? (
+                      <>
+                        <Typography variant="body2">按次计费：每次 {formatPoints(row.input_points)} 积分</Typography>
+                        <Typography variant="caption" display="block" color="warning.main">
+                          不能用于 Agent，填写按 token 的价格后可用
+                        </Typography>
+                      </>
                     ) : (
                       <>
                         <Typography variant="body2">输入 {formatPoints(row.input_points)}</Typography>
@@ -214,7 +222,12 @@ export default function AgentModels() {
                     <Stack direction="row" spacing={1}>
                       <Button
                         size="small"
-                        onClick={() =>
+                        onClick={() => {
+                          // 按次计费的价格不是每百万 token 的价格，不预填，由管理员重新填写；取 12 位精度避免浮点误差出现在输入框里
+                          const points =
+                            row.priced && row.price_type !== 'times'
+                              ? [row.input_points, row.output_points].map((value) => Number(Number(value).toPrecision(12)))
+                              : null;
                           setEditing({
                             model: row.model,
                             listed: row.listed,
@@ -223,11 +236,13 @@ export default function AgentModels() {
                             gouo_sort: row.gouo_sort || 0,
                             vision: row.vision,
                             gouo_max_tokens: row.gouo_max_tokens || 0,
-                            // 避免浮点误差出现在输入框里
-                            input_points: row.priced ? Number(Number(row.input_points).toPrecision(12)) : '',
-                            output_points: row.priced ? Number(Number(row.output_points).toPrecision(12)) : ''
-                          })
-                        }
+                            times_points: row.price_type === 'times' ? row.input_points : null,
+                            input_points: points ? points[0] : '',
+                            output_points: points ? points[1] : '',
+                            // 记下打开时的价格：没改价格就不提交，后端只在填写价格时才锁定，免得上游同步的价格被锁住
+                            initial_points: points
+                          });
+                        }}
                       >
                         {row.listed ? '编辑' : '上架'}
                       </Button>
@@ -285,8 +300,11 @@ export default function AgentModels() {
                   gouo_sort: Number(editing.gouo_sort || 0),
                   vision: editing.vision,
                   gouo_max_tokens: Number(editing.gouo_max_tokens || 0),
-                  input_points: Number(editing.input_points),
-                  output_points: Number(editing.output_points)
+                  ...(keepTimes ||
+                  (editing.initial_points?.[0] === Number(editing.input_points) &&
+                    editing.initial_points?.[1] === Number(editing.output_points))
+                    ? {}
+                    : { input_points: Number(editing.input_points), output_points: Number(editing.output_points) })
                 },
                 `${editing.model} 已保存并上架`
               );
@@ -295,6 +313,12 @@ export default function AgentModels() {
             <DialogTitle id="gouo-agent-model-title">{editing.model}</DialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 1 }}>
+                {editing.times_points !== null && (
+                  <Alert severity="warning">
+                    该模型当前按次计费（每次 {formatPoints(editing.times_points)} 积分），按次计费的模型不会出现在客户端 Agent
+                    中。填写每百万 token 的输入和输出价格后改为按 token 计费即可使用；两个价格都留空则保持按次计费，只保存其他字段。
+                  </Alert>
+                )}
                 <TextField
                   label="显示名称"
                   value={editing.name}
@@ -318,7 +342,7 @@ export default function AgentModels() {
                   helperText="数字小的排在前面"
                 />
                 <TextField
-                  required
+                  required={editing.times_points === null}
                   label="输入价格（积分/百万 token）"
                   type="number"
                   value={editing.input_points}
@@ -330,7 +354,7 @@ export default function AgentModels() {
                   }
                 />
                 <TextField
-                  required
+                  required={editing.times_points === null}
                   label="输出价格（积分/百万 token）"
                   type="number"
                   value={editing.output_points}

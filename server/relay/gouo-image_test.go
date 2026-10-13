@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"one-api/common/config"
 	"one-api/common/logger"
@@ -300,4 +301,63 @@ func TestGouoAgentMaxTokensForPlatformToken(t *testing.T) {
 	}
 	// 普通 API 令牌不受影响
 	require.Equal(t, 0, chat("api-user", 0, 0).MaxCompletionTokens)
+}
+
+func TestGouoImageEditFormChecks(t *testing.T) {
+	old := model.PricingInstance
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{
+		"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1, GouoReference: true, GouoMaxInputs: 2},
+	}}
+	t.Cleanup(func() { model.PricingInstance = old })
+	edit := func(files ...string) *types.OpenAIErrorWithStatusCode {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		require.NoError(t, writer.WriteField("model", "image-a"))
+		require.NoError(t, writer.WriteField("prompt", "改色"))
+		for _, name := range files {
+			part, err := writer.CreateFormFile(name, "a.png")
+			require.NoError(t, err)
+			_, err = part.Write([]byte("png"))
+			require.NoError(t, err)
+		}
+		require.NoError(t, writer.Close())
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/images/edits", &body)
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		require.NoError(t, c.Request.ParseMultipartForm(1<<20))
+		r := NewRelayImageEdits(c)
+		r.request.N = 1
+		r.setOriginalModel("image-a")
+		return prepareGouoImage(c, r)
+	}
+	require.Nil(t, edit("image", "image"))
+	require.Nil(t, edit("image[]", "image[]"))
+	// 同名 image 重复时结构体只绑定第一个，但全部会转发给上游，按实际文件数核对参考图上限
+	require.Equal(t, "image_param_unavailable", edit("image", "image", "image").Code)
+	require.Equal(t, "image_param_unavailable", edit("image", "image[]", "image[]").Code)
+	// 其他字段名的文件同样会转发，不在计数里，直接拒绝
+	require.Equal(t, "invalid_form_file", edit("image", "image[0]").Code)
+	// 遮罩按表单里的文件判断，模型不支持遮罩时拒绝
+	require.Equal(t, "image_capability_unavailable", edit("image", "mask").Code)
+
+	// JSON 请求体会原样转发给上游，提示词、张数等可能和这里校验的不一致，必须拒绝
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/images/edits", strings.NewReader(`{"model":"image-a","prompt":"改色"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	r := NewRelayImageEdits(c)
+	r.request = types.ImageEditRequest{Model: "image-a", Prompt: "改色", N: 1}
+	r.setOriginalModel("image-a")
+	require.Equal(t, "image_edit_multipart_required", prepareGouoImage(c, r).Code)
+}
+
+func TestGouoRealtimeFollowsAgentSwitch(t *testing.T) {
+	old, oldLogger := config.GouoAgentEnabled, logger.Logger
+	config.GouoAgentEnabled, logger.Logger = false, zap.NewNop()
+	t.Cleanup(func() { config.GouoAgentEnabled, logger.Logger = old, oldLogger })
+	res := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(res)
+	c.Request = httptest.NewRequest("GET", "/v1/realtime?model=gpt-realtime", nil)
+	c.Set("token_name", "sys_playground")
+	ChatRealtime(c)
+	require.Equal(t, http.StatusForbidden, res.Code)
 }
