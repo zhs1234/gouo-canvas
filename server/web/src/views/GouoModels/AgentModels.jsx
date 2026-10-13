@@ -221,7 +221,12 @@ export default function AgentModels() {
                     <Stack direction="row" spacing={1}>
                       <Button
                         size="small"
-                        onClick={() =>
+                        onClick={() => {
+                          // 按次计费的价格不是每百万 token 的价格，不预填，由管理员重新填写；取 12 位精度避免浮点误差出现在输入框里
+                          const points =
+                            row.priced && row.price_type !== 'times'
+                              ? [row.input_points, row.output_points].map((value) => Number(Number(value).toPrecision(12)))
+                              : null;
                           setEditing({
                             model: row.model,
                             listed: row.listed,
@@ -230,13 +235,13 @@ export default function AgentModels() {
                             gouo_sort: row.gouo_sort || 0,
                             vision: row.vision,
                             gouo_max_tokens: row.gouo_max_tokens || 0,
-                            // 按次计费的价格不是每百万 token 的价格，不预填，由管理员重新填写
                             times_points: row.price_type === 'times' ? row.input_points : null,
-                            // 避免浮点误差出现在输入框里
-                            input_points: row.priced && row.price_type !== 'times' ? Number(Number(row.input_points).toPrecision(12)) : '',
-                            output_points: row.priced && row.price_type !== 'times' ? Number(Number(row.output_points).toPrecision(12)) : ''
-                          })
-                        }
+                            input_points: points ? points[0] : '',
+                            output_points: points ? points[1] : '',
+                            // 记下打开时的价格：没改价格就不提交，后端只在填写价格时才锁定，免得上游同步的价格被锁住
+                            initial_points: points
+                          });
+                        }}
                       >
                         {row.listed ? '编辑' : '上架'}
                       </Button>
@@ -294,8 +299,10 @@ export default function AgentModels() {
                   gouo_sort: Number(editing.gouo_sort || 0),
                   vision: editing.vision,
                   gouo_max_tokens: Number(editing.gouo_max_tokens || 0),
-                  input_points: Number(editing.input_points),
-                  output_points: Number(editing.output_points)
+                  ...(editing.initial_points?.[0] === Number(editing.input_points) &&
+                  editing.initial_points?.[1] === Number(editing.output_points)
+                    ? {}
+                    : { input_points: Number(editing.input_points), output_points: Number(editing.output_points) })
                 },
                 `${editing.model} 已保存并上架`
               );

@@ -547,6 +547,18 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "首次上架请填写输入和输出价格")
 		return
 	}
+	// 价格相关的校验都要在写入模型资料之前做完，否则校验失败时模型已经被标成上架
+	pointsSet := input.InputPoints != nil || input.OutputPoints != nil
+	// 按次计费改成按 token 时两个价格都要重新填，否则另一个沿用按次计费的数值
+	if priced && price.Type == model.TimesPriceType && pointsSet && (input.InputPoints == nil || input.OutputPoints == nil) {
+		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "该模型当前按次计费，改为按 token 计费需同时填写输入和输出价格")
+		return
+	}
+	// 两项都必须是正数：任一为 0 时换算倍率为 0 或无穷大，价格会被存成无穷大或 0（等于免费）
+	if pointsSet && !(config.PaymentUSDRate > 0 && config.QuotaPerUnit > 0) {
+		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "支付汇率或额度单位未设置，无法换算积分价格")
+		return
+	}
 	if err := saveGouoModelInfo(id, func(info *model.ModelInfo) {
 		applyGouoModelText(info, input.Name, input.Description)
 		for _, tag := range model.GouoToolTags {
@@ -577,17 +589,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	if !priced {
 		price = model.Price{Model: id, Type: model.TokensPriceType, ChannelType: config.ChannelTypeUnknown}
 	}
-	pointsSet := input.InputPoints != nil || input.OutputPoints != nil
-	// 按次计费改成按 token 时两个价格都要重新填，否则另一个沿用按次计费的数值
-	if price.Type == model.TimesPriceType && pointsSet && (input.InputPoints == nil || input.OutputPoints == nil) {
-		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "该模型当前按次计费，改为按 token 计费需同时填写输入和输出价格")
-		return
-	}
 	rate := gouoPointsPerMillionTokens()
-	if pointsSet && rate <= 0 {
-		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "支付汇率或额度单位未设置，无法换算积分价格")
-		return
-	}
 	if input.InputPoints != nil {
 		price.Type, price.Input = model.TokensPriceType, *input.InputPoints/rate
 	}

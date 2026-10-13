@@ -438,17 +438,26 @@ func TestGouoAdminAgentPriceKeepsBilling(t *testing.T) {
 	require.False(t, model.PricingInstance.Prices["chat-sync"].Locked)
 	require.Equal(t, 3, model.PricingInstance.Prices["chat-sync"].GouoSort)
 
-	// 按次计费改为按 token 必须同时填两个价格
+	// 按次计费改为按 token 必须同时填两个价格；校验失败时不改动上架状态
+	require.Equal(t, http.StatusOK, update(`{"model":"chat-times","listed":false}`))
 	require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-times","listed":true,"input_points":1460}`))
 	require.Equal(t, model.TimesPriceType, model.PricingInstance.Prices["chat-times"].Type)
+	stored, err := model.GetModelInfoByModel("chat-times")
+	require.NoError(t, err)
+	require.False(t, model.GouoAgentListed(stored.ToResponse()))
 	require.Equal(t, http.StatusOK, update(`{"model":"chat-times","listed":true,"input_points":1460,"output_points":2920}`))
 	price = model.PricingInstance.Prices["chat-times"]
 	require.Equal(t, model.TokensPriceType, price.Type)
 	require.InDelta(t, 2.0, price.Output, 1e-9)
 	require.True(t, price.Locked)
 
-	// 汇率未设置时无法换算，拒绝而不是存入无穷大
-	config.PaymentUSDRate = 0
-	require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-sync","listed":true,"input_points":1,"output_points":1}`))
-	require.InDelta(t, 1.0, model.PricingInstance.Prices["chat-sync"].Input, 1e-9)
+	// 汇率或额度单位未设置时无法换算，拒绝而不是存入无穷大或 0；也不能先把模型标成上架
+	for _, zero := range []func(){func() { config.PaymentUSDRate = 0 }, func() { config.PaymentUSDRate, config.QuotaPerUnit = 7.3, 0 }} {
+		zero()
+		require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-sync","listed":true,"input_points":1,"output_points":1}`))
+		require.InDelta(t, 1.0, model.PricingInstance.Prices["chat-sync"].Input, 1e-9)
+		stored, err := model.GetModelInfoByModel("chat-sync")
+		require.NoError(t, err)
+		require.False(t, model.GouoAgentListed(stored.ToResponse()))
+	}
 }
