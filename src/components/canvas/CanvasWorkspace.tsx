@@ -13,7 +13,7 @@ import './canvas.css'
 export interface CanvasWorkspaceProps {
   projectId?: string
   onOpenProject: (id: string) => void
-  onOpenAgent: (projectId: string) => void
+  onOpenAgent?: (projectId: string) => void
 }
 
 export default function CanvasWorkspace(props: CanvasWorkspaceProps) {

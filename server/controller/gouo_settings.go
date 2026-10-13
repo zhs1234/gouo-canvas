@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"one-api/common/config"
 	"one-api/model"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -12,7 +14,7 @@ import (
 )
 
 // 光构客户端相关的设置。系统设置接口只允许 root，这些设置普通管理员也需要日常维护
-var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel"}
+var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoMaxImagesPerTask"}
 
 func normalizeGouoSetting(key, value string) (string, error) {
 	value = strings.TrimSpace(value)
@@ -27,9 +29,21 @@ func normalizeGouoSetting(key, value string) (string, error) {
 		if utf8.RuneCountInString(value) > 2000 {
 			return "", errors.New("兑换码说明和客服信息不能超过 2000 个字符")
 		}
-	case "GouoDefaultImageModel":
+	case "GouoDefaultImageModel", "GouoAgentDefaultModel":
 		if len(value) > 100 {
 			return "", errors.New("模型名称无效")
+		}
+	case "GouoAgentSystemPrompt":
+		if utf8.RuneCountInString(value) > 4000 {
+			return "", errors.New("Agent 附加提示词不能超过 4000 个字符")
+		}
+	case "GouoCanvasEnabled", "GouoAgentEnabled":
+		if value != "true" && value != "false" {
+			return "", errors.New("开关只能是 true 或 false")
+		}
+	case "GouoMaxImagesPerTask":
+		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 10 {
+			return "", errors.New("一次最多生成张数必须是 1 到 10 的整数")
 		}
 	default:
 		return "", errors.New("不支持的光构设置：" + key)
@@ -42,7 +56,17 @@ func GetGouoAdminSettings(c *gin.Context) {
 	for _, key := range gouoSettingKeys {
 		data[key] = config.GlobalOption.Get(key)
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": data})
+	// 可选作默认 Agent 模型的文本模型（不区分用户分组和令牌限制）
+	agentModels := make([]string, 0)
+	model.PricingInstance.RLock()
+	for _, price := range model.PricingInstance.Prices {
+		if gouoAgentCapabilities(price) != nil {
+			agentModels = append(agentModels, price.Model)
+		}
+	}
+	model.PricingInstance.RUnlock()
+	sort.Strings(agentModels)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": data, "agent_models": agentModels})
 }
 
 // UpdateGouoAdminSettings 只修改请求中出现的键；先全部校验，避免部分保存

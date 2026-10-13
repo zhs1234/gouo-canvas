@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"one-api/common/config"
 	"one-api/model"
 
 	"github.com/gin-gonic/gin"
@@ -19,6 +20,7 @@ type gouoAgentModel struct {
 	ContextLength    int    `json:"context_length"`
 	MaxTokens        int    `json:"max_tokens"`
 	CapabilitySource string `json:"capability_source"`
+	Default          bool   `json:"default,omitempty"`
 }
 
 func gouoAgentCapabilities(price *model.Price) *gouoAgentModel {
@@ -48,6 +50,11 @@ func GetGouoAgentModels(c *gin.Context) {
 	if token == nil {
 		return
 	}
+	// 后台关闭 Agent 时目录为空，客户端隐藏入口
+	if !config.GouoAgentEnabled {
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": []*gouoAgentModel{}, "message": "", "agent_enabled": false})
+		return
+	}
 	entries := make([]*gouoAgentModel, 0)
 	model.PricingInstance.RLock()
 	for _, price := range model.PricingInstance.Prices {
@@ -73,5 +80,14 @@ func GetGouoAgentModels(c *gin.Context) {
 			}
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "billing_unit": "platform_text_usage", "configuration_hint": "Agent 模型需在模型信息中配置 output_modalities: [\"text\"] 与 tags: [\"tools\"]，并启用支持流式工具调用的渠道。"})
+	// 后台指定的默认模型可用时标出它，否则标出目录第一个
+	preferred := strings.TrimSpace(config.GouoAgentDefaultModel)
+	defaultIndex := slices.IndexFunc(data, func(entry *gouoAgentModel) bool { return entry.ID == preferred })
+	if defaultIndex < 0 && len(data) > 0 {
+		defaultIndex = 0
+	}
+	if defaultIndex >= 0 {
+		data[defaultIndex].Default = true
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "agent_enabled": true, "system_prompt": config.GouoAgentSystemPrompt, "billing_unit": "platform_text_usage", "configuration_hint": "Agent 模型需在模型信息中配置 output_modalities: [\"text\"] 与 tags: [\"tools\"]，并启用支持流式工具调用的渠道。"})
 }

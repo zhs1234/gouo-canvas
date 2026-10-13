@@ -65,7 +65,7 @@ import { formatPoints } from '../../lib/accountUsage'
 
 const EMPTY_IDS: string[] = []
 type Clipboard = { nodes: CanvasNodeData[]; connections: CanvasConnection[] }
-type Props = { project: CanvasProject; onOpenProject: (id: string) => void; onOpenAgent: (id: string) => void }
+type Props = { project: CanvasProject; onOpenProject: (id: string) => void; onOpenAgent?: (id: string) => void }
 
 export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
   const { message, modal } = App.useApp()
@@ -832,7 +832,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           onUndo={() => run(useCanvasStore.getState().undo(project.id))}
           onRedo={() => run(useCanvasStore.getState().redo(project.id))}
           agentOpen={false}
-          onToggleAgent={() => onOpenAgent(project.id)}
+          onToggleAgent={onOpenAgent && (() => onOpenAgent(project.id))}
         />
         <InfiniteCanvas
           containerRef={containerRef}

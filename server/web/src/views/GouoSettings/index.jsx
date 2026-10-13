@@ -1,14 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Divider, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material';
 import { API } from 'utils/api';
 import { showError, showSuccess } from 'utils/common';
 
-const EMPTY = { GouoNotice: '', GouoRedemptionHelp: '', GouoSupportContact: '', GouoDefaultImageModel: '' };
+const EMPTY = {
+  GouoNotice: '',
+  GouoRedemptionHelp: '',
+  GouoSupportContact: '',
+  GouoDefaultImageModel: '',
+  GouoCanvasEnabled: 'true',
+  GouoAgentEnabled: 'true',
+  GouoAgentDefaultModel: '',
+  GouoAgentSystemPrompt: '',
+  GouoMaxImagesPerTask: '10'
+};
 
 export default function GouoSettings() {
   const [saved, setSaved] = useState(EMPTY);
   const [values, setValues] = useState(EMPTY);
   const [models, setModels] = useState([]);
+  const [agentModels, setAgentModels] = useState([]);
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,6 +37,7 @@ export default function GouoSettings() {
       setSaved(next);
       setValues(next);
       setModels((catalog.data.data?.models || []).filter((row) => row.gouo_enabled).map((row) => row.model));
+      setAgentModels(settings.data.agent_models || []);
       setStatus(site.data.data || null);
     } catch (error) {
       showError(error.response?.data?.message || error.message || '读取光构设置失败');
@@ -61,6 +73,25 @@ export default function GouoSettings() {
   });
   // 已设置但现已下架的默认模型仍列出，方便看出它不再生效
   const options = values.GouoDefaultImageModel && !models.includes(values.GouoDefaultImageModel) ? [...models, values.GouoDefaultImageModel] : models;
+  const agentOptions =
+    values.GouoAgentDefaultModel && !agentModels.includes(values.GouoAgentDefaultModel) ? [...agentModels, values.GouoAgentDefaultModel] : agentModels;
+  const toggle = (key, label, helper) => (
+    <Box>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={values[key] === 'true'}
+            onChange={(event) => setValues({ ...values, [key]: event.target.checked ? 'true' : 'false' })}
+            disabled={loading || saving}
+          />
+        }
+        label={label}
+      />
+      <Typography variant="caption" display="block" color="text.secondary" sx={{ ml: 6 }}>
+        {helper}
+      </Typography>
+    </Box>
+  );
 
   return (
     <Box sx={{ mt: 2, maxWidth: 880 }}>
@@ -107,6 +138,47 @@ export default function GouoSettings() {
           {...field('GouoSupportContact')}
           inputProps={{ maxLength: 2000 }}
           helperText="在用户中心的“充值与账务帮助”展示，用户可复制；单独的 HTTP(S) 网址可直接打开。"
+        />
+        <Divider textAlign="left">功能与生成</Divider>
+        {toggle('GouoCanvasEnabled', '开放画布', '关闭后客户端隐藏画布入口和“我的画布”；已保存的画布保留，重新开放后可继续使用。')}
+        {toggle('GouoAgentEnabled', '开放 Agent', '关闭后客户端隐藏 Agent 入口、创作会话和画布里的 Agent 按钮，Agent 模型目录返回为空；已保存的会话保留。')}
+        <TextField
+          select
+          label="一次最多生成张数"
+          {...field('GouoMaxImagesPerTask')}
+          helperText="限制客户端一次提交的图片总数（1–10 张），生成页、画布和 Agent 都受此限制。每张仍按单图请求计费。"
+        >
+          {Array.from({ length: 10 }, (_, index) => String(index + 1)).map((value) => (
+            <MenuItem key={value} value={value}>
+              {value} 张
+            </MenuItem>
+          ))}
+        </TextField>
+        <Divider textAlign="left">Agent</Divider>
+        <TextField
+          select
+          label="默认 Agent 模型"
+          {...field('GouoAgentDefaultModel')}
+          helperText={
+            values.GouoAgentDefaultModel && !agentModels.includes(values.GouoAgentDefaultModel)
+              ? '该模型目前不满足 Agent 条件，当前不生效，新对话使用目录中的第一个。'
+              : '新对话默认使用的对话模型；用户可在对话中切换。列表为“模型详情”中输出文本且带 tools 标签的模型，用户还需有对应渠道和分组。'
+          }
+        >
+          <MenuItem value="">未设置（使用目录中的第一个）</MenuItem>
+          {agentOptions.map((model) => (
+            <MenuItem key={model} value={model}>
+              {model}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          label="Agent 附加提示词"
+          multiline
+          minRows={3}
+          {...field('GouoAgentSystemPrompt')}
+          inputProps={{ maxLength: 4000 }}
+          helperText="附加在内置规则之后，用于补充语气、品牌或业务要求，最多 4000 字；不能放宽计费确认、工具和安全规则。在新的一轮对话中生效。"
         />
         {status && (
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">

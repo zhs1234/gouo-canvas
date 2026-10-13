@@ -5,7 +5,7 @@ import { normalizeSettings, getActiveApiProfile, validateApiProfile } from './ap
 import { putTask, storeImage } from './db'
 import { orderInputImagesForMask } from './mask'
 import { validateMaskMatchesImage } from './canvasImage'
-import { getCurrentUser, getImageModelQuote, isBackendAuthEnabled } from './gouoBackend'
+import { getCurrentUser, getImageModelQuote, getMaxTaskImages, isBackendAuthEnabled } from './gouoBackend'
 import { getChangedParams, normalizeParamsForSettings } from './paramCompatibility'
 import { getTransparentRequestParams, createTransparentOutputMeta } from './transparentImage'
 import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
@@ -34,7 +34,7 @@ const pendingRequests = new Map<string, Promise<string>>()
 export function submitImageTask(input: ImageTaskInput): Promise<string> {
   if (!input.prompt.trim() || input.prompt.length > 100000) return Promise.reject(new Error('提示词为空或过长'))
   if (input.inputImageIds && (input.inputImageIds.length > 16 || input.inputImageIds.some((id) => typeof id !== 'string' || !id))) return Promise.reject(new Error('参考图片无效'))
-  if (input.params?.n !== undefined && (!Number.isInteger(input.params.n) || input.params.n < 1 || input.params.n > 10)) return Promise.reject(new Error('图片数量必须为 1 到 10'))
+  if (input.params?.n !== undefined && (!Number.isInteger(input.params.n) || input.params.n < 1 || input.params.n > getMaxTaskImages())) return Promise.reject(new Error(`图片数量必须为 1 到 ${getMaxTaskImages()}`))
   if (input.requestId && !/^[a-zA-Z0-9_:-]{1,512}$/.test(input.requestId)) return Promise.reject(new Error('任务请求标识无效，请重新发起任务'))
   if (input.requestId && pendingRequests.has(input.requestId)) return pendingRequests.get(input.requestId)!
   const request = submitFromInput({}, input).then((id) => {
