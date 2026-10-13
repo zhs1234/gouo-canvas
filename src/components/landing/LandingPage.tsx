@@ -4,6 +4,8 @@ import {
   ReceiptText, RotateCcw, Shapes, ShoppingBag, Sparkles, UserRound,
 } from 'lucide-react'
 import { BRAND } from '../../config/brand'
+import { useBackendStatus } from '../../hooks/useBackendStatus'
+import { getMaxTaskImages } from '../../lib/gouoBackend'
 import { INSPIRATION_TEMPLATES } from '../../lib/inspirationTemplates'
 import { AvatarArt, EarbudsArt, FestivalPosterArt, MarbleProductArt } from './artwork'
 import './landing.css'
@@ -36,7 +38,6 @@ const FEATURES = [
 ]
 
 const STATS = [
-  { value: '10', unit: '张', title: '单次最多出图', desc: '一次提交最多生成 10 张候选，并排比较，挑出最好的一张。', tone: 'from-[#e3f4ea] via-[#f4f8f1] to-[#fbfbf9]' },
   { value: '24', unit: '小时', title: '原图可找回', desc: '网络中断或页面关闭后，24 小时内可取回已生成的结果，不会重新生成扣费。', tone: 'from-[#ebe4fb] via-[#f5f1fb] to-[#fbfbf9]' },
   { value: '0', unit: '元', title: '失败不扣费', desc: '明确失败的生成会自动退回预扣额度，只为成功出图付费。', tone: 'from-[#fde4d3] via-[#fcf1e8] to-[#fbfbf9]' },
   { value: '∞', unit: '画布', title: '不限尺寸的创作空间', desc: '把参考、草图与成片放在同一张画布上，随时回到任何一步继续。', tone: 'from-[#dcedf7] via-[#eef5f8] to-[#fbfbf9]' },
@@ -298,6 +299,13 @@ function UseCases() {
 
 export default function LandingPage({ onLogin, onRegister }: { onLogin: () => void; onRegister: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null)
+  // 单次最多张数由后台设置，状态加载后重新渲染
+  useBackendStatus()
+  const maxImages = getMaxTaskImages()
+  const stats = [
+    { value: String(maxImages), unit: '张', title: '单次最多出图', desc: `一次提交最多生成 ${maxImages} 张候选，并排比较，挑出最好的一张。`, tone: 'from-[#e3f4ea] via-[#f4f8f1] to-[#fbfbf9]' },
+    ...STATS,
+  ]
 
   useEffect(() => {
     const root = rootRef.current
@@ -427,7 +435,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         <div className="relative mx-auto max-w-[1280px]">
           <h2 className="gouo-reveal max-w-3xl text-[clamp(2.2rem,4.4vw,3.6rem)] font-semibold leading-[1.05] tracking-[-0.05em]">为认真创作的人设计的细节</h2>
           <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {STATS.map((stat, index) => (
+            {stats.map((stat, index) => (
               <div key={stat.title} className={`gouo-reveal grid min-h-[230px] content-between gap-10 sm:min-h-[340px] rounded-[28px] border border-white/80 bg-gradient-to-b ${stat.tone} p-7 shadow-[0_20px_50px_rgb(66_49_37/0.07)]`} style={delay(`${index * 0.08}s`)}>
                 <div className="flex items-baseline gap-2">
                   <strong className="text-[clamp(4rem,6vw,5.6rem)] font-semibold leading-[0.82] tracking-[-0.075em] tabular-nums">{stat.value}</strong>
