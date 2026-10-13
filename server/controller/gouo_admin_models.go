@@ -73,10 +73,27 @@ func gouoChannelsByModel() (map[string][]gouoAdminChannel, error) {
 		return nil, err
 	}
 	result := map[string][]gouoAdminChannel{}
+	model.PricingInstance.RLock()
+	ids := make([]string, 0, len(model.PricingInstance.Prices))
+	for id := range model.PricingInstance.Prices {
+		ids = append(ids, id)
+	}
+	model.PricingInstance.RUnlock()
 	for _, channel := range channels {
 		groups := splitTrimmed(channel.Group)
 		mapping, _ := utils.UnmarshalString[map[string]string](channel.GetModelMapping())
-		for _, id := range splitTrimmed(channel.Models) {
+		models := splitTrimmed(channel.Models)
+		for _, pattern := range splitTrimmed(channel.Models) {
+			if !strings.HasSuffix(pattern, "*") {
+				continue
+			}
+			for _, id := range ids {
+				if strings.HasPrefix(id, strings.TrimRight(pattern, "*")) && !slices.Contains(models, id) {
+					models = append(models, id)
+				}
+			}
+		}
+		for _, id := range models {
 			item := gouoAdminChannel{ID: channel.Id, Name: channel.Name, Status: channel.Status, Groups: groups, OnlyChat: channel.OnlyChat, Stream: channel.AllowStream(id)}
 			if target := strings.TrimSpace(mapping[id]); target != "" {
 				item.BillingOriginal = strings.HasPrefix(target, "+")
@@ -112,12 +129,29 @@ func gouoModelText(price *model.Price) (string, string) {
 	return price.ModelInfo.Name, price.ModelInfo.Description
 }
 
+func gouoModelInfos() (map[string]*model.ModelInfoResponse, error) {
+	infos, err := model.GetAllModelInfo()
+	if err != nil {
+		return nil, err
+	}
+	result := map[string]*model.ModelInfoResponse{}
+	for _, info := range infos {
+		result[info.Model] = info.ToResponse()
+	}
+	return result, nil
+}
+
 // ListGouoAdminModels 列出已定价或已配置在渠道上的模型，以及各自的光构配置和支持它的渠道，
 // 便于在一处看到哪些模型会出现在客户端
 func ListGouoAdminModels(c *gin.Context) {
 	channelsByModel, err := gouoChannelsByModel()
 	if err != nil {
 		gouoFail(c, http.StatusInternalServerError, "channels_unavailable", "读取渠道失败")
+		return
+	}
+	infos, err := gouoModelInfos()
+	if err != nil {
+		gouoFail(c, http.StatusInternalServerError, "model_info_unavailable", "读取模型资料失败")
 		return
 	}
 	byModel := map[string]*gouoAdminModel{}
@@ -136,7 +170,11 @@ func ListGouoAdminModels(c *gin.Context) {
 	}
 	model.PricingInstance.RUnlock()
 	for id, channels := range channelsByModel {
-		entry(id).Channels = channels
+		item := entry(id)
+		item.Channels = channels
+		if info := infos[id]; !item.Priced && info != nil {
+			item.Name, item.Description = info.Name, info.Description
+		}
 	}
 	models := make([]*gouoAdminModel, 0, len(byModel))
 	for _, item := range byModel {
@@ -303,6 +341,11 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 		gouoFail(c, http.StatusInternalServerError, "channels_unavailable", "读取渠道失败")
 		return
 	}
+	infos, err := gouoModelInfos()
+	if err != nil {
+		gouoFail(c, http.StatusInternalServerError, "model_info_unavailable", "读取模型资料失败")
+		return
+	}
 	rate := gouoPointsPerMillionTokens()
 	byModel := map[string]*gouoAdminAgentModel{}
 	imageModels := map[string]bool{}
@@ -325,6 +368,11 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 		}
 		if byModel[id] == nil {
 			byModel[id] = &gouoAdminAgentModel{Model: id}
+			if info := infos[id]; info != nil {
+				byModel[id].Name, byModel[id].Description = info.Name, info.Description
+				byModel[id].Listed = gouoAgentListed(info)
+				byModel[id].Vision = slices.Contains(info.InputModalities, "image")
+			}
 		}
 		byModel[id].Channels = channels
 	}

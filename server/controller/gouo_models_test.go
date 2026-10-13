@@ -59,6 +59,8 @@ func TestGouoAdminModelsListAndUpdate(t *testing.T) {
 	})
 	require.NoError(t, db.Create(&model.Price{Model: "image-a", Type: model.TimesPriceType, GouoEnabled: true, GouoPriceCNY: 0.1, GouoMaxOutputs: 1}).Error)
 	require.NoError(t, db.Create(&model.Channel{Name: "上游", Status: 1, Models: "image-a, image-new", Group: "default,vip"}).Error)
+	require.NoError(t, db.Create(&model.ModelInfo{Model: "image-new", Name: "已有图片名称", Description: "已有图片说明"}).Error)
+	require.NoError(t, db.Create(&model.Channel{Name: "通配符", Status: 1, Models: "image-*,image-a", Group: "default"}).Error)
 	require.NoError(t, model.PricingInstance.Init())
 
 	router := gin.New()
@@ -86,6 +88,9 @@ func TestGouoAdminModelsListAndUpdate(t *testing.T) {
 	require.Equal(t, true, models["image-a"]["gouo_enabled"])
 	// 只在渠道上配置、还没有价格的模型也列出，便于直接启用
 	require.Equal(t, false, models["image-new"]["priced"])
+	require.Equal(t, "已有图片名称", models["image-new"]["name"])
+	require.Equal(t, "已有图片说明", models["image-new"]["description"])
+	require.Len(t, models["image-a"]["channels"], 2)
 	require.Len(t, models["image-new"]["channels"], 1)
 	require.Equal(t, []any{"default", "vip"}, models["image-new"]["channels"].([]any)[0].(map[string]any)["groups"])
 	// vip 不是有效的用户分组，不算开放分组
@@ -103,7 +108,7 @@ func TestGouoAdminModelsListAndUpdate(t *testing.T) {
 	require.Equal(t, 0.3, models["image-new"]["gouo_price_cny"])
 	before, err := model.PricingInstance.GetGouoModel("image-new")
 	require.NoError(t, err)
-	require.Equal(t, "image-new", before.Name)
+	require.Equal(t, "已有图片名称", before.Name)
 	// 显示名称、说明和排序不参与价格版本，修改后用户不必重新确认价格
 	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"name":" 标准画质 ","description":"速度快，适合草图","gouo_sort":-1}`).Code)
 	after, err := model.PricingInstance.GetGouoModel("image-new")
@@ -149,6 +154,12 @@ func TestGouoAdminAgentModels(t *testing.T) {
 	noStream := datatypes.NewJSONSlice([]string{"chat-b"})
 	require.NoError(t, db.Create(&model.Channel{Name: "文本", Status: 1, Models: "chat-a,chat-b,image-x", Group: "default", DisabledStream: &noStream}).Error)
 	require.NoError(t, db.Create(&model.Price{Model: "image-x", Type: model.TimesPriceType, GouoEnabled: true, GouoPriceCNY: 0.1, GouoMaxOutputs: 1}).Error)
+	require.NoError(t, db.Create(&model.ModelInfo{Model: "chat-b", Name: "已有助手", Description: "已有说明", InputModalities: `["text","image"]`, OutputModalities: `["text"]`, Tags: `["tools"]`}).Error)
+	require.NoError(t, db.Create(&model.ModelInfo{Model: "chat-wild", OutputModalities: `["text"]`, Tags: `["tools"]`}).Error)
+	require.NoError(t, db.Create(&model.Price{Model: "chat-wild", Type: model.TokensPriceType}).Error)
+	wildNoStream := datatypes.NewJSONSlice([]string{"chat-wild"})
+	wildMapping := `{"chat-wild":"+upstream"}`
+	require.NoError(t, db.Create(&model.Channel{Name: "通配符", Status: 1, Models: "chat-*", Group: "default", DisabledStream: &wildNoStream, ModelMapping: &wildMapping}).Error)
 	require.NoError(t, model.PricingInstance.Init())
 
 	router := gin.New()
@@ -180,6 +191,15 @@ func TestGouoAdminAgentModels(t *testing.T) {
 	require.NotContains(t, models, "image-x")
 	require.Equal(t, "未上架", models["chat-a"]["reason"])
 	require.Equal(t, false, models["chat-a"]["priced"])
+	require.Equal(t, "已有助手", models["chat-b"]["name"])
+	require.Equal(t, "已有说明", models["chat-b"]["description"])
+	require.Equal(t, true, models["chat-b"]["vision"])
+	require.Equal(t, true, models["chat-b"]["listed"])
+	require.Equal(t, "渠道关闭了此模型的流式输出", models["chat-wild"]["reason"])
+	require.Len(t, models["chat-wild"]["channels"], 1)
+	wildChannel := models["chat-wild"]["channels"].([]any)[0].(map[string]any)
+	require.Equal(t, "upstream", wildChannel["mapped_to"])
+	require.Equal(t, true, wildChannel["billing_original"])
 
 	// 首次上架必须填价格；已启用的图片模型不能上架为 Agent
 	require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-a","listed":true}`).Code)
@@ -214,7 +234,11 @@ func TestGouoAdminAgentModels(t *testing.T) {
 
 	// 渠道关闭了流式输出时给出原因
 	require.Equal(t, http.StatusOK, update(`{"model":"chat-b","listed":true,"input_points":0,"output_points":0}`).Code)
+	require.Equal(t, true, list()["chat-b"]["visible"])
+	require.NoError(t, db.Model(&model.Channel{}).Where("name = ?", "通配符").Update("disabled_stream", datatypes.NewJSONSlice([]string{"chat-b", "chat-wild"})).Error)
 	require.Equal(t, "渠道关闭了此模型的流式输出", list()["chat-b"]["reason"])
+	require.Equal(t, "已有助手", model.PricingInstance.Prices["chat-b"].ModelInfo.Name)
+	require.Contains(t, model.PricingInstance.Prices["chat-b"].ModelInfo.InputModalities, "image")
 
 	// 下架只去掉工具声明，价格和名称保留
 	require.Equal(t, http.StatusOK, update(`{"model":"chat-a","listed":false}`).Code)
