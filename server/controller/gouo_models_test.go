@@ -428,6 +428,11 @@ func TestGouoAdminAgentPriceKeepsBilling(t *testing.T) {
 	require.InDelta(t, 0.73, byID["chat-times"]["input_points"].(float64), 1e-9)
 	require.InDelta(t, 0.0, byID["chat-times"]["output_points"].(float64), 1e-9)
 	require.Equal(t, "tokens", byID["chat-sync"]["price_type"])
+	// 客户端按每百万 token 显示 Agent 价格，按次计费的模型即使已上架也不进目录
+	require.Equal(t, true, byID["chat-times"]["listed"])
+	require.Equal(t, false, byID["chat-times"]["visible"])
+	require.Contains(t, byID["chat-times"]["reason"], "按次计费")
+	require.Nil(t, gouoAgentCapabilities(model.PricingInstance.Prices["chat-times"]))
 
 	// 下架不改价格记录，上游同步来的价格不会因此被锁定
 	require.Equal(t, http.StatusOK, update(`{"model":"chat-sync","listed":false}`))
@@ -451,6 +456,7 @@ func TestGouoAdminAgentPriceKeepsBilling(t *testing.T) {
 	require.Equal(t, model.TokensPriceType, price.Type)
 	require.InDelta(t, 2.0, price.Output, 1e-9)
 	require.True(t, price.Locked)
+	require.NotNil(t, gouoAgentCapabilities(price))
 
 	// 汇率或额度单位未设置时无法换算，拒绝而不是存入无穷大或 0；也不能先把模型标成上架
 	for _, zero := range []func(){
@@ -459,6 +465,8 @@ func TestGouoAdminAgentPriceKeepsBilling(t *testing.T) {
 		func() { config.PaymentUSDRate, config.QuotaPerUnit = math.Inf(1), 500000 },
 		func() { config.PaymentUSDRate, config.QuotaPerUnit = 7.3, math.Inf(1) },
 		func() { config.PaymentUSDRate, config.QuotaPerUnit = math.NaN(), 500000 },
+		// 倍率是有限正数，但换算出的价格溢出成无穷大
+		func() { config.PaymentUSDRate, config.QuotaPerUnit = 1e-315, 500000 },
 	} {
 		zero()
 		require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-sync","listed":true,"input_points":1,"output_points":1}`))

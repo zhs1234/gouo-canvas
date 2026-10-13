@@ -169,7 +169,7 @@ export default function AgentModels() {
                       <>
                         <Typography variant="body2">按次计费：每次 {formatPoints(row.input_points)} 积分</Typography>
                         <Typography variant="caption" display="block" color="warning.main">
-                          在这里保存价格会改为按 token 计费
+                          不能用于 Agent，填写按 token 的价格后可用
                         </Typography>
                       </>
                     ) : (
@@ -315,8 +315,8 @@ export default function AgentModels() {
               <Stack spacing={2} sx={{ mt: 1 }}>
                 {editing.times_points !== null && (
                   <Alert severity="warning">
-                    该模型当前按次计费（每次 {formatPoints(editing.times_points)} 积分）。两个价格都留空则保持按次计费；填写每百万 token
-                    的输入和输出价格则改为按 token 计费。
+                    该模型当前按次计费（每次 {formatPoints(editing.times_points)} 积分），按次计费的模型不会出现在客户端 Agent
+                    中。填写每百万 token 的输入和输出价格后改为按 token 计费即可使用；两个价格都留空则保持按次计费，只保存其他字段。
                   </Alert>
                 )}
                 <TextField

@@ -398,6 +398,8 @@ func gouoAgentReason(item *gouoAdminAgentModel) string {
 		return "未上架"
 	case !item.Priced:
 		return "还没有价格记录"
+	case item.PriceType == model.TimesPriceType:
+		return "按次计费的模型不能用于 Agent，请填写按 token 的价格"
 	case !enabled:
 		return "没有启用中的渠道支持此模型"
 	case !streaming:
@@ -559,6 +561,13 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	if pointsSet && !(rate > 0 && !math.IsInf(rate, 0)) {
 		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "支付汇率或额度单位未设置，无法换算积分价格")
 		return
+	}
+	// 倍率是有限正数但极小时，换算出的价格仍可能溢出成无穷大
+	for _, points := range []*float64{input.InputPoints, input.OutputPoints} {
+		if points != nil && math.IsInf(*points/rate, 0) {
+			gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "支付汇率或额度单位设置异常，换算后的价格超出范围")
+			return
+		}
 	}
 	if err := saveGouoModelInfo(id, func(info *model.ModelInfo) {
 		applyGouoModelText(info, input.Name, input.Description)

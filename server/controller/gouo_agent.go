@@ -31,7 +31,8 @@ type gouoAgentModel struct {
 
 func gouoAgentCapabilities(price *model.Price) *gouoAgentModel {
 	info := price.ModelInfo
-	if price.GouoEnabled || strings.ContainsAny(price.Model, "*#") || !model.GouoAgentListed(info) {
+	// 客户端按每百万 token 估算和显示 Agent 价格，按次计费的模型不放进目录
+	if price.GouoEnabled || price.Type != model.TokensPriceType || strings.ContainsAny(price.Model, "*#") || !model.GouoAgentListed(info) {
 		return nil
 	}
 	name := info.Name
