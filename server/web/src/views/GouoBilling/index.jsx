@@ -94,8 +94,8 @@ export default function GouoBilling() {
           <DialogContent>
             <Typography sx={{ overflowWrap: 'anywhere', mb: 2 }}>请求 {selected?.id}<br />用户 {selected?.user_id} · {selected?.model_name} · {renderGouoPoints(selected?.price_cny)}</Typography>
             <TextField select required fullWidth label="核对结果" value={action} onChange={(event) => setAction(event.target.value)} sx={{ mt: 1 }}>
-              <MenuItem value="refunded">确认失败，退回预扣额度</MenuItem>
-              <MenuItem value="settled">确认成功，结算预扣额度</MenuItem>
+              <MenuItem value="refunded">确认失败，退回预扣积分</MenuItem>
+              <MenuItem value="settled">确认成功，结算预扣积分</MenuItem>
             </TextField>
             <TextField required fullWidth multiline minRows={3} label="核对依据（渠道记录、时间或工单编号）" value={note} onChange={(event) => setNote(event.target.value)} inputProps={{ maxLength: 1000 }} sx={{ mt: 2 }} />
           </DialogContent>

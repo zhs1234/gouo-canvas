@@ -48,7 +48,8 @@ export function CanvasTopBar({
   onUndo: () => void
   onRedo: () => void
   agentOpen: boolean
-  onToggleAgent: () => void
+  // 后台关闭 Agent 时不传，隐藏入口
+  onToggleAgent?: () => void
 }) {
   const colorTheme = useThemeStore((state) => state.theme)
   const { t } = useTranslation()
@@ -162,8 +163,8 @@ export function CanvasTopBar({
           <Button type="text" onClick={() => setShortcutsOpen(true)}>
             快捷键
           </Button>
-          <span className="h-6 w-px" style={{ background: theme.toolbar.border }} />
-          <Button
+          {onToggleAgent && <span className="h-6 w-px" style={{ background: theme.toolbar.border }} />}
+          {onToggleAgent && <Button
             type="text"
             className="!h-10 !rounded-xl !px-3 !font-medium"
             style={{
@@ -175,7 +176,7 @@ export function CanvasTopBar({
             onClick={onToggleAgent}
           >
             Agent
-          </Button>
+          </Button>}
         </div>
       </div>
       <Modal title={t('canvas.shortcuts')} open={shortcutsOpen} onCancel={() => setShortcutsOpen(false)} footer={null} centered>

@@ -1,7 +1,8 @@
 import { createBackendSettings, isBackendAuthEnabled } from '../gouoBackend'
 import type { AgentModel, AgentToolCall, AgentToolDefinition, ChatMessage } from './types'
 
-export async function getAgentModels(): Promise<AgentModel[]> {
+// 目录同时带回运营方在后台填写的附加提示词
+export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string }> {
   if (!isBackendAuthEnabled()) throw new Error('Agent 需要启用光构平台服务，请先配置平台后端')
   const settings = await createBackendSettings()
   const base = settings.baseUrl!.replace(/\/v1\/?$/, '')
@@ -17,7 +18,7 @@ export async function getAgentModels(): Promise<AgentModel[]> {
     const model = entry as Record<string, unknown>
     return typeof model.id !== 'string' || typeof model.name !== 'string' || typeof model.tool_calls !== 'boolean' || typeof model.vision !== 'boolean'
   })) throw new Error('Agent 模型目录格式无效')
-  return payload.data.filter((model: AgentModel) => model.tool_calls)
+  return { models: payload.data.filter((model: AgentModel) => model.tool_calls), systemPrompt: typeof payload.system_prompt === 'string' ? payload.system_prompt.trim() : '' }
 }
 
 // SSE 的分片可能切在中文字符、CRLF 或 tool arguments 中间，统一按完整事件消费。

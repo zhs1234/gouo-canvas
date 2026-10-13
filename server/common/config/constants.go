@@ -24,6 +24,13 @@ var GouoSupportContact = ""
 // GouoNotice 是客户端创作页顶部的公告，留空时显示默认介绍
 var GouoNotice = ""
 
+// 客户端功能开关、Agent 与生成限制，由后台“光构设置”维护；画布和 Agent 仍受前端构建开关约束
+var GouoCanvasEnabled = true
+var GouoAgentEnabled = true
+var GouoAgentDefaultModel = ""
+var GouoAgentSystemPrompt = ""
+var GouoMaxImagesPerTask = 10
+
 // GouoDefaultImageModel 是客户端未手动选择模型时使用的图片模型；为空或不可用时取目录中的第一个
 var GouoDefaultImageModel = ""
 var ChatLink = ""

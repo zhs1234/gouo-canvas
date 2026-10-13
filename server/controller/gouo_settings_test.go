@@ -21,10 +21,11 @@ func TestGouoAdminSettings(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.Option{}))
-	oldDB, oldNotice, oldHelp, oldDefault := model.DB, config.GouoNotice, config.GouoRedemptionHelp, config.GouoDefaultImageModel
+	oldDB, oldNotice, oldHelp, oldDefault, oldPricing := model.DB, config.GouoNotice, config.GouoRedemptionHelp, config.GouoDefaultImageModel, model.PricingInstance
 	model.DB = db
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{}}
 	t.Cleanup(func() {
-		model.DB, config.GouoNotice, config.GouoRedemptionHelp, config.GouoDefaultImageModel = oldDB, oldNotice, oldHelp, oldDefault
+		model.DB, config.GouoNotice, config.GouoRedemptionHelp, config.GouoDefaultImageModel, model.PricingInstance = oldDB, oldNotice, oldHelp, oldDefault, oldPricing
 	})
 	config.GouoNotice, config.GouoRedemptionHelp, config.GouoDefaultImageModel = "", "旧说明", ""
 	// 测试不经过 InitOptionMap，手动登记这些设置项
@@ -32,6 +33,13 @@ func TestGouoAdminSettings(t *testing.T) {
 	config.GlobalOption.RegisterString("GouoRedemptionHelp", &config.GouoRedemptionHelp)
 	config.GlobalOption.RegisterString("GouoSupportContact", &config.GouoSupportContact)
 	config.GlobalOption.RegisterString("GouoDefaultImageModel", &config.GouoDefaultImageModel)
+	config.GlobalOption.RegisterBool("GouoAgentEnabled", &config.GouoAgentEnabled)
+	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
+	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
+	oldAgent, oldMax, oldPrompt := config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt
+	t.Cleanup(func() {
+		config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt = oldAgent, oldMax, oldPrompt
+	})
 
 	router := gin.New()
 	router.GET("/settings", GetGouoAdminSettings)
@@ -56,8 +64,19 @@ func TestGouoAdminSettings(t *testing.T) {
 	require.NoError(t, db.First(&stored, "key = ?", "GouoNotice").Error)
 	require.Equal(t, "国庆活动 全场 8 折", stored.Value)
 
+	// 开关、数量和多行提示词按类型保存
+	code, res = put(`{"GouoAgentEnabled":"false","GouoMaxImagesPerTask":"4","GouoAgentSystemPrompt":"  回答简洁。\n只用中文。  "}`)
+	require.Equal(t, http.StatusOK, code)
+	require.False(t, config.GouoAgentEnabled)
+	require.Equal(t, 4, config.GouoMaxImagesPerTask)
+	require.Equal(t, "回答简洁。\n只用中文。", config.GouoAgentSystemPrompt)
+
 	// 任一项不合法时整批不保存；不接受白名单以外的系统设置
 	for _, body := range []string{
+		`{"GouoAgentEnabled":"yes"}`,
+		`{"GouoMaxImagesPerTask":"0"}`,
+		`{"GouoMaxImagesPerTask":"11"}`,
+		`{"GouoAgentSystemPrompt":"` + strings.Repeat("长", 4001) + `"}`,
 		`{"GouoNotice":"新公告","GouoSupportContact":"` + strings.Repeat("长", 2001) + `"}`,
 		`{"GouoNotice":"` + strings.Repeat("长", 201) + `"}`,
 		`{"RegisterEnabled":"false"}`,

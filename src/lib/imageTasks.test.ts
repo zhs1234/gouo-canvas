@@ -12,7 +12,7 @@ vi.mock('../store', () => ({
   executeTask: fixtures.execute,
 }))
 vi.mock('./db', () => ({ putTask: vi.fn(async (task: TaskRecord) => { fixtures.saved.push(task) }), storeImage: vi.fn(async () => 'image') }))
-vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user }))
+vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user, getMaxTaskImages: () => 10 }))
 vi.mock('./userGuidance', () => ({ getActionableErrorMessage: (message: string) => message, requestUserCenter: vi.fn() }))
 vi.mock('./canvasImage', () => ({ validateMaskMatchesImage: vi.fn(async () => 'partial') }))
 

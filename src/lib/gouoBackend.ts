@@ -120,7 +120,7 @@ export async function getImageModelQuote(id: string, inputCount: number, hasMask
     throw new Error('所选模型已不可用，请重新选择模型')
   }
   if ((inputCount > 0 && !model.reference) || (hasMask && !model.mask)) throw new Error('此模型不支持当前编辑操作，请重新选择模型')
-  if (!Number.isInteger(n) || n < 1 || n > 10) throw new Error('图片总数量必须为 1 到 10 的整数')
+  if (!Number.isInteger(n) || n < 1 || n > getMaxTaskImages()) throw new Error(`图片总数量必须为 1 到 ${getMaxTaskImages()} 的整数`)
   if (!version || version !== model.price_version) {
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('gouo-models-refresh'))
     throw new GouoPriceChangedError(model)
@@ -146,6 +146,9 @@ export interface GouoBackendStatus {
   gouo_notice?: string
   register_enabled?: boolean
   password_login?: boolean
+  gouo_canvas_enabled?: boolean
+  gouo_agent_enabled?: boolean
+  gouo_max_images?: number
 }
 
 export interface GouoCloudStorage {
@@ -301,6 +304,40 @@ export function getCurrentUser(): Promise<GouoUser> {
 
 export function getBackendStatus(): Promise<GouoBackendStatus> {
   return backendRequest<GouoBackendStatus>('/api/status')
+}
+
+// 后台下发的客户端设置。各处共用一次请求；切回页面时最多每分钟刷新一次，管理员修改后用户无需刷新页面
+const STATUS_REFRESH_MS = 60_000
+let cachedStatus: GouoBackendStatus | null = null
+let statusLoadedAt = 0
+let statusPending: Promise<void> | null = null
+const statusListeners = new Set<(status: GouoBackendStatus) => void>()
+
+export function refreshBackendStatus() {
+  if (statusPending || Date.now() - statusLoadedAt < STATUS_REFRESH_MS) return
+  statusPending = getBackendStatus()
+    .then((status) => {
+      cachedStatus = status
+      statusLoadedAt = Date.now()
+      statusListeners.forEach((listener) => listener(status))
+    })
+    .catch((err) => console.warn('读取后台设置失败', err))
+    .finally(() => { statusPending = null })
+}
+
+export function getCachedBackendStatus() {
+  return cachedStatus
+}
+
+export function subscribeBackendStatus(listener: (status: GouoBackendStatus) => void) {
+  statusListeners.add(listener)
+  return () => { statusListeners.delete(listener) }
+}
+
+// 后台限制的一次最多生成张数；未加载或数值无效时按上限 10
+export function getMaxTaskImages() {
+  const n = cachedStatus?.gouo_max_images
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 10 ? n : 10
 }
 
 export function login(username: string, password: string): Promise<GouoUser> {

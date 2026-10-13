@@ -33,14 +33,14 @@ After signing in you land on **创作** (Create). The sidebar holds Create, **�
 ![Creation page](../images/screenshots/client-create.webp)
 
 - The banner at the top shows the operator's announcement. A dismissed announcement reappears when its text changes. Without an announcement, a default introduction is shown.
-- The **生成图片 / 画布 / Agent** switch selects one of three ways of working. The deployment decides which of them are available.
+- The **生成图片 / 画布 / Agent** switch selects one of three ways of working. The operator can turn off the canvas or Agent, which hides their entry points.
 - Below the prompt box are the model menu, the estimated charge, parameters, and the reference image entry.
 
 ## 3. Create the first image
 
 1. Describe the subject, scene, composition, light, and constraints in the prompt box.
 2. Pick a model from the model menu. The estimated charge appears below the box, for example "预计 20 积分（1 张 · 20 积分/张）· 按成功张数计费" (about 20 points, 1 image at 20 points each, billed per successful image).
-3. Optionally set size, quality, format, and image count (up to 10 per submission) under **自定义参数** (Custom parameters).
+3. Optionally set size, quality, format, and image count (up to 10 per submission; the operator can lower this) under **自定义参数** (Custom parameters).
 4. Optionally add reference images or draw a mask on a reference.
 5. Click the arrow to submit. Results appear under **本次生成** (This session) below the prompt box and in **我的作品**.
 
@@ -184,7 +184,7 @@ Each successful image is charged at the model price, and images the server confi
 
 Product mode hides API keys and provider settings; regular users never enter platform keys.
 
-ZIP backup export, import, and local data clearing are under **数据管理** (Data management) in settings. The current creation workspace header does not expose a settings button, so contact the operator if you need them. Export first fetches original images from the cloud and reports a failure if any are missing. Import checks the version, task references, and image files before saving new tasks and images together. Local tasks with the same ID are kept; an image with the same ID but different content rejects the whole import.
+Click the gear icon at the top right to open settings, where you can adjust habits such as the submit shortcut and how reference edits work. ZIP backup export, import, and local data clearing are under **数据管理** (Data management). Export first fetches original images from the cloud and reports a failure if any are missing. Import checks the version, task references, and image files before saving new tasks and images together. Local tasks with the same ID are kept; an image with the same ID but different content rejects the whole import.
 
 Imported works are not uploaded automatically; import them into your account from **用户中心 → 导入本机旧作品**, and note that importing twice can create duplicates. Clearing local data does not delete cloud works, which reload from the server; content that was never imported or backed up is lost.
 

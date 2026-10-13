@@ -217,7 +217,8 @@ export default function Header({ compact = false }: { compact?: boolean }) {
                 操作指南
               </ViewportTooltip>
             </div>}
-            {!compact && <div
+            {/* 创作空间也需要设置入口：数据导入导出、习惯配置都在这里 */}
+            <div
               className="relative"
               {...settingsTooltip.handlers}
             >
@@ -231,7 +232,7 @@ export default function Header({ compact = false }: { compact?: boolean }) {
               <ViewportTooltip visible={settingsTooltip.visible} className="whitespace-nowrap">
                 设置
               </ViewportTooltip>
-            </div>}
+            </div>
           </div>
         </div>
       </header>

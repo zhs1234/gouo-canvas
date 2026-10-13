@@ -5,6 +5,8 @@ export interface AgentModel {
   name: string
   tool_calls: boolean
   vision: boolean
+  // 后台“光构设置”指定的默认 Agent 模型
+  default?: boolean
   input_price_cny?: number
   output_price_cny?: number
 }

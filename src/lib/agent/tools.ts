@@ -3,7 +3,7 @@ import { useCanvasStore } from '../../stores/canvasStore'
 import { getImage } from '../db'
 import { submitImageTask } from '../imageTasks'
 import { getActiveApiProfile } from '../apiProfiles'
-import { getImageModels, isBackendAuthEnabled } from '../gouoBackend'
+import { getImageModels, getMaxTaskImages, isBackendAuthEnabled } from '../gouoBackend'
 import { serializeCanvasProject } from '../canvas/document'
 import type { TaskParams } from '../../types'
 import type { AgentConversation, AgentToolDefinition } from './types'
@@ -182,7 +182,7 @@ export async function executeAgentTool(input: {
     if (Object.keys(values).some((key) => !['size', 'quality', 'n', 'output_format'].includes(key))) throw new Error('图片参数包含不支持的字段')
     if (values.size !== undefined && (typeof values.size !== 'string' || !/^(auto|\d{2,5}x\d{2,5})$/.test(values.size))) throw new Error('图片尺寸无效')
     if (values.quality !== undefined && !['auto', 'low', 'medium', 'high'].includes(values.quality as string)) throw new Error('图片质量无效')
-    if (values.n !== undefined && (!Number.isInteger(values.n) || (values.n as number) < 1 || (values.n as number) > 10)) throw new Error('图片数量无效')
+    if (values.n !== undefined && (!Number.isInteger(values.n) || (values.n as number) < 1 || (values.n as number) > getMaxTaskImages())) throw new Error(`图片数量必须为 1 到 ${getMaxTaskImages()}`)
     if (values.output_format !== undefined && !['png', 'jpeg', 'webp'].includes(values.output_format as string)) throw new Error('图片格式无效')
     // 从最近一条用户消息起累计已提交的张数
     const start = conversation.messages.map((message) => message.role).lastIndexOf('user')

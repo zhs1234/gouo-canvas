@@ -160,7 +160,8 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
   }, [conversationId, projectId, onConversationReady])
 
   useEffect(() => {
-    if (conversation && !conversation.modelId && models[0]) useAgentStore.getState().configureConversation(conversation.id, { modelId: models[0].id })
+    const fallback = models.find((model) => model.default) || models[0]
+    if (conversation && !conversation.modelId && fallback) useAgentStore.getState().configureConversation(conversation.id, { modelId: fallback.id })
   }, [conversation, models])
 
   useEffect(() => {

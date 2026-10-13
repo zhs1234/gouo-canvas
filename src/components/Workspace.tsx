@@ -21,9 +21,17 @@ import '../workspace.css'
 const CanvasWorkspace = lazy(() => import('./canvas/CanvasWorkspace'))
 const AgentWorkspace = lazy(() => import('./agent/AgentWorkspace'))
 const InspirationLibraryPage = lazy(() => import('./InspirationLibraryModal').then((module) => ({ default: module.InspirationLibraryPage })))
-const canvasEnabled = import.meta.env.VITE_CANVAS_ENABLED !== 'false'
-const agentEnabled = import.meta.env.VITE_AGENT_ENABLED !== 'false'
-const creationModes = [{ id: 'generate', label: '生成图片', enabled: true }, { id: 'canvas', label: '画布', enabled: canvasEnabled }, { id: 'agent', label: 'Agent', enabled: agentEnabled }].filter((item) => item.enabled)
+const canvasBuildEnabled = import.meta.env.VITE_CANVAS_ENABLED !== 'false'
+const agentBuildEnabled = import.meta.env.VITE_AGENT_ENABLED !== 'false'
+
+// 构建开关是上限，后台“光构设置”可在此基础上随时关闭画布或 Agent
+function useCreationFeatures() {
+  const status = useBackendStatus()
+  const canvasEnabled = canvasBuildEnabled && status?.gouo_canvas_enabled !== false
+  const agentEnabled = agentBuildEnabled && status?.gouo_agent_enabled !== false
+  const creationModes = [{ id: 'generate', label: '生成图片', enabled: true }, { id: 'canvas', label: '画布', enabled: canvasEnabled }, { id: 'agent', label: 'Agent', enabled: agentEnabled }].filter((item) => item.enabled)
+  return { canvasEnabled, agentEnabled, creationModes }
+}
 const NOTICE_DISMISSED_KEY = 'gouo-canvas.notice-dismissed'
 
 // 服务端邮件和支付返回的链接指向 /topup，打开用户中心的充值页
@@ -34,6 +42,7 @@ function TopupRoute() {
 
 function CanvasRoute() {
   const { id } = useParams()
+  const { agentEnabled } = useCreationFeatures()
   const navigate = useNavigate()
   const [drawer, setDrawer] = useState(false)
   const [conversationId, setConversationId] = useState<string>()
@@ -43,8 +52,8 @@ function CanvasRoute() {
     setDrawer(true)
   }
   return <div className="canvas-route">
-    <CanvasWorkspace projectId={id} onOpenProject={(next) => { setDrawer(false); navigate(`/canvas/${encodeURIComponent(next)}`) }} onOpenAgent={(projectId) => void openAgent(projectId)} />
-    {drawer && id && <aside className="canvas-agent-drawer" aria-label="画布 Agent"><div className="canvas-agent-drawer-heading"><span>创作助手</span><button onClick={() => navigate(conversationId ? `/agent/${conversationId}` : `/agent?canvas=${id}`)}>展开会话 ↗</button><button aria-label="关闭画布 Agent" onClick={() => setDrawer(false)}>×</button></div><AgentWorkspace embedded projectId={id} conversationId={conversationId} onOpenConversation={setConversationId} /></aside>}
+    <CanvasWorkspace projectId={id} onOpenProject={(next) => { setDrawer(false); navigate(`/canvas/${encodeURIComponent(next)}`) }} onOpenAgent={agentEnabled ? (projectId) => void openAgent(projectId) : undefined} />
+    {drawer && id && agentEnabled && <aside className="canvas-agent-drawer" aria-label="画布 Agent"><div className="canvas-agent-drawer-heading"><span>创作助手</span><button onClick={() => navigate(conversationId ? `/agent/${conversationId}` : `/agent?canvas=${id}`)}>展开会话 ↗</button><button aria-label="关闭画布 Agent" onClick={() => setDrawer(false)}>×</button></div><AgentWorkspace embedded projectId={id} conversationId={conversationId} onOpenConversation={setConversationId} /></aside>}
   </div>
 }
 
@@ -71,6 +80,7 @@ function RecentResults() {
 }
 
 function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: string) => void }) {
+  const { creationModes, agentEnabled } = useCreationFeatures()
   const location = useLocation()
   const prompt = useStore((s) => s.prompt)
   const setPrompt = useStore((s) => s.setPrompt)
@@ -83,6 +93,11 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
     setMode('generate')
     window.scrollTo(0, 0)
   }, [location.key, setMode])
+  // 后台关闭了当前模式时回到生成图片
+  const modeIds = creationModes.map((item) => item.id).join()
+  useEffect(() => {
+    if (!modeIds.split(',').includes(mode)) setMode('generate')
+  }, [modeIds, mode, setMode])
   const openAgent = async (id: string) => {
     try {
       const conversations = await getAllAgentConversations()
@@ -133,7 +148,7 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
             <div className="template-links">{templates.slice(0, 5).map((item) => <button key={item.id} onClick={() => applyTemplate(item.prompt)}>{item.title}<span>↗</span></button>)}{templates.length === 0 && <span>此分类暂无模板，可从精选中寻找灵感。</span>}</div>
           </section>
         </>}
-        {item.id === 'canvas' && <CanvasWorkspace projectId={projectId} onOpenProject={setProjectId} onOpenAgent={(id) => void openAgent(id)} />}
+        {item.id === 'canvas' && <CanvasWorkspace projectId={projectId} onOpenProject={setProjectId} onOpenAgent={agentEnabled ? (id) => void openAgent(id) : undefined} />}
         {item.id === 'agent' && <AgentWorkspace conversationId={conversationId} projectId={agentProjectId} onOpenConversation={setConversationId} onConversationReady={rememberConversation} />}
       </Suspense>}
     </div>)}
@@ -174,6 +189,7 @@ function FavoritesWorkspace() {
 }
 
 export default function Workspace() {
+  const { canvasEnabled, agentEnabled } = useCreationFeatures()
   const location = useLocation()
   const navigate = useNavigate()
   const favorite = location.pathname === '/favorites'

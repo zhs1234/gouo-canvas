@@ -3,6 +3,7 @@ import type { AgentConversation } from './types'
 import type { CanvasProject } from '../canvas/types'
 
 const mocks = vi.hoisted(() => ({
+  maxImages: 10,
   submit: vi.fn(),
   apply: vi.fn(),
   snapshot: vi.fn(),
@@ -27,7 +28,7 @@ vi.mock('../../store', () => ({
   },
 }))
 vi.mock('../apiProfiles', () => ({ getActiveApiProfile: () => ({ model: 'gpt-image-2' }) }))
-vi.mock('../gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getImageModels: mocks.models }))
+vi.mock('../gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getImageModels: mocks.models, getMaxTaskImages: () => mocks.maxImages }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))
@@ -153,7 +154,14 @@ describe('Agent tool boundary', () => {
 
   it('rejects unprovided images and invalid generation counts before submitting', async () => {
     await expect(run('create_image_task', { prompt: '图', inputImageIds: ['other-user-image'] })).rejects.toThrow('只能使用')
-    await expect(run('create_image_task', { prompt: '图', params: { n: 1.5 } })).rejects.toThrow('数量无效')
+    await expect(run('create_image_task', { prompt: '图', params: { n: 1.5 } })).rejects.toThrow('图片数量必须为 1 到 10')
+    // 后台限制一次最多 4 张时，超出的请求在提交前被拒绝
+    mocks.maxImages = 4
+    try {
+      await expect(run('create_image_task', { prompt: '图', params: { n: 5 } })).rejects.toThrow('图片数量必须为 1 到 4')
+    } finally {
+      mocks.maxImages = 10
+    }
     expect(mocks.submit).not.toHaveBeenCalled()
   })
 
