@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"one-api/common/config"
+	"slices"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -15,18 +16,38 @@ import (
 )
 
 type GouoImageModel struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	PriceCNY     float64 `json:"price_cny"`
-	Reference    bool    `json:"reference"`
-	Mask         bool    `json:"mask"`
-	MaxOutputs   int     `json:"max_outputs"`
-	Quota        int     `json:"quota"`
-	PriceVersion string  `json:"price_version"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	PriceCNY   float64 `json:"price_cny"`
+	Reference  bool    `json:"reference"`
+	Mask       bool    `json:"mask"`
+	MaxOutputs int     `json:"max_outputs"`
+	Quota      int     `json:"quota"`
+	// 后台限定的尺寸、画质和参考图张数，参与价格版本；不限时省略，原有模型的价格版本不变
+	MaxSize      string   `json:"max_size,omitempty"`
+	Qualities    []string `json:"qualities,omitempty"`
+	MaxInputs    int      `json:"max_inputs,omitempty"`
+	PriceVersion string   `json:"price_version"`
 	// 以下字段在价格版本算好后才设置，不参与版本计算：改名、改说明或调整顺序不会让用户重新确认价格
 	Default     bool   `json:"default,omitempty"`
 	Description string `json:"description,omitempty"`
 	Sort        int    `json:"-"`
+}
+
+// 各尺寸档位允许的最大像素数，与客户端尺寸选择的档位一致
+var GouoSizeTierPixels = map[string]int{"1K": 1024 * 1536, "2K": 2048 * 2048, "4K": 3840 * 2160}
+
+var gouoQualityValues = []string{"low", "medium", "high"}
+
+// GouoQualityList 返回后台限定的可选画质，空表示不限
+func GouoQualityList(price *Price) []string {
+	var list []string
+	for _, item := range strings.Split(price.GouoQualities, ",") {
+		if item = strings.ToLower(strings.TrimSpace(item)); item != "" {
+			list = append(list, item)
+		}
+	}
+	return list
 }
 
 func ValidateGouoPrice(price *Price) error {
@@ -41,6 +62,20 @@ func ValidateGouoPrice(price *Price) error {
 	}
 	if price.GouoMaxOutputs < 1 || price.GouoMaxOutputs > 10 || (price.GouoMask && !price.GouoReference) {
 		return errors.New("光构单次输出上限必须在 1 到 10 之间；遮罩编辑需要支持参考图")
+	}
+	if _, ok := GouoSizeTierPixels[price.GouoMaxSize]; price.GouoMaxSize != "" && !ok {
+		return errors.New("最大尺寸只能是 1K、2K 或 4K")
+	}
+	for _, quality := range GouoQualityList(price) {
+		if !slices.Contains(gouoQualityValues, quality) {
+			return errors.New("画质只能是 low、medium、high")
+		}
+	}
+	if strings.TrimSpace(price.GouoQualities) != "" && len(GouoQualityList(price)) == 0 {
+		return errors.New("至少开放一种画质")
+	}
+	if price.GouoMaxInputs < 0 || price.GouoMaxInputs > 16 {
+		return errors.New("最多参考图张数必须在 0 到 16 之间，0 表示不限")
 	}
 	return nil
 }
@@ -67,7 +102,8 @@ func (p *Pricing) GetGouoModel(id string) (*GouoImageModel, error) {
 		return nil, errors.New("图片计费额度超出范围")
 	}
 	result := &GouoImageModel{ID: id, Name: id, PriceCNY: price.GouoPriceCNY,
-		Reference: price.GouoReference, Mask: price.GouoMask, MaxOutputs: price.GouoMaxOutputs, Quota: int(quota)}
+		Reference: price.GouoReference, Mask: price.GouoMask, MaxOutputs: price.GouoMaxOutputs, Quota: int(quota),
+		MaxSize: price.GouoMaxSize, Qualities: GouoQualityList(price), MaxInputs: price.GouoMaxInputs}
 	data, _ := json.Marshal(result)
 	hash := sha256.Sum256(data)
 	result.PriceVersion = hex.EncodeToString(hash[:])

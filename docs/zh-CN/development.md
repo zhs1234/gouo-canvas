@@ -54,7 +54,6 @@ npm run dev
 VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:3000
-VITE_GOUO_IMAGE_MODEL=gpt-image-2
 ```
 
 访问 `http://127.0.0.1:5173`。开发服务器会把同域 `/api`、`/v1` 和 `/panel` 请求代理到后端；浏览器无需处理跨域登录 Cookie。
@@ -65,7 +64,7 @@ VITE_GOUO_IMAGE_MODEL=gpt-image-2
 
 1. 在渠道管理中添加 OpenAI 或兼容服务商。
 2. 只在后端渠道里填写上游 API Key。
-3. 配置图片渠道与映射，在“光构 → 光构模型”启用模型并设置积分售价、能力和数量上限，在“光构 → 光构设置”选择默认图片模型；`VITE_GOUO_IMAGE_MODEL` 只是加载模型目录前的占位值。
+3. 配置图片渠道与映射，在“光构 → 光构模型”启用模型并设置积分售价、能力和数量上限，在“光构 → 光构设置”选择默认图片模型。客户端不预设模型。
 4. 分别验证 generations、edits 和 variations 图片路由。
 5. 再使用普通账号从 `http://127.0.0.1:5173` 完整验证登录、生成、计费和同步。
 
@@ -121,7 +120,6 @@ Copy-Item dev-proxy.config.example.json dev-proxy.config.json
 | `VITE_GOUO_BACKEND_ENABLED` | 前端构建/开发 | 值严格等于 `true` 时启用产品登录模式 |
 | `VITE_GOUO_BACKEND_URL` | 前端构建/开发 | 跨域后端地址；同域时留空 |
 | `VITE_GOUO_BACKEND_DEV_TARGET` | Vite 开发服务器 | 本地 `/api`、`/v1` 和 `/panel` 代理目标 |
-| `VITE_GOUO_IMAGE_MODEL` | 前端构建/开发 | 加载模型目录前的占位模型；实际默认模型由后台“光构设置”决定，用户选择按账号记忆 |
 
 ### 纯前端与兼容部署变量
 

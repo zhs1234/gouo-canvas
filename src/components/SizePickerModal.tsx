@@ -21,6 +21,8 @@ interface Props {
   onSelect: (size: string) => void
   onClose: () => void
   allowAuto?: boolean
+  // 后台为所选模型限定的最大尺寸档位
+  maxTier?: SizeTier
 }
 
 type Mode = 'auto' | 'ratio' | 'resolution'
@@ -43,7 +45,8 @@ function findPresetForSize(size: string) {
   return null
 }
 
-export default function SizePickerModal({ currentSize, onSelect, onClose, allowAuto = true }: Props) {
+export default function SizePickerModal({ currentSize, onSelect, onClose, allowAuto = true, maxTier }: Props) {
+  const tiers = maxTier ? TIERS.slice(0, TIERS.indexOf(maxTier) + 1) : TIERS
   usePreventBackgroundScroll(true)
 
   const modalRef = useRef<HTMLDivElement>(null)
@@ -242,7 +245,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
                 <section>
                   <div className="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">基准分辨率</div>
                   <div className="grid grid-cols-3 gap-2">
-                    {TIERS.map((item) => (
+                    {tiers.map((item) => (
                       <button key={item} className={buttonClass(tier === item)} onClick={() => setTier(item)}>
                         {item}
                       </button>

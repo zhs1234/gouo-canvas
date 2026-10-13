@@ -3,7 +3,7 @@ import { ensureImageCached, useStore as useAppStore } from '../store'
 import { getAllAgentConversations, getAllTasks, putAgentConversation } from '../lib/db'
 import { registerDocumentImageReferences } from '../lib/documentAssets'
 import { isStorageScopeCurrent } from '../lib/storageScope'
-import { getAgentModels, streamAgentCompletion } from '../lib/agent/api'
+import { getAgentModels, streamAgentCompletion, getAgentLimits } from '../lib/agent/api'
 import { agentToolDefinitions, executeAgentTool } from '../lib/agent/tools'
 import { reconcileAgentTasks } from '../lib/agent/taskRecovery'
 import type { AgentConversation, AgentModel, AgentToolCall, ChatMessage } from '../lib/agent/types'
@@ -128,9 +128,8 @@ function updateAssistant(id: string, messageId: string, content: string, calls: 
 async function runConversation(id: string, controller: AbortController) {
   let timedOut = false
   const timeout = setTimeout(() => { timedOut = true; controller.abort() }, 180_000)
-  let toolCount = 0
   try {
-    for (let round = 0; round < 8; round += 1) {
+    for (let round = 0; round < getAgentLimits().maxRounds; round += 1) {
       controller.signal.throwIfAborted()
       if (!isStorageScopeCurrent()) throw new Error('账号已切换，会话已停止')
       const conversation = useAgentStore.getState().conversations.find((item) => item.id === id)!
@@ -148,6 +147,7 @@ async function runConversation(id: string, controller: AbortController) {
       }
       let finishAfterSubmit = false
       let failedTools = false
+      let toolCount = 0
       for (const call of completion.calls) {
         controller.signal.throwIfAborted()
         if (++toolCount > 8) throw new Error('本轮已达到 8 次工具调用上限，请检查结果后继续')

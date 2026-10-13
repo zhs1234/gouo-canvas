@@ -65,7 +65,6 @@ The bundled mock listens only on localhost and never forwards requests upstream.
 VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:5190
-VITE_GOUO_IMAGE_MODEL=gpt-image-2
 VITE_CANVAS_ENABLED=true
 VITE_AGENT_ENABLED=true
 ```

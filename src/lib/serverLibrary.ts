@@ -372,7 +372,7 @@ async function uploadTask(task: TaskRecord) {
     schema_version: 1,
     status: task.status,
     prompt: task.prompt,
-    model: task.apiModel || useStore.getState().settings.model || 'gpt-image-2',
+    model: task.apiModel || useStore.getState().settings.model,
     operation: task.maskImageId || task.inputImageIds.length ? 'edit' : 'generation',
     params: task.params,
     result_meta: getTaskResultMeta(task),

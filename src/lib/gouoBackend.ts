@@ -1,5 +1,6 @@
-import type { AppSettings } from '../types'
+import type { AppSettings, TaskParams } from '../types'
 import { getLoadedStorageUserId } from './storageScope'
+import { TIER_PIXEL_BUDGET, type SizeTier } from './size'
 
 interface BackendEnvelope<T> {
   success: boolean
@@ -68,6 +69,10 @@ export interface GouoImageModel {
   default?: boolean
   // 后台填写的一句话说明；name 是后台设置的显示名称，未设置时为模型 ID
   description?: string
+  // 后台限定的最大尺寸档位、可选画质和最多参考图张数，缺省表示不限；服务端同样校验
+  max_size?: SizeTier
+  qualities?: string[]
+  max_inputs?: number
 }
 
 export class GouoPriceChangedError extends Error {
@@ -104,7 +109,40 @@ export async function getImageModels(): Promise<GouoImageModel[]> {
   if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny <= 0 || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1)) {
     throw new Error('图片模型目录格式无效')
   }
-  return data as GouoImageModel[]
+  cachedImageModels = data as GouoImageModel[]
+  imageModelListeners.forEach((listener) => listener())
+  return cachedImageModels
+}
+
+// 最近一次读取的模型目录，供输入栏按所选模型限定尺寸、画质和参考图张数
+let cachedImageModels: GouoImageModel[] = []
+const imageModelListeners = new Set<() => void>()
+
+export function getCachedImageModels() {
+  return cachedImageModels
+}
+
+export function subscribeImageModels(listener: () => void) {
+  imageModelListeners.add(listener)
+  return () => { imageModelListeners.delete(listener) }
+}
+
+export function isLowModerationAllowed() {
+  return cachedStatus?.gouo_allow_low_moderation === true
+}
+
+// 与服务端的参数校验一致：图片按张计价，尺寸、画质和参考图张数不能超出后台为模型限定的范围
+export function getImageParamIssue(model: GouoImageModel, params: Pick<TaskParams, 'size' | 'quality' | 'moderation'>, inputCount: number) {
+  if (model.max_size && params.size !== 'auto') {
+    const [width, height] = params.size.split('x').map(Number)
+    if (!(width > 0 && height > 0) || width * height > TIER_PIXEL_BUDGET[model.max_size]) return `此模型最大支持 ${model.max_size} 尺寸，请调小尺寸`
+  }
+  if (model.qualities?.length && (params.quality === 'auto' ? !model.qualities.includes('high') : !model.qualities.includes(params.quality))) {
+    return params.quality === 'auto' ? '此模型不开放自动画质，请选择具体画质' : '此模型不开放所选画质，请重新选择'
+  }
+  if (params.moderation === 'low' && !isLowModerationAllowed()) return '运营方未开放宽松审核'
+  if (model.max_inputs && inputCount > model.max_inputs) return `此模型最多使用 ${model.max_inputs} 张参考图`
+  return ''
 }
 
 // 用户没有手动选过模型、或选的模型已不在目录里时，使用后台标出的默认模型，管理员改默认模型后对这些用户生效
@@ -114,7 +152,7 @@ export function resolveBackendModel(models: GouoImageModel[], current: string, u
   return models.find((entry) => entry.default) ?? selected ?? models[0]
 }
 
-export async function getImageModelQuote(id: string, inputCount: number, hasMask: boolean, n: number, version?: string): Promise<GouoImageModel> {
+export async function getImageModelQuote(id: string, inputCount: number, hasMask: boolean, n: number, version?: string, params?: Pick<TaskParams, 'size' | 'quality' | 'moderation'>): Promise<GouoImageModel> {
   const models = await getImageModels()
   const model = models.find((entry) => entry.id === id)
   if (!model) {
@@ -123,6 +161,8 @@ export async function getImageModelQuote(id: string, inputCount: number, hasMask
   }
   if ((inputCount > 0 && !model.reference) || (hasMask && !model.mask)) throw new Error('此模型不支持当前编辑操作，请重新选择模型')
   if (!Number.isInteger(n) || n < 1 || n > getMaxTaskImages()) throw new Error(`图片总数量必须为 1 到 ${getMaxTaskImages()} 的整数`)
+  const issue = params ? getImageParamIssue(model, params, inputCount) : ''
+  if (issue) throw new Error(issue)
   if (!version || version !== model.price_version) {
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('gouo-models-refresh'))
     throw new GouoPriceChangedError(model)
@@ -153,6 +193,7 @@ export interface GouoBackendStatus {
   gouo_max_images?: number
   gouo_trash_retention_days?: number
   gouo_max_upload_bytes?: number
+  gouo_allow_low_moderation?: boolean
 }
 
 export interface GouoCloudStorage {
@@ -418,10 +459,6 @@ export async function createBackendSettings(forceRefresh = false): Promise<Parti
     apiProxy: false,
     streamImages: false,
   }
-}
-
-export function getDefaultBackendModel(): string {
-  return import.meta.env.VITE_GOUO_IMAGE_MODEL?.trim() || 'gpt-image-2'
 }
 
 export function isInvalidBackendTokenError(error: unknown): boolean {

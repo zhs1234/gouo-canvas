@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getImageModels, getMaxTaskImages, resolveBackendModel, type GouoImageModel } from '../lib/gouoBackend'
+import { getImageModels, getImageParamIssue, getMaxTaskImages, resolveBackendModel, type GouoImageModel } from '../lib/gouoBackend'
 import { useStore } from '../store'
 import ModelSelect from './ModelSelect'
 import { formatPoints } from '../lib/accountUsage'
@@ -48,7 +48,7 @@ export default function BackendModelSelector({ onReady, compact = false, showEst
   }, [])
 
   const selected = models.find((entry) => entry.id === settings.model)
-  const reason = loading ? '正在加载模型' : error || (!selected ? '所选模型不可用，请重新选择' : (inputCount > 0 && !selected.reference) || (hasMask && !selected.mask) ? '此模型不支持当前编辑操作' : !Number.isInteger(params.n) || params.n < 1 || params.n > getMaxTaskImages() ? `图片总数量必须为 1 到 ${getMaxTaskImages()} 的整数` : '')
+  const reason = loading ? '正在加载模型' : error || (!selected ? '所选模型不可用，请重新选择' : (inputCount > 0 && !selected.reference) || (hasMask && !selected.mask) ? '此模型不支持当前编辑操作' : !Number.isInteger(params.n) || params.n < 1 || params.n > getMaxTaskImages() ? `图片总数量必须为 1 到 ${getMaxTaskImages()} 的整数` : getImageParamIssue(selected, params, inputCount))
   useEffect(() => { onReady(!reason) }, [reason, onReady])
 
   return (

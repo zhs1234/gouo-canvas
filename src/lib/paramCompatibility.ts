@@ -1,6 +1,6 @@
 import { DEFAULT_PARAMS, type AppSettings, type TaskParams } from '../types'
 import { getActiveApiProfile } from './apiProfiles'
-import { getMaxTaskImages, isBackendAuthEnabled } from './gouoBackend'
+import { getMaxTaskImages, isBackendAuthEnabled, isLowModerationAllowed } from './gouoBackend'
 import { normalizeImageSize } from './size'
 
 export const DEFAULT_FAL_IMAGE_SIZE = '1360x1024'
@@ -36,6 +36,9 @@ export function normalizeParamsForSettings(
     nextParams.moderation = DEFAULT_PARAMS.moderation
     nextParams.output_compression = DEFAULT_PARAMS.output_compression
   }
+
+  // 产品模式下宽松审核由后台“光构设置”决定，未开放时一律按自动
+  if (isBackendAuthEnabled() && !isLowModerationAllowed()) nextParams.moderation = 'auto'
 
   if (nextParams.output_format === 'png') {
     nextParams.output_compression = DEFAULT_PARAMS.output_compression

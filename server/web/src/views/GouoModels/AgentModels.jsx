@@ -90,6 +90,9 @@ export default function AgentModels() {
     editing &&
     validPoints(editing.input_points) &&
     validPoints(editing.output_points) &&
+    Number.isInteger(Number(editing.gouo_max_tokens || 0)) &&
+    Number(editing.gouo_max_tokens || 0) >= 0 &&
+    Number(editing.gouo_max_tokens || 0) <= 1000000 &&
     editing.name.trim().length <= 40 &&
     editing.description.trim().length <= 100 &&
     Number.isInteger(Number(editing.gouo_sort || 0));
@@ -171,7 +174,14 @@ export default function AgentModels() {
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell>{row.listed ? `工具调用 · ${row.vision ? '可看图' : '不看图'}` : '—'}</TableCell>
+                  <TableCell>
+                    {row.listed ? `工具调用 · ${row.vision ? '可看图' : '不看图'}` : '—'}
+                    {row.listed && row.gouo_max_tokens > 0 && (
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        单次回复最多 {row.gouo_max_tokens.toLocaleString('zh-CN')} token
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell sx={{ maxWidth: 280 }}>
                     {row.channels.length ? (
                       row.channels.map((channel) => (
@@ -210,6 +220,7 @@ export default function AgentModels() {
                             description: row.description || '',
                             gouo_sort: row.gouo_sort || 0,
                             vision: row.vision,
+                            gouo_max_tokens: row.gouo_max_tokens || 0,
                             // 避免浮点误差出现在输入框里
                             input_points: row.priced ? Number(Number(row.input_points).toPrecision(12)) : '',
                             output_points: row.priced ? Number(Number(row.output_points).toPrecision(12)) : ''
@@ -271,6 +282,7 @@ export default function AgentModels() {
                   description: editing.description,
                   gouo_sort: Number(editing.gouo_sort || 0),
                   vision: editing.vision,
+                  gouo_max_tokens: Number(editing.gouo_max_tokens || 0),
                   input_points: Number(editing.input_points),
                   output_points: Number(editing.output_points)
                 },
@@ -337,6 +349,14 @@ export default function AgentModels() {
                     />
                   }
                   label="能看图（Agent 会把参考图直接发给模型）"
+                />
+                <TextField
+                  label="单次回复最多输出 token"
+                  type="number"
+                  value={editing.gouo_max_tokens}
+                  onChange={(event) => setEditing({ ...editing, gouo_max_tokens: event.target.value })}
+                  inputProps={{ min: 0, max: 1000000, step: 1 }}
+                  helperText="0 表示不限。服务端给光构客户端的每次请求带上 max_completion_tokens；需要上游支持该参数，部分中转会忽略，请先实测。推理模型的思考过程也计入输出"
                 />
               </Stack>
             </DialogContent>

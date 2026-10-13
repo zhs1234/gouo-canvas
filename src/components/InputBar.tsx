@@ -9,6 +9,8 @@ import { normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { isBackendAuthEnabled } from '../lib/gouoBackend'
+import { useBackendStatus } from '../hooks/useBackendStatus'
+import { useImageModels } from '../hooks/useImageModels'
 import BackendModelSelector from './BackendModelSelector'
 import { getActionableErrorMessage } from '../lib/userGuidance'
 import { useHintTooltip } from '../hooks/useHintTooltip'
@@ -464,7 +466,20 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   }, [setPrompt])
   const activeProvider = activeProfile.provider
   const isFalProvider = activeProvider === 'fal'
-  const moderationDisabled = isFalProvider
+  // 产品模式按后台为所选模型限定的画质、尺寸档位和参考图张数；宽松审核由后台决定是否开放
+  const imageModels = useImageModels()
+  const backendStatus = useBackendStatus()
+  const backendModel = isBackendAuthEnabled() ? imageModels.find((model) => model.id === settings.model) : undefined
+  const maxInputImages = backendModel?.max_inputs || API_MAX_IMAGES
+
+  // 所选模型不开放当前画质时，自动换成开放的最高画质，免得用户卡在提示上
+  useEffect(() => {
+    const allowed = backendModel?.qualities
+    if (!allowed?.length || allowed.includes(params.quality === 'auto' ? 'high' : params.quality)) return
+    const next = (['high', 'medium', 'low'] as const).find((quality) => allowed.includes(quality))
+    if (next) setParams({ quality: next })
+  }, [backendModel, params.quality, setParams])
+  const moderationDisabled = isFalProvider || (isBackendAuthEnabled() && !backendStatus?.gouo_allow_low_moderation)
   const transparentOutputAvailable = true
   const showTransparentOutputControl = transparentOutputAvailable && params.output_format === 'png'
   const transparentOutputEnabled = transparentOutputAvailable && showTransparentOutputControl && params.transparent_output
@@ -483,7 +498,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
     ? DEFAULT_FAL_IMAGE_SIZE
     : normalizeImageSize(params.size) || DEFAULT_PARAMS.size
 
-  const qualityOptions = isFalProvider
+  const qualityOptions = (isFalProvider
     ? [
         { label: 'low', value: 'low' },
         { label: 'medium', value: 'medium' },
@@ -495,8 +510,10 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
         { label: 'medium', value: 'medium' },
         { label: 'high', value: 'high' },
       ]
-  const atImageLimit = inputImages.length >= API_MAX_IMAGES
-  const uploadImageTooltipText = atImageLimit ? `参考图数量已达上限（${API_MAX_IMAGES} 张），无法继续添加` : '上传图片'
+  // 自动画质可能由上游选成高画质，只有开放高画质时才提供
+  ).filter((option) => !backendModel?.qualities?.length || backendModel.qualities.includes(option.value === 'auto' ? 'high' : option.value))
+  const atImageLimit = inputImages.length >= maxInputImages
+  const uploadImageTooltipText = atImageLimit ? `参考图数量已达上限（${maxInputImages} 张），无法继续添加` : '上传图片'
   const transparentOutputHint = useHintTooltip()
   const handleTransparentOutputMenuOpenChange = useCallback((open: boolean) => {
     if (open) transparentOutputHint.hide()
@@ -756,15 +773,15 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const handleFiles = async (files: FileList | File[]) => {
     try {
       const currentCount = useStore.getState().inputImages.length
-      if (currentCount >= API_MAX_IMAGES) {
+      if (currentCount >= maxInputImages) {
         useStore.getState().showToast(
-          `参考图数量已达上限（${API_MAX_IMAGES} 张），无法继续添加`,
+          `参考图数量已达上限（${maxInputImages} 张），无法继续添加`,
           'error',
         )
         return
       }
 
-      const remaining = API_MAX_IMAGES - currentCount
+      const remaining = maxInputImages - currentCount
       const accepted = Array.from(files).filter((f) => f.type.startsWith('image/'))
       const toAdd = accepted.slice(0, remaining)
       const discarded = accepted.length - toAdd.length
@@ -775,7 +792,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
       if (discarded > 0) {
         useStore.getState().showToast(
-          `已达上限 ${API_MAX_IMAGES} 张，${discarded} 张图片被丢弃`,
+          `已达上限 ${maxInputImages} 张，${discarded} 张图片被丢弃`,
           'error',
         )
       }
@@ -1582,7 +1599,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
   return (
     <>
-      <DragUploadOverlay visible={isDragging} atImageLimit={atImageLimit} maxImages={API_MAX_IMAGES} />
+      <DragUploadOverlay visible={isDragging} atImageLimit={atImageLimit} maxImages={maxInputImages} />
 
       {showSizePicker && (
         <Suspense fallback={null}>
@@ -1591,6 +1608,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
             onSelect={(size) => setParams({ size })}
             onClose={() => setShowSizePicker(false)}
             allowAuto={!isFalTextToImage}
+            maxTier={backendModel?.max_size}
           />
         </Suspense>
       )}

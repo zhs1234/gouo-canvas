@@ -4,7 +4,6 @@ import {
   createBackendSettings,
   getBackendStatus,
   getCurrentUser,
-  getDefaultBackendModel,
   isBackendAuthEnabled,
   login,
   register,
@@ -35,7 +34,8 @@ async function initializeUser(user: GouoUser): Promise<GouoUser | null> {
     return null
   }
   const settings = await createBackendSettings()
-  useStore.getState().setSettings({ ...settings, ...(!useStore.getState().settings.gouoModelSelected ? { model: getDefaultBackendModel() } : {}) })
+  // 未手动选过模型时清空，由模型目录按后台默认模型选择，客户端不预设模型
+  useStore.getState().setSettings({ ...settings, ...(!useStore.getState().settings.gouoModelSelected ? { model: '' } : {}) })
   return user
 }
 

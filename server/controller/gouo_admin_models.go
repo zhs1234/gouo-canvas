@@ -40,6 +40,9 @@ type gouoAdminModel struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description"`
 	Sort        int                `json:"gouo_sort"`
+	MaxSize     string             `json:"gouo_max_size"`
+	Qualities   []string           `json:"gouo_qualities"`
+	MaxInputs   int                `json:"gouo_max_inputs"`
 	Error       string             `json:"error,omitempty"`
 	Channels    []gouoAdminChannel `json:"channels"`
 	// 有启用中的渠道支持、且是有效用户分组的分组，即客户端可能看到这个模型的分组
@@ -54,6 +57,7 @@ type gouoAdminAgentModel struct {
 	Name         string             `json:"name"`
 	Description  string             `json:"description"`
 	Sort         int                `json:"gouo_sort"`
+	MaxTokens    int                `json:"gouo_max_tokens"`
 	Listed       bool               `json:"listed"`
 	Vision       bool               `json:"vision"`
 	Channels     []gouoAdminChannel `json:"channels"`
@@ -167,6 +171,7 @@ func ListGouoAdminModels(c *gin.Context) {
 		item.Priced = true
 		item.Enabled, item.PriceCNY, item.Reference, item.Mask, item.MaxOutputs, item.Sort = price.GouoEnabled, price.GouoPriceCNY, price.GouoReference, price.GouoMask, price.GouoMaxOutputs, price.GouoSort
 		item.Name, item.Description = gouoModelText(price)
+		item.MaxSize, item.Qualities, item.MaxInputs = price.GouoMaxSize, model.GouoQualityList(price), price.GouoMaxInputs
 	}
 	model.PricingInstance.RUnlock()
 	for id, channels := range channelsByModel {
@@ -247,6 +252,10 @@ func UpdateGouoAdminModel(c *gin.Context) {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
 		Sort        *int    `json:"gouo_sort"`
+		// 尺寸、画质和参考图限制可以省略，省略时保持原值；空字符串、空列表或 0 表示不限
+		MaxSize   *string   `json:"gouo_max_size"`
+		Qualities *[]string `json:"gouo_qualities"`
+		MaxInputs *int      `json:"gouo_max_inputs"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil || strings.TrimSpace(input.Model) == "" || len(input.Model) > 100 {
 		gouoFail(c, http.StatusBadRequest, "invalid_model", "模型名称无效")
@@ -273,6 +282,15 @@ func UpdateGouoAdminModel(c *gin.Context) {
 	}
 	if input.Sort != nil {
 		price.GouoSort = *input.Sort
+	}
+	if input.MaxSize != nil {
+		price.GouoMaxSize = strings.ToUpper(strings.TrimSpace(*input.MaxSize))
+	}
+	if input.Qualities != nil {
+		price.GouoQualities = strings.Join(*input.Qualities, ",")
+	}
+	if input.MaxInputs != nil {
+		price.GouoMaxInputs = *input.MaxInputs
 	}
 	// 先校验价格，避免价格无效时模型详情已被改掉
 	if err := model.ValidateGouoPrice(&price); err != nil {
@@ -355,7 +373,7 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 			imageModels[id] = true
 			continue
 		}
-		item := &gouoAdminAgentModel{Model: id, Priced: true, Sort: price.GouoSort, Listed: gouoAgentListed(price.ModelInfo)}
+		item := &gouoAdminAgentModel{Model: id, Priced: true, Sort: price.GouoSort, MaxTokens: price.GouoMaxTokens, Listed: gouoAgentListed(price.ModelInfo)}
 		item.InputPoints, item.OutputPoints = price.GetInput()*rate, price.GetOutput()*rate
 		item.Name, item.Description = gouoModelText(price)
 		item.Vision = price.ModelInfo != nil && slices.Contains(price.ModelInfo.InputModalities, "image")
@@ -428,6 +446,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		Vision       *bool    `json:"vision"`
 		InputPoints  *float64 `json:"input_points"`
 		OutputPoints *float64 `json:"output_points"`
+		MaxTokens    *int     `json:"gouo_max_tokens"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil || strings.TrimSpace(input.Model) == "" || len(input.Model) > 100 {
 		gouoFail(c, http.StatusBadRequest, "invalid_model", "模型名称无效")
@@ -440,6 +459,10 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	}
 	if err := validateGouoModelText(input.Name, input.Description); err != nil {
 		gouoFail(c, http.StatusBadRequest, "invalid_model_text", err.Error())
+		return
+	}
+	if input.MaxTokens != nil && (*input.MaxTokens < 0 || *input.MaxTokens > 1000000) {
+		gouoFail(c, http.StatusBadRequest, "invalid_max_tokens", "单次回复最多输出 token 必须在 0 到 100 万之间，0 表示不限")
 		return
 	}
 	for _, points := range []*float64{input.InputPoints, input.OutputPoints} {
@@ -480,7 +503,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		gouoFail(c, http.StatusInternalServerError, "model_info_save_failed", "保存模型能力失败")
 		return
 	}
-	changed := input.Sort != nil || input.InputPoints != nil || input.OutputPoints != nil
+	changed := input.Sort != nil || input.InputPoints != nil || input.OutputPoints != nil || input.MaxTokens != nil
 	if !priced && !changed {
 		// 只改了模型详情（例如下架一个没有价格记录的模型），刷新缓存即可
 		if err := model.PricingInstance.Init(); err != nil {
@@ -502,6 +525,9 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	}
 	if input.Sort != nil {
 		price.GouoSort = *input.Sort
+	}
+	if input.MaxTokens != nil {
+		price.GouoMaxTokens = *input.MaxTokens
 	}
 	// 在这里定的价格不随上游价格同步被覆盖或删除
 	price.Locked = true

@@ -67,6 +67,12 @@ type Price struct {
 	GouoMaxOutputs int     `json:"gouo_max_outputs" gorm:"default:1"`
 	// 光构客户端模型列表的排列顺序，小的在前
 	GouoSort int `json:"gouo_sort" gorm:"default:0"`
+	// 图片按张计价，影响上游成本的参数由后台限定：最大尺寸档位（1K/2K/4K）、可选画质（逗号分隔）、最多参考图张数；留空或 0 表示不限
+	GouoMaxSize   string `json:"gouo_max_size" gorm:"type:varchar(10);default:''"`
+	GouoQualities string `json:"gouo_qualities" gorm:"type:varchar(50);default:''"`
+	GouoMaxInputs int    `json:"gouo_max_inputs" gorm:"default:0"`
+	// Agent 单次回复最多输出的 token，0 表示不限
+	GouoMaxTokens int `json:"gouo_max_tokens" gorm:"default:0"`
 
 	ExtraRatios *datatypes.JSONType[map[string]float64] `json:"extra_ratios,omitempty" gorm:"type:json"`
 	ModelInfo   *ModelInfoResponse                      `json:"model_info,omitempty" gorm:"-"`
@@ -154,7 +160,7 @@ func (price *Price) FetchOutputCurrencyPrice(rate float64) string {
 }
 
 func UpdatePrices(tx *gorm.DB, models []string, prices *Price) error {
-	err := tx.Model(Price{}).Where("model IN (?)", models).Select("*").Omit("model", "gouo_enabled", "gouo_price_cny", "gouo_reference", "gouo_mask", "gouo_max_outputs", "gouo_sort").Updates(
+	err := tx.Model(Price{}).Where("model IN (?)", models).Select("*").Omit("model", "gouo_enabled", "gouo_price_cny", "gouo_reference", "gouo_mask", "gouo_max_outputs", "gouo_sort", "gouo_max_size", "gouo_qualities", "gouo_max_inputs", "gouo_max_tokens").Updates(
 		Price{
 			Type:        prices.Type,
 			ChannelType: prices.ChannelType,

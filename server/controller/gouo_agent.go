@@ -22,7 +22,11 @@ type gouoAgentModel struct {
 	CapabilitySource string `json:"capability_source"`
 	Default          bool   `json:"default,omitempty"`
 	Description      string `json:"description,omitempty"`
-	sort             int
+	// 每百万 token 的人民币价格，客户端换算成积分展示；实际扣费还会乘以用户分组倍率
+	InputPriceCNY   float64 `json:"input_price_cny"`
+	OutputPriceCNY  float64 `json:"output_price_cny"`
+	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
+	sort            int
 }
 
 func gouoAgentCapabilities(price *model.Price) *gouoAgentModel {
@@ -44,7 +48,8 @@ func gouoAgentCapabilities(price *model.Price) *gouoAgentModel {
 	if name == "" {
 		name = price.Model
 	}
-	return &gouoAgentModel{ID: price.Model, Name: name, ToolCalls: true, Vision: slices.Contains(info.InputModalities, "image"), ContextLength: info.ContextLength, MaxTokens: info.MaxTokens, CapabilitySource: "model_info", Description: strings.TrimSpace(info.Description), sort: price.GouoSort}
+	return &gouoAgentModel{ID: price.Model, Name: name, ToolCalls: true, Vision: slices.Contains(info.InputModalities, "image"), ContextLength: info.ContextLength, MaxTokens: info.MaxTokens, CapabilitySource: "model_info", Description: strings.TrimSpace(info.Description), sort: price.GouoSort,
+		InputPriceCNY: price.GetInput() * 1e6 * config.PaymentUSDRate / config.QuotaPerUnit, OutputPriceCNY: price.GetOutput() * 1e6 * config.PaymentUSDRate / config.QuotaPerUnit, MaxOutputTokens: price.GouoMaxTokens}
 }
 
 func GetGouoAgentModels(c *gin.Context) {
@@ -97,5 +102,5 @@ func GetGouoAgentModels(c *gin.Context) {
 	if defaultIndex >= 0 {
 		data[defaultIndex].Default = true
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "agent_enabled": true, "system_prompt": config.GouoAgentSystemPrompt, "billing_unit": "platform_text_usage", "configuration_hint": "Agent 模型需在模型信息中配置 output_modalities: [\"text\"] 与 tags: [\"tools\"]，并启用支持流式工具调用的渠道。"})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "agent_enabled": true, "system_prompt": config.GouoAgentSystemPrompt, "max_rounds": config.GouoAgentMaxRounds, "confirm_images": config.GouoAgentConfirmImages, "billing_unit": "platform_text_usage", "configuration_hint": "Agent 模型需在模型信息中配置 output_modalities: [\"text\"] 与 tags: [\"tools\"]，并启用支持流式工具调用的渠道。"})
 }

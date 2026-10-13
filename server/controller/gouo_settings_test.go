@@ -104,3 +104,16 @@ func TestGouoAdminSettings(t *testing.T) {
 	}
 	require.Equal(t, "国庆活动 全场 8 折", config.GouoNotice)
 }
+
+func TestNormalizeGouoModelPolicySettings(t *testing.T) {
+	for key, cases := range map[string]map[string]bool{
+		"GouoAllowLowModeration": {"true": true, "false": true, "yes": false},
+		"GouoAgentMaxRounds":     {"1": true, "20": true, "0": false, "21": false, "x": false},
+		"GouoAgentConfirmImages": {"1": true, "10": true, "0": false, "11": false},
+	} {
+		for value, ok := range cases {
+			_, err := normalizeGouoSetting(key, value)
+			require.Equal(t, ok, err == nil, key+"="+value)
+		}
+	}
+}

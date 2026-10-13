@@ -2069,7 +2069,7 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
   let quote: Awaited<ReturnType<typeof getImageModelQuote>> | undefined
   if (isBackendAuthEnabled()) {
     try {
-      quote = await getImageModelQuote(activeProfile.model, task.inputImageIds.length, Boolean(task.maskImageId), task.params.n, task.gouoPriceVersion)
+      quote = await getImageModelQuote(activeProfile.model, task.inputImageIds.length, Boolean(task.maskImageId), task.params.n, task.gouoPriceVersion, task.params)
     } catch (err) {
       if (err instanceof GouoPriceChangedError) {
         useStore.getState().setConfirmDialog({

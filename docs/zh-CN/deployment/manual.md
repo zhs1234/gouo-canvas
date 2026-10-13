@@ -148,7 +148,7 @@ USER_TOKEN_SECRET=替换为第二段不同的随机值
 # 通过 HTTPS 访问时必须为 true，登录 Cookie 才不会在 http:// 请求中明文发送。
 SESSION_COOKIE_SECURE=true
 
-# 首次迁移的默认模型，需与前端构建时的 VITE_GOUO_IMAGE_MODEL 一致。
+# 首次迁移时启用的默认模型；之后在后台“光构模型”管理。
 GOUO_IMAGE_MODEL=gpt-image-2
 
 GOUO_IMAGE_PRICE_CNY=0.10
@@ -187,7 +187,6 @@ npm ci
 ```dotenv
 VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
-VITE_GOUO_IMAGE_MODEL=gpt-image-2
 ```
 
 同域部署必须让 `VITE_GOUO_BACKEND_URL` 保持为空，浏览器会直接请求当前域名的 `/api` 和 `/v1`。模型名必须与管理后台渠道配置一致。
