@@ -291,7 +291,8 @@ func TestGouoModelKind(t *testing.T) {
 		{"已启用的图片模型", "chat-x", &model.Price{GouoEnabled: true, Type: model.TokensPriceType}, nil, "image"},
 		{"已上架的 Agent 模型", "gpt-image-1", nil, agentInfo, "text"},
 		{"资料只输出图片", "chat-y", nil, &model.ModelInfoResponse{OutputModalities: []string{"image"}}, "image"},
-		{"资料只输出文本", "flux-chat", nil, &model.ModelInfoResponse{OutputModalities: []string{"text"}}, "text"},
+		{"资料只输出文本", "my-assistant", nil, &model.ModelInfoResponse{OutputModalities: []string{"text"}}, "text"},
+		{"图片模型从 Agent 下架后资料仍留着文本输出，按名称归图片", "gpt-image-1", nil, &model.ModelInfoResponse{OutputModalities: []string{"text"}, Tags: []string{}}, "image"},
 		{"按名称识别图片模型", "black-forest-labs/FLUX.1-dev", nil, nil, "image"},
 		{"按 token 计费的是文本模型", "gpt-4o", &model.Price{Type: model.TokensPriceType}, nil, "text"},
 		{"主流文本模型没有价格也能识别", "gpt-5.5", nil, nil, "text"},
@@ -377,4 +378,77 @@ func TestGouoAdminModelKindSeparation(t *testing.T) {
 	// 未上架为 Agent 的模型照常启用，已启用的模型再次保存不受影响
 	require.Equal(t, http.StatusOK, update("/models", `{"model":"gpt-image-1","gouo_enabled":true,"gouo_price_cny":0.2,"gouo_max_outputs":1}`).Code)
 	require.Equal(t, http.StatusOK, update("/models", `{"model":"gpt-image-1","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1}`).Code)
+}
+
+func TestGouoAdminAgentPriceKeepsBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Price{}, &model.ModelInfo{}, &model.Channel{}))
+	oldDB, oldPricing, oldRate, oldUnit := model.DB, model.PricingInstance, config.PaymentUSDRate, config.QuotaPerUnit
+	oldGroups := model.GlobalUserGroupRatio.UserGroup
+	model.DB, config.PaymentUSDRate, config.QuotaPerUnit = db, 7.3, 500000
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{}}
+	model.GlobalUserGroupRatio.UserGroup = map[string]*model.UserGroup{"default": {Symbol: "default", Ratio: 1}}
+	t.Cleanup(func() {
+		model.DB, model.PricingInstance, config.PaymentUSDRate, config.QuotaPerUnit = oldDB, oldPricing, oldRate, oldUnit
+		model.GlobalUserGroupRatio.UserGroup = oldGroups
+	})
+	require.NoError(t, db.Create(&model.Channel{Name: "文本", Status: 1, Models: "chat-times,chat-sync", Group: "default"}).Error)
+	require.NoError(t, db.Create(&model.Price{Model: "chat-times", Type: model.TimesPriceType, Input: 0.5, Output: 0.5}).Error)
+	require.NoError(t, db.Create(&model.Price{Model: "chat-sync", Type: model.TokensPriceType, Input: 1, Output: 2}).Error)
+	for _, id := range []string{"chat-times", "chat-sync"} {
+		require.NoError(t, db.Create(&model.ModelInfo{Model: id, OutputModalities: `["text"]`, Tags: `["tools"]`}).Error)
+	}
+	require.NoError(t, model.PricingInstance.Init())
+
+	router := gin.New()
+	router.GET("/agent-models", ListGouoAdminAgentModels)
+	router.PUT("/agent-models", UpdateGouoAdminAgentModel)
+	update := func(body string) int {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest("PUT", "/agent-models", strings.NewReader(body)))
+		return res.Code
+	}
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest("GET", "/agent-models", nil))
+	var body struct {
+		Data struct {
+			Models []map[string]any `json:"models"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &body))
+	byID := map[string]map[string]any{}
+	for _, item := range body.Data.Models {
+		byID[item["model"].(string)] = item
+	}
+	// 按次计费显示每次请求的积分：每次扣 1000 × 0.5 额度 = 1000 × 0.5 / 500000 美元 × 7.3 × 100 积分
+	require.Equal(t, "times", byID["chat-times"]["price_type"])
+	require.InDelta(t, 0.73, byID["chat-times"]["input_points"].(float64), 1e-9)
+	require.InDelta(t, 0.0, byID["chat-times"]["output_points"].(float64), 1e-9)
+	require.Equal(t, "tokens", byID["chat-sync"]["price_type"])
+
+	// 下架不改价格记录，上游同步来的价格不会因此被锁定
+	require.Equal(t, http.StatusOK, update(`{"model":"chat-sync","listed":false}`))
+	price := model.PricingInstance.Prices["chat-sync"]
+	require.False(t, price.Locked)
+	require.Nil(t, gouoAgentCapabilities(price))
+	// 只改排序也不锁定
+	require.Equal(t, http.StatusOK, update(`{"model":"chat-sync","listed":false,"gouo_sort":3}`))
+	require.False(t, model.PricingInstance.Prices["chat-sync"].Locked)
+	require.Equal(t, 3, model.PricingInstance.Prices["chat-sync"].GouoSort)
+
+	// 按次计费改为按 token 必须同时填两个价格
+	require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-times","listed":true,"input_points":1460}`))
+	require.Equal(t, model.TimesPriceType, model.PricingInstance.Prices["chat-times"].Type)
+	require.Equal(t, http.StatusOK, update(`{"model":"chat-times","listed":true,"input_points":1460,"output_points":2920}`))
+	price = model.PricingInstance.Prices["chat-times"]
+	require.Equal(t, model.TokensPriceType, price.Type)
+	require.InDelta(t, 2.0, price.Output, 1e-9)
+	require.True(t, price.Locked)
+
+	// 汇率未设置时无法换算，拒绝而不是存入无穷大
+	config.PaymentUSDRate = 0
+	require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-sync","listed":true,"input_points":1,"output_points":1}`))
+	require.InDelta(t, 1.0, model.PricingInstance.Prices["chat-sync"].Input, 1e-9)
 }

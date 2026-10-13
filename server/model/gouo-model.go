@@ -50,6 +50,37 @@ func GouoQualityList(price *Price) []string {
 	return list
 }
 
+// GouoToolTags 是模型资料里表示支持工具调用的标签，上架 Agent 时写入其中的 tools
+var GouoToolTags = []string{"tools", "tool_calls", "function_calling", "function-calling"}
+
+// GouoAgentListed 判断模型是否已上架为 Agent：模型资料声明能输出文本且支持工具调用
+func GouoAgentListed(info *ModelInfoResponse) bool {
+	if info == nil || !slices.Contains(info.OutputModalities, "text") {
+		return false
+	}
+	return slices.ContainsFunc(info.Tags, func(tag string) bool {
+		return slices.Contains(GouoToolTags, strings.ToLower(strings.TrimSpace(tag)))
+	})
+}
+
+var ErrGouoAgentListed = errors.New("该模型已作为 Agent 模型上架，请先在 Agent 模型里下架")
+
+// CheckGouoImageExclusive 在启用图片模型前核对它没有上架为 Agent，否则会从 Agent 目录里消失。
+// 直接读数据库：多实例部署时本实例的价格缓存最多落后 1 分钟，可能还没看到别的实例刚上架的 Agent
+func CheckGouoImageExclusive(id string) error {
+	info, err := GetModelInfoByModel(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if GouoAgentListed(info.ToResponse()) {
+		return ErrGouoAgentListed
+	}
+	return nil
+}
+
 func ValidateGouoPrice(price *Price) error {
 	if !price.GouoEnabled {
 		return nil

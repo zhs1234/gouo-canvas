@@ -69,9 +69,9 @@ type gouoAdminAgentModel struct {
 	// 渠道映射到其他模型且没有按原模型计费时，实际按上游模型的价格扣费，这里填的价格不生效
 	PriceWarning string `json:"price_warning,omitempty"`
 	Kind         string `json:"kind"`
+	// times 表示按次计费，此时 InputPoints 是每次请求的积分，OutputPoints 为 0
+	PriceType string `json:"price_type,omitempty"`
 }
-
-var gouoToolTags = []string{"tools", "tool_calls", "function_calling", "function-calling"}
 
 // 常见图片模型的名称特征，模型资料没有声明输出类型时用来区分图片模型和文本模型
 var gouoImageNameHints = []string{"image", "dall-e", "flux", "midjourney", "imagen", "seedream", "stable-diffusion", "recraft", "ideogram", "cogview", "kolors", "jimeng", "wanx", "t2i"}
@@ -85,26 +85,28 @@ var gouoTextModelPrefixes = []string{
 }
 
 // gouoModelKind 判断模型是图片模型还是文本模型；判断不了时返回空字符串，两个标签页都会列出。
-// 已启用的图片模型和已上架的 Agent 模型以当前状态为准，其余依次看模型资料的输出类型、图片模型名称特征、主流文本模型名称和计费方式
+// 已启用的图片模型和已上架的 Agent 模型以当前状态为准，其余依次看模型资料是否只输出图片、图片模型名称特征、模型资料是否输出文本、主流文本模型名称和计费方式
 func gouoModelKind(id string, price *model.Price, info *model.ModelInfoResponse) string {
 	if price != nil && price.GouoEnabled {
 		return "image"
 	}
-	if gouoAgentListed(info) {
+	if model.GouoAgentListed(info) {
 		return "text"
 	}
+	outputsImage, outputsText := false, false
 	if info != nil {
-		outputsImage, outputsText := slices.Contains(info.OutputModalities, "image"), slices.Contains(info.OutputModalities, "text")
-		if outputsImage && !outputsText {
-			return "image"
-		}
-		if outputsText && !outputsImage {
-			return "text"
-		}
+		outputsImage, outputsText = slices.Contains(info.OutputModalities, "image"), slices.Contains(info.OutputModalities, "text")
 	}
+	if outputsImage && !outputsText {
+		return "image"
+	}
+	// 名称特征排在“只输出文本”之前：图片模型被上架过 Agent 再下架后，资料里仍留着上架时加的文本输出
 	lower := strings.ToLower(id)
 	if slices.ContainsFunc(gouoImageNameHints, func(hint string) bool { return strings.Contains(lower, hint) }) {
 		return "image"
+	}
+	if outputsText {
+		return "text"
 	}
 	// 渠道模型可能带供应商前缀，如 anthropic/claude-sonnet-4-6
 	base := lower[strings.LastIndex(lower, "/")+1:]
@@ -328,16 +330,14 @@ func UpdateGouoAdminModel(c *gin.Context) {
 	if !ok {
 		price = model.Price{Model: id, Type: model.TimesPriceType, ChannelType: config.ChannelTypeUnknown}
 	}
-	// 同一个模型不能同时作为图片模型和 Agent 模型，否则会从另一边的目录里消失
-	// 直接读数据库：多实例部署时本实例的价格缓存最多落后 1 分钟，可能还没看到别的实例刚上架的 Agent
 	if input.Enabled && !price.GouoEnabled {
-		stored, err := model.GetModelInfoByModel(id)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			gouoFail(c, http.StatusInternalServerError, "model_info_unavailable", "读取模型资料失败")
+		err := model.CheckGouoImageExclusive(id)
+		if errors.Is(err, model.ErrGouoAgentListed) {
+			gouoFail(c, http.StatusBadRequest, "agent_model_listed", err.Error())
 			return
 		}
-		if err == nil && gouoAgentListed(stored.ToResponse()) {
-			gouoFail(c, http.StatusBadRequest, "agent_model_listed", "该模型已作为 Agent 模型上架，请先在 Agent 模型里下架")
+		if err != nil {
+			gouoFail(c, http.StatusInternalServerError, "model_info_unavailable", "读取模型资料失败")
 			return
 		}
 	}
@@ -387,15 +387,6 @@ func gouoPointsPerMillionTokens() float64 {
 	return 1e6 * config.PaymentUSDRate / config.QuotaPerUnit * 100
 }
 
-func gouoAgentListed(info *model.ModelInfoResponse) bool {
-	if info == nil || !slices.Contains(info.OutputModalities, "text") {
-		return false
-	}
-	return slices.ContainsFunc(info.Tags, func(tag string) bool {
-		return slices.Contains(gouoToolTags, strings.ToLower(strings.TrimSpace(tag)))
-	})
-}
-
 // 按客户端 Agent 目录的条件逐项检查，返回第一个不满足的原因
 func gouoAgentReason(item *gouoAdminAgentModel) string {
 	enabled := slices.ContainsFunc(item.Channels, func(channel gouoAdminChannel) bool { return channel.Status == 1 })
@@ -438,8 +429,12 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 			imageModels[id] = true
 			continue
 		}
-		item := &gouoAdminAgentModel{Model: id, Priced: true, Sort: price.GouoSort, MaxTokens: price.GouoMaxTokens, Listed: gouoAgentListed(price.ModelInfo), Kind: gouoModelKind(id, price, price.ModelInfo)}
-		item.InputPoints, item.OutputPoints = price.GetInput()*rate, price.GetOutput()*rate
+		item := &gouoAdminAgentModel{Model: id, Priced: true, Sort: price.GouoSort, MaxTokens: price.GouoMaxTokens, Listed: model.GouoAgentListed(price.ModelInfo), Kind: gouoModelKind(id, price, price.ModelInfo)}
+		item.InputPoints, item.OutputPoints, item.PriceType = price.GetInput()*rate, price.GetOutput()*rate, price.Type
+		if price.Type == model.TimesPriceType {
+			// 按次计费每次扣 1000 × Input 额度，不能按每百万 token 换算
+			item.InputPoints, item.OutputPoints = price.GetInput()*rate/1000, 0
+		}
 		item.Name, item.Description = gouoModelText(price)
 		item.Vision = price.ModelInfo != nil && slices.Contains(price.ModelInfo.InputModalities, "image")
 		byModel[id] = item
@@ -453,7 +448,7 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 			byModel[id] = &gouoAdminAgentModel{Model: id}
 			if info := infos[id]; info != nil {
 				byModel[id].Name, byModel[id].Description = info.Name, info.Description
-				byModel[id].Listed = gouoAgentListed(info)
+				byModel[id].Listed = model.GouoAgentListed(info)
 				byModel[id].Vision = slices.Contains(info.InputModalities, "image")
 			}
 			byModel[id].Kind = gouoModelKind(id, nil, infos[id])
@@ -554,7 +549,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	}
 	if err := saveGouoModelInfo(id, func(info *model.ModelInfo) {
 		applyGouoModelText(info, input.Name, input.Description)
-		for _, tag := range gouoToolTags {
+		for _, tag := range model.GouoToolTags {
 			info.Tags = setGouoListItem(info.Tags, tag, false)
 		}
 		if input.Listed {
@@ -570,8 +565,8 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		return
 	}
 	changed := input.Sort != nil || input.InputPoints != nil || input.OutputPoints != nil || input.MaxTokens != nil
-	if !priced && !changed {
-		// 只改了模型详情（例如下架一个没有价格记录的模型），刷新缓存即可
+	if !changed {
+		// 只改了模型详情（例如下架），不动价格记录，免得把上游同步来的价格锁定
 		if err := model.PricingInstance.Init(); err != nil {
 			gouoFail(c, http.StatusInternalServerError, "pricing_reload_failed", "刷新模型目录失败")
 			return
@@ -582,7 +577,17 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	if !priced {
 		price = model.Price{Model: id, Type: model.TokensPriceType, ChannelType: config.ChannelTypeUnknown}
 	}
+	pointsSet := input.InputPoints != nil || input.OutputPoints != nil
+	// 按次计费改成按 token 时两个价格都要重新填，否则另一个沿用按次计费的数值
+	if price.Type == model.TimesPriceType && pointsSet && (input.InputPoints == nil || input.OutputPoints == nil) {
+		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "该模型当前按次计费，改为按 token 计费需同时填写输入和输出价格")
+		return
+	}
 	rate := gouoPointsPerMillionTokens()
+	if pointsSet && rate <= 0 {
+		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "支付汇率或额度单位未设置，无法换算积分价格")
+		return
+	}
 	if input.InputPoints != nil {
 		price.Type, price.Input = model.TokensPriceType, *input.InputPoints/rate
 	}
@@ -595,8 +600,10 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	if input.MaxTokens != nil {
 		price.GouoMaxTokens = *input.MaxTokens
 	}
-	// 在这里定的价格不随上游价格同步被覆盖或删除
-	price.Locked = true
+	// 在这里定的价格不随上游价格同步被覆盖或删除；只改排序或回复上限时不锁定
+	if pointsSet {
+		price.Locked = true
+	}
 	var err error
 	if priced {
 		err = model.PricingInstance.UpdatePrice(id, &price)

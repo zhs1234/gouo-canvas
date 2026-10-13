@@ -31,17 +31,7 @@ type gouoAgentModel struct {
 
 func gouoAgentCapabilities(price *model.Price) *gouoAgentModel {
 	info := price.ModelInfo
-	if price.GouoEnabled || strings.ContainsAny(price.Model, "*#") || info == nil || !slices.Contains(info.OutputModalities, "text") {
-		return nil
-	}
-	tools := false
-	for _, tag := range info.Tags {
-		switch strings.ToLower(strings.TrimSpace(tag)) {
-		case "tools", "tool_calls", "function_calling", "function-calling":
-			tools = true
-		}
-	}
-	if !tools {
+	if price.GouoEnabled || strings.ContainsAny(price.Model, "*#") || !model.GouoAgentListed(info) {
 		return nil
 	}
 	name := info.Name

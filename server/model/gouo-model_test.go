@@ -172,3 +172,31 @@ func TestGouoRefundBeforeExhaustedStatusWrite(t *testing.T) {
 	require.Equal(t, config.TokenStatusEnabled, token.Status)
 	require.Equal(t, 10, token.RemainQuota)
 }
+
+func TestGouoImageExclusiveOnPriceWrites(t *testing.T) {
+	oldLogger := logger.Logger
+	logger.Logger = zap.NewNop()
+	t.Cleanup(func() { logger.Logger = oldLogger })
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Price{}, &ModelInfo{}, &ModelOwnedBy{}))
+	oldDB := DB
+	DB = db
+	t.Cleanup(func() { DB = oldDB })
+	require.NoError(t, db.Create(&Price{Model: "chat-agent", Type: TokensPriceType, Input: 1, Output: 1}).Error)
+	require.NoError(t, db.Create(&ModelInfo{Model: "chat-agent", OutputModalities: `["text"]`, Tags: `["tools"]`}).Error)
+	require.NoError(t, db.Create(&ModelInfo{Model: "chat-new", OutputModalities: `["text"]`, Tags: `["function_calling"]`}).Error)
+	p := &Pricing{Prices: map[string]*Price{}}
+	require.NoError(t, p.Init())
+	image := func(id string) *Price {
+		return &Price{Model: id, Type: TimesPriceType, GouoEnabled: true, GouoPriceCNY: 0.1, GouoMaxOutputs: 1}
+	}
+	// 价格管理的单个、批量接口也不能把已上架的 Agent 模型启用为图片模型
+	require.ErrorIs(t, p.UpdatePrice("chat-agent", image("chat-agent")), ErrGouoAgentListed)
+	require.ErrorIs(t, p.AddPrice(image("chat-new")), ErrGouoAgentListed)
+	require.ErrorIs(t, p.BatchSetPrices(&BatchPrices{Models: []string{"chat-agent"}, Price: *image("")}, []string{"chat-agent"}), ErrGouoAgentListed)
+	require.False(t, p.GetPrice("chat-agent").GouoEnabled)
+	// 没有上架的模型照常启用
+	require.NoError(t, p.AddPrice(image("image-a")))
+	require.True(t, p.GetPrice("image-a").GouoEnabled)
+}

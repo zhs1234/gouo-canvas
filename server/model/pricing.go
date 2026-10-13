@@ -179,6 +179,11 @@ func (p *Pricing) UpdatePrice(modelName string, price *Price) error {
 	if err := ValidateGouoPrice(price); err != nil {
 		return err
 	}
+	if price.GouoEnabled && !p.GetPrice(modelName).GouoEnabled {
+		if err := CheckGouoImageExclusive(price.Model); err != nil {
+			return err
+		}
+	}
 
 	if err := p.updateRawPrice(modelName, price); err != nil {
 		return err
@@ -201,6 +206,11 @@ func (p *Pricing) addRawPrice(price *Price) error {
 func (p *Pricing) AddPrice(price *Price) error {
 	if err := ValidateGouoPrice(price); err != nil {
 		return err
+	}
+	if price.GouoEnabled {
+		if err := CheckGouoImageExclusive(price.Model); err != nil {
+			return err
+		}
 	}
 	if err := p.addRawPrice(price); err != nil {
 		return err
@@ -500,6 +510,11 @@ func (p *Pricing) BatchSetPrices(batchPrices *BatchPrices, originalModels []stri
 		price.Model = id
 		if err := ValidateGouoPrice(&price); err != nil {
 			return err
+		}
+		if price.GouoEnabled && !p.GetPrice(id).GouoEnabled {
+			if err := CheckGouoImageExclusive(id); err != nil {
+				return err
+			}
 		}
 	}
 	// 查找需要删除的model

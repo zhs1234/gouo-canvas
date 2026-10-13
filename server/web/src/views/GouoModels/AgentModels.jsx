@@ -164,6 +164,13 @@ export default function AgentModels() {
                       <Typography variant="body2" color="error.main" fontWeight={600}>
                         免费（输入、输出均为 0）
                       </Typography>
+                    ) : row.price_type === 'times' ? (
+                      <>
+                        <Typography variant="body2">按次计费：每次 {formatPoints(row.input_points)} 积分</Typography>
+                        <Typography variant="caption" display="block" color="warning.main">
+                          在这里保存价格会改为按 token 计费
+                        </Typography>
+                      </>
                     ) : (
                       <>
                         <Typography variant="body2">输入 {formatPoints(row.input_points)}</Typography>
@@ -223,9 +230,11 @@ export default function AgentModels() {
                             gouo_sort: row.gouo_sort || 0,
                             vision: row.vision,
                             gouo_max_tokens: row.gouo_max_tokens || 0,
+                            // 按次计费的价格不是每百万 token 的价格，不预填，由管理员重新填写
+                            times_points: row.price_type === 'times' ? row.input_points : null,
                             // 避免浮点误差出现在输入框里
-                            input_points: row.priced ? Number(Number(row.input_points).toPrecision(12)) : '',
-                            output_points: row.priced ? Number(Number(row.output_points).toPrecision(12)) : ''
+                            input_points: row.priced && row.price_type !== 'times' ? Number(Number(row.input_points).toPrecision(12)) : '',
+                            output_points: row.priced && row.price_type !== 'times' ? Number(Number(row.output_points).toPrecision(12)) : ''
                           })
                         }
                       >
@@ -295,6 +304,12 @@ export default function AgentModels() {
             <DialogTitle id="gouo-agent-model-title">{editing.model}</DialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 1 }}>
+                {editing.times_points !== null && (
+                  <Alert severity="warning">
+                    该模型当前按次计费（每次 {formatPoints(editing.times_points)} 积分）。保存后改为按 token 计费，请填写每百万 token
+                    的输入和输出价格。
+                  </Alert>
+                )}
                 <TextField
                   label="显示名称"
                   value={editing.name}
