@@ -74,10 +74,18 @@ type gouoAdminAgentModel struct {
 var gouoToolTags = []string{"tools", "tool_calls", "function_calling", "function-calling"}
 
 // 常见图片模型的名称特征，模型资料没有声明输出类型时用来区分图片模型和文本模型
-var gouoImageNameHints = []string{"image", "dall-e", "flux", "midjourney", "imagen", "seedream", "stable-diffusion", "recraft", "ideogram", "cogview", "kolors"}
+var gouoImageNameHints = []string{"image", "dall-e", "flux", "midjourney", "imagen", "seedream", "stable-diffusion", "recraft", "ideogram", "cogview", "kolors", "jimeng", "wanx", "t2i"}
+
+// 近期主流文本模型的名称前缀，用于还没有价格记录、只配在渠道上的模型；图片模型先按上面的名称特征排除，
+// 所以 gemini-3-pro-image 这类名称不会被 gemini-3 归成文本模型
+var gouoTextModelPrefixes = []string{
+	"gpt-5", "gpt-4.1", "gpt-4o", "chatgpt-4o", "o1", "o3", "o4-mini", "claude-", "gemini-2.5-", "gemini-3",
+	"grok-3", "grok-4", "deepseek-", "qwen3", "qwen-max", "qwen-plus", "qwen-turbo", "qwen-flash", "qwq",
+	"glm-4", "glm-5", "kimi-", "moonshot-", "doubao-seed-", "doubao-1-5", "minimax-", "ernie-", "hunyuan-", "mistral-", "llama-",
+}
 
 // gouoModelKind 判断模型是图片模型还是文本模型；判断不了时返回空字符串，两个标签页都会列出。
-// 已启用的图片模型和已上架的 Agent 模型以当前状态为准，其余依次看模型资料的输出类型、名称和计费方式
+// 已启用的图片模型和已上架的 Agent 模型以当前状态为准，其余依次看模型资料的输出类型、图片模型名称特征、主流文本模型名称和计费方式
 func gouoModelKind(id string, price *model.Price, info *model.ModelInfoResponse) string {
 	if price != nil && price.GouoEnabled {
 		return "image"
@@ -97,6 +105,11 @@ func gouoModelKind(id string, price *model.Price, info *model.ModelInfoResponse)
 	lower := strings.ToLower(id)
 	if slices.ContainsFunc(gouoImageNameHints, func(hint string) bool { return strings.Contains(lower, hint) }) {
 		return "image"
+	}
+	// 渠道模型可能带供应商前缀，如 anthropic/claude-sonnet-4-6
+	base := lower[strings.LastIndex(lower, "/")+1:]
+	if slices.ContainsFunc(gouoTextModelPrefixes, func(prefix string) bool { return strings.HasPrefix(base, prefix) }) {
+		return "text"
 	}
 	if price != nil && price.Type == model.TokensPriceType {
 		return "text"

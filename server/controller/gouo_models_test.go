@@ -294,6 +294,13 @@ func TestGouoModelKind(t *testing.T) {
 		{"资料只输出文本", "flux-chat", nil, &model.ModelInfoResponse{OutputModalities: []string{"text"}}, "text"},
 		{"按名称识别图片模型", "black-forest-labs/FLUX.1-dev", nil, nil, "image"},
 		{"按 token 计费的是文本模型", "gpt-4o", &model.Price{Type: model.TokensPriceType}, nil, "text"},
+		{"主流文本模型没有价格也能识别", "gpt-5.5", nil, nil, "text"},
+		{"带供应商前缀的主流文本模型", "anthropic/claude-sonnet-4-6", nil, nil, "text"},
+		{"图片名称特征优先于文本前缀", "gemini-3-pro-image-preview", nil, nil, "image"},
+		{"豆包图片模型不算豆包文本模型", "doubao-seedream-4-0-250828", nil, nil, "image"},
+		{"即梦", "jimeng-4.0", nil, nil, "image"},
+		{"通义万相", "wan2.5-t2i-preview", nil, nil, "image"},
+		{"dall-e 即使按 token 计费也是图片模型", "dall-e-3", &model.Price{Type: model.TokensPriceType}, nil, "image"},
 		{"无法判断", "mystery", &model.Price{Type: model.TimesPriceType}, nil, ""},
 	}
 	for _, tc := range cases {
