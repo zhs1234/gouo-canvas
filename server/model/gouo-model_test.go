@@ -204,3 +204,26 @@ func TestGouoImageExclusiveOnPriceWrites(t *testing.T) {
 	require.True(t, p.GetPrice("image-a").GouoEnabled)
 	require.NoError(t, p.UpdatePrice("image-a", image("image-a")))
 }
+
+func TestPriceSyncKeepsGouoAgentFields(t *testing.T) {
+	oldLogger := logger.Logger
+	logger.Logger = zap.NewNop()
+	t.Cleanup(func() { logger.Logger = oldLogger })
+	for _, mode := range []string{string(PriceUpdateModeUpdate), string(PriceUpdateModeOverwrite)} {
+		db, err := gorm.Open(sqlite.Open("file:"+t.Name()+mode+"?mode=memory&cache=shared"), &gorm.Config{})
+		require.NoError(t, err)
+		require.NoError(t, db.AutoMigrate(&Price{}, &ModelInfo{}, &ModelOwnedBy{}))
+		oldDB := DB
+		DB = db
+		require.NoError(t, db.Create(&Price{Model: "chat-a", Type: TokensPriceType, Input: 1, Output: 2, GouoSort: 3, GouoMaxTokens: 4000}).Error)
+		p := &Pricing{Prices: map[string]*Price{}}
+		require.NoError(t, p.Init())
+		// 未锁定的价格随上游更新，但 Agent 页设置的排序和回复上限保留
+		require.NoError(t, p.SyncPricing([]*Price{{Model: "chat-a", Type: TokensPriceType, Input: 5, Output: 6}}, mode))
+		price := p.GetPrice("chat-a")
+		require.InDelta(t, 5.0, price.Input, 1e-9, mode)
+		require.Equal(t, 3, price.GouoSort, mode)
+		require.Equal(t, 4000, price.GouoMaxTokens, mode)
+		DB = oldDB
+	}
+}

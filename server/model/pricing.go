@@ -388,7 +388,7 @@ func (p *Pricing) SyncPriceWithOverwrite(pricing []*Price) error {
 			newPrices = append(newPrices, price)
 		} else {
 			if !p.Prices[price.Model].Locked && !p.Prices[price.Model].GouoEnabled {
-				newPrices = append(newPrices, price)
+				newPrices = append(newPrices, withLocalGouoAgentFields(price, p.Prices[price.Model]))
 			}
 		}
 	}
@@ -413,6 +413,13 @@ func (p *Pricing) SyncPriceWithOverwrite(pricing []*Price) error {
 	return p.Init()
 }
 
+// withLocalGouoAgentFields 上游价格不含光构 Agent 的排序和回复上限，同步替换未锁定的价格时沿用本地配置
+func withLocalGouoAgentFields(price, local *Price) *Price {
+	merged := *price
+	merged.GouoSort, merged.GouoMaxTokens = local.GouoSort, local.GouoMaxTokens
+	return &merged
+}
+
 // SyncPriceOnlyUpdate 只更新系统现有的数据 不含lock的数据
 func (p *Pricing) SyncPriceOnlyUpdate(pricing []*Price) error {
 	logger.SysLog(fmt.Sprintf("系统内已有价格配置 %d 个(包含locked价格)", len(p.Prices)))
@@ -421,7 +428,7 @@ func (p *Pricing) SyncPriceOnlyUpdate(pricing []*Price) error {
 	//系统内存在并且非lock的模型价格加入new price
 	for _, price := range pricing {
 		if p, ok := p.Prices[price.Model]; ok && !p.Locked && !p.GouoEnabled {
-			newPrices = append(newPrices, price)
+			newPrices = append(newPrices, withLocalGouoAgentFields(price, p))
 			newPricesName = append(newPricesName, price.Model)
 		}
 	}
