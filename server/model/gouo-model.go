@@ -23,8 +23,10 @@ type GouoImageModel struct {
 	MaxOutputs   int     `json:"max_outputs"`
 	Quota        int     `json:"quota"`
 	PriceVersion string  `json:"price_version"`
-	// 价格版本算好后才设置，不参与版本计算
-	Default bool `json:"default,omitempty"`
+	// 以下字段在价格版本算好后才设置，不参与版本计算：改名、改说明或调整顺序不会让用户重新确认价格
+	Default     bool   `json:"default,omitempty"`
+	Description string `json:"description,omitempty"`
+	Sort        int    `json:"-"`
 }
 
 func ValidateGouoPrice(price *Price) error {
@@ -69,6 +71,13 @@ func (p *Pricing) GetGouoModel(id string) (*GouoImageModel, error) {
 	data, _ := json.Marshal(result)
 	hash := sha256.Sum256(data)
 	result.PriceVersion = hex.EncodeToString(hash[:])
+	result.Sort = price.GouoSort
+	if info := price.ModelInfo; info != nil {
+		if name := strings.TrimSpace(info.Name); name != "" {
+			result.Name = name
+		}
+		result.Description = strings.TrimSpace(info.Description)
+	}
 	return result, nil
 }
 

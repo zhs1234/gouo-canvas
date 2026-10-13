@@ -66,6 +66,8 @@ export interface GouoImageModel {
   quota: number
   // 后台设置的默认模型（未设置或不可用时为目录第一个）
   default?: boolean
+  // 后台填写的一句话说明；name 是后台设置的显示名称，未设置时为模型 ID
+  description?: string
 }
 
 export class GouoPriceChangedError extends Error {

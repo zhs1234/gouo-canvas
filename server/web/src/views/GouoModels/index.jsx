@@ -18,22 +18,25 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tab,
+  Tabs,
   TextField,
   Typography
 } from '@mui/material';
 import { API } from 'utils/api';
 import { GOUO_POINTS_PER_CNY, renderGouoPoints, showError, showSuccess } from 'utils/common';
+import AgentModels from './AgentModels';
 
-// 客户端能看到的条件：开启光构、配置有效、至少一个启用中的渠道支持它（还需用户分组匹配、令牌未限制）
+// 客户端能看到的条件：开启光构、配置有效、至少一个启用中的渠道支持它且渠道分组是有效的用户分组（还需令牌未限制）
 const visibility = (row) => {
   if (!row.gouo_enabled) return { ok: false, text: '未启用' };
   if (row.error) return { ok: false, text: row.error };
-  const groups = [...new Set(row.channels.filter((channel) => channel.status === 1).flatMap((channel) => channel.groups))];
-  if (!groups.length) return { ok: false, text: '没有启用中的渠道支持此模型' };
-  return { ok: true, text: `分组 ${groups.join('、')} 可见` };
+  if (!row.channels.some((channel) => channel.status === 1)) return { ok: false, text: '没有启用中的渠道支持此模型' };
+  if (!row.open_groups.length) return { ok: false, text: '渠道分组都不是有效的用户分组，或渠道为“仅对话”' };
+  return { ok: true, text: `分组 ${row.open_groups.join('、')} 可见` };
 };
 
-export default function GouoModels() {
+function ImageModels() {
   const [rows, setRows] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
   const [loading, setLoading] = useState(true);
@@ -70,7 +73,13 @@ export default function GouoModels() {
         gouo_price_cny: values.gouo_points === undefined ? values.gouo_price_cny : Number(values.gouo_points) / GOUO_POINTS_PER_CNY,
         gouo_reference: values.gouo_reference,
         gouo_mask: values.gouo_mask,
-        gouo_max_outputs: Number(values.gouo_max_outputs)
+        gouo_max_outputs: Number(values.gouo_max_outputs),
+        // 只有编辑窗口会带上显示名称、说明和排序；下架按钮不传，保持原值
+        ...(values.display_name !== undefined && {
+          name: values.display_name,
+          description: values.display_description,
+          gouo_sort: Number(values.display_sort || 0)
+        })
       });
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess(values.gouo_enabled ? `${values.model} 已保存` : `${values.model} 已在客户端下架`);
@@ -107,15 +116,18 @@ export default function GouoModels() {
     Number.isInteger(Number(editing.gouo_max_outputs)) &&
     Number(editing.gouo_max_outputs) >= 1 &&
     Number(editing.gouo_max_outputs) <= 10 &&
-    (!editing.gouo_mask || editing.gouo_reference);
+    (!editing.gouo_mask || editing.gouo_reference) &&
+    editing.display_name.trim().length <= 40 &&
+    editing.display_description.trim().length <= 100 &&
+    Number.isInteger(Number(editing.display_sort || 0));
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Typography variant="h3">光构模型</Typography>
+    <Box>
       <Alert severity="info" sx={{ my: 2 }}>
         客户端只显示同时满足以下条件的模型：在这里启用并填写有效售价；至少一个启用中的渠道支持它，且渠道分组包含用户所在分组；用户令牌没有限制该模型。
-        修改立即生效，多实例部署时其他实例最多 1 分钟同步。默认模型用于用户未手动选择、或所选模型已下架的情况
-        {defaultModel ? `，当前为 ${defaultModel}` : '，当前未设置，客户端使用目录第一个'}。
+        客户端按“排序”从小到大排列，相同时按模型 ID；显示名称和说明不影响价格确认。修改立即生效，多实例部署时其他实例最多 1
+        分钟同步。默认模型用于用户未手动选择、或所选模型已下架的情况
+        {defaultModel ? `，当前为 ${defaultModel}` : '，当前未设置，客户端使用排在第一的模型'}。
       </Alert>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ md: 'center' }} sx={{ mb: 2 }}>
         <TextField label="搜索模型" value={keyword} onChange={(event) => setKeyword(event.target.value)} sx={{ minWidth: 260 }} />
@@ -149,6 +161,21 @@ export default function GouoModels() {
                   <TableCell sx={{ maxWidth: 240, overflowWrap: 'anywhere' }}>
                     {row.model}
                     {row.model === defaultModel && <Chip label="默认" color="primary" size="small" sx={{ ml: 1 }} />}
+                    {row.name && row.name !== row.model && (
+                      <Typography variant="body2" display="block">
+                        显示为「{row.name}」
+                      </Typography>
+                    )}
+                    {row.description && (
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        {row.description}
+                      </Typography>
+                    )}
+                    {row.gouo_enabled && (
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        排序 {row.gouo_sort}
+                      </Typography>
+                    )}
                     {!row.priced && (
                       <Typography variant="caption" display="block" color="text.secondary">
                         尚无价格记录
@@ -195,7 +222,10 @@ export default function GouoModels() {
                             // 避免 0.07 × 100 这类浮点误差出现在输入框里
                             gouo_points: row.gouo_price_cny ? Number((row.gouo_price_cny * GOUO_POINTS_PER_CNY).toPrecision(12)) : '',
                             gouo_max_outputs: row.gouo_max_outputs || 1,
-                            gouo_enabled: true
+                            gouo_enabled: true,
+                            display_name: row.name || '',
+                            display_description: row.description || '',
+                            display_sort: row.gouo_sort || 0
                           })
                         }
                       >
@@ -247,6 +277,28 @@ export default function GouoModels() {
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 1 }}>
                 <Alert severity="info">按每张成功生成的图片收费，生成与编辑同价，不叠加分组倍率；上游价格同步不会覆盖这里的配置。</Alert>
+                <TextField
+                  label="显示名称"
+                  value={editing.display_name}
+                  onChange={(event) => setEditing({ ...editing, display_name: event.target.value })}
+                  inputProps={{ maxLength: 40 }}
+                  helperText="客户端模型列表显示的名称，留空时显示模型 ID"
+                />
+                <TextField
+                  label="说明"
+                  value={editing.display_description}
+                  onChange={(event) => setEditing({ ...editing, display_description: event.target.value })}
+                  inputProps={{ maxLength: 100 }}
+                  helperText="一句话说明，显示在客户端模型名称后面，例如“速度快，适合草图”"
+                />
+                <TextField
+                  label="排序"
+                  type="number"
+                  value={editing.display_sort}
+                  onChange={(event) => setEditing({ ...editing, display_sort: event.target.value })}
+                  inputProps={{ step: 1 }}
+                  helperText="数字小的排在前面"
+                />
                 <TextField
                   required
                   label="售价（积分/张）"
@@ -303,6 +355,20 @@ export default function GouoModels() {
           </Box>
         )}
       </Dialog>
+    </Box>
+  );
+}
+
+export default function GouoModels() {
+  const [tab, setTab] = useState('image');
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="h3">光构模型</Typography>
+      <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mt: 1 }}>
+        <Tab value="image" label="图片模型" />
+        <Tab value="agent" label="Agent 模型" />
+      </Tabs>
+      {tab === 'image' ? <ImageModels /> : <AgentModels />}
     </Box>
   );
 }
