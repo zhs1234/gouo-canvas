@@ -204,7 +204,7 @@ func UploadGouoAsset(c *gin.Context) {
 		return
 	}
 	if fileHeader.Size > config.GouoAssetMaxFileBytes {
-		gouoFail(c, http.StatusRequestEntityTooLarge, "file_too_large", "单张图片不能超过 25 MB")
+		gouoFail(c, http.StatusRequestEntityTooLarge, "file_too_large", fmt.Sprintf("单张图片不能超过 %d MB", config.GouoAssetMaxFileBytes>>20))
 		return
 	}
 	file, err := fileHeader.Open()
@@ -215,7 +215,7 @@ func UploadGouoAsset(c *gin.Context) {
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, config.GouoAssetMaxFileBytes+1))
 	if err != nil || int64(len(data)) > config.GouoAssetMaxFileBytes {
-		gouoFail(c, http.StatusRequestEntityTooLarge, "file_too_large", "单张图片不能超过 25 MB")
+		gouoFail(c, http.StatusRequestEntityTooLarge, "file_too_large", fmt.Sprintf("单张图片不能超过 %d MB", config.GouoAssetMaxFileBytes>>20))
 		return
 	}
 

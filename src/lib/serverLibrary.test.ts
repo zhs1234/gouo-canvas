@@ -19,6 +19,7 @@ let meta: Map<string, unknown>
 let assetMap: Map<string, unknown>
 let pages: Record<string, GouoCloudTask[]>
 let purged: string[][]
+let retention: number | null
 
 beforeEach(() => {
   vi.resetModules()
@@ -28,6 +29,7 @@ beforeEach(() => {
   assetMap = new Map()
   pages = { visible: [], hidden: [] }
   purged = []
+  retention = 3 * 24 * 60 * 60 * 1000
   const notify = () => { for (const listener of listeners) listener(state) }
   state = {
     tasks: [], favoriteCollections: [], settings: { model: 'image' }, showToast: vi.fn(),
@@ -48,7 +50,8 @@ beforeEach(() => {
     putTask: vi.fn(),
   }))
   vi.doMock('./gouoBackend', () => ({
-    GOUO_TRASH_RETENTION_MS: 3 * 24 * 60 * 60 * 1000,
+    getLoadedTrashRetentionMs: () => retention,
+    refreshBackendStatus: async () => {},
     GouoAssetMissingError: class extends Error {},
     isBackendAuthEnabled: () => true,
     getCloudStorage: vi.fn(async () => ({ enabled: true })),
@@ -209,6 +212,21 @@ describe('server library', () => {
     state.tasks = [localTask({ id: 'old', cloudHiddenAt: Date.now() - 4 * day }), localTask({ id: 'recent', cloudHiddenAt: Date.now() - day }), localTask({ id: 'visible' })]
     await library.startServerLibrary()
     expect(purged).toEqual([['old']])
+  })
+
+  it('follows the admin retention period and skips local purging until it is known', async () => {
+    const day = 24 * 60 * 60 * 1000
+    const tasks = () => [localTask({ id: 'six-days', cloudHiddenAt: Date.now() - 6 * day }), localTask({ id: 'nine-days', cloudHiddenAt: Date.now() - 9 * day })]
+    // 后台设置未取到时不清理，避免误删服务端仍可恢复的作品
+    retention = null
+    state.tasks = tasks()
+    await (await import('./serverLibrary')).startServerLibrary()
+    expect(purged).toEqual([])
+    vi.resetModules()
+    retention = 7 * day
+    state.tasks = tasks()
+    await (await import('./serverLibrary')).startServerLibrary()
+    expect(purged).toEqual([['nine-days']])
   })
 
   it('forgets cached cloud image ids when the server no longer has the image', async () => {

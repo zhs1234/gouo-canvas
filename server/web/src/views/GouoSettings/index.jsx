@@ -12,7 +12,11 @@ const EMPTY = {
   GouoAgentEnabled: 'true',
   GouoAgentDefaultModel: '',
   GouoAgentSystemPrompt: '',
-  GouoMaxImagesPerTask: '10'
+  GouoMaxImagesPerTask: '10',
+  GouoCloudLibraryEnabled: 'true',
+  GouoAssetUserQuotaBytes: String(2 * 1024 ** 3),
+  GouoAssetMaxFileBytes: String(25 * 1024 ** 2),
+  GouoTrashRetentionDays: '3'
 };
 
 export default function GouoSettings() {
@@ -75,6 +79,14 @@ export default function GouoSettings() {
   const options = values.GouoDefaultImageModel && !models.includes(values.GouoDefaultImageModel) ? [...models, values.GouoDefaultImageModel] : models;
   const agentOptions =
     values.GouoAgentDefaultModel && !agentModels.includes(values.GouoAgentDefaultModel) ? [...agentModels, values.GouoAgentDefaultModel] : agentModels;
+  // 字节数按整数 GB / MB 填写，避免小数输入被换算打断
+  const sizeField = (key, unit) => ({
+    value: values[key] ? String(Math.round(Number(values[key]) / unit)) : '',
+    onChange: (event) => setValues({ ...values, [key]: event.target.value === '' ? '' : String(Math.round(Number(event.target.value)) * unit) }),
+    disabled: loading || saving,
+    fullWidth: true,
+    type: 'number'
+  });
   const toggle = (key, label, helper) => (
     <Box>
       <FormControlLabel
@@ -180,6 +192,33 @@ export default function GouoSettings() {
           inputProps={{ maxLength: 4000 }}
           helperText="附加在内置规则之后，用于补充语气、品牌或业务要求，最多 4000 字；不能放宽计费确认、工具和安全规则。在新的一轮对话中生效。"
         />
+        <Divider textAlign="left">云端作品库</Divider>
+        {toggle(
+          'GouoCloudLibraryEnabled',
+          '开放云端作品库',
+          '关闭后客户端不再上传和同步作品、画布与会话，生成结果只保存在用户浏览器；已保存的云端内容保留。用户刷新页面后生效。'
+        )}
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <TextField
+            label="默认每用户空间（GB）"
+            {...sizeField('GouoAssetUserQuotaBytes', 1024 ** 3)}
+            inputProps={{ min: 1, max: 1024, step: 1 }}
+            helperText="未单独设置配额的用户使用此值，可在“光构存储”为个别用户调整。只约束用户上传的参考图和遮罩，服务端保存的生成图不计入限制。"
+          />
+          <TextField
+            label="单文件上传上限（MB）"
+            {...sizeField('GouoAssetMaxFileBytes', 1024 ** 2)}
+            inputProps={{ min: 1, max: 100, step: 1 }}
+            helperText="参考图、遮罩等单个上传文件的上限，1–100 MB。调高时同步调整 Nginx 的 client_max_body_size（部署模板为 32 MB）和 CDN 限制。"
+          />
+          <TextField
+            label="回收站保留天数"
+            {...field('GouoTrashRetentionDays')}
+            type="number"
+            inputProps={{ min: 1, max: 30, step: 1 }}
+            helperText="1–30 天。缩短后，已超过新保留期的内容会在下一次清理（每小时一次）时彻底删除，无法恢复。"
+          />
+        </Stack>
         {status && (
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             <Typography variant="body2" color="text.secondary">

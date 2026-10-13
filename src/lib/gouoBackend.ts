@@ -149,6 +149,8 @@ export interface GouoBackendStatus {
   gouo_canvas_enabled?: boolean
   gouo_agent_enabled?: boolean
   gouo_max_images?: number
+  gouo_trash_retention_days?: number
+  gouo_max_upload_bytes?: number
 }
 
 export interface GouoCloudStorage {
@@ -218,8 +220,6 @@ export interface GouoCloudTaskMeta {
   collection_ids?: string[]
 }
 
-// 与服务端一致：回收站内容保留 3 天后彻底删除
-export const GOUO_TRASH_RETENTION_MS = 3 * 24 * 60 * 60 * 1000
 
 const configuredBaseUrl = (import.meta.env.VITE_GOUO_BACKEND_URL ?? '').trim().replace(/\/+$/, '')
 let backendToken = ''
@@ -313,8 +313,9 @@ let statusLoadedAt = 0
 let statusPending: Promise<void> | null = null
 const statusListeners = new Set<(status: GouoBackendStatus) => void>()
 
-export function refreshBackendStatus() {
-  if (statusPending || Date.now() - statusLoadedAt < STATUS_REFRESH_MS) return
+export function refreshBackendStatus(): Promise<void> {
+  if (statusPending) return statusPending
+  if (Date.now() - statusLoadedAt < STATUS_REFRESH_MS) return Promise.resolve()
   statusPending = getBackendStatus()
     .then((status) => {
       cachedStatus = status
@@ -323,6 +324,7 @@ export function refreshBackendStatus() {
     })
     .catch((err) => console.warn('读取后台设置失败', err))
     .finally(() => { statusPending = null })
+  return statusPending
 }
 
 export function getCachedBackendStatus() {
@@ -332,6 +334,24 @@ export function getCachedBackendStatus() {
 export function subscribeBackendStatus(listener: (status: GouoBackendStatus) => void) {
   statusListeners.add(listener)
   return () => { statusListeners.delete(listener) }
+}
+
+// 回收站保留期由后台设置；未取到后台设置时返回 null，调用方不做本地清理，避免误删服务端仍可恢复的内容
+export function getLoadedTrashRetentionMs() {
+  const days = cachedStatus?.gouo_trash_retention_days
+  return typeof days === 'number' && Number.isInteger(days) && days >= 1 && days <= 30 ? days * 24 * 60 * 60 * 1000 : null
+}
+
+// 单个上传文件的上限由后台设置，未加载时按默认 25 MB
+export function getMaxUploadBytes() {
+  const bytes = cachedStatus?.gouo_max_upload_bytes
+  return typeof bytes === 'number' && Number.isFinite(bytes) && bytes >= 1024 * 1024 ? bytes : 25 * 1024 * 1024
+}
+
+// 界面提示用的保留天数，未加载时按默认 3 天
+export function getTrashRetentionDays() {
+  const ms = getLoadedTrashRetentionMs()
+  return ms ? ms / (24 * 60 * 60 * 1000) : 3
 }
 
 // 后台限制的一次最多生成张数；未加载或数值无效时按上限 10

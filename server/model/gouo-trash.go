@@ -13,14 +13,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// GouoTrashRetention 回收站保留期：作品、画布、会话和收藏夹删除后保留 3 天再彻底清除；已删除账号的云端数据同样保留 3 天。
-const GouoTrashRetention = 3 * 24 * time.Hour
+// GouoTrashRetention 回收站保留期：作品、画布、会话和收藏夹删除后保留到期再彻底清除，已删除账号的云端数据同样如此。
+// 天数在后台“光构设置”配置，默认 3 天
+func GouoTrashRetention() time.Duration {
+	return time.Duration(config.GouoTrashRetentionDays) * 24 * time.Hour
+}
 
 // PurgeGouoTrash 清除超过保留期的回收站内容，以及因此不再被引用的图片文件。
 func PurgeGouoTrash(now time.Time) error {
-	cutoff := now.Add(-GouoTrashRetention).UnixMilli()
+	cutoff := now.Add(-GouoTrashRetention()).UnixMilli()
 	var deletedUsers []int
-	if err := DB.Unscoped().Model(&User{}).Where("deleted_at IS NOT NULL AND deleted_at < ?", now.Add(-GouoTrashRetention)).Pluck("id", &deletedUsers).Error; err != nil {
+	if err := DB.Unscoped().Model(&User{}).Where("deleted_at IS NOT NULL AND deleted_at < ?", now.Add(-GouoTrashRetention())).Pluck("id", &deletedUsers).Error; err != nil {
 		return err
 	}
 	deleted := map[int]bool{}

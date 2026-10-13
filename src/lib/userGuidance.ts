@@ -26,7 +26,7 @@ export function getActionableErrorMessage(message: string, billedRequest = false
   if (/无效的令牌|token.+(invalid|expired)|unauthorized|HTTP\s*401/i.test(normalized)) return `${normalized}\n下一步：重新登录以刷新生成令牌；提示词和参考图草稿会保留。`
   if (billedRequest) return `${normalized}\n下一步：打开用户中心 → 使用记录 → 图片请求状态，先核对是否已结算或退款；待核对的请求请将请求编号提供给管理员。服务端确认失败才退款，网络中断或本地保存失败不代表已退款；重试会新建付费请求，多张图片分别计费。`
   if (/network|fetch|连接|超时|timeout|ECONN|Failed to fetch/i.test(normalized)) return `${normalized}\n下一步：检查网络连接，稍后点击任务上的“重试”；不要重复快速提交。`
-  if (/too large|文件过大|25\s*MB|payload/i.test(normalized)) return `${normalized}\n下一步：压缩参考图至 25 MB 以下，或改用 JPEG/WebP 后重新上传。`
+  if (/too large|文件过大|不能超过 \d+\s*MB|payload/i.test(normalized)) return `${normalized}\n下一步：压缩参考图或改用 JPEG/WebP 后重新上传。`
   if (/格式|decode|解码|unsupported.*image/i.test(normalized)) return `${normalized}\n下一步：将图片转换成 PNG、JPEG 或 WebP，再重新上传。`
   return `${normalized}\n下一步：可先点击任务详情中的“复制完整报错”，然后重试；若仍失败，请把 request ID 提供给管理员。`
 }

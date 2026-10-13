@@ -46,7 +46,7 @@ import { getCustomQueuedImageResult } from './lib/openaiCompatibleImageApi'
 import { normalizeParamsForSettings } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
-import { getImageModelQuote, GouoPriceChangedError, isBackendAuthEnabled } from './lib/gouoBackend'
+import { getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isBackendAuthEnabled } from './lib/gouoBackend'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
@@ -2338,7 +2338,7 @@ export async function removeTask(task: TaskRecord) {
   if (task.cloudId) {
     const { hideServerTask } = await import('./lib/serverLibrary')
     await hideServerTask(task)
-    useStore.getState().showToast('任务已移入回收站，3 天后彻底删除', 'success')
+    useStore.getState().showToast(`任务已移入回收站，${getTrashRetentionDays()} 天后彻底删除`, 'success')
     return
   }
   await purgeLocalTasks([task.id])

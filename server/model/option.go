@@ -4,6 +4,7 @@ import (
 	"one-api/common"
 	"one-api/common/config"
 	"one-api/common/logger"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -93,6 +94,19 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterString("GouoAgentDefaultModel", &config.GouoAgentDefaultModel)
 	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
 	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
+	// 云端作品库：环境变量是初始值，管理员在后台保存后以数据库为准
+	config.GlobalOption.RegisterBool("GouoCloudLibraryEnabled", &config.GouoCloudLibraryEnabled)
+	config.GlobalOption.RegisterInt("GouoTrashRetentionDays", &config.GouoTrashRetentionDays)
+	for key, value := range map[string]*int64{"GouoAssetUserQuotaBytes": &config.GouoAssetUserQuotaBytes, "GouoAssetMaxFileBytes": &config.GouoAssetMaxFileBytes} {
+		config.GlobalOption.RegisterCustom(key, func() string { return strconv.FormatInt(*value, 10) }, func(raw string) error {
+			n, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				return err
+			}
+			*value = n
+			return nil
+		}, strconv.FormatInt(*value, 10))
+	}
 	config.GlobalOption.RegisterString("ChatLink", &config.ChatLink)
 	config.GlobalOption.RegisterString("ChatLinks", &config.ChatLinks)
 	config.GlobalOption.RegisterFloat("QuotaPerUnit", &config.QuotaPerUnit)

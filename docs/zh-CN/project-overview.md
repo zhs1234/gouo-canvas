@@ -118,13 +118,13 @@
 
 | 默认限制 | 数值 | 配置 |
 | --- | --- | --- |
-| 每用户资产空间 | 2 GiB | `GOUO_ASSET_USER_QUOTA_BYTES` |
-| 单文件大小 | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES` |
+| 每用户资产空间 | 2 GiB | `GOUO_ASSET_USER_QUOTA_BYTES`，或后台“光构设置” |
+| 单文件大小 | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES`，或后台“光构设置” |
 | 单任务关联资产数 | 32 | `GOUO_ASSET_MAX_TASK_FILES` |
 
 前端补交逻辑也限制为 32 个关联资产（参考图、遮罩和输出图）；只增加后端限额不会自动扩大前端范围。空间配额只约束用户上传，服务端保存的已付费生成图不受配额限制。管理员可为用户设置单独空间额度。
 
-删除云端作品、画布、会话或收藏夹会进入回收站，保留 3 天，期间可恢复并继续占用空间；之后由主节点每小时的清理任务彻底删除记录和不再被引用的图片。尚未导入账号的本机作品只存在于原浏览器，清理浏览器数据或换设备会丢失。
+删除云端作品、画布、会话或收藏夹会进入回收站，默认保留 3 天（后台可改为 1–30 天），期间可恢复并继续占用空间；之后由主节点每小时的清理任务彻底删除记录和不再被引用的图片。尚未导入账号的本机作品只存在于原浏览器，清理浏览器数据或换设备会丢失。
 
 依据：[db.ts](../../src/lib/db.ts)、[serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo-trash.go](../../server/model/gouo-trash.go)、[controller/gouo_cloud.go](../../server/controller/gouo_cloud.go)、[model/gouo_cloud.go](../../server/model/gouo_cloud.go)。
 

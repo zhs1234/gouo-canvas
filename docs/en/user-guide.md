@@ -155,7 +155,7 @@ When you are signed in, successful images are saved to your account by the serve
 - Older local works and works imported from ZIP are not uploaded automatically. Import them from **用户中心 → 导入本机旧作品** (User center → Import local works); clearing site data before that loses them.
 - Deleted works, canvases, and conversations go to the recycle bin. Restore them from **回收站** (Recycle bin) in the works filter menu; they still count toward cloud storage meanwhile.
 
-Recycle-bin items are kept for 3 days, then permanently deleted together with images that are no longer referenced. They cannot be recovered after that.
+Recycle-bin items are kept for 3 days by default (the UI shows the current period; the operator can change it), then permanently deleted together with images that are no longer referenced. They cannot be recovered after that.
 
 ## 13. Points, redemption codes, and usage
 

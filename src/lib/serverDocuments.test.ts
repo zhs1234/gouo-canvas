@@ -47,7 +47,8 @@ beforeEach(() => {
     putCloudMeta: async (key: string, value: unknown) => { meta.set(key, value) },
   }))
   vi.doMock('./gouoBackend', () => ({
-    GOUO_TRASH_RETENTION_MS: 3 * 24 * 60 * 60 * 1000,
+    getLoadedTrashRetentionMs: () => 3 * 24 * 60 * 60 * 1000,
+    refreshBackendStatus: async () => {},
     GouoAssetMissingError: class extends Error {},
     GouoConflictError: class extends Error {},
     backendRequest: vi.fn(async (path: string, init?: RequestInit) => {
