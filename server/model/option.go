@@ -94,6 +94,9 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterString("GouoAgentDefaultModel", &config.GouoAgentDefaultModel)
 	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
 	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
+	config.GlobalOption.RegisterBool("GouoAllowLowModeration", &config.GouoAllowLowModeration)
+	config.GlobalOption.RegisterInt("GouoAgentMaxRounds", &config.GouoAgentMaxRounds)
+	config.GlobalOption.RegisterInt("GouoAgentConfirmImages", &config.GouoAgentConfirmImages)
 	// 云端作品库：环境变量是初始值，管理员在后台保存后以数据库为准
 	config.GlobalOption.RegisterBool("GouoCloudLibraryEnabled", &config.GouoCloudLibraryEnabled)
 	config.GlobalOption.RegisterInt("GouoTrashRetentionDays", &config.GouoTrashRetentionDays)

@@ -123,6 +123,28 @@ func TestGouoAdminModelsListAndUpdate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "标准画质", after.Name)
 	require.Equal(t, -1, after.Sort)
+	// 尺寸、画质、参考图限制：保存后出现在目录和列表里，非法值拒绝
+	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_max_size":"2k","gouo_qualities":["low","medium"],"gouo_max_inputs":4}`).Code)
+	after, err = model.PricingInstance.GetGouoModel("image-new")
+	require.NoError(t, err)
+	require.Equal(t, "2K", after.MaxSize)
+	require.Equal(t, []string{"low", "medium"}, after.Qualities)
+	require.Equal(t, 4, after.MaxInputs)
+	_, models = list()
+	require.Equal(t, "2K", models["image-new"]["gouo_max_size"])
+	require.Equal(t, []any{"low", "medium"}, models["image-new"]["gouo_qualities"])
+	for _, body := range []string{
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_max_size":"8K"}`,
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_qualities":["ultra"]}`,
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_max_inputs":17}`,
+	} {
+		require.Equal(t, http.StatusBadRequest, update(body).Code, body)
+	}
+	// 改回不限：价格版本回到原值
+	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_max_size":"","gouo_qualities":[],"gouo_max_inputs":0}`).Code)
+	after, err = model.PricingInstance.GetGouoModel("image-new")
+	require.NoError(t, err)
+	require.Equal(t, before.PriceVersion, after.PriceVersion)
 	// 售价无效、只开遮罩不开参考图时拒绝
 	require.Equal(t, http.StatusBadRequest, update(`{"model":"image-a","gouo_enabled":true,"gouo_price_cny":0}`).Code)
 	require.Equal(t, http.StatusBadRequest, update(`{"model":"image-a","gouo_enabled":true,"gouo_price_cny":0.1,"gouo_mask":true}`).Code)
@@ -195,6 +217,14 @@ func TestGouoAdminAgentModels(t *testing.T) {
 	require.Equal(t, 2, price.GouoSort)
 	agent := gouoAgentCapabilities(price)
 	require.NotNil(t, agent)
+	// 目录返回每百万 token 的人民币价格：1460 积分 = 14.6 元
+	require.InDelta(t, 14.6, agent.InputPriceCNY, 1e-9)
+	require.InDelta(t, 29.2, agent.OutputPriceCNY, 1e-9)
+	// 单次回复上限
+	require.Equal(t, http.StatusOK, update(`{"model":"chat-a","listed":true,"gouo_max_tokens":4000}`).Code)
+	require.Equal(t, 4000, model.PricingInstance.Prices["chat-a"].GouoMaxTokens)
+	require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-a","listed":true,"gouo_max_tokens":-1}`).Code)
+	price = model.PricingInstance.Prices["chat-a"]
 	require.Equal(t, "通用助手", agent.Name)
 	require.Equal(t, "适合日常创作", agent.Description)
 	require.True(t, agent.Vision)

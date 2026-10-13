@@ -13,6 +13,9 @@ const EMPTY = {
   GouoAgentDefaultModel: '',
   GouoAgentSystemPrompt: '',
   GouoMaxImagesPerTask: '10',
+  GouoAllowLowModeration: 'false',
+  GouoAgentMaxRounds: '8',
+  GouoAgentConfirmImages: '4',
   GouoCloudLibraryEnabled: 'true',
   GouoAssetUserQuotaBytes: String(2 * 1024 ** 3),
   GouoAssetMaxFileBytes: String(25 * 1024 ** 2),
@@ -76,13 +79,17 @@ export default function GouoSettings() {
     fullWidth: true
   });
   // 已设置但现已下架的默认模型仍列出，方便看出它不再生效
-  const options = values.GouoDefaultImageModel && !models.includes(values.GouoDefaultImageModel) ? [...models, values.GouoDefaultImageModel] : models;
+  const options =
+    values.GouoDefaultImageModel && !models.includes(values.GouoDefaultImageModel) ? [...models, values.GouoDefaultImageModel] : models;
   const agentOptions =
-    values.GouoAgentDefaultModel && !agentModels.includes(values.GouoAgentDefaultModel) ? [...agentModels, values.GouoAgentDefaultModel] : agentModels;
+    values.GouoAgentDefaultModel && !agentModels.includes(values.GouoAgentDefaultModel)
+      ? [...agentModels, values.GouoAgentDefaultModel]
+      : agentModels;
   // 字节数按整数 GB / MB 填写，避免小数输入被换算打断
   const sizeField = (key, unit) => ({
     value: values[key] ? String(Math.round(Number(values[key]) / unit)) : '',
-    onChange: (event) => setValues({ ...values, [key]: event.target.value === '' ? '' : String(Math.round(Number(event.target.value)) * unit) }),
+    onChange: (event) =>
+      setValues({ ...values, [key]: event.target.value === '' ? '' : String(Math.round(Number(event.target.value)) * unit) }),
     disabled: loading || saving,
     fullWidth: true,
     type: 'number'
@@ -153,7 +160,11 @@ export default function GouoSettings() {
         />
         <Divider textAlign="left">功能与生成</Divider>
         {toggle('GouoCanvasEnabled', '开放画布', '关闭后客户端隐藏画布入口和“我的画布”；已保存的画布保留，重新开放后可继续使用。')}
-        {toggle('GouoAgentEnabled', '开放 Agent', '关闭后客户端隐藏 Agent 入口、创作会话和画布里的 Agent 按钮，Agent 模型目录返回为空；已保存的会话保留。')}
+        {toggle(
+          'GouoAgentEnabled',
+          '开放 Agent',
+          '关闭后客户端隐藏 Agent 入口、创作会话和画布里的 Agent 按钮，Agent 模型目录返回为空；已保存的会话保留。'
+        )}
         <TextField
           select
           label="一次最多生成张数"
@@ -166,6 +177,11 @@ export default function GouoSettings() {
             </MenuItem>
           ))}
         </TextField>
+        {toggle(
+          'GouoAllowLowModeration',
+          '允许用户选择宽松审核',
+          '开启后用户可把上游内容审核调成宽松（low）；关闭时服务端拒绝宽松审核，客户端隐藏该选项，一律按自动审核。'
+        )}
         <Divider textAlign="left">Agent</Divider>
         <TextField
           select
@@ -181,6 +197,30 @@ export default function GouoSettings() {
           {agentOptions.map((model) => (
             <MenuItem key={model} value={model}>
               {model}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label="每条消息最多工具轮数"
+          {...field('GouoAgentMaxRounds')}
+          helperText="Agent 处理一条用户消息时最多调用几轮工具（1–20），每轮都会消耗一次对话请求的 token。"
+        >
+          {Array.from({ length: 20 }, (_, index) => String(index + 1)).map((value) => (
+            <MenuItem key={value} value={value}>
+              {value} 轮
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          label="生成超过几张图片时请用户确认"
+          {...field('GouoAgentConfirmImages')}
+          helperText="单条用户消息内 Agent 合计提交的图片超过这个张数时，先弹窗让用户确认费用（1–10 张）。"
+        >
+          {Array.from({ length: 10 }, (_, index) => String(index + 1)).map((value) => (
+            <MenuItem key={value} value={value}>
+              {value} 张
             </MenuItem>
           ))}
         </TextField>
@@ -224,8 +264,16 @@ export default function GouoSettings() {
             <Typography variant="body2" color="text.secondary">
               账号入口（在“设置 → 系统设置”修改，仅 root）：
             </Typography>
-            <Chip size="small" color={status.register_enabled ? 'success' : 'default'} label={status.register_enabled ? '开放注册' : '已关闭注册'} />
-            <Chip size="small" color={status.password_login ? 'success' : 'default'} label={status.password_login ? '允许密码登录' : '已关闭密码登录'} />
+            <Chip
+              size="small"
+              color={status.register_enabled ? 'success' : 'default'}
+              label={status.register_enabled ? '开放注册' : '已关闭注册'}
+            />
+            <Chip
+              size="small"
+              color={status.password_login ? 'success' : 'default'}
+              label={status.password_login ? '允许密码登录' : '已关闭密码登录'}
+            />
           </Stack>
         )}
         <Box>

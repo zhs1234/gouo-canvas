@@ -3,10 +3,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ARG VITE_GOUO_IMAGE_MODEL=gpt-image-2
 ENV VITE_GOUO_BACKEND_ENABLED=true \
-    VITE_GOUO_BACKEND_URL= \
-    VITE_GOUO_IMAGE_MODEL=${VITE_GOUO_IMAGE_MODEL}
+    VITE_GOUO_BACKEND_URL=
 RUN npm run build
 
 FROM nginx:1.29-alpine

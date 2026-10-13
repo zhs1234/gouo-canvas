@@ -12,7 +12,7 @@ vi.mock('../store', () => ({
   executeTask: fixtures.execute,
 }))
 vi.mock('./db', () => ({ putTask: vi.fn(async (task: TaskRecord) => { fixtures.saved.push(task) }), storeImage: vi.fn(async () => 'image') }))
-vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user, getMaxTaskImages: () => 10 }))
+vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user, getMaxTaskImages: () => 10, isLowModerationAllowed: () => false }))
 vi.mock('./userGuidance', () => ({ getActionableErrorMessage: (message: string) => message, requestUserCenter: vi.fn() }))
 vi.mock('./canvasImage', () => ({ validateMaskMatchesImage: vi.fn(async () => 'partial') }))
 
@@ -40,7 +40,7 @@ describe('统一图片任务入口', () => {
     fixtures.backend = true
     fixtures.quote.mockResolvedValue({ id: 'image-b', price_cny: 0.3, price_version: 'quote-b' })
     await submitImageTask({ prompt: '海报', model: 'image-b', priceVersion: 'quote-b', source: { kind: 'canvas' } })
-    expect(fixtures.quote).toHaveBeenCalledWith('image-b', 0, false, 1, 'quote-b')
+    expect(fixtures.quote).toHaveBeenCalledWith('image-b', 0, false, 1, 'quote-b', expect.objectContaining({ size: 'auto', quality: 'auto', moderation: 'auto' }))
     expect(fixtures.saved[0]).toMatchObject({ gouoPriceVersion: 'quote-b' })
   })
 

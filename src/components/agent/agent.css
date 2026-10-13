@@ -31,6 +31,7 @@
 .agent-composer textarea:focus-visible { outline: 0; }
 .agent-composer-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 18px; font-size: 12px; }
 .agent-model-select { min-width: 0; max-width: 100%; }
+.agent-model-price { color: #929292; white-space: nowrap; }
 .agent-mode { color: #21c0e8; display: flex; gap: 5px; align-items: center; margin-right: 8px; }
 .agent-canvas-select { display: flex; gap: 6px; align-items: center; color: #aaa; min-width: 0; }
 .agent-canvas-select select { color: #ccc; max-width: 170px; background: #202020; border: 0; outline: 0; text-overflow: ellipsis; }

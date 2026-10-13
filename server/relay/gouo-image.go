@@ -20,6 +20,7 @@ import (
 	"one-api/relay/relay_util"
 	"one-api/types"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -98,9 +99,23 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		if model.PricingInstance.GetPrice(relay.getOriginalModel()).GouoEnabled {
 			return common.StringErrorWrapperLocal("此模型只能通过图片生成接口调用", "image_model_endpoint", http.StatusBadRequest)
 		}
+		if c.GetString("token_name") != "sys_playground" {
+			return nil
+		}
 		// 光构客户端只有 Agent 走文本接口，后台关闭 Agent 后不能再用平台令牌直接调用
-		if !config.GouoAgentEnabled && c.GetString("token_name") == "sys_playground" {
+		if !config.GouoAgentEnabled {
 			return common.StringErrorWrapperLocal("运营方已关闭 Agent", "agent_disabled", http.StatusForbidden)
+		}
+		// 后台为模型设置了单次回复上限时，客户端请求一律按上限截断
+		if r, ok := relay.(*relayChat); ok {
+			if limit := model.PricingInstance.GetPrice(relay.getOriginalModel()).GouoMaxTokens; limit > 0 {
+				if r.chatRequest.MaxCompletionTokens <= 0 || r.chatRequest.MaxCompletionTokens > limit {
+					r.chatRequest.MaxCompletionTokens = limit
+				}
+				if r.chatRequest.MaxTokens > limit {
+					r.chatRequest.MaxTokens = limit
+				}
+			}
 		}
 		return nil
 	}
@@ -131,18 +146,27 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	if err != nil {
 		return common.ErrorWrapperLocal(err, "image_model_unavailable", http.StatusBadRequest)
 	}
-	n := 1
+	n, inputs := 1, 0
 	edit, mask := false, false
+	size, quality, moderation := "", "", ""
 	switch r := relay.(type) {
 	case *relayImageGenerations:
-		n = r.request.N
+		n, size, quality = r.request.N, r.request.Size, r.request.Quality
+		if r.request.Moderation != nil {
+			moderation = *r.request.Moderation
+		}
 	case *relayImageEdits:
-		n = r.request.N
+		// 编辑请求的画质和审核强度不在结构体里，从表单读取
+		n, size, quality, moderation = r.request.N, r.request.Size, c.PostForm("quality"), c.PostForm("moderation")
 		edit = true
 		mask = r.request.Mask != nil
+		inputs = len(r.request.Images)
+		if r.request.Image != nil {
+			inputs++
+		}
 	case *relayImageVariations:
-		n = r.request.N
-		edit = true
+		n, size = r.request.N, r.request.Size
+		edit, inputs = true, 1
 	}
 	if n == 0 {
 		n = 1
@@ -159,6 +183,9 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	}
 	if (edit && !entry.Reference) || (mask && !entry.Mask) {
 		return common.StringErrorWrapperLocal("此模型不支持当前编辑操作，请重新选择", "image_capability_unavailable", http.StatusBadRequest)
+	}
+	if message := checkGouoImageParams(entry, size, quality, moderation, inputs); message != "" {
+		return common.StringErrorWrapperLocal(message, "image_param_unavailable", http.StatusBadRequest)
 	}
 	version := c.GetHeader("X-Gouo-Price-Version")
 	// 光构客户端必须确认目录价格；普通API用户可省略版本，仍使用请求开始时的快照。
@@ -197,6 +224,41 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		c.Set("gouo_image_capture", capture)
 	}
 	return nil
+}
+
+// 图片按张计价，尺寸、画质和参考图张数直接影响上游成本，按后台为模型限定的范围校验；审核强度按运营方设置
+func checkGouoImageParams(entry *model.GouoImageModel, size, quality, moderation string, inputs int) string {
+	if entry.MaxSize != "" {
+		if size = strings.ToLower(strings.TrimSpace(size)); size != "" && size != "auto" {
+			width, height, ok := strings.Cut(size, "x")
+			w, errW := strconv.Atoi(width)
+			h, errH := strconv.Atoi(height)
+			if !ok || errW != nil || errH != nil || w <= 0 || h <= 0 {
+				return "图片尺寸无效"
+			}
+			if w*h > model.GouoSizeTierPixels[entry.MaxSize] {
+				return "此模型最大支持 " + entry.MaxSize + " 尺寸，请调小尺寸"
+			}
+		}
+	}
+	if len(entry.Qualities) > 0 {
+		quality = strings.ToLower(strings.TrimSpace(quality))
+		// 自动画质可能由上游选成高画质，只有开放高画质时才允许
+		if quality == "" || quality == "auto" {
+			if !slices.Contains(entry.Qualities, "high") {
+				return "此模型不开放自动画质，请选择具体画质"
+			}
+		} else if !slices.Contains(entry.Qualities, quality) {
+			return "此模型不开放所选画质，请重新选择"
+		}
+	}
+	if !config.GouoAllowLowModeration && strings.EqualFold(strings.TrimSpace(moderation), "low") {
+		return "运营方未开放宽松审核"
+	}
+	if entry.MaxInputs > 0 && inputs > entry.MaxInputs {
+		return fmt.Sprintf("此模型最多使用 %d 张参考图", entry.MaxInputs)
+	}
+	return ""
 }
 
 type gouoImageCapture struct {

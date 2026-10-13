@@ -3,8 +3,6 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-      args:
-        VITE_GOUO_IMAGE_MODEL: ${GOUO_IMAGE_MODEL:-gpt-image-2}
     restart: unless-stopped
     ports:
       - "${PUBLIC_PORT:-8080}:80"

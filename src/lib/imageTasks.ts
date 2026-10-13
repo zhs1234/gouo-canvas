@@ -122,7 +122,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
     let quote: Awaited<ReturnType<typeof getImageModelQuote>> | undefined
     if (isBackendAuthEnabled()) {
       try {
-        quote = await getImageModelQuote(activeProfile.model, inputImages.length, Boolean(maskDraft), params.n, input?.model && input.model !== settings.model ? input.priceVersion : settings.gouoPriceVersion)
+        quote = await getImageModelQuote(activeProfile.model, inputImages.length, Boolean(maskDraft), params.n, input?.model && input.model !== settings.model ? input.priceVersion : settings.gouoPriceVersion, params)
       } catch (err) {
         if (input) throw err
         showToast(err instanceof Error ? err.message : String(err), 'error')

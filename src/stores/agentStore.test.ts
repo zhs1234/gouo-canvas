@@ -22,7 +22,7 @@ vi.mock('../store', () => ({
 vi.mock('../lib/db', () => ({ getAllAgentConversations: async () => mocks.stored, getAllTasks: async () => mocks.storedTasks, putAgentConversation: mocks.put }))
 vi.mock('../lib/documentAssets', () => ({ registerDocumentImageReferences: vi.fn() }))
 vi.mock('../lib/storageScope', () => ({ isStorageScopeCurrent: () => mocks.currentScope }))
-vi.mock('../lib/agent/api', () => ({ getAgentModels: async () => mocks.catalog, streamAgentCompletion: mocks.stream }))
+vi.mock('../lib/agent/api', () => ({ getAgentModels: async () => mocks.catalog, streamAgentCompletion: mocks.stream, getAgentLimits: () => ({ maxRounds: 8, confirmImages: 4 }) }))
 vi.mock('../lib/agent/tools', () => ({ agentToolDefinitions: [], executeAgentTool: mocks.tool }))
 
 import { buildAgentMessages, markAgentPersisted, normalizeAgentConversation, useAgentStore } from './agentStore'

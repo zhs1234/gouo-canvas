@@ -169,7 +169,6 @@ describe('gouoBackend', () => {
   })
 
   it('refreshes backend authentication without replacing the selected model', async () => {
-    vi.stubEnv('VITE_GOUO_IMAGE_MODEL', 'gpt-image-2')
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true, data: 'user-token' }))
     vi.stubGlobal('fetch', fetchMock)
     const { createBackendSettings } = await import('./gouoBackend')
@@ -250,5 +249,23 @@ describe('gouoBackend', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/gouo/assets')
     expect(init).toMatchObject({ method: 'POST', credentials: 'include' })
     expect((init.body as FormData).get('client_image_id')).toBe('image-1')
+  })
+
+  it('checks image params against the limits the backend sets for the model', async () => {
+    const { getImageParamIssue } = await import('./gouoBackend')
+    const base = { id: 'image-a', name: 'A', price_cny: 0.1, price_version: 'v', reference: true, mask: false, max_outputs: 1, quota: 1 }
+    const params = { size: '1024x1024', quality: 'medium' as const, moderation: 'auto' as const }
+    // 不限时任何参数都放行
+    expect(getImageParamIssue(base, { ...params, size: '3840x2160', quality: 'high' }, 16)).toBe('')
+    const limited = { ...base, max_size: '1K' as const, qualities: ['low', 'medium'], max_inputs: 2 }
+    expect(getImageParamIssue(limited, params, 2)).toBe('')
+    expect(getImageParamIssue(limited, { ...params, size: 'auto' }, 0)).toBe('')
+    expect(getImageParamIssue(limited, { ...params, size: '2048x2048' }, 0)).toContain('最大支持 1K')
+    expect(getImageParamIssue(limited, { ...params, quality: 'high' }, 0)).toContain('不开放所选画质')
+    // 自动画质可能被上游选成高画质，只开放部分画质时不放行
+    expect(getImageParamIssue(limited, { ...params, quality: 'auto' }, 0)).toContain('不开放自动画质')
+    expect(getImageParamIssue(limited, params, 3)).toContain('最多使用 2 张参考图')
+    // 后台未开放宽松审核
+    expect(getImageParamIssue(base, { ...params, moderation: 'low' }, 0)).toBe('运营方未开放宽松审核')
   })
 })

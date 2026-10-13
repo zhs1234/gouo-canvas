@@ -86,7 +86,7 @@ USER_TOKEN_SECRET=replace-with-the-second-random-value
 | `PUBLIC_PORT` | `127.0.0.1:8080` behind a host proxy; `8080` only for temporary private-network testing | Plain `8080` listens on every interface |
 | `BACKEND_ADMIN_PORT` | `3000` | Compose binds it to `127.0.0.1`; do not expose it publicly |
 | `SESSION_COOKIE_SECURE` | `true` when the site is served over HTTPS | With `false`, the first request a user makes over `http://` (old bookmark, typed address) carries the login cookie in clear text before the redirect; keep `false` only for private-network HTTP testing |
-| `GOUO_IMAGE_MODEL` | Initial frontend default and migration target | Rebuild `web` to change the frontend default; backend migration runs once and later choices/prices use the catalog |
+| `GOUO_IMAGE_MODEL` | Model enabled by the first migration | Backend migration runs once; later choices and prices use the model catalog |
 | `GOUO_IMAGE_PRICE_CNY` | Default model's initial migration price | Change later prices in the single-model editor; restarting preserves saved prices; validate cost and output limits |
 | `GOUO_ASSET_DIR` | `/data/gouo-assets` | `/data` is backed by `backend-data`; do not move it outside the mounted path |
 | `MYSQL_PASSWORD` | Strong application-database password | Prefer long alphanumeric text that does not create DSN parsing ambiguity |
@@ -316,12 +316,6 @@ For a backend-only environment change:
 
 ```bash
 docker compose up -d backend
-```
-
-`GOUO_IMAGE_MODEL` is a frontend build argument, so rebuild `web` after changing it:
-
-```bash
-docker compose up -d --build web
 ```
 
 ## 13. Roll back

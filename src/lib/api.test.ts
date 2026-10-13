@@ -13,7 +13,6 @@ describe('callImageApi', () => {
 
   it('keeps the task model and quoted price when refreshing a backend token', async () => {
     vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
-    vi.stubEnv('VITE_GOUO_IMAGE_MODEL', 'image-default')
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'old-token' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'invalid token' } }), { status: 401 }))

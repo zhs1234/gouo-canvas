@@ -154,7 +154,7 @@ export function formatImageRatio(width: number, height: number) {
  * 每个档位的像素预算上限。
  * 在该预算内、满足所有 OpenAI 约束的前提下，选取总像素最大的候选尺寸。
  */
-const TIER_PIXEL_BUDGET: Record<SizeTier, number> = {
+export const TIER_PIXEL_BUDGET: Record<SizeTier, number> = {
   '1K': 1_572_864,   // 1024 × 1536
   '2K': 4_194_304,   // 2048 × 2048
   '4K': MAX_PIXELS,  // 8_294_400

@@ -179,3 +179,80 @@ func TestImageResponsePayloadValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestGouoImageParamLimits(t *testing.T) {
+	oldLow := config.GouoAllowLowModeration
+	t.Cleanup(func() { config.GouoAllowLowModeration = oldLow })
+	config.GouoAllowLowModeration = false
+	open := &model.GouoImageModel{}
+	limited := &model.GouoImageModel{MaxSize: "1K", Qualities: []string{"low", "medium"}, MaxInputs: 2}
+	// 不限时任何尺寸、画质、参考图张数都放行
+	require.Empty(t, checkGouoImageParams(open, "3840x2160", "high", "", 16))
+	// 尺寸按档位的像素上限比较，auto 放行
+	require.Empty(t, checkGouoImageParams(limited, "1024x1536", "low", "", 0))
+	require.Empty(t, checkGouoImageParams(limited, "auto", "low", "", 0))
+	require.Contains(t, checkGouoImageParams(limited, "2048x2048", "low", "", 0), "最大支持 1K")
+	require.Equal(t, "图片尺寸无效", checkGouoImageParams(limited, "big", "low", "", 0))
+	// 只开放部分画质时，自动画质可能被上游选成高画质，不放行
+	require.Contains(t, checkGouoImageParams(limited, "auto", "high", "", 0), "不开放所选画质")
+	require.Contains(t, checkGouoImageParams(limited, "auto", "auto", "", 0), "不开放自动画质")
+	require.Contains(t, checkGouoImageParams(limited, "auto", "", "", 0), "不开放自动画质")
+	require.Empty(t, checkGouoImageParams(&model.GouoImageModel{Qualities: []string{"high"}}, "auto", "auto", "", 0))
+	require.Contains(t, checkGouoImageParams(limited, "auto", "low", "", 3), "最多使用 2 张参考图")
+	// 宽松审核默认不开放，开放后放行
+	require.Equal(t, "运营方未开放宽松审核", checkGouoImageParams(open, "auto", "", "low", 0))
+	config.GouoAllowLowModeration = true
+	require.Empty(t, checkGouoImageParams(open, "auto", "", "low", 0))
+}
+
+func TestGouoImageParamLimitsInRequest(t *testing.T) {
+	old := model.PricingInstance
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{
+		"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1, GouoMaxSize: "1K", GouoQualities: "low,medium"},
+		"image-b": {Model: "image-b", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1},
+	}}
+	t.Cleanup(func() { model.PricingInstance = old })
+	limitedEntry, err := model.PricingInstance.GetGouoModel("image-a")
+	require.NoError(t, err)
+	require.Equal(t, []string{"low", "medium"}, limitedEntry.Qualities)
+	openEntry, err := model.PricingInstance.GetGouoModel("image-b")
+	require.NoError(t, err)
+	// 不限时目录里不出现限制字段，原有模型的价格版本保持不变
+	require.Empty(t, openEntry.MaxSize)
+	require.NotEqual(t, limitedEntry.PriceVersion, openEntry.PriceVersion)
+	generate := func(size, quality string) *types.OpenAIErrorWithStatusCode {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/images/generations", nil)
+		c.Request.Header.Set("X-Gouo-Price-Version", limitedEntry.PriceVersion)
+		r := NewRelayImageGenerations(c)
+		r.request = types.ImageRequest{Model: "image-a", N: 1, Size: size, Quality: quality}
+		r.setOriginalModel("image-a")
+		return prepareGouoImage(c, r)
+	}
+	require.Nil(t, generate("1024x1024", "medium"))
+	require.Equal(t, "image_param_unavailable", generate("2048x2048", "medium").Code)
+	require.Equal(t, "image_param_unavailable", generate("1024x1024", "high").Code)
+}
+
+func TestGouoAgentMaxTokensForPlatformToken(t *testing.T) {
+	old := model.PricingInstance
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{"chat-a": {Model: "chat-a", Type: model.TokensPriceType, GouoMaxTokens: 2000}}}
+	t.Cleanup(func() { model.PricingInstance = old })
+	chat := func(tokenName string, maxCompletion, maxTokens int) types.ChatCompletionRequest {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+		c.Set("token_name", tokenName)
+		r := NewRelayChat(c)
+		r.chatRequest = types.ChatCompletionRequest{Model: "chat-a", MaxCompletionTokens: maxCompletion, MaxTokens: maxTokens}
+		r.setOriginalModel("chat-a")
+		require.Nil(t, prepareGouoImage(c, r))
+		return r.chatRequest
+	}
+	// 平台令牌：未设置或超过上限时按上限截断，更小的值保留
+	require.Equal(t, 2000, chat("sys_playground", 0, 0).MaxCompletionTokens)
+	require.Equal(t, 2000, chat("sys_playground", 50000, 0).MaxCompletionTokens)
+	require.Equal(t, 500, chat("sys_playground", 500, 0).MaxCompletionTokens)
+	require.Equal(t, 2000, chat("sys_playground", 0, 9000).MaxTokens)
+	// 普通 API 令牌不受影响
+	require.Equal(t, 0, chat("api-user", 0, 0).MaxCompletionTokens)
+}

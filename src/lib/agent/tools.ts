@@ -9,9 +9,8 @@ import type { TaskParams } from '../../types'
 import type { AgentConversation, AgentToolDefinition } from './types'
 import { getAgentRequestId, getAgentTaskResult } from './taskRecovery'
 import { formatPoints } from '../accountUsage'
+import { getAgentLimits } from './api'
 
-// 单条用户消息内 Agent 无需确认即可提交的图片张数；超出时弹窗由用户确认，避免模型连续提交付费任务
-const AGENT_IMAGES_PER_MESSAGE = 4
 
 export const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference'] as const
 
@@ -36,7 +35,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     type: 'function',
     function: {
       name: 'create_image_task',
-      description: '按用户要求创建图片任务，使用用户当前选择的图片模型和显示的价格，会产生图片费用。仅用户明确要求生成或修改图片时调用；不要因为聊天、规划或工具错误擅自生成。单条用户消息内合计超过 4 张图片（各任务 n 之和）时，系统会先请用户确认；用户取消时不要重复提交。返回 taskId。每个请求只提交一次，查询状态不会重复扣费。inputImageIds 只能来自用户附件、画布或本会话生成图片。本次提交后全部任务已安排、且无需继续规划或操作画布时，设置 finishAfterSubmit:true，提交成功后直接回执并结束本轮，不再请求模型确认；它不表示图片已生成完成。有后续任务或画布操作时保持 false。',
+      description: '按用户要求创建图片任务，使用用户当前选择的图片模型和显示的价格，会产生图片费用。仅用户明确要求生成或修改图片时调用；不要因为聊天、规划或工具错误擅自生成。单条用户消息内合计超过运营方设定的张数（各任务 n 之和）时，系统会先请用户确认；用户取消时不要重复提交。返回 taskId。每个请求只提交一次，查询状态不会重复扣费。inputImageIds 只能来自用户附件、画布或本会话生成图片。本次提交后全部任务已安排、且无需继续规划或操作画布时，设置 finishAfterSubmit:true，提交成功后直接回执并结束本轮，不再请求模型确认；它不表示图片已生成完成。有后续任务或画布操作时保持 false。',
       parameters: {
         type: 'object', properties: {
           prompt: { type: 'string', minLength: 1, maxLength: 20000 },
@@ -196,7 +195,7 @@ export async function executeAgentTool(input: {
         }
       }, 0)
     const requested = (values.n as number | undefined) ?? 1
-    if (submitted + requested > AGENT_IMAGES_PER_MESSAGE) {
+    if (submitted + requested > getAgentLimits().confirmImages) {
       // 按当前目录价格显示预计扣费；读取失败时只提示按模型计费，提交时仍会校验价格版本
       let cost = '每张按所选图片模型的价格计费。'
       if (isBackendAuthEnabled()) {

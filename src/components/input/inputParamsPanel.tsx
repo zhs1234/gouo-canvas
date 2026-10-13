@@ -240,7 +240,7 @@ export default function InputParamsPanel({
         />
         <ButtonTooltip
           visible={moderationDisabled && moderationHint.visible}
-          text="fal.ai 不支持审核参数"
+          text={isFalProvider ? 'fal.ai 不支持审核参数' : '运营方未开放宽松审核，按自动审核'}
         />
       </label>
       <label

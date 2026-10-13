@@ -1,7 +1,14 @@
 import { createBackendSettings, isBackendAuthEnabled } from '../gouoBackend'
 import type { AgentModel, AgentToolCall, AgentToolDefinition, ChatMessage } from './types'
 
-// 目录同时带回运营方在后台填写的附加提示词
+// 每条用户消息最多工具轮数、单条消息需确认的图片张数，由后台“光构设置”下发；读取目录前按后台默认值
+let agentLimits = { maxRounds: 8, confirmImages: 4 }
+
+export function getAgentLimits() {
+  return agentLimits
+}
+
+// 目录同时带回运营方在后台填写的附加提示词和 Agent 限制
 export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string }> {
   if (!isBackendAuthEnabled()) throw new Error('Agent 需要启用光构平台服务，请先配置平台后端')
   const settings = await createBackendSettings()
@@ -18,6 +25,10 @@ export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPr
     const model = entry as Record<string, unknown>
     return typeof model.id !== 'string' || typeof model.name !== 'string' || typeof model.tool_calls !== 'boolean' || typeof model.vision !== 'boolean'
   })) throw new Error('Agent 模型目录格式无效')
+  agentLimits = {
+    maxRounds: Number.isInteger(payload.max_rounds) && payload.max_rounds >= 1 ? payload.max_rounds : agentLimits.maxRounds,
+    confirmImages: Number.isInteger(payload.confirm_images) && payload.confirm_images >= 1 ? payload.confirm_images : agentLimits.confirmImages,
+  }
   return { models: payload.data.filter((model: AgentModel) => model.tool_calls), systemPrompt: typeof payload.system_prompt === 'string' ? payload.system_prompt.trim() : '' }
 }
 

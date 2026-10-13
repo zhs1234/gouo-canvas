@@ -28,7 +28,7 @@ vi.mock('../../store', () => ({
   },
 }))
 vi.mock('../apiProfiles', () => ({ getActiveApiProfile: () => ({ model: 'gpt-image-2' }) }))
-vi.mock('../gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getImageModels: mocks.models, getMaxTaskImages: () => mocks.maxImages }))
+vi.mock('../gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getImageModels: mocks.models, getMaxTaskImages: () => mocks.maxImages, isLowModerationAllowed: () => false }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))

@@ -14,7 +14,7 @@ import (
 )
 
 // 光构客户端相关的设置。系统设置接口只允许 root，这些设置普通管理员也需要日常维护
-var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoMaxImagesPerTask", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays"}
+var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays"}
 
 func normalizeGouoSetting(key, value string) (string, error) {
 	value = strings.TrimSpace(value)
@@ -37,13 +37,21 @@ func normalizeGouoSetting(key, value string) (string, error) {
 		if utf8.RuneCountInString(value) > 4000 {
 			return "", errors.New("Agent 附加提示词不能超过 4000 个字符")
 		}
-	case "GouoCanvasEnabled", "GouoAgentEnabled", "GouoCloudLibraryEnabled":
+	case "GouoCanvasEnabled", "GouoAgentEnabled", "GouoCloudLibraryEnabled", "GouoAllowLowModeration":
 		if value != "true" && value != "false" {
 			return "", errors.New("开关只能是 true 或 false")
 		}
 	case "GouoMaxImagesPerTask":
 		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 10 {
 			return "", errors.New("一次最多生成张数必须是 1 到 10 的整数")
+		}
+	case "GouoAgentMaxRounds":
+		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 20 {
+			return "", errors.New("Agent 每条消息最多工具轮数必须是 1 到 20 的整数")
+		}
+	case "GouoAgentConfirmImages":
+		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 10 {
+			return "", errors.New("Agent 需确认的图片张数必须是 1 到 10 的整数")
 		}
 	case "GouoTrashRetentionDays":
 		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 30 {

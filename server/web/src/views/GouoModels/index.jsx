@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  MenuItem,
   Stack,
   Switch,
   Table,
@@ -26,6 +27,22 @@ import {
 import { API } from 'utils/api';
 import { GOUO_POINTS_PER_CNY, renderGouoPoints, showError, showSuccess } from 'utils/common';
 import AgentModels from './AgentModels';
+
+const QUALITY_OPTIONS = [
+  ['low', '低'],
+  ['medium', '中'],
+  ['high', '高']
+];
+// 能力列里的成本相关限制，未设置的不显示
+const limitText = (row) =>
+  [
+    row.gouo_max_size && `最大 ${row.gouo_max_size}`,
+    row.gouo_qualities?.length &&
+      `画质 ${row.gouo_qualities.map((value) => QUALITY_OPTIONS.find(([key]) => key === value)?.[1] || value).join('/')}`,
+    row.gouo_max_inputs > 0 && `参考图最多 ${row.gouo_max_inputs} 张`
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
 // 客户端能看到的条件：开启光构、配置有效、至少一个启用中的渠道支持它且渠道分组是有效的用户分组（还需令牌未限制）
 const visibility = (row) => {
@@ -78,7 +95,11 @@ function ImageModels() {
         ...(values.display_name !== undefined && {
           name: values.display_name,
           description: values.display_description,
-          gouo_sort: Number(values.display_sort || 0)
+          gouo_sort: Number(values.display_sort || 0),
+          gouo_max_size: values.cap_size,
+          // 三种画质都开放即不限
+          gouo_qualities: values.cap_qualities.length === QUALITY_OPTIONS.length ? [] : values.cap_qualities,
+          gouo_max_inputs: Number(values.cap_inputs || 0)
         })
       });
       if (!response.data.success) throw new Error(response.data.message);
@@ -119,7 +140,11 @@ function ImageModels() {
     (!editing.gouo_mask || editing.gouo_reference) &&
     editing.display_name.trim().length <= 40 &&
     editing.display_description.trim().length <= 100 &&
-    Number.isInteger(Number(editing.display_sort || 0));
+    Number.isInteger(Number(editing.display_sort || 0)) &&
+    editing.cap_qualities.length > 0 &&
+    Number.isInteger(Number(editing.cap_inputs || 0)) &&
+    Number(editing.cap_inputs || 0) >= 0 &&
+    Number(editing.cap_inputs || 0) <= 16;
 
   return (
     <Box>
@@ -187,6 +212,11 @@ function ImageModels() {
                     {row.gouo_enabled
                       ? `${row.gouo_reference ? '参考图' : '无参考图'} · ${row.gouo_mask ? '遮罩' : '无遮罩'} · 单次最多 ${row.gouo_max_outputs} 张`
                       : '—'}
+                    {row.gouo_enabled && limitText(row) && (
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        {limitText(row)}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell sx={{ maxWidth: 280 }}>
                     {row.channels.length ? (
@@ -225,7 +255,10 @@ function ImageModels() {
                             gouo_enabled: true,
                             display_name: row.name || '',
                             display_description: row.description || '',
-                            display_sort: row.gouo_sort || 0
+                            display_sort: row.gouo_sort || 0,
+                            cap_size: row.gouo_max_size || '',
+                            cap_qualities: row.gouo_qualities?.length ? row.gouo_qualities : QUALITY_OPTIONS.map(([value]) => value),
+                            cap_inputs: row.gouo_max_inputs || 0
                           })
                         }
                       >
@@ -341,6 +374,59 @@ function ImageModels() {
                     />
                   }
                   label="支持遮罩编辑（需同时支持参考图）"
+                />
+                <Alert severity="warning">
+                  按张计价时，尺寸越大、画质越高、参考图越多，上游成本越高。以下限制由服务端校验，客户端只显示允许的选项。
+                </Alert>
+                <TextField
+                  select
+                  label="最大尺寸"
+                  value={editing.cap_size}
+                  onChange={(event) => setEditing({ ...editing, cap_size: event.target.value })}
+                  helperText="1K 约 1024×1536，2K 约 2048×2048，4K 约 3840×2160"
+                >
+                  <MenuItem value="">不限</MenuItem>
+                  {['1K', '2K', '4K'].map((tier) => (
+                    <MenuItem key={tier} value={tier}>
+                      {tier}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <Box>
+                  <Typography variant="body2">开放的画质</Typography>
+                  {QUALITY_OPTIONS.map(([value, label]) => (
+                    <FormControlLabel
+                      key={value}
+                      control={
+                        <Checkbox
+                          checked={editing.cap_qualities.includes(value)}
+                          onChange={(event) =>
+                            setEditing({
+                              ...editing,
+                              cap_qualities: event.target.checked
+                                ? QUALITY_OPTIONS.map(([key]) => key).filter((key) => key === value || editing.cap_qualities.includes(key))
+                                : editing.cap_qualities.filter((key) => key !== value)
+                            })
+                          }
+                        />
+                      }
+                      label={label}
+                    />
+                  ))}
+                  <Typography variant="caption" display="block" color={editing.cap_qualities.length ? 'text.secondary' : 'error'}>
+                    {editing.cap_qualities.length
+                      ? '全选表示不限。“自动”画质可能被上游选成高画质，只在开放高画质时提供。'
+                      : '至少开放一种画质'}
+                  </Typography>
+                </Box>
+                <TextField
+                  label="最多参考图张数"
+                  type="number"
+                  value={editing.cap_inputs}
+                  disabled={!editing.gouo_reference}
+                  onChange={(event) => setEditing({ ...editing, cap_inputs: event.target.value })}
+                  inputProps={{ min: 0, max: 16, step: 1 }}
+                  helperText="0 表示不限（客户端最多 16 张）；只在支持参考图时生效"
                 />
               </Stack>
             </DialogContent>

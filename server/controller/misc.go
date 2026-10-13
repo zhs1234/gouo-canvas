@@ -35,6 +35,7 @@ func GetStatus(c *gin.Context) {
 			"gouo_canvas_enabled":       config.GouoCanvasEnabled,
 			"gouo_agent_enabled":        config.GouoAgentEnabled,
 			"gouo_max_images":           config.GouoMaxImagesPerTask,
+			"gouo_allow_low_moderation": config.GouoAllowLowModeration,
 			"gouo_trash_retention_days": config.GouoTrashRetentionDays,
 			"gouo_max_upload_bytes":     config.GouoAssetMaxFileBytes,
 			"register_enabled":          config.RegisterEnabled && config.PasswordRegisterEnabled,

@@ -146,7 +146,7 @@ USER_TOKEN_SECRET=replace-with-the-second-different-random-value
 # Must be true when users reach the site over HTTPS, so the login cookie is never sent on http:// requests.
 SESSION_COOKIE_SECURE=true
 
-# Default model for the first migration; keep it equal to the frontend build value VITE_GOUO_IMAGE_MODEL.
+# Model enabled by the first migration; manage models in the admin panel afterwards.
 GOUO_IMAGE_MODEL=gpt-image-2
 
 GOUO_IMAGE_PRICE_CNY=0.10
@@ -185,7 +185,6 @@ Create a production-only `.env.production.local`:
 ```dotenv
 VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
-VITE_GOUO_IMAGE_MODEL=gpt-image-2
 ```
 
 Leave `VITE_GOUO_BACKEND_URL` empty for same-origin production so the browser requests `/api` and `/v1` on the current domain. The model must match backend channel configuration.

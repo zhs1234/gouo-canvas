@@ -31,6 +31,13 @@ var GouoAgentDefaultModel = ""
 var GouoAgentSystemPrompt = ""
 var GouoMaxImagesPerTask = 10
 
+// 是否允许用户把上游审核调成宽松（moderation=low）；默认不允许，由运营方决定
+var GouoAllowLowModeration = false
+
+// Agent 每条用户消息最多调用几轮工具，以及单条消息合计超过多少张图片时先请用户确认
+var GouoAgentMaxRounds = 8
+var GouoAgentConfirmImages = 4
+
 // GouoDefaultImageModel 是客户端未手动选择模型时使用的图片模型；为空或不可用时取目录中的第一个
 var GouoDefaultImageModel = ""
 var ChatLink = ""

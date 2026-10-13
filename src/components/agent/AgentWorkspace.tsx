@@ -6,6 +6,7 @@ import { fileToDataUrl } from '../../lib/dataUrl'
 import { storeImageWithSize } from '../../lib/db'
 import { getMaxUploadBytes, isBackendAuthEnabled } from '../../lib/gouoBackend'
 import { executeAgentTool } from '../../lib/agent/tools'
+import { formatPoints } from '../../lib/accountUsage'
 import type { AgentConversation, AgentToolCall } from '../../lib/agent/types'
 import BackendModelSelector from '../BackendModelSelector'
 import ModelSelect from '../ModelSelect'
@@ -223,6 +224,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
         <div className="agent-model-select" title={model ? model.vision ? '可理解上传的参考图片' : '附件可用于图片生成，此对话模型不直接识图' : undefined}>
           <ModelSelect compact label="Agent 模型" models={models} value={conversation?.modelId || ''} disabled={running || modelsLoading || !conversation} placeholder={modelsLoading ? '正在加载…' : unavailableModel ? '原模型已不可用，请重新选择' : !models.length ? '暂无可用模型' : undefined} onChange={(modelId) => useAgentStore.getState().configureConversation(id, { modelId })} />
         </div>
+        {model && <span className="agent-model-price" title="按后台定价计费，实际扣费还会乘以账号分组倍率">{model.input_price_cny || model.output_price_cny ? `输入 ${formatPoints(model.input_price_cny)} · 输出 ${formatPoints(model.output_price_cny)} / 百万 token` : '免费'}</span>}
         <button type="button" className={`agent-text-button ${showReferences ? 'is-active' : ''}`} aria-label="选择已有图片作为参考" aria-expanded={showReferences} disabled={running || !conversation} onClick={() => setShowReferences(!showReferences)}>@</button>
         <label className="agent-canvas-select"><span>画布</span><select aria-label="关联画布" value={conversation?.projectId || ''} disabled={running || !conversation} onChange={(event) => useAgentStore.getState().configureConversation(id, { projectId: event.target.value || undefined })}><option value="">未关联</option>{conversation?.projectId && !linkedProject && <option value={conversation.projectId} disabled>原画布已不可用</option>}{projects.filter((project) => !project.hiddenAt).map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label>
         <span className="agent-composer-spacer" />

@@ -11,7 +11,6 @@ interface ImportMetaEnv {
   readonly VITE_GOUO_BACKEND_ENABLED?: string
   readonly VITE_GOUO_BACKEND_URL?: string
   readonly VITE_GOUO_BACKEND_DEV_TARGET?: string
-  readonly VITE_GOUO_IMAGE_MODEL?: string
 }
 
 interface ImportMeta {
