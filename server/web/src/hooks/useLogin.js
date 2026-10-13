@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import { LOGIN, SET_USER_GROUP } from 'store/actions';
 import { useNavigate } from 'react-router';
-import { showSuccess } from 'utils/common';
+import { ADMIN_ONLY_MESSAGE, showSuccess } from 'utils/common';
 import { useTranslation } from 'react-i18next';
 
 const useLogin = () => {
@@ -18,7 +18,14 @@ const useLogin = () => {
       });
       const { success, message } = res.data;
       if (success) {
-        loadUser();
+        const user = await loadUser();
+        // 普通用户直接在登录表单提示，不进入后台
+        if (user && user.role < 10) {
+          await API.get('/api/user/logout').catch(() => {});
+          localStorage.removeItem('user');
+          dispatch({ type: LOGIN, payload: null });
+          return { success: false, message: ADMIN_ONLY_MESSAGE };
+        }
         loadUserGroup();
         navigate('/panel');
       }

@@ -91,8 +91,8 @@ describe('Agent tool boundary', () => {
     mocks.models.mockResolvedValue([{ id: 'gpt-image-2', price_cny: 0.15 }])
     const pending = run('create_image_task', { prompt: '海报', params: { n: 5 } })
     await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
-    expect(mocks.dialog!.message).toContain('每张 ¥0.15')
-    expect(mocks.dialog!.message).toContain('预计扣费 ¥0.75')
+    expect(mocks.dialog!.message).toContain('每张 15 积分')
+    expect(mocks.dialog!.message).toContain('预计扣费 75 积分')
     mocks.dialog!.action!()
     await expect(pending).resolves.toMatchObject({ taskIds: ['task'] })
 

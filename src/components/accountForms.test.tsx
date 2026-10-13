@@ -133,6 +133,25 @@ describe('account email and password forms', () => {
     expect(api.sendEmailVerification).toHaveBeenCalledWith('first@example.invalid', '')
   })
 
+  it('shows a closed notice instead of the form when the operator disables registration or password login', async () => {
+    api.getBackendStatus.mockResolvedValue({ email_service: true, register_enabled: false, password_login: false })
+    const draw = () => BackendAuthGate({ children: null })
+    render(draw)
+    await flush()
+    const landing = elements(render(draw)).find((element) => element.type === LandingPage)
+    if (!landing) throw new Error('Missing landing page')
+    // 首页文案不变，点“免费注册”后说明未开放，不显示注册表单
+    ;(landing.props.onRegister as () => void)()
+    let tree = render(draw)
+    expect(text(tree)).toContain('暂未开放注册')
+    expect(elements(tree).some((element) => element.type === 'form')).toBe(false)
+    fire(button(tree, '返回登录'), 'onClick')
+    tree = render(draw)
+    expect(text(tree)).toContain('运营方暂时关闭了账号密码登录')
+    expect(text(tree)).not.toContain('还没有账户？立即注册')
+    expect(button(tree, '登录并进入').props.disabled).toBe(true)
+  })
+
   it('locks binding and resend together and clears verification when the recipient changes', async () => {
     api.getCurrentUser.mockResolvedValue({ id: 1, username: 'creator' })
     const draw = () => UserCenterModal({ initialSection: 'security', onClose: vi.fn() })

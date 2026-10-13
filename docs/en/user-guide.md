@@ -115,19 +115,19 @@ Items stay in the recycle bin for 3 days. After that they are permanently delete
 
 ## 10. Balance, redemption codes, and usage
 
-Operators can fill in redemption instructions and a support website, email, or contact handle under Settings → Operation settings. Both fields default to blank. The user center shows the instructions on the redemption screen and provides copyable support details; a standalone HTTP(S) URL is also clickable. Blank fields are shown as unconfigured and should be filled before public operation.
+Operators can fill in redemption instructions and a support website, email, or contact handle under 光构 → 光构设置 (Gouo settings) in the admin panel. Both fields default to blank. The user center shows the instructions on the redemption screen and provides copyable support details; a standalone HTTP(S) URL is also clickable. Blank fields are shown as unconfigured and should be filled before public operation.
 
 The gallery shows 60 tasks per page. Search covers the entire library, filters reset pagination, and selections persist across pages for batch downloads. Collection renames and deletions synchronize without reviving deleted collections on stale devices.
 
 The user center shows:
 
-- Current balance and cumulative usage.
+- Available points and cumulative usage (1 CNY = 100 points).
 - Model-specific billing information and the actual price in individual usage records.
 - Cloud storage consumption.
 - Redemption-code credit.
 - Recent usage with CSV export.
 
-Each successfully generated image is charged at the model price (generating several images splits them into single-image requests), and failed images are refunded once the server confirms the failure. Prices are configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
+Balance, prices, and charges are shown in points (积分). Each successfully generated image is charged at the model price (generating several images splits them into single-image requests), and failed images are refunded once the server confirms the failure. Prices are configured per model by the operator. Usage records and CSV preserve historical prices and actual charged quota; cumulative usage uses the current conversion rate. Online payments require an operator-published and tested payment method; otherwise use redemption codes or manual credit.
 
 ## 11. Settings, import, and export
 

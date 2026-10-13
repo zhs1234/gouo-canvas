@@ -231,7 +231,11 @@ func SetApiRouter(router *gin.Engine) {
 		gouoAdminRoute := apiRouter.Group("/gouo/admin")
 		gouoAdminRoute.Use(middleware.AdminAuth())
 		{
+			gouoAdminRoute.GET("/settings", controller.GetGouoAdminSettings)
+			gouoAdminRoute.PUT("/settings", controller.UpdateGouoAdminSettings)
 			gouoAdminRoute.GET("/storage", controller.GetGouoAdminStorage)
+			gouoAdminRoute.GET("/models", controller.ListGouoAdminModels)
+			gouoAdminRoute.PUT("/models", controller.UpdateGouoAdminModel)
 			gouoAdminRoute.GET("/image-charges", controller.ListGouoAdminImageCharges)
 			gouoAdminRoute.POST("/image-charges/:id/resolve", controller.ResolveGouoImageCharge)
 			gouoAdminRoute.GET("/storage/users", controller.ListGouoAdminStorageUsers)

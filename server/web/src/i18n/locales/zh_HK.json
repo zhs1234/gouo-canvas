@@ -633,6 +633,8 @@
     "userIdLabel": "用戶ID"
   },
   "paySetting": "支付設定",
+  "gouo": "光構",
+  "gouo_settings": "光構設置",
   "payment": "付款",
   "paymentGatewayPage": {
     "createPayment": "新建支付",
@@ -1379,8 +1381,8 @@
     "username": "用戶名",
     "usernameRequired": "用戶名不能為空",
     "users": "用戶",
-    "changeQuota": "增減額度",
-    "changeQuotaHelperText": "呢度係增減，唔係直接更改用戶餘額，輸入美元，你最多可以扣除 {{quota}}",
+    "changeQuota": "增減積分",
+    "changeQuotaHelperText": "呢度係增減，唔係直接更改用戶餘額，輸入積分（1 元 = 100 積分），你最多可以扣除 {{quota}}",
     "changeQuotaNotEmpty": "請填寫更改額度",
     "changeQuotaNotEnough": "唔可以扣除超過用戶餘額嘅金額",
     "quotaRemark": "備註"

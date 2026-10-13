@@ -63,16 +63,24 @@ The backend rate-limits sign-in, registration and verification emails by client 
 
 ## 3. Initial admin setup
 
-The backend exposes the admin UI at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure.
+The backend exposes the admin UI at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure. Only administrators can sign in to the admin UI: regular users are rejected at its login form, and a regular user who already has a session is signed out when opening it. Regular users use only the Gouo client, where all amounts are shown in points. The admin login page no longer links to registration.
+
+"光构 → 光构设置" (Gouo settings) collects the settings that act directly on the client. Any administrator can change them (the system-settings API is still root only), and they take effect when users return to or reload the client:
+
+- **创作页公告** (announcement): a single line of up to 200 characters at the top of the client's creation page; when blank the default introduction is shown. A dismissed announcement reappears when its text changes.
+- **默认图片模型** (default image model): see "Per-model image billing" below.
+- **兑换码获取说明** (redemption instructions) and **客服联系方式** (support contact): shown in the user center.
+
+The registration and password-login switches in Settings → System (root only) are also passed to the client: with registration closed, "免费注册" shows "registration is not open" and the login page hides its registration link; with password login closed, the login page says sign-in is paused. In product mode the client no longer imports service-address parameters such as `apiUrl`/`apiKey` from links or remote config URLs.
 
 Recommended order:
 
 1. Create a separate day-to-day administrator account.
 2. Add an OpenAI or compatible image channel. Store its API key only in the channel.
-3. Configure image channels and mappings. In the single-model price editor, enable Gouo and set its CNY price, reference/mask capabilities, and output limit. The client displays the public model ID used in requests; there is no separate display name.
+3. Configure image channels and mappings. In the single-model price editor, enable Gouo and set its price in points, reference/mask capabilities, and output limit. The client displays the public model ID used in requests; there is no separate display name.
 4. Validate generations, edits, and variations routes.
 5. Validate model-specific charging, failure refunds, price-change confirmation, and insufficient-balance rejection.
-6. Configure new-user credit, redemption codes, registration policy, and rate limits.
+6. Configure new-user credit (inputs show the points equivalent), redemption codes (can be entered in points), registration policy, and rate limits.
 7. If online payment is planned, validate provider setup, callback signatures, abnormal orders, and reconciliation before exposing it. Payment callbacks are always verified with the gateway's current configuration: to switch to a different merchant (another app ID, merchant ID, or platform public key), add a new gateway and disable the old one, keeping it until its orders are completed or closed. Otherwise callbacks from the old merchant for orders created before the change fail verification and are not credited.
 8. Confirm the asset directory and user storage under the Gouo storage administration view.
 
@@ -91,8 +99,10 @@ GOUO_IMAGE_PRICE_CNY=0.10
 GOUO_IMAGE_MODEL=gpt-image-2
 ```
 
+- Users only ever see points (积分): **1 CNY = 100 points**. The client shows balance, unit prices, estimated charges, usage records, and CSV in points; the admin "光构模型" page, price editor, and Gouo billing records take and show prices in points, and the redemption-code dialog and the user "增减积分" (adjust points) dialog accept points and convert them to quota; every other balance, log, statistic, chart, and settings hint in the admin UI is shown in points too. Newly written billing log text (redemption, signup/invite gifts, admin adjustments, online top-ups) and the low-balance email also use points; the client hides legacy log text written in dollars or raw quota and still shows the amount in points. Server-side accounting is unchanged: it still stores CNY prices and converts them to quota with the formula below, so no data migration is needed and existing balances are only displayed in points.
 - Migration enables only the previous default model and price, with reference/mask support and an output limit of **1 image**. Increase the limit after checking upstream costs. The limit applies to `n` in a single HTTP request; it does not cap the total images the product client generates, because the client splits them into single-image requests. It preserves balances and historical artworks, never enables other models automatically, and never re-enables a removed or disabled default on restart.
-- `VITE_GOUO_IMAGE_MODEL` supplies the initial frontend choice. Subsequent choices are remembered per account and survive login/token refresh. Tasks and retries retain their original model.
+- The admin panel page "光构 → 光构模型" (Gouo → Gouo models) manages which models clients can use: it lists models that are priced or configured on a channel, lets you enable, take down, re-price, change capabilities and set the default, and shows the supporting channels and groups and whether (and why) the model is visible to clients.
+- The client's default model is set with "设为默认" (Set default) on that page or in 光构 → 光构设置 → "默认图片模型" (Gouo settings → default image model). It is used when the user has not picked a model or the picked model is no longer available; when empty or unavailable to the user, the first model in the catalog is used. Changes apply immediately to users who never picked a model. `VITE_GOUO_IMAGE_MODEL` is only a placeholder until the catalog loads. Manual choices are remembered per account and survive login/token refresh. Tasks and retries retain their original model.
 - `GET /api/gouo/models` requires the login cookie and that account's relay token in `X-Gouo-Token`. It intersects enabled models, valid prices, the actual token allowlist, and channels available to its groups. Missing prices and disabled models fail closed instead of falling back to generic pricing.
 - The client submits `X-Gouo-Price-Version`. Changed prices or capabilities return `409 image_price_changed`; refresh the catalog and confirm by submitting again. In product mode every retry asks the user to confirm the cost of the new request, showing the new price when it changed. Non-product API tokens may omit the version but still use a quote captured when the request starts.
 - Quota is `ceil(CNY price / PaymentUSDRate × QuotaPerUnit)`. Conditional database updates reserve user/token balances in one transaction. Success settles the reservation, confirmed backend failure refunds it, and channel retries share one reservation. Logs preserve the public model, price, billing unit, version, and charged quota. The user center and CSV use the price snapshot; cumulative usage is consumed quota converted at the current rate.

@@ -114,7 +114,7 @@ export default function MultiUserStats() {
         title: { text: '额度消耗', style: { color: theme.palette.text.primary } },
         labels: {
           style: { colors: theme.palette.text.primary },
-          formatter: (val) => '$' + calculateQuota(val, 2)
+          formatter: (val) => calculateQuota(val, 2) + ' 积分'
         }
       },
       fill: {
@@ -134,7 +134,7 @@ export default function MultiUserStats() {
       tooltip: {
         theme: theme.palette.mode,
         y: {
-          formatter: (val) => '$' + calculateQuota(val, 6)
+          formatter: (val) => calculateQuota(val, 2) + ' 积分'
         }
       }
     },
@@ -306,10 +306,10 @@ export default function MultiUserStats() {
 
                     <Box>
                       <Typography variant="body2" color="text.secondary">
-                        额度消耗
+                        积分消耗
                       </Typography>
                       <Typography variant="h5" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
-                        ${calculateQuota(stat.quota, 6)}
+                        {calculateQuota(stat.quota, 2)} 积分
                       </Typography>
                     </Box>
 

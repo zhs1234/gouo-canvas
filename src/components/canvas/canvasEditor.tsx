@@ -61,6 +61,7 @@ import { NodeCreateMenu } from './canvasCreateMenus'
 import { CanvasSidePanel, type InsertAssetPayload } from './canvasSidePanel'
 import { CanvasNodeCropDialog, type CanvasImageCropRect } from './canvasNodeCropDialog'
 import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from './canvasNodeMaskEditDialog'
+import { formatPoints } from '../../lib/accountUsage'
 
 const EMPTY_IDS: string[] = []
 type Clipboard = { nodes: CanvasNodeData[]; connections: CanvasConnection[] }
@@ -592,7 +593,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
       const count = target?.metadata?.count || 1
       modal.confirm({
         title: '确认重新生成？',
-        content: `将新建 ${count} 次单图请求${quote ? `，全部成功预计扣费 ¥${(quote.price_cny * count).toFixed(2)}` : ''}。原请求可能已扣费，请先在用户中心的使用记录核对。`,
+        content: `将新建 ${count} 次单图请求${quote ? `，全部成功预计扣费 ${formatPoints(quote.price_cny * count)}` : ''}。原请求可能已扣费，请先在用户中心的使用记录核对。`,
         okText: '重新生成',
         cancelText: '取消',
         onOk: () => run(submit()),
@@ -710,7 +711,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
         ) : null}
         {models.find((model) => model.id === (config.model || settings.model)) && (
           <div className="mt-2 text-[11px] opacity-50">
-            本次预计 ¥{((models.find((model) => model.id === (config.model || settings.model))?.price_cny || 0) * (config.count || 1)).toFixed(2)}
+            本次预计 {formatPoints((models.find((model) => model.id === (config.model || settings.model))?.price_cny || 0) * (config.count || 1))}
           </div>
         )}
         <Button className="mt-3 w-full" type="primary" icon={<Play className="size-3.5" />} onClick={() => run(generate(node.id))}>

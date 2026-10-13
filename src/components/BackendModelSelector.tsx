@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { getImageModels, type GouoImageModel } from '../lib/gouoBackend'
+import { getImageModels, resolveBackendModel, type GouoImageModel } from '../lib/gouoBackend'
 import { useStore } from '../store'
 import ModelSelect from './ModelSelect'
+import { formatPoints } from '../lib/accountUsage'
 
 export default function BackendModelSelector({ onReady, compact = false, showEstimate = !compact }: { onReady: (ready: boolean) => void; compact?: boolean; showEstimate?: boolean }) {
   const settings = useStore((s) => s.settings)
@@ -21,8 +22,12 @@ export default function BackendModelSelector({ onReady, compact = false, showEst
         if (cancelled) return
         setModels(data)
         setError('')
-        const selected = data.find((entry) => entry.id === useStore.getState().settings.model)
-        useStore.getState().setSettings({ gouoPriceVersion: selected?.price_version })
+        const current = useStore.getState().settings
+        const picked = resolveBackendModel(data, current.model, Boolean(current.gouoModelSelected))
+        // 自动换成默认模型时清掉"用户已选"标记，之后管理员调整默认模型仍会生效
+        useStore.getState().setSettings(picked && picked.id !== current.model
+          ? { model: picked.id, gouoModelSelected: false, gouoPriceVersion: picked.price_version }
+          : { gouoPriceVersion: picked?.price_version })
       } catch (err) {
         if (cancelled) return
         console.warn('读取图片模型目录失败', err)
@@ -65,7 +70,7 @@ export default function BackendModelSelector({ onReady, compact = false, showEst
       </label>
       {reason
         ? (!compact || !loading) && <span role="status" className="text-amber-600 dark:text-amber-400">{reason}</span>
-        : showEstimate && selected && <span className="text-gray-400">预计 ¥{(selected.price_cny * params.n).toFixed(2)}（{params.n} 张 · ¥{selected.price_cny}/张）· 按成功张数计费{!compact && ' · 服务端确认失败退款，中断请核对账务'}</span>}
+        : showEstimate && selected && <span className="text-gray-400">预计 {formatPoints(selected.price_cny * params.n)}（{params.n} 张 · {formatPoints(selected.price_cny)}/张）· 按成功张数计费{!compact && ' · 服务端确认失败退款，中断请核对账务'}</span>}
       {(!compact || (!loading && Boolean(reason))) && <button type="button" disabled={loading} onClick={() => window.dispatchEvent(new Event('gouo-models-refresh'))} className="rounded px-1.5 py-1 text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:text-blue-400">{compact ? '重试' : '刷新模型'}</button>}
     </div>
   )

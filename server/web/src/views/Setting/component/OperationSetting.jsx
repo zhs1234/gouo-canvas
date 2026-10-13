@@ -12,9 +12,10 @@ import {
   Alert,
   Select,
   MenuItem,
-  Chip
+  Chip,
+  InputAdornment
 } from '@mui/material';
-import { showSuccess, showError, verifyJSON } from 'utils/common';
+import { renderQuotaWithPrompt, showSuccess, showError, verifyJSON } from 'utils/common';
 import { API } from 'utils/api';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -38,8 +39,6 @@ const OperationSetting = () => {
     QuotaRemindThreshold: 0,
     PreConsumedQuota: 0,
     TopUpLink: '',
-    GouoRedemptionHelp: '',
-    GouoSupportContact: '',
     ChatLink: '',
     ChatLinks: '',
     QuotaPerUnit: 0,
@@ -228,9 +227,6 @@ const OperationSetting = () => {
           if (originInputs['TopUpLink'] !== inputs.TopUpLink) {
             await updateOption('TopUpLink', inputs.TopUpLink);
           }
-          for (const key of ['GouoRedemptionHelp', 'GouoSupportContact']) {
-            if (originInputs[key] !== inputs[key]) await updateOption(key, inputs[key]);
-          }
           if (originInputs['ChatLink'] !== inputs.ChatLink) {
             await updateOption('ChatLink', inputs.ChatLink);
           }
@@ -386,16 +382,9 @@ const OperationSetting = () => {
     <Stack spacing={2}>
       <SubCard title={t('setting_index.operationSettings.generalSettings.title')}>
         <Stack justifyContent="flex-start" alignItems="flex-start" spacing={2}>
-          <TextField
-            fullWidth multiline minRows={2} label="光构兑换码获取说明" name="GouoRedemptionHelp"
-            value={inputs.GouoRedemptionHelp} onChange={handleInputChange} disabled={loading}
-            inputProps={{ maxLength: 2000 }} helperText="默认留空。填写获取方式、发放条件或处理时间，在用户中心的兑换页展示。"
-          />
-          <TextField
-            fullWidth multiline minRows={2} label="光构客服联系方式" name="GouoSupportContact"
-            value={inputs.GouoSupportContact} onChange={handleInputChange} disabled={loading}
-            inputProps={{ maxLength: 2000 }} helperText="默认留空。可填写客服网址、邮箱或微信号，用户可复制联系；单独的 HTTP(S) 网址可直接打开。"
-          />
+          <Alert severity="info" sx={{ width: '100%' }}>
+            光构公告、兑换码说明、客服联系方式和默认图片模型已移到“光构 → 光构设置”。
+          </Alert>
           <Stack direction={{ sm: 'column', md: 'row' }} spacing={{ xs: 3, sm: 2, md: 4 }}>
             <FormControl fullWidth>
               <InputLabel htmlFor="TopUpLink">{t('setting_index.operationSettings.generalSettings.topUpLink.label')}</InputLabel>
@@ -715,6 +704,7 @@ const OperationSetting = () => {
                 name="QuotaRemindThreshold"
                 type="number"
                 value={inputs.QuotaRemindThreshold}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaRemindThreshold)}</InputAdornment>}
                 onChange={handleInputChange}
                 label={t('setting_index.operationSettings.monitoringSettings.quotaRemindThreshold.label')}
                 placeholder={t('setting_index.operationSettings.monitoringSettings.quotaRemindThreshold.placeholder')}
@@ -762,6 +752,7 @@ const OperationSetting = () => {
                 name="QuotaForNewUser"
                 type="number"
                 value={inputs.QuotaForNewUser}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaForNewUser)}</InputAdornment>}
                 onChange={handleInputChange}
                 label={t('setting_index.operationSettings.quotaSettings.quotaForNewUser.label')}
                 placeholder={t('setting_index.operationSettings.quotaSettings.quotaForNewUser.placeholder')}
@@ -777,6 +768,7 @@ const OperationSetting = () => {
                 name="PreConsumedQuota"
                 type="number"
                 value={inputs.PreConsumedQuota}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.PreConsumedQuota)}</InputAdornment>}
                 onChange={handleInputChange}
                 label={t('setting_index.operationSettings.quotaSettings.preConsumedQuota.label')}
                 placeholder={t('setting_index.operationSettings.quotaSettings.preConsumedQuota.placeholder')}
@@ -791,6 +783,7 @@ const OperationSetting = () => {
                 type="number"
                 label={t('setting_index.operationSettings.quotaSettings.quotaForInviter.label')}
                 value={inputs.QuotaForInviter}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaForInviter)}</InputAdornment>}
                 onChange={handleInputChange}
                 placeholder={t('setting_index.operationSettings.quotaSettings.quotaForInviter.placeholder')}
                 disabled={loading}
@@ -804,6 +797,7 @@ const OperationSetting = () => {
                 type="number"
                 label={t('setting_index.operationSettings.quotaSettings.quotaForInvitee.label')}
                 value={inputs.QuotaForInvitee}
+                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaForInvitee)}</InputAdornment>}
                 onChange={handleInputChange}
                 autoComplete="new-password"
                 placeholder={t('setting_index.operationSettings.quotaSettings.quotaForInvitee.placeholder')}

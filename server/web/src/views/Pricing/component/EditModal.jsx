@@ -27,7 +27,7 @@ import {
   Typography
 } from '@mui/material';
 
-import { showError, showSuccess, trims } from 'utils/common';
+import { GOUO_POINTS_PER_CNY, showError, showSuccess, trims } from 'utils/common';
 import { API } from 'utils/api';
 import { createFilterOptions } from '@mui/material/Autocomplete';
 import { priceType, ValueFormatter } from './util';
@@ -57,8 +57,8 @@ const validateSingleMode = (t, values, rows) => {
     return t('pricing_edit.channelTypeErr2');
   }
 
-  if (values.gouo_enabled && (!Number.isFinite(Number(values.gouo_price_cny)) || Number(values.gouo_price_cny) <= 0 || Number(values.gouo_price_cny) > 10000 || !Number.isInteger(Number(values.gouo_max_outputs)) || Number(values.gouo_max_outputs) < 1 || Number(values.gouo_max_outputs) > 10 || (values.gouo_mask && !values.gouo_reference))) {
-    return '光构价格须大于 0 且不超过 10000 元，输出上限为 1～10 张；遮罩编辑需要支持参考图';
+  if (values.gouo_enabled && (!Number.isFinite(Number(values.gouo_points)) || Number(values.gouo_points) <= 0 || Number(values.gouo_points) > 10000 * GOUO_POINTS_PER_CNY || !Number.isInteger(Number(values.gouo_max_outputs)) || Number(values.gouo_max_outputs) < 1 || Number(values.gouo_max_outputs) > 10 || (values.gouo_mask && !values.gouo_reference))) {
+    return `光构价格须大于 0 且不超过 ${10000 * GOUO_POINTS_PER_CNY} 积分，输出上限为 1～10 张；遮罩编辑需要支持参考图`;
   }
 
   // 判断model是否是唯一值
@@ -122,7 +122,7 @@ const multipleOriginInputs = {
 // 单一模式初始值
 const singleOriginInputs = {
   gouo_enabled: false,
-  gouo_price_cny: 0,
+  gouo_points: 0,
   gouo_reference: false,
   gouo_mask: false,
   gouo_max_outputs: 1,
@@ -266,7 +266,8 @@ const EditModal = ({
           const calculatedOutput = values.type === 'times' ? calculatedInput : calculateRate(values.output);
           await onSaveSingle({
             ...values,
-            gouo_price_cny: Number(values.gouo_price_cny || 0),
+            gouo_price_cny: Number(values.gouo_points || 0) / GOUO_POINTS_PER_CNY,
+            gouo_points: undefined,
             gouo_max_outputs: Number(values.gouo_max_outputs || 1),
             input: calculatedInput,
             output: calculatedOutput
@@ -360,6 +361,8 @@ const EditModal = ({
         setInputs({
           ...singleOriginInputs,
           ...price,
+          // 管理员按积分填写光构售价，保存时再换回人民币；toPrecision 消除浮点误差
+          gouo_points: price.gouo_price_cny ? Number((price.gouo_price_cny * GOUO_POINTS_PER_CNY).toPrecision(12)) : 0,
           extra_ratios: price.extra_ratios || {}
         });
       } else {
@@ -739,8 +742,8 @@ const EditModal = ({
               <Stack spacing={2}>
                 <FormControlLabel control={<Checkbox name="gouo_enabled" checked={Boolean(inputs.gouo_enabled)} onChange={handleChange} />} label="在光构图片模型目录启用" />
                 {inputs.gouo_enabled && <>
-                  <Alert severity="info">光构图片请求使用下方人民币售价，生成与编辑同价，每次成功请求收费，不叠加分组倍率。目录仅展示账号有可用渠道的模型；上游价格同步不会覆盖此配置。</Alert>
-                  <TextField label="光构人民币售价（元/次成功请求）" name="gouo_price_cny" value={inputs.gouo_price_cny} onChange={handleChange} type="number" inputProps={{ min: 0.000001, max: 10000, step: 'any' }} fullWidth />
+                  <Alert severity="info">光构图片请求使用下方积分售价（1 元 = 100 积分），生成与编辑同价，每次成功请求收费，不叠加分组倍率。目录仅展示账号有可用渠道的模型；上游价格同步不会覆盖此配置。</Alert>
+                  <TextField label="光构售价（积分/张）" name="gouo_points" value={inputs.gouo_points} onChange={handleChange} type="number" inputProps={{ min: 0.0001, max: 10000 * GOUO_POINTS_PER_CNY, step: 'any' }} fullWidth />
                   <TextField label="单次输出数量上限" name="gouo_max_outputs" value={inputs.gouo_max_outputs} onChange={handleChange} type="number" inputProps={{ min: 1, max: 10, step: 1 }} fullWidth />
                   <FormControlLabel control={<Checkbox name="gouo_reference" checked={Boolean(inputs.gouo_reference)} onChange={handleChange} />} label="支持参考图编辑" />
                   <FormControlLabel control={<Checkbox name="gouo_mask" checked={Boolean(inputs.gouo_mask)} onChange={handleChange} />} label="支持遮罩编辑" />

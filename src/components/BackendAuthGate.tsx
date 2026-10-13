@@ -21,7 +21,7 @@ import LandingPage from './landing/LandingPage'
 type AuthMode = 'login' | 'register' | 'reset'
 
 const AUTH_INTRO: Record<AuthMode, { lines: string[]; desc: string; panel: string }> = {
-  login: { lines: ['欢迎回来'], desc: '登录后继续使用你的额度、作品与画布。', panel: '登录光构' },
+  login: { lines: ['欢迎回来'], desc: '登录后继续使用你的积分、作品与画布。', panel: '登录光构' },
   register: { lines: ['创建你的', '光构账户'], desc: '', panel: '注册账户' },
   reset: { lines: ['找回账号'], desc: '输入邮件中的验证码，并设置新的登录密码。', panel: '重置密码' },
 }
@@ -60,6 +60,8 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
   const [statusAttempt, setStatusAttempt] = useState(0)
   const [turnstileEnabled, setTurnstileEnabled] = useState(false)
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('')
+  const [registerEnabled, setRegisterEnabled] = useState(true)
+  const [passwordLogin, setPasswordLogin] = useState(true)
   const [turnstileToken, setTurnstileToken] = useState('')
   const [turnstileReset, setTurnstileReset] = useState(0)
   const [sendingVerification, setSendingVerification] = useState(false)
@@ -109,6 +111,9 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
         setEmailVerification(Boolean(status.email_verification))
         setTurnstileEnabled(Boolean(status.turnstile_check))
         setTurnstileSiteKey(status.turnstile_site_key ?? '')
+        // 旧版后端不返回这两项，按开放处理
+        setRegisterEnabled(status.register_enabled !== false)
+        setPasswordLogin(status.password_login !== false)
         setBackendStatusLoaded(true)
       })
       .catch((err) => { if (active) setStatusError(err instanceof Error ? err.message : String(err)) })
@@ -218,7 +223,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
             ))}
           </h1>
           <p className="gouo-fade-up mt-6 max-w-[34rem] text-[17px] font-medium leading-[1.65] tracking-[-0.02em] text-[var(--ink-soft)]" style={{ '--delay': '0.3s' } as CSSProperties}>
-            {mode === 'register' ? `用户名最多 12 个字符，密码 8–20 位${emailVerification ? '，需验证邮箱' : ''}。注册后兑换额度即可开始创作。` : intro.desc}
+            {mode === 'register' ? `用户名最多 12 个字符，密码 8–20 位${emailVerification ? '，需验证邮箱' : ''}。注册后兑换积分即可开始创作。` : intro.desc}
           </p>
         </section>
 
@@ -231,9 +236,16 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
             </div>
           ) : !backendStatusLoaded && !statusError ? (
             <div className="py-10 text-center text-sm text-[var(--ink-soft)]">正在读取账号服务配置…</div>
+          ) : mode === 'register' && !registerEnabled ? (
+            <div role="alert" className="space-y-4 text-sm text-[var(--ink-soft)]">
+              <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--ink)]">暂未开放注册</h2>
+              <p>运营方当前关闭了新用户注册。已有账户可直接登录。</p>
+              <button type="button" onClick={() => { setMode('login'); setError('') }} className={SECONDARY_BUTTON_CLASS + ' min-h-10'}>返回登录</button>
+            </div>
           ) : (
             <>
               <h2 className="text-xl font-semibold tracking-[-0.02em]">{intro.panel}</h2>
+              {mode === 'login' && !passwordLogin && <div role="alert" className="mt-4 rounded-xl border border-amber-500/25 bg-amber-50/70 px-4 py-3 text-sm leading-5 text-amber-800">运营方暂时关闭了账号密码登录，请稍后再试或联系运营方。</div>}
               <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
                 {turnstileEnabled && mode !== 'login' && <TurnstileChallenge key={mode} siteKey={turnstileSiteKey} resetKey={turnstileReset} onToken={setTurnstileToken} />}
                 {mode !== 'reset' ? (
@@ -285,15 +297,15 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
 
                 {error && <div role="alert" className="rounded-xl border border-red-500/20 bg-red-50/70 px-4 py-3 text-sm leading-5 text-red-700">{error}</div>}
 
-                <button type="submit" disabled={submitting || sendingVerification || (mode === 'register' && turnstileEnabled && !turnstileToken)} className="min-h-12 w-full rounded-[13px] bg-[#101012] text-[13px] font-bold text-white shadow-[0_14px_30px_rgb(27_24_28/0.16)] transition hover:-translate-y-px hover:bg-black disabled:cursor-wait disabled:bg-[#6f6f73] disabled:shadow-none">
+                <button type="submit" disabled={submitting || sendingVerification || (mode === 'register' && turnstileEnabled && !turnstileToken) || (mode === 'login' && !passwordLogin)} className="min-h-12 w-full rounded-[13px] bg-[#101012] text-[13px] font-bold text-white shadow-[0_14px_30px_rgb(27_24_28/0.16)] transition hover:-translate-y-px hover:bg-black disabled:cursor-wait disabled:bg-[#6f6f73] disabled:shadow-none">
                   {submitting ? '请稍候…' : mode === 'login' ? '登录并进入' : mode === 'register' ? '注册并进入' : '确认重置密码'}
                 </button>
               </form>
 
               <div className="mt-6 flex items-center justify-center gap-5 text-[13px] text-[var(--ink-soft)]">
-                <button type="button" disabled={sendingVerification || submitting} className="underline-offset-4 hover:text-[var(--ink)] hover:underline disabled:opacity-40" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
+                {(mode !== 'login' || registerEnabled) && <button type="button" disabled={sendingVerification || submitting} className="underline-offset-4 hover:text-[var(--ink)] hover:underline disabled:opacity-40" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
                   {mode === 'login' ? '还没有账户？立即注册' : '返回登录'}
-                </button>
+                </button>}
                 {mode === 'login' && emailService && <button type="button" disabled={submitting} className="underline-offset-4 hover:text-[var(--ink)] hover:underline disabled:opacity-40" onClick={() => { setMode('reset'); setError('') }}>忘记密码</button>}
               </div>
             </>

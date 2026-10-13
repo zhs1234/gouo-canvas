@@ -141,7 +141,7 @@ export default {
     baseUrlRequired: '请先配置 Base URL',
     apiKeyRequired: '请先配置 API Key',
     authenticationFailed: '鉴权失败，请检查 API Key、套餐权限或模型权限',
-    rateLimited: '请求被限流或额度不足，请稍后重试',
+    rateLimited: '请求被限流或积分不足，请稍后重试',
     notFound: '接口地址不存在（404），请检查 Base URL 和模型选择',
     badGateway: '网关错误（502），接口服务暂时不可用，请稍后重试',
     serviceBusy: '服务繁忙（503），请稍后重试',

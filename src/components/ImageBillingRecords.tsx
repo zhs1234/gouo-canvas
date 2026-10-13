@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getImageCharges, type GouoImageCharge } from '../lib/gouoBackend'
 import { createLatestRequest } from '../lib/latestRequest'
+import { formatPoints } from '../lib/accountUsage'
 
 const labels = { reserved: '已预扣，尚未发送', dispatched: '生成中，已预扣', needs_review: '结果待核对', settled: '已结算', refunded: '已退款' }
 
@@ -34,7 +35,7 @@ export default function ImageBillingRecords() {
       {error && <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
       {rows.map((row) => (
         <div key={row.id} className="mt-3 rounded-xl bg-gray-50 p-3 text-xs dark:bg-white/[0.04]">
-          <div className="flex flex-wrap justify-between gap-2"><span>{row.model_name} · ¥{row.price_cny}</span><strong className={row.status === 'needs_review' ? 'text-amber-700 dark:text-amber-400' : ''}>{labels[row.status] || row.status}</strong></div>
+          <div className="flex flex-wrap justify-between gap-2"><span>{row.model_name} · {formatPoints(row.price_cny)}/张</span><strong className={row.status === 'needs_review' ? 'text-amber-700 dark:text-amber-400' : ''}>{labels[row.status] || row.status}</strong></div>
           <p className="mt-1 break-all font-mono">请求编号：{row.id}</p>
           <p className="mt-1 text-gray-500 dark:text-gray-400">{new Date(row.created_at * 1000).toLocaleString('zh-CN')}{row.note ? ` · ${row.note}` : ''}</p>
         </div>

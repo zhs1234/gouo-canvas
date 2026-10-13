@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material';
 import { API } from 'utils/api';
-import { showError, showSuccess } from 'utils/common';
+import { renderGouoPoints, showError, showSuccess } from 'utils/common';
 
 const labels = { reserved: '预扣未发送', dispatched: '已发送，生成中', needs_review: '待核对', settled: '已结算', refunded: '已退款' };
 
@@ -73,7 +73,7 @@ export default function GouoBilling() {
               <TableRow key={row.id}>
                 <TableCell sx={{ maxWidth: 250, overflowWrap: 'anywhere' }}>{row.id}<Typography variant="caption" display="block">{new Date(row.created_at * 1000).toLocaleString('zh-CN')}</Typography></TableCell>
                 <TableCell>用户 {row.user_id}<br />渠道 {row.channel_id || '未发送'} · {row.attempts} 次尝试</TableCell>
-                <TableCell>{row.model_name}<br />¥{row.price_cny} · {row.quota} 额度</TableCell>
+                <TableCell>{row.model_name}<br />{renderGouoPoints(row.price_cny)} · {row.quota} 额度</TableCell>
                 <TableCell><Chip label={labels[row.status] || row.status} color={row.status === 'needs_review' ? 'warning' : 'default'} size="small" /></TableCell>
                 <TableCell sx={{ maxWidth: 300, overflowWrap: 'anywhere' }}>{row.note || '—'}{row.log_id > 0 && <Typography variant="caption" display="block">日志 #{row.log_id}{row.resolved_by > 0 ? ` · 管理员 ${row.resolved_by}` : ''}</Typography>}</TableCell>
                 <TableCell><Button disabled={row.status !== 'needs_review' || loading} onClick={() => { setSelected(row); setAction(''); setNote(''); }}>核对处理</Button></TableCell>
@@ -92,7 +92,7 @@ export default function GouoBilling() {
         <Box component="form" onSubmit={resolve}>
           <DialogTitle id="billing-resolution-title">核对图片请求</DialogTitle>
           <DialogContent>
-            <Typography sx={{ overflowWrap: 'anywhere', mb: 2 }}>请求 {selected?.id}<br />用户 {selected?.user_id} · {selected?.model_name} · ¥{selected?.price_cny}</Typography>
+            <Typography sx={{ overflowWrap: 'anywhere', mb: 2 }}>请求 {selected?.id}<br />用户 {selected?.user_id} · {selected?.model_name} · {renderGouoPoints(selected?.price_cny)}</Typography>
             <TextField select required fullWidth label="核对结果" value={action} onChange={(event) => setAction(event.target.value)} sx={{ mt: 1 }}>
               <MenuItem value="refunded">确认失败，退回预扣额度</MenuItem>
               <MenuItem value="settled">确认成功，结算预扣额度</MenuItem>

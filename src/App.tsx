@@ -12,6 +12,7 @@ import ImageContextMenu from './components/ImageContextMenu'
 import OverlayLayer from './components/OverlayLayer'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 import { startServerLibrary } from './lib/serverLibrary'
+import { isBackendAuthEnabled } from './lib/gouoBackend'
 
 let customProviderConfigUrlImportStarted = false
 
@@ -56,6 +57,13 @@ export default function App() {
       const nextSearch = searchParams.toString()
       const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`
       window.history.replaceState(null, '', nextUrl)
+    }
+
+    // 产品模式统一走光构后端，链接里的服务地址、密钥和远程配置都不导入，只把参数从地址栏清掉
+    if (isBackendAuthEnabled()) {
+      clearAppliedUrlSettings()
+      void initStore().then(() => startServerLibrary())
+      return
     }
 
     if (customProviderConfigUrl && defaultConfigOnly && !customProviderConfigUrlImportStarted) {

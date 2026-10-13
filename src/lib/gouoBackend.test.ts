@@ -15,6 +15,23 @@ afterEach(() => {
 })
 
 describe('gouoBackend', () => {
+  it('uses the backend default model unless the user picked a model that is still available', async () => {
+    const { resolveBackendModel } = await import('./gouoBackend')
+    const model = (id: string, isDefault = false) => ({ id, name: id, price_cny: 0.1, price_version: id, reference: true, mask: true, max_outputs: 1, quota: 1, ...(isDefault ? { default: true } : {}) })
+    const catalog = [model('image-a'), model('image-b', true)]
+    // 构建时的默认模型不在目录里：改用后台默认
+    expect(resolveBackendModel(catalog, 'gpt-image-2', false)?.id).toBe('image-b')
+    // 没手动选过：后台改默认模型后跟着变
+    expect(resolveBackendModel(catalog, 'image-a', false)?.id).toBe('image-b')
+    // 手动选过且仍可用：保留
+    expect(resolveBackendModel(catalog, 'image-a', true)?.id).toBe('image-a')
+    // 手动选的已下架：回到后台默认
+    expect(resolveBackendModel(catalog, 'removed', true)?.id).toBe('image-b')
+    // 旧后端没有 default 标记：取第一个
+    expect(resolveBackendModel([model('image-a'), model('image-b')], 'gpt-image-2', false)?.id).toBe('image-a')
+    expect(resolveBackendModel([], 'gpt-image-2', false)).toBeUndefined()
+  })
+
   it('sends the loaded account on cloud requests and reloads when the session switched accounts', async () => {
     vi.doMock('./storageScope', () => ({ getLoadedStorageUserId: () => '7' }))
     const reload = vi.fn()

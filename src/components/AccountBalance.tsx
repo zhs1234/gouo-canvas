@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCurrentUser } from '../lib/gouoBackend'
 import { useStore } from '../store'
+import { formatPoints } from '../lib/accountUsage'
 
 export default function AccountBalance({ onClick, refreshKey }: { onClick: () => void; refreshKey?: boolean }) {
   const runningCount = useStore((state) => state.tasks.filter((task) => task.status === 'running').length)
@@ -36,7 +37,7 @@ export default function AccountBalance({ onClick, refreshKey }: { onClick: () =>
     }
   }, [runningCount, refreshKey])
 
-  const text = typeof balance === 'number' ? `余额 ¥${balance.toFixed(2)}` : balance === 'loading' ? '余额 …' : '余额暂不可用'
+  const text = typeof balance === 'number' ? `余额 ${formatPoints(balance)}` : balance === 'loading' ? '余额 …' : '余额暂不可用'
 
   return (
     <button type="button" onClick={onClick} aria-label={`${text}，打开用户中心`} aria-busy={balance === 'loading'} className="whitespace-nowrap rounded-lg px-2.5 py-2 text-xs tabular-nums text-gray-400 outline-none hover:bg-white/[0.05] hover:text-gray-100 focus-visible:ring-2 focus-visible:ring-white/20">
