@@ -47,6 +47,8 @@ type gouoAdminModel struct {
 	Channels    []gouoAdminChannel `json:"channels"`
 	// 有启用中的渠道支持、且是有效用户分组的分组，即客户端可能看到这个模型的分组
 	OpenGroups []string `json:"open_groups"`
+	// image / text / 空（无法判断），后台按此把图片模型和文本模型分到各自的标签页
+	Kind string `json:"kind"`
 }
 
 type gouoAdminAgentModel struct {
@@ -66,9 +68,41 @@ type gouoAdminAgentModel struct {
 	Reason       string             `json:"reason"`
 	// 渠道映射到其他模型且没有按原模型计费时，实际按上游模型的价格扣费，这里填的价格不生效
 	PriceWarning string `json:"price_warning,omitempty"`
+	Kind         string `json:"kind"`
 }
 
 var gouoToolTags = []string{"tools", "tool_calls", "function_calling", "function-calling"}
+
+// 常见图片模型的名称特征，模型资料没有声明输出类型时用来区分图片模型和文本模型
+var gouoImageNameHints = []string{"image", "dall-e", "flux", "midjourney", "imagen", "seedream", "stable-diffusion", "recraft", "ideogram", "cogview", "kolors"}
+
+// gouoModelKind 判断模型是图片模型还是文本模型；判断不了时返回空字符串，两个标签页都会列出。
+// 已启用的图片模型和已上架的 Agent 模型以当前状态为准，其余依次看模型资料的输出类型、名称和计费方式
+func gouoModelKind(id string, price *model.Price, info *model.ModelInfoResponse) string {
+	if price != nil && price.GouoEnabled {
+		return "image"
+	}
+	if gouoAgentListed(info) {
+		return "text"
+	}
+	if info != nil {
+		outputsImage, outputsText := slices.Contains(info.OutputModalities, "image"), slices.Contains(info.OutputModalities, "text")
+		if outputsImage && !outputsText {
+			return "image"
+		}
+		if outputsText && !outputsImage {
+			return "text"
+		}
+	}
+	lower := strings.ToLower(id)
+	if slices.ContainsFunc(gouoImageNameHints, func(hint string) bool { return strings.Contains(lower, hint) }) {
+		return "image"
+	}
+	if price != nil && price.Type == model.TokensPriceType {
+		return "text"
+	}
+	return ""
+}
 
 // 模型 → 支持它的渠道
 func gouoChannelsByModel() (map[string][]gouoAdminChannel, error) {
@@ -182,6 +216,11 @@ func ListGouoAdminModels(c *gin.Context) {
 		}
 	}
 	models := make([]*gouoAdminModel, 0, len(byModel))
+	model.PricingInstance.RLock()
+	for id, item := range byModel {
+		item.Kind = gouoModelKind(id, model.PricingInstance.Prices[id], infos[id])
+	}
+	model.PricingInstance.RUnlock()
 	for _, item := range byModel {
 		if item.Enabled {
 			if _, err := model.PricingInstance.GetGouoModel(item.Model); err != nil {
@@ -275,6 +314,19 @@ func UpdateGouoAdminModel(c *gin.Context) {
 	model.PricingInstance.RUnlock()
 	if !ok {
 		price = model.Price{Model: id, Type: model.TimesPriceType, ChannelType: config.ChannelTypeUnknown}
+	}
+	// 同一个模型不能同时作为图片模型和 Agent 模型，否则会从另一边的目录里消失
+	if input.Enabled && !price.GouoEnabled {
+		info := price.ModelInfo
+		if info == nil {
+			if stored, err := model.GetModelInfoByModel(id); err == nil {
+				info = stored.ToResponse()
+			}
+		}
+		if gouoAgentListed(info) {
+			gouoFail(c, http.StatusBadRequest, "agent_model_listed", "该模型已作为 Agent 模型上架，请先在 Agent 模型里下架")
+			return
+		}
 	}
 	price.GouoEnabled, price.GouoPriceCNY, price.GouoReference, price.GouoMask, price.GouoMaxOutputs = input.Enabled, input.PriceCNY, input.Reference, input.Mask, input.MaxOutputs
 	if price.GouoMaxOutputs < 1 {
@@ -373,7 +425,7 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 			imageModels[id] = true
 			continue
 		}
-		item := &gouoAdminAgentModel{Model: id, Priced: true, Sort: price.GouoSort, MaxTokens: price.GouoMaxTokens, Listed: gouoAgentListed(price.ModelInfo)}
+		item := &gouoAdminAgentModel{Model: id, Priced: true, Sort: price.GouoSort, MaxTokens: price.GouoMaxTokens, Listed: gouoAgentListed(price.ModelInfo), Kind: gouoModelKind(id, price, price.ModelInfo)}
 		item.InputPoints, item.OutputPoints = price.GetInput()*rate, price.GetOutput()*rate
 		item.Name, item.Description = gouoModelText(price)
 		item.Vision = price.ModelInfo != nil && slices.Contains(price.ModelInfo.InputModalities, "image")
@@ -391,6 +443,7 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 				byModel[id].Listed = gouoAgentListed(info)
 				byModel[id].Vision = slices.Contains(info.InputModalities, "image")
 			}
+			byModel[id].Kind = gouoModelKind(id, nil, infos[id])
 		}
 		byModel[id].Channels = channels
 	}

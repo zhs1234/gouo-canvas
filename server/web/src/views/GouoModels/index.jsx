@@ -126,7 +126,8 @@ function ImageModels() {
 
   const filtered = rows.filter(
     (row) =>
-      (showAll || row.gouo_enabled || row.channels.length > 0) &&
+      // 后台识别为文本模型的归 Agent 标签页，这里默认不列出
+      (showAll || (row.kind !== 'text' && (row.gouo_enabled || row.channels.length > 0))) &&
       (!enabledOnly || row.gouo_enabled) &&
       row.model.toLowerCase().includes(keyword.trim().toLowerCase())
   );
@@ -162,7 +163,7 @@ function ImageModels() {
         />
         <FormControlLabel
           control={<Switch checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />}
-          label="显示没有渠道的已定价模型"
+          label="显示全部模型（含文本模型和没有渠道的）"
         />
         <Button onClick={() => void load()} disabled={loading}>
           刷新
@@ -186,6 +187,7 @@ function ImageModels() {
                   <TableCell sx={{ maxWidth: 240, overflowWrap: 'anywhere' }}>
                     {row.model}
                     {row.model === defaultModel && <Chip label="默认" color="primary" size="small" sx={{ ml: 1 }} />}
+                    {row.kind === 'text' && <Chip label="文本模型" color="warning" variant="outlined" size="small" sx={{ ml: 1 }} />}
                     {row.name && row.name !== row.model && (
                       <Typography variant="body2" display="block">
                         显示为「{row.name}」

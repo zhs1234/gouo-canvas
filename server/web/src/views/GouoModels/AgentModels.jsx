@@ -82,7 +82,8 @@ export default function AgentModels() {
 
   const filtered = rows.filter(
     (row) =>
-      (showAll || row.listed || row.channels.length > 0) &&
+      // 后台识别为图片模型的归图片标签页，这里默认不列出
+      (showAll || (row.kind !== 'image' && (row.listed || row.channels.length > 0))) &&
       (!listedOnly || row.listed) &&
       `${row.model} ${row.name}`.toLowerCase().includes(keyword.trim().toLowerCase())
   );
@@ -113,7 +114,7 @@ export default function AgentModels() {
         />
         <FormControlLabel
           control={<Switch checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />}
-          label="显示没有渠道的已定价模型"
+          label="显示全部模型（含图片模型和没有渠道的）"
         />
         <Button onClick={() => void load()} disabled={loading}>
           刷新
@@ -137,6 +138,7 @@ export default function AgentModels() {
                   <TableCell sx={{ maxWidth: 240, overflowWrap: 'anywhere' }}>
                     {row.model}
                     {row.model === defaultModel && <Chip label="默认" color="primary" size="small" sx={{ ml: 1 }} />}
+                    {row.kind === 'image' && <Chip label="图片模型" color="warning" variant="outlined" size="small" sx={{ ml: 1 }} />}
                     {row.name && row.name !== row.model && (
                       <Typography variant="body2" display="block">
                         显示为「{row.name}」
