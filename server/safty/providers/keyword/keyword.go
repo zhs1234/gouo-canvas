@@ -68,7 +68,9 @@ func (k *KeywordChecker) Check(data string) (types.CheckResult, error) {
 	}
 
 	for _, keyword := range config.SafeKeyWords {
-		if strings.Contains(strings.ToLower(data), strings.ToLower(keyword)) {
+		// 后台按行保存关键词，空行会匹配任何内容，必须跳过
+		keyword = strings.TrimSpace(keyword)
+		if keyword != "" && strings.Contains(strings.ToLower(data), strings.ToLower(keyword)) {
 			result.IsSafe = false
 			result.Details = append(result.Details, types.SafeDefaultErrorMessage)
 			result.Code = types.SafeDefaultErrorCode

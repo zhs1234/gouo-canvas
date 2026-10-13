@@ -22,6 +22,8 @@ export function getActionableErrorMessage(message: string, billedRequest = false
   const normalized = message.trim() || '请求失败'
   if (/下一步[:：]/.test(normalized)) return normalized
   if (isBalanceError(normalized)) return `${normalized}\n下一步：打开用户中心兑换积分，然后点击任务上的“重试”。`
+  // 平台内容审查在扣费前拦截，不需要核对账务
+  if (normalized.includes('提示词包含不允许的内容')) return `${normalized}\n下一步：修改提示词中不合适的描述后重新生成；这次请求已被拦下，没有扣费。`
   if (/安全系统|safety|sexual|violence|content policy|内容审核/i.test(normalized)) return `${normalized}\n下一步：删除可能涉及敏感内容的描述，明确人物为成年人且穿着完整，再重新生成。`
   if (/无效的令牌|token.+(invalid|expired)|unauthorized|HTTP\s*401/i.test(normalized)) return `${normalized}\n下一步：重新登录以刷新生成令牌；提示词和参考图草稿会保留。`
   if (billedRequest) return `${normalized}\n下一步：打开用户中心 → 使用记录 → 图片请求状态，先核对是否已结算或退款；待核对的请求请将请求编号提供给管理员。服务端确认失败才退款，网络中断或本地保存失败不代表已退款；重试会新建付费请求，多张图片分别计费。`

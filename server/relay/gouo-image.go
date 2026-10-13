@@ -18,6 +18,7 @@ import (
 	"one-api/common/utils"
 	"one-api/model"
 	"one-api/relay/relay_util"
+	"one-api/safty"
 	"one-api/types"
 	"regexp"
 	"strconv"
@@ -114,6 +115,17 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		if len(form.File["mask"]) > 1 {
 			return common.StringErrorWrapperLocal("请求参数重复", "duplicate_form_field", http.StatusBadRequest)
 		}
+	}
+	// 内容审查在扣费前完成，未通过的请求不产生费用；开关和关键词沿用后台“运营设置”
+	prompt := ""
+	switch r := relay.(type) {
+	case *relayImageGenerations:
+		prompt = r.request.Prompt
+	case *relayImageEdits:
+		prompt = r.request.Prompt
+	}
+	if result, _ := safty.CheckContent(prompt); !result.IsSafe {
+		return common.StringErrorWrapperLocal("提示词包含不允许的内容，请修改后重试", result.Code, http.StatusBadRequest)
 	}
 	if id := c.GetHeader("X-Gouo-Request-Id"); id != "" && !gouoImageRequestID.MatchString(id) {
 		return common.StringErrorWrapperLocal("图片请求 ID 无效", "invalid_image_request_id", http.StatusBadRequest)

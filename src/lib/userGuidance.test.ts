@@ -37,6 +37,10 @@ describe('userGuidance', () => {
       expect(guidance).not.toContain('稍后点击任务上的“重试”')
     }
     expect(getActionableErrorMessage('图片添加失败：Failed to fetch')).not.toContain('付费请求')
+    // 平台内容审查在扣费前拦截，即使按付费请求处理也不提示核对账务
+    const blocked = getActionableErrorMessage('提示词包含不允许的内容，请修改后重试 (request id: 1)', true)
+    expect(blocked).toContain('没有扣费')
+    expect(blocked).not.toContain('图片请求状态')
   })
 
 })
