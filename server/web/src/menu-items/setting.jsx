@@ -8,7 +8,6 @@ const icons = {
   IconUserScan: () => <Icon width={20} icon="solar:user-id-bold-duotone" />,
   IconReceipt2: () => <Icon width={20} icon="solar:document-bold-duotone" />,
   IconSettingsCog: () => <Icon width={20} icon="solar:settings-bold-duotone" />,
-  IconBrandTelegram: () => <Icon width={20} icon="solar:plain-bold-duotone" />,
   IconCoin: () => <Icon width={20} icon="solar:dollar-minimalistic-bold-duotone" />,
   IconBrandPaypal: () => <Icon width={20} icon="solar:wallet-money-bold-duotone" />,
   IconCoins: () => <Icon width={20} icon="solar:hand-money-bold-duotone" />,
@@ -126,15 +125,6 @@ const Setting = {
           type: 'item',
           url: '/panel/model_info',
           icon: icons.IconInfo,
-          breadcrumbs: false,
-          isAdmin: true
-        },
-        {
-          id: 'telegram',
-          title: 'Telegram Bot',
-          type: 'item',
-          url: '/panel/telegram',
-          icon: icons.IconBrandTelegram,
           breadcrumbs: false,
           isAdmin: true
         }
