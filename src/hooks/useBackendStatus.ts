@@ -7,11 +7,12 @@ export function useBackendStatus() {
   useEffect(() => {
     if (!isBackendAuthEnabled()) return
     const unsubscribe = subscribeBackendStatus(setStatus)
-    refreshBackendStatus()
-    window.addEventListener('focus', refreshBackendStatus)
+    const refresh = () => { void refreshBackendStatus() }
+    refresh()
+    window.addEventListener('focus', refresh)
     return () => {
       unsubscribe()
-      window.removeEventListener('focus', refreshBackendStatus)
+      window.removeEventListener('focus', refresh)
     }
   }, [])
   return status

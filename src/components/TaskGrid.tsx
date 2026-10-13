@@ -5,6 +5,7 @@ import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilt
 import TaskCard from './TaskCard'
 import { restoreServerTask } from '../lib/serverLibrary'
 import { EMPTY_GALLERY_PROMPTS } from '../lib/userGuidance'
+import { getTrashRetentionDays } from '../lib/gouoBackend'
 
 const PAGE_SIZE = 60
 
@@ -21,7 +22,7 @@ export function confirmRemoveTask(task: TaskRecord) {
   }
   setConfirmDialog({
     title: task.cloudId ? '移入回收站' : '删除任务',
-    message: task.cloudId ? '确定将这个任务移入云端回收站吗？3 天内可以恢复，期间仍占用云端空间，之后连同图片彻底删除。' : '确定要删除这个任务吗？关联的图片资源也会被清理（如果没有其他任务引用）。',
+    message: task.cloudId ? `确定将这个任务移入云端回收站吗？${getTrashRetentionDays()} 天内可以恢复，期间仍占用云端空间，之后连同图片彻底删除。` : '确定要删除这个任务吗？关联的图片资源也会被清理（如果没有其他任务引用）。',
     confirmText: task.cloudId ? '移入回收站' : '删除',
     action: () => removeTask(task),
   })

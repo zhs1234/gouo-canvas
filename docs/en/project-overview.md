@@ -118,13 +118,13 @@ The backend recalculates SHA-256 and deduplicates within each user. The database
 
 | Default limit | Value | Configuration |
 | --- | --- | --- |
-| Storage per user | 2 GiB | `GOUO_ASSET_USER_QUOTA_BYTES` |
-| Size per file | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES` |
+| Storage per user | 2 GiB | `GOUO_ASSET_USER_QUOTA_BYTES`, or Gouo settings in the admin panel |
+| Size per file | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES`, or Gouo settings in the admin panel |
 | Asset links per task | 32 | `GOUO_ASSET_MAX_TASK_FILES` |
 
 The frontend also caps metadata submissions at 32 asset links (references, masks, and outputs). Raising only the backend limit does not expand the frontend. The quota applies to user uploads; paid generated images saved by the server are not limited by it. Administrators can override storage quota for individual users.
 
-Deleted cloud artworks, canvases, conversations, and collections go to the recycle bin for 3 days. They can be restored during that time and still count toward storage; after that, an hourly cleanup job on the master node permanently deletes the records and unreferenced images. Local work not yet imported into the account exists only in the original browser and is lost if browser data is cleared or the device changes.
+Deleted cloud artworks, canvases, conversations, and collections go to the recycle bin for 3 days by default (1–30 days, configurable in the admin panel). They can be restored during that time and still count toward storage; after that, an hourly cleanup job on the master node permanently deletes the records and unreferenced images. Local work not yet imported into the account exists only in the original browser and is lost if browser data is cleared or the device changes.
 
 Sources: [db.ts](../../src/lib/db.ts), [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo-trash.go](../../server/model/gouo-trash.go), [controller/gouo_cloud.go](../../server/controller/gouo_cloud.go), [model/gouo_cloud.go](../../server/model/gouo_cloud.go).
 

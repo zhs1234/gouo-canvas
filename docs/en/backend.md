@@ -84,6 +84,7 @@ Gouo-specific features live under the **光构** (Gouo) menu: 光构设置 (Gouo
 - **一次最多生成张数** (max images per submission): 1–10. Limits how many images the client submits at once on the creation page, canvas, and Agent; each image is still billed as a single-image request. This is a client submission limit; the images per HTTP request are bounded by each model's "maximum images per request".
 - **默认 Agent 模型** (default Agent model): the chat model new conversations start with, chosen from models that qualify for the Agent (step 10 in 3.8). When unset or unavailable to the user, the first model in the catalog is used.
 - **Agent 附加提示词** (extra Agent prompt): up to 4000 characters appended after the built-in rules to add tone, brand, or business requirements. It cannot relax the billing confirmation, tool, or safety rules, and applies from the next conversation turn.
+- **云端作品库** (cloud library): the on/off switch, default per-user storage (GB), per-file upload limit (1–100 MB), and recycle-bin retention (1–30 days); see [section 5](#5-cloud-library). When raising the upload limit, also raise Nginx `client_max_body_size` (32 MB in the deployment templates) and any CDN limit.
 
 The bottom of the page shows whether registration and password sign-in are open. Change them under Settings → System (root only); the client follows them: with registration closed, **免费注册** shows "registration is not open" and the sign-in page hides its registration link; with password sign-in closed, the sign-in page says sign-in is paused.
 
@@ -185,6 +186,8 @@ GOUO_ASSET_MAX_FILE_BYTES=26214400
 GOUO_ASSET_MAX_TASK_FILES=32
 ```
 
+The library switch, default per-user storage, and per-file limit can also be changed under 光构 → 光构设置 (Gouo settings) in the admin panel. Environment variables are only initial values: once an administrator saves them in the panel, the database values win. Changes apply immediately (up to one minute across instances). `GOUO_ASSET_DIR` and `GOUO_ASSET_MAX_TASK_FILES` remain environment-only.
+
 Defaults mean:
 
 - 2 GiB per user.
@@ -196,7 +199,7 @@ Successful images are written to the library by the server when they are generat
 
 The storage quota and the 25 MiB per-file limit apply to user uploads such as references and masks. Paid generated images saved by the server are not limited by the quota (up to 64 MB each), so used storage can exceed the quota. Image results are also cached in `GOUO_ASSET_DIR/image-results` for 24 hours (4 GB total, 256 MB per result) so an interrupted request can recover its original result; include it in capacity and backup planning.
 
-Deleted artworks, canvases, conversations, and collections go to the recycle bin for 3 days. They can be restored during that time and still count toward storage. After that, a cleanup job that runs hourly on the master node permanently deletes the records and any images no longer referenced. Cloud data of deleted accounts is likewise removed after 3 days.
+Deleted artworks, canvases, conversations, and collections go to the recycle bin, for 3 days by default (1–30 days, configurable in Gouo settings). They can be restored during that time and still count toward storage. After that, a cleanup job that runs hourly on the master node permanently deletes the records and any images no longer referenced. Cloud data of deleted accounts is removed on the same schedule. After shortening the retention, items already past the new period are deleted at the next cleanup.
 
 Local-file storage is suitable for one backend instance. Multiple instances must mount the same shared filesystem or database records can point to files visible only on another instance. Gouo-specific object storage is not yet implemented.
 

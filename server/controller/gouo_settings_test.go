@@ -37,7 +37,9 @@ func TestGouoAdminSettings(t *testing.T) {
 	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
 	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
 	oldAgent, oldMax, oldPrompt := config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt
-	t.Cleanup(func() { config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt = oldAgent, oldMax, oldPrompt })
+	t.Cleanup(func() {
+		config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt = oldAgent, oldMax, oldPrompt
+	})
 
 	router := gin.New()
 	router.GET("/settings", GetGouoAdminSettings)
@@ -69,8 +71,24 @@ func TestGouoAdminSettings(t *testing.T) {
 	require.Equal(t, 4, config.GouoMaxImagesPerTask)
 	require.Equal(t, "回答简洁。\n只用中文。", config.GouoAgentSystemPrompt)
 
+	// 存储设置：保留天数生效，字节数按范围校验后写入数据库
+	config.GlobalOption.RegisterInt("GouoTrashRetentionDays", &config.GouoTrashRetentionDays)
+	oldRetention := config.GouoTrashRetentionDays
+	t.Cleanup(func() { config.GouoTrashRetentionDays = oldRetention })
+	code, _ = put(`{"GouoTrashRetentionDays":"7","GouoAssetMaxFileBytes":"52428800"}`)
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, 7, config.GouoTrashRetentionDays)
+	var maxFile model.Option
+	require.NoError(t, db.First(&maxFile, "key = ?", "GouoAssetMaxFileBytes").Error)
+	require.Equal(t, "52428800", maxFile.Value)
+
 	// 任一项不合法时整批不保存；不接受白名单以外的系统设置
 	for _, body := range []string{
+		`{"GouoTrashRetentionDays":"0"}`,
+		`{"GouoTrashRetentionDays":"31"}`,
+		`{"GouoAssetMaxFileBytes":"104857601"}`,
+		`{"GouoAssetUserQuotaBytes":"1024"}`,
+		`{"GouoCloudLibraryEnabled":"on"}`,
 		`{"GouoAgentEnabled":"yes"}`,
 		`{"GouoMaxImagesPerTask":"0"}`,
 		`{"GouoMaxImagesPerTask":"11"}`,

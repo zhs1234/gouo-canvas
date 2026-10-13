@@ -4,7 +4,7 @@ import { useAgentStore } from '../../stores/agentStore'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { fileToDataUrl } from '../../lib/dataUrl'
 import { storeImageWithSize } from '../../lib/db'
-import { isBackendAuthEnabled } from '../../lib/gouoBackend'
+import { getMaxUploadBytes, isBackendAuthEnabled } from '../../lib/gouoBackend'
 import { executeAgentTool } from '../../lib/agent/tools'
 import type { AgentConversation, AgentToolCall } from '../../lib/agent/types'
 import BackendModelSelector from '../BackendModelSelector'
@@ -196,7 +196,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
   const attachFiles = async (files: File[]) => {
     if (!conversation || running || uploading) return
     if (files.length + conversation.referenceImageIds.length > 16) { useStore.getState().showToast('最多添加 16 张参考图', 'error'); return }
-    if (files.some((file) => !/^image\/(png|jpeg|webp|gif)$/.test(file.type) || file.size > 25 * 1024 * 1024)) { useStore.getState().showToast('请上传 PNG、JPEG、WebP 或 GIF 图片，单张不超过 25 MB', 'error'); return }
+    if (files.some((file) => !/^image\/(png|jpeg|webp|gif)$/.test(file.type) || file.size > getMaxUploadBytes())) { useStore.getState().showToast(`请上传 PNG、JPEG、WebP 或 GIF 图片，单张不超过 ${Math.round(getMaxUploadBytes() / 1024 / 1024)} MB`, 'error'); return }
     setUploading(true)
     try {
       const images = await Promise.all(files.map(async (file) => storeImageWithSize(await fileToDataUrl(file))))

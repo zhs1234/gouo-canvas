@@ -5,7 +5,7 @@ import { App, Button, Modal } from 'antd'
 import { Brush, Crop, Download, ImagePlus, Play, Settings2 } from 'lucide-react'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { useStore, ensureImageCached } from '../../store'
-import { getImageModels, isBackendAuthEnabled, type GouoImageModel } from '../../lib/gouoBackend'
+import { getImageModels, getTrashRetentionDays, isBackendAuthEnabled, type GouoImageModel } from '../../lib/gouoBackend'
 import { storeImage, storeImageWithSize } from '../../lib/db'
 import { loadImage } from '../../lib/canvasImage'
 import {
@@ -818,7 +818,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           onDeleteProject={() =>
             modal.confirm({
               title: '将画布移入回收站？',
-              content: '作品素材会保留，画布可在 3 天内从回收站恢复，之后彻底删除。',
+              content: `作品素材会保留，画布可在 ${getTrashRetentionDays()} 天内从回收站恢复，之后彻底删除。`,
               okText: '移入回收站',
               cancelText: '取消',
               onOk: async () => {

@@ -2,7 +2,7 @@ import type { AgentConversation, CanvasProject } from '../types'
 import { deleteImageIfUnreferenced, useStore } from '../store'
 import { deleteCloudAssetMapItems, deleteDocuments, getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
 import { getDocumentImageIds } from './documentAssets'
-import { backendRequest, GouoAssetMissingError, GouoConflictError, GOUO_TRASH_RETENTION_MS, type GouoCloudAsset } from './gouoBackend'
+import { backendRequest, getLoadedTrashRetentionMs, GouoAssetMissingError, GouoConflictError, refreshBackendStatus, type GouoCloudAsset } from './gouoBackend'
 import { downloadAsset, uploadImage } from './serverLibrary'
 import { isStorageScopeCurrent } from './storageScope'
 import { serializeCanvasProject, validateCanvasProject } from './canvas/document'
@@ -202,9 +202,12 @@ async function pullDocuments(kind: Kind) {
   }
 }
 
-// 回收站中的画布和会话保留 3 天后彻底删除，与服务端清理保持一致。
+// 回收站中的画布和会话到期后彻底删除，与服务端清理保持一致；保留期未知时不清理
 async function purgeExpiredDocuments() {
-  const cutoff = Date.now() - GOUO_TRASH_RETENTION_MS
+  await refreshBackendStatus()
+  const retention = getLoadedTrashRetentionMs()
+  if (!retention) return
+  const cutoff = Date.now() - retention
   for (const kind of KINDS) {
     const records: Document[] = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
     const expired = records.filter((doc) => doc.hiddenAt && doc.hiddenAt < cutoff)

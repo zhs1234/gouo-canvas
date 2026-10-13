@@ -17,7 +17,8 @@ import {
   fetchCloudAssetContent,
   getCloudStorage,
   GouoAssetMissingError,
-  GOUO_TRASH_RETENTION_MS,
+  getLoadedTrashRetentionMs,
+  refreshBackendStatus,
   hideCloudCollection,
   isBackendAuthEnabled,
   listCloudCollections,
@@ -278,9 +279,10 @@ export function refreshServerLibrary(): Promise<void> {
       await loadCollections()
       await loadTasks(false)
       await loadTasks(true)
-      // 回收站中的作品保留 3 天后彻底删除，与服务端清理保持一致
-      const cutoff = Date.now() - GOUO_TRASH_RETENTION_MS
-      const expired = useStore.getState().tasks.filter((task) => task.cloudHiddenAt && task.cloudHiddenAt < cutoff)
+      // 回收站中的作品到期后彻底删除，与服务端清理保持一致；保留期未知时不清理
+      await refreshBackendStatus()
+      const retention = getLoadedTrashRetentionMs()
+      const expired = retention ? useStore.getState().tasks.filter((task) => task.cloudHiddenAt && task.cloudHiddenAt < Date.now() - retention) : []
       if (expired.length) await purgeLocalTasks(expired.map((task) => task.id))
     } catch (err) {
       showError('读取云端作品失败', err)

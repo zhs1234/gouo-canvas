@@ -25,7 +25,7 @@ func TestPurgeGouoTrashAfterRetention(t *testing.T) {
 	config.GouoAssetDir = t.TempDir()
 	t.Cleanup(func() { config.GouoAssetDir = oldDir })
 	now := time.Now()
-	expired := now.Add(-GouoTrashRetention - time.Hour).UnixMilli()
+	expired := now.Add(-GouoTrashRetention() - time.Hour).UnixMilli()
 	recent := now.Add(-time.Hour).UnixMilli()
 
 	asset := func(userID int, id string, createdAt int64) {
@@ -54,7 +54,7 @@ func TestPurgeGouoTrashAfterRetention(t *testing.T) {
 	// 用户 2 已删除超过保留期：全部云端数据清除
 	asset(2, "deleted-user-asset", recent)
 	task(2, "deleted-user-task", 0, "deleted-user-asset")
-	require.NoError(t, DB.Model(&User{}).Where("id = ?", 2).Update("deleted_at", now.Add(-GouoTrashRetention-time.Hour)).Error)
+	require.NoError(t, DB.Model(&User{}).Where("id = ?", 2).Update("deleted_at", now.Add(-GouoTrashRetention()-time.Hour)).Error)
 
 	require.NoError(t, PurgeGouoTrash(now))
 
@@ -92,7 +92,7 @@ func TestPurgeGouoTrashKeepsReuploadedAsset(t *testing.T) {
 	config.GouoAssetDir = t.TempDir()
 	t.Cleanup(func() { config.GouoAssetDir = oldDir })
 	now := time.Now()
-	expired := now.Add(-GouoTrashRetention - time.Hour).UnixMilli()
+	expired := now.Add(-GouoTrashRetention() - time.Hour).UnixMilli()
 	var buf bytes.Buffer
 	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))))
 	asset, _, err := SaveGouoAssetBytes(1, buf.Bytes(), "a.png", false)
@@ -123,7 +123,7 @@ func TestPurgeGouoTrashContinuesAfterOneUserFails(t *testing.T) {
 	oldDir := config.GouoAssetDir
 	config.GouoAssetDir = t.TempDir()
 	t.Cleanup(func() { config.GouoAssetDir = oldDir })
-	expired := time.Now().Add(-GouoTrashRetention - time.Hour).UnixMilli()
+	expired := time.Now().Add(-GouoTrashRetention() - time.Hour).UnixMilli()
 	for _, userID := range []int{1, 2} {
 		id := fmt.Sprintf("asset-%d", userID)
 		path := filepath.Join(config.GouoAssetDir, id)
@@ -151,7 +151,7 @@ func TestPurgeGouoTrashKeepsAssetTouchedDuringPurge(t *testing.T) {
 	config.GouoAssetDir = t.TempDir()
 	t.Cleanup(func() { config.GouoAssetDir = oldDir })
 	now := time.Now()
-	expired := now.Add(-GouoTrashRetention - time.Hour).UnixMilli()
+	expired := now.Add(-GouoTrashRetention() - time.Hour).UnixMilli()
 	var buf bytes.Buffer
 	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 3, 3))))
 	asset, _, err := SaveGouoAssetBytes(1, buf.Bytes(), "a.png", false)
