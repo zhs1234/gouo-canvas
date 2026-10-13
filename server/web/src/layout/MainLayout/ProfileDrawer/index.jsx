@@ -176,30 +176,6 @@ const ProfileDrawer = ({ open, onClose }) => {
             </Box>
           </Stack>
           <Divider sx={{ borderWidth: '1px', borderStyle: 'dashed', mt: 2, mb: 2 }} />
-          {/* 按钮区域 */}
-          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-            <Button
-              fullWidth
-              variant="contained"
-              color="primary"
-              sx={{
-                borderRadius: '4px',
-                py: 1,
-                textTransform: 'none',
-                fontWeight: 'normal',
-                bgcolor: theme.palette.primary.main,
-                transition: 'transform 0.2s ease-in-out, background-color 0.2s ease-in-out',
-                '&:hover': {
-                  transform: 'scale(1.05)'
-                }
-              }}
-              onClick={() => handleNavigate('/panel/topup')}
-            >
-              {t('topup')}
-            </Button>
-          </Box>
-
-          <Divider sx={{ borderWidth: '1px', borderStyle: 'dashed', mt: 2, mb: 2 }} />
 
           {/* 底部导航菜单 */}
           <Box>

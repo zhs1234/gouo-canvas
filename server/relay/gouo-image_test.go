@@ -12,15 +12,18 @@ import (
 	"mime/multipart"
 	"net/http/httptest"
 	"one-api/common/config"
+	"one-api/common/logger"
 	"one-api/model"
 	"one-api/providers/claude"
 	"one-api/providers/gemini"
+	"one-api/safty"
 	"one-api/types"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestGouoPlatformTokenFollowsAdminSettings(t *testing.T) {
@@ -62,6 +65,33 @@ func TestGouoPlatformTokenFollowsAdminSettings(t *testing.T) {
 	require.Nil(t, chat("api-user"))
 	config.GouoAgentEnabled = true
 	require.Nil(t, chat("sys_playground"))
+}
+
+func TestGouoImagePromptSafetyCheck(t *testing.T) {
+	old, oldSafe, oldTool, oldWords, oldLogger := model.PricingInstance, config.EnableSafe, config.SafeToolName, config.SafeKeyWords, logger.Logger
+	logger.Logger = zap.NewNop()
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1}}}
+	t.Cleanup(func() {
+		model.PricingInstance, config.EnableSafe, config.SafeToolName, config.SafeKeyWords, logger.Logger = old, oldSafe, oldTool, oldWords, oldLogger
+	})
+	require.NoError(t, safty.InitSaftyTools())
+	// 后台保存时末尾的空行不能把所有请求都判为违规
+	config.EnableSafe, config.SafeToolName, config.SafeKeyWords = true, "Keyword", []string{"违禁词", ""}
+	entry, err := model.PricingInstance.GetGouoModel("image-a")
+	require.NoError(t, err)
+	check := func(prompt string) *types.OpenAIErrorWithStatusCode {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/images/generations", nil)
+		c.Request.Header.Set("X-Gouo-Price-Version", entry.PriceVersion)
+		r := NewRelayImageGenerations(c)
+		r.request = types.ImageRequest{Model: "image-a", Prompt: prompt, N: 1}
+		r.setOriginalModel("image-a")
+		return prepareGouoImage(c, r)
+	}
+	require.NotNil(t, check("画一张含违禁词的海报"))
+	require.Nil(t, check("画一只红色苹果"))
+	config.EnableSafe = false
+	require.Nil(t, check("画一张含违禁词的海报"))
 }
 
 func TestGouoImageRequestQuoteAndCapabilities(t *testing.T) {
