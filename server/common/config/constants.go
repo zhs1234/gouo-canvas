@@ -21,6 +21,9 @@ var TopUpLink = ""
 var GouoRedemptionHelp = ""
 var GouoSupportContact = ""
 
+// GouoNotice 是客户端创作页顶部的公告，留空时显示默认介绍
+var GouoNotice = ""
+
 // GouoDefaultImageModel 是客户端未手动选择模型时使用的图片模型；为空或不可用时取目录中的第一个
 var GouoDefaultImageModel = ""
 var ChatLink = ""

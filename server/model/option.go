@@ -87,6 +87,7 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterString("GouoRedemptionHelp", &config.GouoRedemptionHelp)
 	config.GlobalOption.RegisterString("GouoSupportContact", &config.GouoSupportContact)
 	config.GlobalOption.RegisterString("GouoDefaultImageModel", &config.GouoDefaultImageModel)
+	config.GlobalOption.RegisterString("GouoNotice", &config.GouoNotice)
 	config.GlobalOption.RegisterString("ChatLink", &config.ChatLink)
 	config.GlobalOption.RegisterString("ChatLinks", &config.ChatLinks)
 	config.GlobalOption.RegisterFloat("QuotaPerUnit", &config.QuotaPerUnit)

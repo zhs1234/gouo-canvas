@@ -143,6 +143,9 @@ export interface GouoBackendStatus {
   gouo_cloud_library?: boolean
   gouo_redemption_help?: string
   gouo_support_contact?: string
+  gouo_notice?: string
+  register_enabled?: boolean
+  password_login?: boolean
 }
 
 export interface GouoCloudStorage {

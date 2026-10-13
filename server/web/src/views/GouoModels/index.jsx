@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
 import {
   Alert,
   Box,
@@ -35,7 +34,6 @@ const visibility = (row) => {
 };
 
 export default function GouoModels() {
-  const isRoot = useSelector((state) => state.account.user?.role === 100);
   const [rows, setRows] = useState([]);
   const [defaultModel, setDefaultModel] = useState('');
   const [loading, setLoading] = useState(true);
@@ -87,7 +85,7 @@ export default function GouoModels() {
 
   const setDefault = async (model) => {
     try {
-      const response = await API.put('/api/option/', { key: 'GouoDefaultImageModel', value: model });
+      const response = await API.put('/api/gouo/admin/settings', { GouoDefaultImageModel: model });
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess(model ? `默认模型已设为 ${model}` : '已清除默认模型，客户端使用目录第一个');
       setDefaultModel(model);
@@ -132,7 +130,7 @@ export default function GouoModels() {
         <Button onClick={() => void load()} disabled={loading}>
           刷新
         </Button>
-        {isRoot && defaultModel && <Button onClick={() => void setDefault('')}>清除默认模型</Button>}
+        {defaultModel && <Button onClick={() => void setDefault('')}>清除默认模型</Button>}
       </Stack>
       <TableContainer>
         <Table>
@@ -208,7 +206,7 @@ export default function GouoModels() {
                           下架
                         </Button>
                       )}
-                      {isRoot && row.gouo_enabled && row.model !== defaultModel && (
+                      {row.gouo_enabled && row.model !== defaultModel && (
                         <Button size="small" onClick={() => void setDefault(row.model)}>
                           设为默认
                         </Button>

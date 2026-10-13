@@ -5,6 +5,7 @@ import { editOutputs, reuseConfig, useStore } from '../store'
 import { getAllAgentConversations, getAllCanvasProjects } from '../lib/db'
 import { INSPIRATION_TEMPLATES } from '../lib/inspirationTemplates'
 import { requestUserCenter } from '../lib/userGuidance'
+import { useBackendStatus } from '../hooks/useBackendStatus'
 import type { AgentConversation, CanvasProject } from '../types'
 import Header from './Header'
 import InputBar from './InputBar'
@@ -23,6 +24,7 @@ const InspirationLibraryPage = lazy(() => import('./InspirationLibraryModal').th
 const canvasEnabled = import.meta.env.VITE_CANVAS_ENABLED !== 'false'
 const agentEnabled = import.meta.env.VITE_AGENT_ENABLED !== 'false'
 const creationModes = [{ id: 'generate', label: '生成图片', enabled: true }, { id: 'canvas', label: '画布', enabled: canvasEnabled }, { id: 'agent', label: 'Agent', enabled: agentEnabled }].filter((item) => item.enabled)
+const NOTICE_DISMISSED_KEY = 'gouo-canvas.notice-dismissed'
 
 // 服务端邮件和支付返回的链接指向 /topup，打开用户中心的充值页
 function TopupRoute() {
@@ -184,6 +186,25 @@ export default function Workspace() {
   const [projects, setProjects] = useState<CanvasProject[]>([])
   const [conversations, setConversations] = useState<AgentConversation[]>([])
   const [banner, setBanner] = useState(true)
+  const notice = useBackendStatus()?.gouo_notice?.trim() || ''
+  // 后台公告被关闭后记住内容，公告更新时再显示；默认介绍只在本次打开期间关闭
+  const [dismissedNotice, setDismissedNotice] = useState(() => {
+    try {
+      return localStorage.getItem(NOTICE_DISMISSED_KEY) || ''
+    } catch {
+      return ''
+    }
+  })
+  const showBanner = notice ? dismissedNotice !== notice : banner
+  const closeBanner = () => {
+    if (!notice) return setBanner(false)
+    setDismissedNotice(notice)
+    try {
+      localStorage.setItem(NOTICE_DISMISSED_KEY, notice)
+    } catch (err) {
+      console.warn('记录公告关闭状态失败', err)
+    }
+  }
   const narrow = canvas ? !canvasExpanded : collapsed
   useLayoutEffect(() => { setCanvasExpanded(false) }, [canvas, location.key])
   useLayoutEffect(() => {
@@ -208,7 +229,7 @@ export default function Workspace() {
   // 浏览器后退等切换页面时，收藏夹选择窗口不应留在新页面上
   useEffect(() => { useStore.getState().closeFavoritePicker() }, [location.pathname])
   return <div className={`workspace-shell ${narrow ? 'sidebar-collapsed' : ''} ${canvas ? 'canvas-mode' : ''} ${location.pathname.startsWith('/agent') ? 'agent-mode-page' : ''}`}>
-    {banner && location.pathname === '/generate' && !canvas && <div className="workspace-announcement"><span>光构创作空间</span> 把灵感构造成图像 · 生成、画布与 Agent，一处完成<button aria-label="关闭提示" onClick={() => setBanner(false)}>×</button></div>}
+    {showBanner && location.pathname === '/generate' && !canvas && <div className="workspace-announcement">{notice ? <><span>公告</span> {notice}</> : <><span>光构创作空间</span> 把灵感构造成图像 · 生成、画布与 Agent，一处完成</>}<button aria-label="关闭提示" onClick={closeBanner}>×</button></div>}
     <aside className="workspace-sidebar" aria-label="主导航">
       <Link to="/generate" className="workspace-brand" aria-label="光构首页"><img src={BRAND.logoUrl} alt="" /><strong>{BRAND.name}<small>Gouo Canvas</small></strong></Link>
       <button className="sidebar-toggle" aria-label={narrow ? '展开导航' : '收起导航'} onClick={() => canvas ? setCanvasExpanded(narrow) : setCollapsed(!narrow)}><ChevronLeftIcon className="h-4 w-4" /></button>

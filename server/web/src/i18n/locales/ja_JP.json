@@ -630,6 +630,7 @@
   },
   "paySetting": "支払い設定",
   "gouo": "光構",
+  "gouo_settings": "Gouo 設定",
   "payment": "支払い",
   "paymentGatewayPage": {
     "createPayment": "支払いを作成",

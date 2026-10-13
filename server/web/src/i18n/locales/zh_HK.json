@@ -634,6 +634,7 @@
   },
   "paySetting": "支付設定",
   "gouo": "光構",
+  "gouo_settings": "光構設置",
   "payment": "付款",
   "paymentGatewayPage": {
     "createPayment": "新建支付",

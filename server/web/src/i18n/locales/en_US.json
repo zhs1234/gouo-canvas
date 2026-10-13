@@ -642,6 +642,7 @@
   },
   "paySetting": "Payment settings",
   "gouo": "Gouo",
+  "gouo_settings": "Gouo settings",
   "payment": "Payment",
   "paymentGatewayPage": {
     "createPayment": "Create Payment",
