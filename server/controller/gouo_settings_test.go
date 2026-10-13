@@ -37,7 +37,9 @@ func TestGouoAdminSettings(t *testing.T) {
 	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
 	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
 	oldAgent, oldMax, oldPrompt := config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt
-	t.Cleanup(func() { config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt = oldAgent, oldMax, oldPrompt })
+	t.Cleanup(func() {
+		config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt = oldAgent, oldMax, oldPrompt
+	})
 
 	router := gin.New()
 	router.GET("/settings", GetGouoAdminSettings)
