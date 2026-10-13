@@ -144,8 +144,24 @@ func gouoDocumentEnabled(c *gin.Context) bool {
 	return false
 }
 
-func PutGouoDocument(c *gin.Context) {
+// 后台关闭画布或 Agent 后不再接收对应文档的新内容；读取和移入回收站仍可用，客户端本地改动会在重新开启后同步
+func gouoDocumentWritable(c *gin.Context) bool {
 	if !gouoDocumentEnabled(c) {
+		return false
+	}
+	if gouoDocumentKind(c) == "canvas" && !config.GouoCanvasEnabled {
+		gouoFail(c, http.StatusForbidden, "canvas_disabled", "运营方已关闭画布")
+		return false
+	}
+	if gouoDocumentKind(c) == "conversation" && !config.GouoAgentEnabled {
+		gouoFail(c, http.StatusForbidden, "agent_disabled", "运营方已关闭 Agent")
+		return false
+	}
+	return true
+}
+
+func PutGouoDocument(c *gin.Context) {
+	if !gouoDocumentWritable(c) {
 		return
 	}
 	clientID := strings.TrimSpace(c.Param("id"))
@@ -305,7 +321,11 @@ func HideGouoDocument(c *gin.Context)    { setGouoDocumentHidden(c, true) }
 func RestoreGouoDocument(c *gin.Context) { setGouoDocumentHidden(c, false) }
 
 func setGouoDocumentHidden(c *gin.Context, hidden bool) {
-	if !gouoDocumentEnabled(c) {
+	allowed := gouoDocumentWritable
+	if hidden {
+		allowed = gouoDocumentEnabled
+	}
+	if !allowed(c) {
 		return
 	}
 	var input struct {

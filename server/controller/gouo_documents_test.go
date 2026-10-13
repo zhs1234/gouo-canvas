@@ -65,6 +65,17 @@ func TestGouoDocumentAPIValidationConflictAndAssets(t *testing.T) {
 	require.Contains(t, request("GET", "/canvases?cursor=", 1, nil).Body.String(), `"revision":2`)
 	require.Equal(t, http.StatusConflict, request("POST", "/canvases/project/restore", 1, map[string]int{"expected_revision": 1}).Code)
 	require.Equal(t, http.StatusOK, request("POST", "/canvases/project/restore", 1, map[string]int{"expected_revision": 2}).Code)
+	// 后台关闭画布或 Agent 后不能再写入或恢复对应文档，仍可读取和移入回收站
+	oldCanvas, oldAgent := config.GouoCanvasEnabled, config.GouoAgentEnabled
+	config.GouoCanvasEnabled, config.GouoAgentEnabled = false, false
+	t.Cleanup(func() { config.GouoCanvasEnabled, config.GouoAgentEnabled = oldCanvas, oldAgent })
+	require.Contains(t, request("PUT", "/canvases/project", 1, input).Body.String(), "canvas_disabled")
+	require.Contains(t, request("PUT", "/conversations/project", 1, input).Body.String(), "agent_disabled")
+	require.Equal(t, http.StatusOK, request("GET", "/canvases/project", 1, nil).Code)
+	require.Equal(t, http.StatusOK, request("POST", "/canvases/project/hide", 1, map[string]int{"expected_revision": 3}).Code)
+	require.Equal(t, http.StatusForbidden, request("POST", "/canvases/project/restore", 1, map[string]int{"expected_revision": 4}).Code)
+	config.GouoCanvasEnabled, config.GouoAgentEnabled = true, true
+	require.Equal(t, http.StatusOK, request("POST", "/canvases/project/restore", 1, map[string]int{"expected_revision": 4}).Code)
 	for _, document := range []any{
 		map[string]any{"schemaVersion": 2},
 		map[string]any{"schemaVersion": 1, "nodes": []any{map[string]any{"metadata": map[string]string{"imageId": "missing-image"}}}},

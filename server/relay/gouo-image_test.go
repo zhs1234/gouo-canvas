@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"mime/multipart"
 	"net/http/httptest"
+	"one-api/common/config"
 	"one-api/model"
 	"one-api/types"
 	"strings"
@@ -19,6 +20,47 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGouoPlatformTokenFollowsAdminSettings(t *testing.T) {
+	old, oldMax, oldAgent := model.PricingInstance, config.GouoMaxImagesPerTask, config.GouoAgentEnabled
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 4}}}
+	config.GouoMaxImagesPerTask, config.GouoAgentEnabled = 2, false
+	t.Cleanup(func() {
+		model.PricingInstance, config.GouoMaxImagesPerTask, config.GouoAgentEnabled = old, oldMax, oldAgent
+	})
+	entry, err := model.PricingInstance.GetGouoModel("image-a")
+	require.NoError(t, err)
+	image := func(tokenName string, n int, index string) *types.OpenAIErrorWithStatusCode {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/images/generations", nil)
+		c.Request.Header.Set("X-Gouo-Price-Version", entry.PriceVersion)
+		c.Request.Header.Set("X-Gouo-Request-Index", index)
+		c.Set("token_name", tokenName)
+		r := NewRelayImageGenerations(c)
+		r.request = types.ImageRequest{Model: "image-a", N: n}
+		r.setOriginalModel("image-a")
+		return prepareGouoImage(c, r)
+	}
+	// 客户端按作品拆成多次请求，单次数量和作品内序号都不能超过后台设置；普通 API 用户只受模型上限约束
+	require.Nil(t, image("sys_playground", 2, ""))
+	require.Equal(t, "image_task_limit", image("sys_playground", 3, "").Code)
+	require.Nil(t, image("sys_playground", 1, "1"))
+	require.Equal(t, "image_task_limit", image("sys_playground", 1, "2").Code)
+	require.Nil(t, image("api-user", 4, "3"))
+
+	chat := func(tokenName string) *types.OpenAIErrorWithStatusCode {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+		c.Set("token_name", tokenName)
+		r := NewRelayImageGenerations(c)
+		r.setOriginalModel("gpt-4o")
+		return prepareGouoImage(c, r)
+	}
+	require.Equal(t, "agent_disabled", chat("sys_playground").Code)
+	require.Nil(t, chat("api-user"))
+	config.GouoAgentEnabled = true
+	require.Nil(t, chat("sys_playground"))
+}
 
 func TestGouoImageRequestQuoteAndCapabilities(t *testing.T) {
 	old := model.PricingInstance

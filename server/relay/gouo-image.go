@@ -98,6 +98,10 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		if model.PricingInstance.GetPrice(relay.getOriginalModel()).GouoEnabled {
 			return common.StringErrorWrapperLocal("此模型只能通过图片生成接口调用", "image_model_endpoint", http.StatusBadRequest)
 		}
+		// 光构客户端只有 Agent 走文本接口，后台关闭 Agent 后不能再用平台令牌直接调用
+		if !config.GouoAgentEnabled && c.GetString("token_name") == "sys_playground" {
+			return common.StringErrorWrapperLocal("运营方已关闭 Agent", "agent_disabled", http.StatusForbidden)
+		}
 		return nil
 	}
 	// 表单字段重复时，校验和计费用的是第一个值，转发给上游的却是全部值（上游常取最后一个），可绕过输出数量上限等检查
@@ -145,6 +149,13 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	}
 	if n < 1 || n > entry.MaxOutputs {
 		return common.StringErrorWrapperLocal("单次输出数量超过模型限制", "image_output_limit", http.StatusBadRequest)
+	}
+	// 光构客户端把一个作品拆成多次请求，按作品内序号核对后台设置的每次最多张数；普通 API 用户只受模型上限约束
+	if c.GetString("token_name") == "sys_playground" {
+		index, _ := strconv.Atoi(c.GetHeader("X-Gouo-Request-Index"))
+		if n > config.GouoMaxImagesPerTask || index >= config.GouoMaxImagesPerTask {
+			return common.StringErrorWrapperLocal(fmt.Sprintf("一次最多生成 %d 张", config.GouoMaxImagesPerTask), "image_task_limit", http.StatusBadRequest)
+		}
 	}
 	if (edit && !entry.Reference) || (mask && !entry.Mask) {
 		return common.StringErrorWrapperLocal("此模型不支持当前编辑操作，请重新选择", "image_capability_unavailable", http.StatusBadRequest)
