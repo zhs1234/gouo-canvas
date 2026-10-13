@@ -329,14 +329,14 @@ func UpdateGouoAdminModel(c *gin.Context) {
 		price = model.Price{Model: id, Type: model.TimesPriceType, ChannelType: config.ChannelTypeUnknown}
 	}
 	// 同一个模型不能同时作为图片模型和 Agent 模型，否则会从另一边的目录里消失
+	// 直接读数据库：多实例部署时本实例的价格缓存最多落后 1 分钟，可能还没看到别的实例刚上架的 Agent
 	if input.Enabled && !price.GouoEnabled {
-		info := price.ModelInfo
-		if info == nil {
-			if stored, err := model.GetModelInfoByModel(id); err == nil {
-				info = stored.ToResponse()
-			}
+		stored, err := model.GetModelInfoByModel(id)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			gouoFail(c, http.StatusInternalServerError, "model_info_unavailable", "读取模型资料失败")
+			return
 		}
-		if gouoAgentListed(info) {
+		if err == nil && gouoAgentListed(stored.ToResponse()) {
 			gouoFail(c, http.StatusBadRequest, "agent_model_listed", "该模型已作为 Agent 模型上架，请先在 Agent 模型里下架")
 			return
 		}

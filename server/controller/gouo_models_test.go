@@ -365,6 +365,11 @@ func TestGouoAdminModelKindSeparation(t *testing.T) {
 	require.False(t, model.PricingInstance.Prices["chat-agent"].GouoEnabled)
 	// 在 Agent 里下架后可以启用；启用后反过来也不能再上架为 Agent
 	require.Equal(t, http.StatusOK, update("/agent-models", `{"model":"chat-agent","listed":false}`).Code)
+	// 别的实例刚重新上架、本实例价格缓存还没刷新时，也以数据库为准
+	require.NotNil(t, model.PricingInstance.Prices["chat-agent"].ModelInfo)
+	require.NoError(t, db.Model(&model.ModelInfo{}).Where("model = ?", "chat-agent").Update("tags", `["tools"]`).Error)
+	require.Equal(t, http.StatusBadRequest, update("/models", `{"model":"chat-agent","gouo_enabled":true,"gouo_price_cny":0.1,"gouo_max_outputs":1}`).Code)
+	require.NoError(t, db.Model(&model.ModelInfo{}).Where("model = ?", "chat-agent").Update("tags", `[]`).Error)
 	require.Equal(t, http.StatusOK, update("/models", `{"model":"chat-agent","gouo_enabled":true,"gouo_price_cny":0.1,"gouo_max_outputs":1}`).Code)
 	require.Equal(t, "image", kinds("/models")["chat-agent"])
 	require.NotContains(t, kinds("/agent-models"), "chat-agent")
