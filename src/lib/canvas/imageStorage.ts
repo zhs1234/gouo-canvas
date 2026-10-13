@@ -1,4 +1,3 @@
-import { ensureImageCached } from '../../store'
 import { getImage, getImageThumbnail, getStoredFreshImageThumbnail, storeImageWithSize } from '../db'
 import { fileToDataUrl } from '../dataUrl'
 import { loadImage } from '../canvasImage'
@@ -89,13 +88,6 @@ export async function uploadCanvasImage(file: File) {
     mimeType: file.type,
     status: 'success' as const,
   }
-}
-
-export async function imageToDataUrl(image: { storageKey?: string; url?: string }) {
-  if (!image.storageKey) throw new Error('图片缺少素材 ID，请重新导入')
-  const dataUrl = await ensureImageCached(image.storageKey)
-  if (!dataUrl) throw new Error('无法读取原图，请检查云同步状态')
-  return dataUrl
 }
 
 export function displayCanvasNodes(nodes: CanvasNodeData[]): CanvasNodeData[] {

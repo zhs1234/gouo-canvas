@@ -1,5 +1,5 @@
 // 基于 basketikun/infinite-canvas (MIT)，来源及适配说明见 UPSTREAM.md。
-import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type ConnectionHandle } from './types'
+import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from './types'
 
 export function nodeBounds(nodes: CanvasNodeData[]) {
   return nodes.reduce(
@@ -131,22 +131,6 @@ export function applyUngroupSelection(selectedIds: Set<string>, nodes: CanvasNod
     })
   const next = withoutRemoved(updated, connections, new Set([...flattenedGroupIds, ...emptyGroupIds(updated, formerGroupIds)]))
   return { ...next, selectedIds: next.nodes.filter((node) => selectedIds.has(node.id) || releasedIds.has(node.id)).map((node) => node.id) }
-}
-
-export function findContainingGroupId(node: CanvasNodeData, nodes: CanvasNodeData[]) {
-  // Called once per moved node when a drag ends, so avoid copying the node list each time.
-  for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    const group = nodes[index]
-    if (group.type === CanvasNodeType.Group && group.id !== node.id && containsCenter(group, node)) return group.id
-  }
-  return undefined
-}
-
-export function getConnectionTargetAnchor(node: CanvasNodeData, current: ConnectionHandle) {
-  return {
-    x: current.handleType === 'source' ? node.position.x : node.position.x + node.width,
-    y: node.position.y + node.height / 2,
-  }
 }
 
 export function normalizeConnection(firstNodeId: string, secondNodeId: string, nodes: CanvasNodeData[], firstHandleType: 'source' | 'target') {

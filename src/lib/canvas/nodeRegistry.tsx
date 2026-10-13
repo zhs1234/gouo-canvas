@@ -11,7 +11,6 @@ interface NodeDefinition {
   defaultSize: { width: number; height: number }
   defaultMetadata: CanvasNodeMetadata
   minimapColor?: string
-  showInCreateMenu?: boolean
   hasSourceHandle?: boolean
   interactionToggle?: boolean
   transparentBackground?: boolean
@@ -19,7 +18,7 @@ interface NodeDefinition {
   keepAspectRatio?: (node: CanvasNodeData) => boolean
 }
 
-const definitions: NodeDefinition[] = [
+export const NODE_DEFINITIONS: NodeDefinition[] = [
   {
     type: CanvasNodeType.Text,
     title: '文本',
@@ -56,19 +55,10 @@ const definitions: NodeDefinition[] = [
 ]
 
 export function getNodeDefinition(type: string) {
-  return definitions.find((def) => def.type === type)
-}
-export function listNodeDefinitions() {
-  return definitions
+  return NODE_DEFINITIONS.find((def) => def.type === type)
 }
 export function isRegisteredNodeType(type: string) {
-  return definitions.some((def) => def.type === type)
-}
-export function getNodePluginId(_type: string) {
-  return 'builtin'
-}
-export function useNodeRegistryVersion() {
-  return 0
+  return NODE_DEFINITIONS.some((def) => def.type === type)
 }
 export function getNodeSpec(type: string) {
   const def = getNodeDefinition(type)

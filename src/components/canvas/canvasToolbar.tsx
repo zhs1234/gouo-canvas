@@ -13,7 +13,6 @@ import {
   Moon,
   MousePointer2,
   Palette,
-  Puzzle,
   Redo2,
   Settings2,
   Square,
@@ -25,9 +24,8 @@ import {
 } from 'lucide-react'
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from '../../lib/canvas/theme'
-import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from '../../lib/canvas/nodeRegistry'
 import { useThemeStore } from '../../lib/canvas/uiStore'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/canvas/i18n'
 
 export function CanvasToolbar({
   selectedCount,
@@ -40,7 +38,6 @@ export function CanvasToolbar({
   onAddText,
   onAddConfig,
   onAddGroup,
-  onAddExtensionNode,
   onUndo,
   onRedo,
   onUpload,
@@ -60,7 +57,6 @@ export function CanvasToolbar({
   onAddText: () => void
   onAddConfig: () => void
   onAddGroup: () => void
-  onAddExtensionNode: (type: string) => void
   onUndo: () => void
   onRedo: () => void
   onUpload: () => void
@@ -80,11 +76,6 @@ export function CanvasToolbar({
   const [tipX, setTipX] = useState(0)
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [panelX, setPanelX] = useState(0)
-  const [extensionsOpen, setExtensionsOpen] = useState(false)
-  const [extPanelX, setExtPanelX] = useState(0)
-  // Keep extension plugin nodes synchronized with registry changes.
-  useNodeRegistryVersion()
-  const extensionDefs = listNodeDefinitions().filter((def) => def.showInCreateMenu !== false && getNodePluginId(def.type) !== 'builtin')
   const dockStyle = {
     background: theme.toolbar.panel,
     borderColor: theme.toolbar.border,
@@ -95,18 +86,17 @@ export function CanvasToolbar({
   const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText }
   const tip = hovered ? toolLabel(hovered, t) : ''
 
-  // Close extension-node and canvas-appearance popovers when clicking outside the toolbar and its panels.
+  // Close the canvas-appearance popover when clicking outside the toolbar and its panels.
   useEffect(() => {
-    if (!extensionsOpen && !appearanceOpen) return
+    if (!appearanceOpen) return
     const handlePointerDown = (event: PointerEvent) => {
       if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setExtensionsOpen(false)
         setAppearanceOpen(false)
       }
     }
     document.addEventListener('pointerdown', handlePointerDown, true)
     return () => document.removeEventListener('pointerdown', handlePointerDown, true)
-  }, [extensionsOpen, appearanceOpen])
+  }, [appearanceOpen])
 
   return (
     <div ref={rootRef} className="canvas-dock pointer-events-none absolute bottom-5 z-50 flex justify-center">
@@ -205,26 +195,6 @@ export function CanvasToolbar({
         >
           <Group className="size-[18px]" />
         </ToolbarButton>
-        {extensionDefs.length ? (
-          <ToolbarButton
-            id="tool-extensions"
-            label={t('canvas.toolbar.extensions')}
-            active={extensionsOpen}
-            hovered={hovered}
-            activeStyle={activeStyle}
-            hoverStyle={hoverStyle}
-            wrapRef={wrapRef}
-            onTipX={setTipX}
-            onHover={setHovered}
-            onClick={(event) => {
-              setExtPanelX(getTipX(wrapRef.current, event.currentTarget))
-              setAppearanceOpen(false)
-              setExtensionsOpen((value) => !value)
-            }}
-          >
-            <Puzzle className="size-[18px]" />
-          </ToolbarButton>
-        ) : null}
         <ToolbarButton
           id="tool-upload"
           label={t('canvas.toolbar.upload')}
@@ -250,7 +220,6 @@ export function CanvasToolbar({
           onHover={setHovered}
           onClick={(event) => {
             setPanelX(getTipX(wrapRef.current, event.currentTarget))
-            setExtensionsOpen(false)
             setAppearanceOpen((value) => !value)
           }}
         >
@@ -289,36 +258,6 @@ export function CanvasToolbar({
           <Eraser className="size-[18px]" />
         </ToolbarButton>
       </div>
-
-      {extensionsOpen && extensionDefs.length ? (
-        <div
-          className="thin-scrollbar pointer-events-auto absolute bottom-[72px] z-30 max-h-[50vh] w-[240px] -translate-x-1/2 overflow-y-auto rounded-xl border p-2 shadow-xl backdrop-blur"
-          style={{ left: extPanelX || '50%', background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item }}
-        >
-          <div className="px-1.5 pb-1.5 text-[11px] font-medium opacity-50">{t('canvas.toolbar.extensions')}</div>
-          <div className="grid gap-0.5">
-            {extensionDefs.map((def) => (
-              <button
-                key={def.type}
-                type="button"
-                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition"
-                style={{ color: theme.toolbar.item }}
-                onMouseEnter={(event) => (event.currentTarget.style.background = theme.toolbar.itemHover)}
-                onMouseLeave={(event) => (event.currentTarget.style.background = 'transparent')}
-                onClick={() => {
-                  onAddExtensionNode(def.type)
-                  setExtensionsOpen(false)
-                }}
-              >
-                <span className="grid size-7 shrink-0 place-items-center rounded-md text-base" style={{ background: theme.toolbar.itemHover }}>
-                  {def.icon}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{def.title}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {appearanceOpen ? (
         <div
@@ -488,11 +427,8 @@ function toolLabel(id: string, t: (key: string) => string) {
   if (id === 'tool-redo') return t('canvas.redo')
   if (id === 'tool-text') return t('canvas.toolbar.text')
   if (id === 'tool-image') return t('canvas.toolbar.image')
-  if (id === 'tool-video') return t('canvas.toolbar.video')
-  if (id === 'tool-audio') return t('canvas.toolbar.audio')
   if (id === 'tool-config') return t('canvas.toolbar.config')
   if (id === 'tool-group') return t('canvas.toolbar.group')
-  if (id === 'tool-extensions') return t('canvas.toolbar.extensions')
   if (id === 'tool-upload') return t('canvas.toolbar.upload')
   if (id === 'tool-style') return t('canvas.toolbar.appearance')
   if (id === 'tool-delete') return t('canvas.deleteSelected')

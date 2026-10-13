@@ -1,3 +1,4 @@
+import { isRecord } from '../storeInputNormalization'
 import { getNodeSpec, isRegisteredNodeType } from './nodeRegistry'
 import type { CanvasNodeData, CanvasNodeMetadata, CanvasNodeTypeId, CanvasProject, Position } from './types'
 
@@ -12,10 +13,6 @@ export function createCanvasNode(type: CanvasNodeTypeId, position: Position, met
     height: spec.height,
     metadata: { ...spec.metadata, ...metadata },
   }
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function validateCanvasTitle(title: string) {

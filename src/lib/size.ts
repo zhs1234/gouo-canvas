@@ -13,7 +13,7 @@ function roundToMultiple(value: number, multiple: number) {
   return Math.max(multiple, Math.round(value / multiple) * multiple)
 }
 
-function floorToMultiple(value: number, multiple: number) {
+export function floorToMultiple(value: number, multiple: number) {
   return Math.max(multiple, Math.floor(value / multiple) * multiple)
 }
 

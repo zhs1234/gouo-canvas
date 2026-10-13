@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 import { Group, Ungroup } from 'lucide-react'
 import { Tooltip } from 'antd'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/canvas/i18n'
 
 import { canvasThemes } from '../../lib/canvas/theme'
 import { nodeBounds } from '../../lib/canvas/nodeGeometry'

@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { App, Button, ConfigProvider, Input, theme as antTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { I18nextProvider } from 'react-i18next'
 import { ArrowLeft, Download, Plus, RotateCcw, Search, Trash2, Upload } from 'lucide-react'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { useThemeStore } from '../../lib/canvas/uiStore'
 import { exportCanvasProjects, importCanvasArchive } from '../../lib/canvas/export'
 import { CanvasEditor } from './canvasEditor'
-import i18n from '../../lib/canvas/i18n'
 import { getTrashRetentionDays } from '../../lib/gouoBackend'
 import './canvas.css'
 
@@ -21,22 +19,20 @@ export default function CanvasWorkspace(props: CanvasWorkspaceProps) {
   const colorTheme = useThemeStore((state) => state.theme)
   const rootRef = useRef<HTMLDivElement>(null)
   return (
-    <I18nextProvider i18n={i18n}>
-      <ConfigProvider
-        locale={zhCN}
-        theme={{
-          algorithm: colorTheme === 'dark' ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
-          token: { colorPrimary: '#5b8fff', borderRadius: 10, fontFamily: 'inherit' },
-        }}
-        getPopupContainer={() => rootRef.current || document.body}
-      >
-        <div ref={rootRef} className={`canvas-workspace h-full min-h-0 w-full ${colorTheme === 'dark' ? 'dark' : ''}`} data-theme={colorTheme}>
-          <App className="h-full min-h-0">
-            <CanvasContent {...props} />
-          </App>
-        </div>
-      </ConfigProvider>
-    </I18nextProvider>
+    <ConfigProvider
+      locale={zhCN}
+      theme={{
+        algorithm: colorTheme === 'dark' ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
+        token: { colorPrimary: '#5b8fff', borderRadius: 10, fontFamily: 'inherit' },
+      }}
+      getPopupContainer={() => rootRef.current || document.body}
+    >
+      <div ref={rootRef} className={`canvas-workspace h-full min-h-0 w-full ${colorTheme === 'dark' ? 'dark' : ''}`} data-theme={colorTheme}>
+        <App className="h-full min-h-0">
+          <CanvasContent {...props} />
+        </App>
+      </div>
+    </ConfigProvider>
   )
 }
 

@@ -94,21 +94,6 @@ export function clearTasks(): Promise<undefined> {
   return dbTransaction(STORE_TASKS, 'readwrite', (s) => s.clear())
 }
 
-export function replaceTasks(tasks: TaskRecord[]): Promise<undefined> {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_TASKS, 'readwrite')
-        const store = tx.objectStore(STORE_TASKS)
-        store.clear()
-        for (const task of tasks) store.put(task)
-        tx.oncomplete = () => resolve(undefined)
-        tx.onerror = () => reject(tx.error)
-        tx.onabort = () => reject(tx.error)
-      }),
-  )
-}
-
 // 整批恢复共用一个事务，冲突或空间不足时不能留下半套任务和图片。
 export async function importTaskData(tasks: TaskRecord[], images: StoredImage[], thumbnails: StoredImageThumbnail[], documents?: { canvases: CanvasProject[]; conversations: AgentConversation[] }) {
   const db = await openDB()

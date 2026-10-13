@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { App, Input, Select } from 'antd'
 import { Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, ListChecks, Search, Settings2, Square, Type } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/canvas/i18n'
 import { useStore } from '../../store'
 import { INSPIRATION_PROMPTS } from '../../lib/inspirationPrompts'
 import { canvasThemes, type CanvasTheme } from '../../lib/canvas/theme'
