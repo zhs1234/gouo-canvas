@@ -2,10 +2,11 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button, Modal, Segmented, Tooltip } from 'antd'
 import { Check, X, ZoomIn, ZoomOut } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/canvas/i18n'
 
 import { useImageEditorViewport } from './useImageEditorViewport'
 import { readImageMeta } from '../../lib/canvas/imageStorage'
+import { clamp } from '../../lib/viewportTransform'
 
 export type CanvasImageCropRect = {
   x: number
@@ -299,10 +300,6 @@ function handleStyle(handle: ResizeHandle) {
   const top = handle.includes('n') ? '-6px' : handle.includes('s') ? 'calc(100% - 6px)' : 'calc(50% - 6px)'
   const left = handle.includes('w') ? '-6px' : handle.includes('e') ? 'calc(100% - 6px)' : 'calc(50% - 6px)'
   return { top, left, cursor: `${handle}-resize` }
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
 }
 
 function formatRatio(width: number, height: number) {

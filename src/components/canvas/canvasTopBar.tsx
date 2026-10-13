@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from 'lucide-react'
 import { Button, Dropdown, Modal, Tooltip } from 'antd'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/canvas/i18n'
 
 import { canvasThemes } from '../../lib/canvas/theme'
 import { useCanvasSidePanelStore } from '../../lib/canvas/uiStore'

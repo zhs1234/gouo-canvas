@@ -5,7 +5,8 @@ import { bytesToDataUrl, dataUrlToBytes } from '../dataUrl'
 import { hashDataUrl, importTaskData } from '../db'
 import { unzipWithLimits } from '../exportZip'
 import type { StoredImage } from '../../types'
-import { isRecord, referencedCanvasImageIds, serializeCanvasProject, validateCanvasProject } from './document'
+import { isRecord } from '../storeInputNormalization'
+import { referencedCanvasImageIds, serializeCanvasProject, validateCanvasProject } from './document'
 import type { CanvasNodeData, CanvasProject } from './types'
 
 export function downloadCanvasBlob(blob: Blob, filename: string) {

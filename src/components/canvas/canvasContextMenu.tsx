@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { BetweenHorizontalStart, GalleryHorizontalEnd, GalleryHorizontal, Group, Plus, Trash2, Ungroup } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/canvas/i18n'
 
 import { canvasThemes } from '../../lib/canvas/theme'
 import { useThemeStore } from '../../lib/canvas/uiStore'

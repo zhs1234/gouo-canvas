@@ -19,7 +19,8 @@ import {
   normalizeConnection,
   snapNodesIntoGroup,
 } from '../../lib/canvas/nodeGeometry'
-import { createCanvasNode, isRecord, validateCanvasProject } from '../../lib/canvas/document'
+import { createCanvasNode, validateCanvasProject } from '../../lib/canvas/document'
+import { isRecord } from '../../lib/storeInputNormalization'
 import { buildNodeMentionReferences, getNodeInputs } from '../../lib/canvas/resources'
 import {
   canvasImageMetadata,
@@ -1041,7 +1042,6 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           onAddText={() => run(addNode(CanvasNodeType.Text))}
           onAddConfig={() => run(addNode(CanvasNodeType.Config))}
           onAddGroup={() => run(addNode(CanvasNodeType.Group))}
-          onAddExtensionNode={(type) => run(addNode(type))}
           onUndo={() => run(useCanvasStore.getState().undo(project.id))}
           onRedo={() => run(useCanvasStore.getState().redo(project.id))}
           onUpload={() => inputRef.current?.click()}

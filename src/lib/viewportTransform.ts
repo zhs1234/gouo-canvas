@@ -24,7 +24,7 @@ export interface ClientRectLike {
 const MIN_SCALE = 1
 const MAX_SCALE = 6
 
-function clamp(value: number, min: number, max: number): number {
+export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 

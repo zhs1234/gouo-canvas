@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { createPortal } from "react-dom";
 import { Button, Input, Modal, Slider, Tooltip } from "antd";
 import { Brush, Eraser, ImagePlus, Redo2, RotateCcw, Undo2, WandSparkles, ZoomIn, ZoomOut } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { useTranslation } from "../../lib/canvas/i18n";
 
 import { readImageMeta } from "../../lib/canvas/imageStorage";
 import { useImageEditorViewport } from "./useImageEditorViewport";
@@ -430,5 +430,3 @@ function buildMaskOverlay(selectionCanvas: HTMLCanvasElement) {
   ctx.drawImage(selectionCanvas, 0, 0)
   return canvas.toDataURL('image/png')
 }
-
-

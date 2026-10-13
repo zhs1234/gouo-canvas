@@ -1,7 +1,7 @@
 // 基于 basketikun/infinite-canvas (MIT)，来源及适配说明见 UPSTREAM.md。
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
-import { ChevronRight, Copy, Download, Group, Image as ImageIcon, Music2, Puzzle, RefreshCw, Star, Trash2, Video } from 'lucide-react'
+import { ChevronRight, Copy, Download, Group, Image as ImageIcon, Puzzle, RefreshCw, Star, Trash2 } from 'lucide-react'
 
 import { canvasThemes } from '../../lib/canvas/theme'
 import { formatBytes } from '../../lib/canvas/imageStorage'
@@ -12,7 +12,7 @@ import { useThemeStore } from '../../lib/canvas/uiStore'
 import { CanvasResourceMentionTextarea } from './canvasResourceMentionTextarea'
 import { CanvasNodeType, type CanvasNodeData, type CanvasNodeImage, type CanvasNodeText, type Position } from '../../lib/canvas/types'
 import type { CanvasResourceReference } from '../../lib/canvas/resources'
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from '../../lib/canvas/i18n'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 const selectionBlue = '#2f80ff'
@@ -127,8 +127,6 @@ export const CanvasNode = React.memo(function CanvasNode({
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(data.title || '')
   const hasImageContent = data.type === CanvasNodeType.Image && Boolean(data.metadata?.content)
-  const hasVideoContent = data.type === CanvasNodeType.Video && Boolean(data.metadata?.content)
-  const hasAudioContent = data.type === CanvasNodeType.Audio && Boolean(data.metadata?.content)
   const isGroup = data.type === CanvasNodeType.Group
   const batchCount =
     data.type === CanvasNodeType.Image ? data.metadata?.images?.length || 0 : data.type === CanvasNodeType.Text ? data.metadata?.texts?.length || 0 : 0
@@ -283,7 +281,6 @@ export const CanvasNode = React.memo(function CanvasNode({
       startHeight: data.height,
       keepRatio:
         (data.type === CanvasNodeType.Image && !data.metadata?.freeResize) ||
-        data.type === CanvasNodeType.Video ||
         Boolean(definition?.keepAspectRatio?.(data)),
       ratio: (data.metadata?.naturalWidth || data.width) / (data.metadata?.naturalHeight || data.height || 1),
     }
@@ -370,7 +367,7 @@ export const CanvasNode = React.memo(function CanvasNode({
       <div
         className="relative h-full w-full overflow-visible rounded-3xl border-2"
         style={{
-          background: isGroup ? 'transparent' : hasImageContent || hasVideoContent || transparentBg ? 'transparent' : theme.node.fill,
+          background: isGroup ? 'transparent' : hasImageContent || transparentBg ? 'transparent' : theme.node.fill,
           borderColor: isGroup
             ? isGroupDropTarget || isActive
               ? selectionBlue
@@ -420,7 +417,7 @@ export const CanvasNode = React.memo(function CanvasNode({
           className={`relative flex h-full w-full items-center justify-center rounded-[inherit] ${isBatchRoot ? 'overflow-visible' : 'overflow-hidden'}`}
           style={
             {
-              background: isGroup ? 'transparent' : hasImageContent || hasVideoContent || transparentBg ? 'transparent' : theme.node.fill,
+              background: isGroup ? 'transparent' : hasImageContent || transparentBg ? 'transparent' : theme.node.fill,
               pointerEvents: contentInteractive ? undefined : 'none',
             } as React.CSSProperties
           }
@@ -457,7 +454,7 @@ export const CanvasNode = React.memo(function CanvasNode({
           </div>
         ) : null}
 
-        {!isGroup && !hasImageContent && !hasVideoContent && !hasAudioContent ? (
+        {!isGroup && !hasImageContent ? (
           <div
             className="pointer-events-none absolute inset-x-0 bottom-0 h-12"
             style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }}
@@ -522,8 +519,6 @@ const nodeContentRenderers = {
   [CanvasNodeType.Text]: TextContent,
   [CanvasNodeType.Image]: ImageNodeContent,
   [CanvasNodeType.Config]: EmptyImageContent,
-  [CanvasNodeType.Video]: VideoNodeContent,
-  [CanvasNodeType.Audio]: AudioNodeContent,
   [CanvasNodeType.Group]: GroupNodeContent,
 } satisfies Record<CanvasNodeType, (props: NodeContentRendererProps) => ReactNode>
 
@@ -778,46 +773,6 @@ function EmptyImageContent({ theme }: NodeContentRendererProps) {
         <ImageIcon className="size-6 opacity-30" />
       </div>
       <span className="text-[10px] tracking-[0.18em] opacity-50">{t('canvas.node.emptyImage')}</span>
-    </div>
-  )
-}
-
-function VideoNodeContent({ node, theme }: NodeContentRendererProps) {
-  const { t } = useTranslation()
-  if (!node.metadata?.content)
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.placeholder }}>
-        <Video className="size-7 opacity-35" />
-        <span className="text-sm">{t('canvas.node.emptyVideo')}</span>
-      </div>
-    )
-  return (
-    <video
-      src={node.metadata.content}
-      controls
-      className="h-full w-full rounded-[18px] bg-black object-contain"
-      data-canvas-video={node.id}
-      data-canvas-no-zoom
-    />
-  )
-}
-
-function AudioNodeContent({ node, theme }: NodeContentRendererProps) {
-  const { t } = useTranslation()
-  if (!node.metadata?.content)
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-2" style={{ color: theme.node.placeholder }}>
-        <Music2 className="size-7 opacity-35" />
-        <span className="text-sm">{t('canvas.node.emptyAudio')}</span>
-      </div>
-    )
-  return (
-    <div className="flex h-full w-full flex-col justify-center gap-3 px-4" style={{ background: theme.node.fill, color: theme.node.text }}>
-      <div className="flex min-w-0 items-center gap-2 text-sm opacity-70">
-        <Music2 className="size-4 shrink-0" />
-        <span className="truncate">{t('canvas.node.audio')}</span>
-      </div>
-      <audio src={node.metadata.content} controls className="w-full" data-canvas-no-zoom />
     </div>
   )
 }

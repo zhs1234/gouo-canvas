@@ -1,6 +1,7 @@
 // 基于上游 canvas-agent-ops.ts，增加外部参数校验与原子应用。
 import { getNodeSpec, isRegisteredNodeType } from './nodeRegistry'
-import { isRecord, validateCanvasProject, validateMetadata } from './document'
+import { isRecord } from '../storeInputNormalization'
+import { validateCanvasProject, validateMetadata } from './document'
 import type { CanvasNodeData, CanvasNodeMetadata, CanvasNodeTypeId, CanvasProject, ViewportTransform } from './types'
 
 export type CanvasAgentOp =

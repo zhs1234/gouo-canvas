@@ -1,75 +1,12 @@
 // 基于 basketikun/infinite-canvas (MIT)，来源及适配说明见 UPSTREAM.md。
 import { useEffect, useRef } from 'react'
-import { ImageIcon, List, Settings2, X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { X } from 'lucide-react'
+import { useTranslation } from '../../lib/canvas/i18n'
 
 import { canvasThemes } from '../../lib/canvas/theme'
 import { useThemeStore } from '../../lib/canvas/uiStore'
-import { listNodeDefinitions, useNodeRegistryVersion } from '../../lib/canvas/nodeRegistry'
-import { CanvasNodeType, type ConnectionHandle, type Position } from '../../lib/canvas/types'
-
-export type PendingConnectionCreate = {
-  connection: ConnectionHandle
-  position: Position
-}
-
-export function ConnectionCreateMenu({
-  pending,
-  onCreate,
-  onClose,
-}: {
-  pending: PendingConnectionCreate
-  onCreate: (type: CanvasNodeType.Image | CanvasNodeType.Text | CanvasNodeType.Config | CanvasNodeType.Video | CanvasNodeType.Audio) => void
-  onClose: () => void
-}) {
-  const theme = canvasThemes[useThemeStore((state) => state.theme)]
-  const { t } = useTranslation()
-  return (
-    <div
-      className="absolute z-[120] w-[300px] rounded-[18px] border p-3 shadow-2xl backdrop-blur"
-      data-connection-create-menu
-      style={{ left: pending.position.x, top: pending.position.y, background: theme.node.panel, borderColor: theme.node.stroke, color: theme.node.text }}
-      onMouseDown={(event) => event.stopPropagation()}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <div className="mb-2 flex items-center justify-between px-1">
-        <span className="text-sm font-medium" style={{ color: theme.node.muted }}>
-          {t('canvas.createMenu.fromNode')}
-        </span>
-        <button
-          type="button"
-          className="grid size-7 place-items-center rounded-lg text-base opacity-55 transition hover:bg-white/10 hover:opacity-100"
-          onClick={onClose}
-          aria-label={t('canvas.createMenu.close')}
-        >
-          ×
-        </button>
-      </div>
-      <div className="grid gap-1">
-        <ConnectionCreateOption
-          theme={theme}
-          icon={<List className="size-5" />}
-          title={t('canvas.createMenu.text')}
-          description={t('canvas.createMenu.textDescription')}
-          onClick={() => onCreate(CanvasNodeType.Text)}
-        />
-        <ConnectionCreateOption
-          theme={theme}
-          icon={<ImageIcon className="size-5" />}
-          title={t('canvas.createMenu.image')}
-          onClick={() => onCreate(CanvasNodeType.Image)}
-        />
-        <ConnectionCreateOption
-          theme={theme}
-          icon={<Settings2 className="size-5" />}
-          title={t('canvas.createMenu.config')}
-          description={t('canvas.createMenu.configDescription')}
-          onClick={() => onCreate(CanvasNodeType.Config)}
-        />
-      </div>
-    </div>
-  )
-}
+import { NODE_DEFINITIONS } from '../../lib/canvas/nodeRegistry'
+import type { Position } from '../../lib/canvas/types'
 
 export function ConnectionCreateOption({
   theme,
@@ -111,9 +48,7 @@ export function ConnectionCreateOption({
 export function NodeCreateMenu({ position, onCreate, onClose }: { position: Position; onCreate: (type: string) => void; onClose: () => void }) {
   const theme = canvasThemes[useThemeStore((state) => state.theme)]
   const { t } = useTranslation()
-  useNodeRegistryVersion()
   const menuRef = useRef<HTMLDivElement>(null)
-  const definitions = listNodeDefinitions().filter((def) => def.showInCreateMenu !== false)
   // Close automatically when clicking outside the menu.
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -144,7 +79,7 @@ export function NodeCreateMenu({ position, onCreate, onClose }: { position: Posi
         </button>
       </div>
       <div className="grid gap-1">
-        {definitions.map((def) => (
+        {NODE_DEFINITIONS.map((def) => (
           <ConnectionCreateOption
             key={def.type}
             theme={theme}

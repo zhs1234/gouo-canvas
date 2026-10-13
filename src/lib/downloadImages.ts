@@ -128,7 +128,6 @@ function getBlobExtension(blob: Blob): string {
   return MIME_EXTENSIONS[blob.type.toLowerCase()] ?? blob.type.split('/')[1] ?? 'png'
 }
 
-function delay(ms: number) {
+export function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
-

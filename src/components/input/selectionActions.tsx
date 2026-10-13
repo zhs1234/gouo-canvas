@@ -2,17 +2,13 @@ import { useCallback, useMemo } from 'react'
 import type { TaskRecord } from '../../types'
 import { ALL_FAVORITES_COLLECTION_ID, deleteFavoriteCollection, getTaskFavoriteCollectionIds, useStore, removeMultipleTasks } from '../../store'
 import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../../lib/taskFilters'
-import { downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getTaskOutputImageZipEntries } from '../../lib/downloadImages'
+import { delay, downloadImageEntriesAsZip, downloadImageIds, formatExportFileTime, getTaskOutputImageZipEntries } from '../../lib/downloadImages'
 import InputBatchBars from './inputBatchBars'
 
 function getFavoriteCollectionTasksForBatch(collectionId: string, tasks: TaskRecord[]) {
   const favoriteTasks = tasks.filter((task) => task.isFavorite)
   if (collectionId === ALL_FAVORITES_COLLECTION_ID) return favoriteTasks
   return favoriteTasks.filter((task) => getTaskFavoriteCollectionIds(task).includes(collectionId))
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 export default function SelectionActions({ inline = false }: { inline?: boolean }) {

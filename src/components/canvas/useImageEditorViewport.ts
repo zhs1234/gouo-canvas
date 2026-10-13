@@ -10,6 +10,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 
+import { clamp } from '../../lib/viewportTransform'
+
 type ImageSize = { width: number; height: number }
 
 const minZoom = 1
@@ -220,8 +222,4 @@ function fitImage(image: ImageSize | null, viewport: ImageSize): ImageSize {
   const availableHeight = Math.max(1, viewport.height - viewportPadding * 2)
   const scale = Math.min(availableWidth / image.width, availableHeight / image.height, 1)
   return { width: Math.max(1, Math.floor(image.width * scale)), height: Math.max(1, Math.floor(image.height * scale)) }
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
 }
