@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getActionableErrorMessage, GUIDE_FLAGS, hasGuideFlag, isBalanceError, notifyFirstGeneration, setGuideFlag } from './userGuidance'
+import { getActionableErrorMessage, isBalanceError } from './userGuidance'
 
 describe('userGuidance', () => {
   beforeEach(() => {
@@ -13,12 +13,6 @@ describe('userGuidance', () => {
       },
     })
     vi.stubGlobal('window', windowMock)
-  })
-
-  it('stores guide flags once', () => {
-    expect(hasGuideFlag(GUIDE_FLAGS.onboarding)).toBe(false)
-    setGuideFlag(GUIDE_FLAGS.onboarding)
-    expect(hasGuideFlag(GUIDE_FLAGS.onboarding)).toBe(true)
   })
 
   it('adds an actionable next step to common errors', () => {
@@ -45,14 +39,4 @@ describe('userGuidance', () => {
     expect(getActionableErrorMessage('图片添加失败：Failed to fetch')).not.toContain('付费请求')
   })
 
-  it('only emits the first-generation event before the guide is completed', () => {
-    const listener = vi.fn()
-    window.addEventListener('gouo:first-generation-complete', listener)
-    notifyFirstGeneration('task-1')
-    expect(listener).toHaveBeenCalledTimes(1)
-    setGuideFlag(GUIDE_FLAGS.firstGeneration)
-    notifyFirstGeneration('task-2')
-    expect(listener).toHaveBeenCalledTimes(1)
-    window.removeEventListener('gouo:first-generation-complete', listener)
-  })
 })

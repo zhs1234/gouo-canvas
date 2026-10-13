@@ -49,7 +49,7 @@ import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
 import { getImageModelQuote, GouoPriceChangedError, isBackendAuthEnabled } from './lib/gouoBackend'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
-import { getActionableErrorMessage, isBalanceError, notifyFirstGeneration, requestUserCenter } from './lib/userGuidance'
+import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
 import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus } from './lib/taskFilters'
 import { isRecord, normalizeInputImages, normalizeMaskDraft } from './lib/storeInputNormalization'
 import { getLoadedStorageName } from './lib/storageScope'
@@ -1377,7 +1377,6 @@ async function completeRecoveredFalTask(task: TaskRecord, result: FalQueuedImage
     elapsed: Date.now() - task.createdAt,
   })
   useStore.getState().showToast(`fal.ai 任务已恢复，共 ${outputIds.length} 张图片`, 'success')
-  if (outputIds.length > 0) notifyFirstGeneration(task.id)
   showTaskCompletionNotification('图像生成完成', `fal.ai 任务已恢复，共 ${outputIds.length} 张图片。`)
 }
 
@@ -1794,7 +1793,6 @@ async function runTask(taskId: string, recoverOnly: boolean) {
       ? `生成完成：成功 ${outputIds.length} 张，失败 ${failedCount} 张`
       : `生成完成，共 ${outputIds.length} 张图片`
     useStore.getState().showToast(completionMessage, failedCount > 0 ? 'error' : 'success')
-    if (outputIds.length > 0) notifyFirstGeneration(taskId)
     showTaskCompletionNotification('图像生成完成', `${completionMessage}。`)
     const currentMask = useStore.getState().maskDraft
     if (
@@ -2409,7 +2407,6 @@ async function completeRecoveredCustomTask(task: TaskRecord, result: Awaited<Ret
     elapsed: Date.now() - task.createdAt,
   })
   useStore.getState().showToast(`自定义异步任务已恢复，共 ${outputIds.length} 张图片`, 'success')
-  if (outputIds.length > 0) notifyFirstGeneration(task.id)
   showTaskCompletionNotification('图像生成完成', `自定义异步任务已恢复，共 ${outputIds.length} 张图片。`)
 }
 

@@ -18,7 +18,7 @@
 | 云端作品库 | 任务及关联图片同步、空间用量、账号隔离 | [serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | 运营后台 | 用户、渠道、额度等 One Hub 管理能力，以及光构存储管理 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
 
-前端还提供灵感库、新用户引导、深色主题和 PWA 安装。PWA 缓存页面与静态资源，并跳过 `/api`、`/v1` 和 `/panel`；它不提供离线图片生成。实现见 [main.tsx](../../src/main.tsx) 和 [sw.js](../../public/sw.js)。
+前端还提供灵感库、深色主题和 PWA 安装。PWA 缓存页面与静态资源，并跳过 `/api`、`/v1` 和 `/panel`；它不提供离线图片生成。实现见 [main.tsx](../../src/main.tsx) 和 [sw.js](../../public/sw.js)。
 
 ## 两种运行模式
 
