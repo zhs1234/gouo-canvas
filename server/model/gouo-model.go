@@ -23,6 +23,8 @@ type GouoImageModel struct {
 	MaxOutputs   int     `json:"max_outputs"`
 	Quota        int     `json:"quota"`
 	PriceVersion string  `json:"price_version"`
+	// 价格版本算好后才设置，不参与版本计算
+	Default bool `json:"default,omitempty"`
 }
 
 func ValidateGouoPrice(price *Price) error {

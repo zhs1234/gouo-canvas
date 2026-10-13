@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getImageModels, type GouoImageModel } from '../lib/gouoBackend'
+import { getImageModels, resolveBackendModel, type GouoImageModel } from '../lib/gouoBackend'
 import { useStore } from '../store'
 import ModelSelect from './ModelSelect'
 
@@ -21,8 +21,12 @@ export default function BackendModelSelector({ onReady, compact = false, showEst
         if (cancelled) return
         setModels(data)
         setError('')
-        const selected = data.find((entry) => entry.id === useStore.getState().settings.model)
-        useStore.getState().setSettings({ gouoPriceVersion: selected?.price_version })
+        const current = useStore.getState().settings
+        const picked = resolveBackendModel(data, current.model, Boolean(current.gouoModelSelected))
+        // 自动换成默认模型时清掉"用户已选"标记，之后管理员调整默认模型仍会生效
+        useStore.getState().setSettings(picked && picked.id !== current.model
+          ? { model: picked.id, gouoModelSelected: false, gouoPriceVersion: picked.price_version }
+          : { gouoPriceVersion: picked?.price_version })
       } catch (err) {
         if (cancelled) return
         console.warn('读取图片模型目录失败', err)

@@ -64,6 +64,8 @@ export interface GouoImageModel {
   mask: boolean
   max_outputs: number
   quota: number
+  // 后台设置的默认模型（未设置或不可用时为目录第一个）
+  default?: boolean
 }
 
 export class GouoPriceChangedError extends Error {
@@ -101,6 +103,13 @@ export async function getImageModels(): Promise<GouoImageModel[]> {
     throw new Error('图片模型目录格式无效')
   }
   return data as GouoImageModel[]
+}
+
+// 用户没有手动选过模型、或选的模型已不在目录里时，使用后台标出的默认模型，管理员改默认模型后对这些用户生效
+export function resolveBackendModel(models: GouoImageModel[], current: string, userSelected: boolean) {
+  const selected = models.find((entry) => entry.id === current)
+  if (selected && userSelected) return selected
+  return models.find((entry) => entry.default) ?? selected ?? models[0]
 }
 
 export async function getImageModelQuote(id: string, inputCount: number, hasMask: boolean, n: number, version?: string): Promise<GouoImageModel> {

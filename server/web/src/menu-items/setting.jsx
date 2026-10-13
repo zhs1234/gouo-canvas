@@ -42,6 +42,42 @@ const Setting = {
       isAdmin: true
     },
     {
+      id: 'gouo',
+      title: '光构',
+      type: 'collapse',
+      icon: icons.IconModel,
+      isAdmin: true,
+      children: [
+        {
+          id: 'gouo_models',
+          title: '光构模型',
+          type: 'item',
+          url: '/panel/gouo_models',
+          icon: icons.IconModel,
+          breadcrumbs: false,
+          isAdmin: true
+        },
+        {
+          id: 'gouo_billing',
+          title: '图片账务',
+          type: 'item',
+          url: '/panel/gouo_billing',
+          icon: icons.IconReceipt2,
+          breadcrumbs: false,
+          isAdmin: true
+        },
+        {
+          id: 'gouo_storage',
+          title: '光构存储',
+          type: 'item',
+          url: '/panel/gouo_storage',
+          icon: icons.IconCloud,
+          breadcrumbs: false,
+          isAdmin: true
+        }
+      ]
+    },
+    {
       id: 'operation',
       title: '运营',
       type: 'collapse',
@@ -81,24 +117,6 @@ const Setting = {
           type: 'item',
           url: '/panel/model_info',
           icon: icons.IconInfo,
-          breadcrumbs: false,
-          isAdmin: true
-        },
-        {
-          id: 'gouo_billing',
-          title: '图片账务',
-          type: 'item',
-          url: '/panel/gouo_billing',
-          icon: icons.IconReceipt2,
-          breadcrumbs: false,
-          isAdmin: true
-        },
-        {
-          id: 'gouo_storage',
-          title: '光构存储',
-          type: 'item',
-          url: '/panel/gouo_storage',
-          icon: icons.IconCloud,
           breadcrumbs: false,
           isAdmin: true
         },

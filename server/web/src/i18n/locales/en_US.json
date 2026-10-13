@@ -641,6 +641,7 @@
     "userIdLabel": "User ID"
   },
   "paySetting": "Payment settings",
+  "gouo": "Gouo",
   "payment": "Payment",
   "paymentGatewayPage": {
     "createPayment": "Create Payment",
