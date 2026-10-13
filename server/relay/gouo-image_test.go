@@ -13,6 +13,8 @@ import (
 	"net/http/httptest"
 	"one-api/common/config"
 	"one-api/model"
+	"one-api/providers/claude"
+	"one-api/providers/gemini"
 	"one-api/types"
 	"strings"
 	"testing"
@@ -253,6 +255,19 @@ func TestGouoAgentMaxTokensForPlatformToken(t *testing.T) {
 	require.Equal(t, 2000, chat("sys_playground", 50000, 0).MaxCompletionTokens)
 	require.Equal(t, 500, chat("sys_playground", 500, 0).MaxCompletionTokens)
 	require.Equal(t, 2000, chat("sys_playground", 0, 9000).MaxTokens)
+	for _, limits := range [][2]int{{0, 0}, {50000, 9000}, {500, 0}, {500, 100}, {0, 100}} {
+		req := chat("sys_playground", limits[0], limits[1])
+		want := req.MaxCompletionTokens
+		if req.MaxTokens > 0 {
+			want = min(want, req.MaxTokens)
+		}
+		claudeReq, err := claude.ConvertFromChatOpenai(&req)
+		require.Nil(t, err)
+		require.Equal(t, want, claudeReq.MaxTokens)
+		geminiReq, err := gemini.ConvertFromChatOpenai(&req)
+		require.Nil(t, err)
+		require.Equal(t, want, geminiReq.GenerationConfig.MaxOutputTokens)
+	}
 	// 普通 API 令牌不受影响
 	require.Equal(t, 0, chat("api-user", 0, 0).MaxCompletionTokens)
 }

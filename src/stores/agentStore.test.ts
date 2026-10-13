@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   tool: vi.fn(),
   toast: vi.fn(),
   currentScope: true,
+  maxRounds: 8,
   catalog: { models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }], systemPrompt: '' } as { models: { id: string; name: string; tool_calls: boolean; vision: boolean; default?: boolean }[]; systemPrompt: string },
   tasks: [] as TaskRecord[],
   storedTasks: [] as TaskRecord[],
@@ -22,7 +23,7 @@ vi.mock('../store', () => ({
 vi.mock('../lib/db', () => ({ getAllAgentConversations: async () => mocks.stored, getAllTasks: async () => mocks.storedTasks, putAgentConversation: mocks.put }))
 vi.mock('../lib/documentAssets', () => ({ registerDocumentImageReferences: vi.fn() }))
 vi.mock('../lib/storageScope', () => ({ isStorageScopeCurrent: () => mocks.currentScope }))
-vi.mock('../lib/agent/api', () => ({ getAgentModels: async () => mocks.catalog, streamAgentCompletion: mocks.stream, getAgentLimits: () => ({ maxRounds: 8, confirmImages: 4 }) }))
+vi.mock('../lib/agent/api', () => ({ getAgentModels: async () => mocks.catalog, streamAgentCompletion: mocks.stream, getAgentLimits: () => ({ maxRounds: mocks.maxRounds, confirmImages: 4 }) }))
 vi.mock('../lib/agent/tools', () => ({ agentToolDefinitions: [], executeAgentTool: mocks.tool }))
 
 import { buildAgentMessages, markAgentPersisted, normalizeAgentConversation, useAgentStore } from './agentStore'
@@ -35,6 +36,7 @@ beforeEach(async () => {
   mocks.stream.mockReset()
   mocks.tool.mockReset()
   mocks.currentScope = true
+  mocks.maxRounds = 8
   mocks.stored = []
   mocks.tasks = []
   mocks.storedTasks = []
@@ -350,13 +352,24 @@ describe('Agent durable runtime', () => {
     await vi.waitFor(() => expect(useAgentStore.getState().conversations.find((item) => item.id === 'conversation')?.status).toBe('completed'))
   })
 
-  it('prevents a ninth tool action within one run', async () => {
-    for (let round = 0; round < 5; round += 1) mocks.stream.mockResolvedValueOnce({ content: '', calls: [0, 1].map((index) => ({ id: `call_${round}_${index}`, name: 'get_canvas', arguments: '{}', status: 'pending' })) })
+  it('prevents a ninth tool action within one round', async () => {
+    mocks.stream.mockResolvedValueOnce({ content: '', calls: Array.from({ length: 9 }, (_, index) => ({ id: `call_${index}`, name: 'get_canvas', arguments: '{}', status: 'pending' })) })
     mocks.tool.mockResolvedValue({ result: '{}' })
     await useAgentStore.getState().send('conversation')
     await vi.waitFor(() => expect(useAgentStore.getState().conversations[0].status).toBe('error'))
     expect(mocks.tool).toHaveBeenCalledTimes(8)
     expect(useAgentStore.getState().conversations[0].error).toContain('8 次')
+  })
+
+  it.each([1, 8, 20])('allows eight tools per round up to the configured %i rounds', async (maxRounds) => {
+    mocks.maxRounds = maxRounds
+    for (let round = 0; round < maxRounds; round += 1) mocks.stream.mockResolvedValueOnce({ content: '', calls: Array.from({ length: 8 }, (_, index) => ({ id: `call_${round}_${index}`, name: 'get_canvas', arguments: '{}', status: 'pending' })) })
+    mocks.tool.mockResolvedValue({ result: '{}' })
+    await useAgentStore.getState().send('conversation')
+    await vi.waitFor(() => expect(useAgentStore.getState().conversations[0].status).toBe('error'))
+    expect(mocks.stream).toHaveBeenCalledTimes(maxRounds)
+    expect(mocks.tool).toHaveBeenCalledTimes(maxRounds * 8)
+    expect(useAgentStore.getState().conversations[0].error).toContain('执行上限')
   })
 
   it('attaches image data only to the latest user message', async () => {

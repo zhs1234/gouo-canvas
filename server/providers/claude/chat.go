@@ -129,6 +129,9 @@ func ConvertFromChatOpenai(request *types.ChatCompletionRequest) (*ClaudeRequest
 		TopP:          request.TopP,
 		Stream:        request.Stream,
 	}
+	if request.MaxCompletionTokens > 0 && (claudeRequest.MaxTokens <= 0 || claudeRequest.MaxTokens > request.MaxCompletionTokens) {
+		claudeRequest.MaxTokens = request.MaxCompletionTokens
+	}
 
 	if request.Stop != nil {
 		stopBytes, err := json.Marshal(request.Stop)

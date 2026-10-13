@@ -166,6 +166,9 @@ func ConvertFromChatOpenai(request *types.ChatCompletionRequest) (*GeminiChatReq
 	if strings.HasPrefix(request.Model, "gemini-2.0-flash-exp") || strings.HasPrefix(request.Model, "gemini-2.5-flash-image-preview") {
 		geminiRequest.GenerationConfig.ResponseModalities = []string{"Text", "Image"}
 	}
+	if request.MaxCompletionTokens > 0 && (geminiRequest.GenerationConfig.MaxOutputTokens <= 0 || geminiRequest.GenerationConfig.MaxOutputTokens > request.MaxCompletionTokens) {
+		geminiRequest.GenerationConfig.MaxOutputTokens = request.MaxCompletionTokens
+	}
 
 	if strings.HasSuffix(request.Model, "-tts") {
 		geminiRequest.GenerationConfig.ResponseModalities = []string{"AUDIO"}

@@ -128,7 +128,6 @@ function updateAssistant(id: string, messageId: string, content: string, calls: 
 async function runConversation(id: string, controller: AbortController) {
   let timedOut = false
   const timeout = setTimeout(() => { timedOut = true; controller.abort() }, 180_000)
-  let toolCount = 0
   try {
     for (let round = 0; round < getAgentLimits().maxRounds; round += 1) {
       controller.signal.throwIfAborted()
@@ -148,6 +147,7 @@ async function runConversation(id: string, controller: AbortController) {
       }
       let finishAfterSubmit = false
       let failedTools = false
+      let toolCount = 0
       for (const call of completion.calls) {
         controller.signal.throwIfAborted()
         if (++toolCount > 8) throw new Error('本轮已达到 8 次工具调用上限，请检查结果后继续')
