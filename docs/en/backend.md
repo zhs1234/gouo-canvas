@@ -61,32 +61,88 @@ Origins must be exact `http(s)://host[:port]` values, comma-separated, without t
 
 The backend rate-limits sign-in, registration and verification emails by client IP and supports per-token IP allowlists. It reads the client IP from `X-Forwarded-For` only for requests coming from `TRUSTED_PROXIES` (`trusted_proxies` in YAML). The default covers loopback and private networks, which fits Nginx on the same host or container network. If the reverse proxy runs at another public address, add its address or CIDR (comma-separated). If the backend faces the internet directly, set it to empty. Behind a platform such as Cloudflare, use `trusted_header` (for example `CF-Connecting-IP`) instead. The backend trusts that header whenever it is present, without checking where the request came from, so the origin must be reachable only through that platform (firewall allows only the platform's ranges, `PUBLIC_PORT` bound to loopback or a private network). Otherwise anyone can connect directly with the header set, spoof their IP, and bypass rate limits and token IP allowlists.
 
-## 3. Initial admin setup
+## 3. Admin panel
 
-The backend exposes the admin UI at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure. Only administrators can sign in to the admin UI: regular users are rejected at its login form, and a regular user who already has a session is signed out when opening it. Regular users use only the Gouo client, where all amounts are shown in points. The admin login page no longer links to registration.
+The backend serves the admin panel at `http://127.0.0.1:3000/panel` by default. An empty database creates `root` / `123456`; change it before any network exposure.
 
-"光构 → 光构设置" (Gouo settings) collects the settings that act directly on the client. Any administrator can change them (the system-settings API is still root only), and they take effect when users return to or reload the client:
+Only administrators can sign in to the admin panel. Regular users are rejected at its login form, a regular user who already has a session is signed out when opening it, and the admin login page has no registration link. Regular users use only the Gouo client. Balances, logs, statistics, charts, and input hints in the panel are shown in points (1 CNY = 100 points); [section 4](#4-model-specific-image-billing) explains the server-side accounting.
 
-- **创作页公告** (announcement): a single line of up to 200 characters at the top of the client's creation page; when blank the default introduction is shown. A dismissed announcement reappears when its text changes.
-- **默认图片模型** (default image model): see "Per-model image billing" below.
-- **兑换码获取说明** (redemption instructions) and **客服联系方式** (support contact): shown in the user center.
+Gouo-specific features live under the **光构** (Gouo) menu: 光构设置 (Gouo settings), 光构模型 (Gouo models), 图片账务 (Image billing), and 光构存储 (Gouo storage). The panel interface is Chinese, so English names are given alongside the labels.
 
-The registration and password-login switches in Settings → System (root only) are also passed to the client: with registration closed, "免费注册" shows "registration is not open" and the login page hides its registration link; with password login closed, the login page says sign-in is paused. In product mode the client no longer imports service-address parameters such as `apiUrl`/`apiKey` from links or remote config URLs.
+> Screenshots come from a local demo environment with demo data.
 
-Recommended order:
+### 3.1 Gouo settings
+
+![Gouo settings](../images/screenshots/panel-gouo-settings.webp)
+
+**光构设置** collects the settings that act directly on the client. Any administrator can change them (the system-settings API is still root only); they take effect when users return to or reload the client:
+
+- **创作页公告** (announcement): a single line of up to 200 characters at the top of the client's creation page. When blank, the default introduction is shown. A dismissed announcement reappears when its text changes.
+- **默认图片模型** (default image model): chosen from enabled models; see [section 4](#4-model-specific-image-billing).
+- **兑换码获取说明** (redemption instructions) and **客服联系方式** (support contact): shown on the redemption screen and under "top-up and billing help" in the user center. Both default to blank, and the client says they are not configured yet.
+
+The bottom of the page shows whether registration and password sign-in are open. Change them under Settings → System (root only); the client follows them: with registration closed, **免费注册** shows "registration is not open" and the sign-in page hides its registration link; with password sign-in closed, the sign-in page says sign-in is paused.
+
+### 3.2 Gouo models
+
+![Gouo models](../images/screenshots/panel-gouo-models.webp)
+
+**光构模型** lists models that are priced or configured on a channel, with their price, capabilities, supporting channels and groups, and whether (and why) clients can see them. Enable, edit, withdraw, set or clear the default model directly here. Models without a channel are hidden until you turn on "显示没有渠道的已定价模型" (show priced models without channels).
+
+![Editing a Gouo model](../images/screenshots/panel-gouo-model-edit.webp)
+
+The edit dialog takes the price per image in points (with the CNY equivalent shown below), the maximum images per request, and whether reference and mask edits are supported (mask edits require reference support). Withdrawing a model keeps its price. The single-model editor in the price management page offers the same Gouo fields.
+
+### 3.3 Users and points
+
+![Adjusting a user's points](../images/screenshots/panel-users.webp)
+
+The user list shows balances and usage in points. **增减积分** (Adjust points) in a user's menu takes the change in points and shows the equivalent quota. Submitting writes a "管理员增减用户积分" (admin adjusted points) log that the user also sees in the client's usage records.
+
+### 3.4 Redemption codes
+
+![Creating redemption codes](../images/screenshots/panel-redemption.webp)
+
+When creating codes, enter points in **按积分填写** (Enter in points); the quota is calculated automatically and rounded up so the credited balance is never below the entered points, and the quota field shows the approximate points. Up to 100 codes can be created at once; creating several downloads a text file. Redeemed points are credited immediately and logged as "兑换码 #ID 充值 N 积分" (code #ID added N points).
+
+### 3.5 Image billing
+
+![Image billing](../images/screenshots/panel-gouo-billing.webp)
+
+**图片账务** lists every image charge with its user, channel, model, unit price (points), status, and log. Interrupted requests that never reached upstream are refunded after about 20 minutes. Requests that were sent but whose outcome is unknown are marked "待核对" (awaiting review); an administrator checks the channel records, records the evidence, and either settles or refunds. See [section 4](#4-model-specific-image-billing).
+
+### 3.6 Gouo storage
+
+![Gouo storage](../images/screenshots/panel-gouo-storage.webp)
+
+**光构存储** shows total assets, image assets, work tasks, works in the recycle bin, and active users, plus each user's usage, share, and quota. You can change one user's quota (not below their current usage) and browse their works. The default quota and asset directory come from environment variables; see [section 5](#5-cloud-library).
+
+### 3.7 Logs
+
+![Logs](../images/screenshots/panel-logs.webp)
+
+The log page filters by type (top-up, consumption, management, system), user, model, channel, and time, and shows quota in points. Newly written redemption, gift, admin adjustment, online top-up, and task compensation logs also use points in their text.
+
+### 3.8 Recommended first-time setup
 
 1. Create a separate day-to-day administrator account.
 2. Add an OpenAI or compatible image channel. Store its API key only in the channel.
-3. Configure image channels and mappings. In the single-model price editor, enable Gouo and set its price in points, reference/mask capabilities, and output limit. The client displays the public model ID used in requests; there is no separate display name.
-4. Validate generations, edits, and variations routes.
-5. Validate model-specific charging, failure refunds, price-change confirmation, and insufficient-balance rejection.
-6. Configure new-user credit (inputs show the points equivalent), redemption codes (can be entered in points), registration policy, and rate limits.
-7. If online payment is planned, validate provider setup, callback signatures, abnormal orders, and reconciliation before exposing it. Payment callbacks are always verified with the gateway's current configuration: to switch to a different merchant (another app ID, merchant ID, or platform public key), add a new gateway and disable the old one, keeping it until its orders are completed or closed. Otherwise callbacks from the old merchant for orders created before the change fail verification and are not credited.
-8. Confirm the asset directory and user storage under the Gouo storage administration view.
+3. Configure image models and channel mappings, then enable models in **光构模型** with a price in points, reference/mask support, and an output limit. The client shows the public model ID used in requests; there is no separate display name.
+4. In **光构设置**, set the default image model, redemption instructions, and support contact, and publish an announcement if needed.
+5. Validate the generations, edits, and variations routes.
+6. Validate per-model pricing, successful charges, failure refunds, price-change confirmation, and insufficient-balance rejection.
+7. Configure the new-user gift (inputs show the points equivalent), redemption codes, registration policy, and rate limits.
+8. If online payment is planned, validate the payment provider, callback signatures, abnormal orders, and reconciliation before exposing it. Payment callbacks are always verified with the gateway's current configuration: to switch merchants (a different app ID, merchant ID, or platform public key), add a new gateway and disable the old one, keeping it until its orders are completed or closed. Otherwise callbacks from the old merchant for orders created before the change fail verification and are not credited.
+9. Confirm in **光构存储** that the asset directory is writable, and check user storage.
+10. For the Agent, set a text model's info in Model details so that `output_modalities` includes `"text"` and `tags` includes `"tools"` (add `"image"` to `input_modalities` for vision), price it, and give it a channel that supports streaming tool calls.
 
-Registration reads backend status to display email verification and Cloudflare Turnstile. A status failure shows a retry action instead of skipping required verification. Configure `TurnstileCheckEnabled`, `TurnstileSiteKey`, and `TurnstileSecretKey` in the backend and allow the actual frontend hostname in Cloudflare. The public site key enables challenges for registration, verification emails, password-reset emails, and account email binding; the secret stays on the server. Expired or failed challenges can be retried and refresh after submission. Custom CSP must allow scripts and frames from `https://challenges.cloudflare.com`. Tokens are sent to the existing backend Siteverify middleware; a client callback alone is not proof of verification. See [client rendering](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/) and [server validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/). OAuth entry points are not part of the public Gouo login page.
+### 3.9 Registration checks and Turnstile
 
-Turnstile retains the existing backend session policy: the first successful verification stores `turnstile=true` in the session, and later requests in that session may reuse it without another Siteverify call. Refreshing the frontend token after each request does not change this server policy.
+Registration reads backend status to display email verification and Cloudflare Turnstile. A status failure shows a retry action instead of skipping required verification. Configure `TurnstileCheckEnabled`, `TurnstileSiteKey`, and `TurnstileSecretKey` in the backend and allow the actual frontend hostname in Cloudflare. The public site key enables challenges for registration, verification emails, password-reset emails, and account email binding; the secret stays on the server. Expired or failed challenges can be retried and refresh after submission. Custom CSP must allow scripts and frames from `https://challenges.cloudflare.com`. Tokens are sent to the existing backend Siteverify middleware; a client callback alone is not proof of verification. See [client rendering](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/) and [server validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/). The public Gouo sign-in page has no OAuth entry points.
+
+Turnstile keeps the existing backend session policy: the first successful verification stores `turnstile=true` in the session, and later requests in that session reuse it without another Siteverify call. Refreshing the frontend token after each request does not change this server policy.
+
+In product mode the client does not import service-address parameters such as `apiUrl`/`apiKey` from links or remote config URLs; it only removes them from the address bar.
 
 ## 4. Model-specific image billing
 
@@ -101,7 +157,7 @@ GOUO_IMAGE_MODEL=gpt-image-2
 
 - Users only ever see points (积分): **1 CNY = 100 points**. The client shows balance, unit prices, estimated charges, usage records, and CSV in points; the admin "光构模型" page, price editor, and Gouo billing records take and show prices in points, and the redemption-code dialog and the user "增减积分" (adjust points) dialog accept points and convert them to quota; every other balance, log, statistic, chart, and settings hint in the admin UI is shown in points too. Newly written billing log text (redemption, signup/invite gifts, admin adjustments, online top-ups) and the low-balance email also use points; the client hides legacy log text written in dollars or raw quota and still shows the amount in points. Server-side accounting is unchanged: it still stores CNY prices and converts them to quota with the formula below, so no data migration is needed and existing balances are only displayed in points.
 - Migration enables only the previous default model and price, with reference/mask support and an output limit of **1 image**. Increase the limit after checking upstream costs. The limit applies to `n` in a single HTTP request; it does not cap the total images the product client generates, because the client splits them into single-image requests. It preserves balances and historical artworks, never enables other models automatically, and never re-enables a removed or disabled default on restart.
-- The admin panel page "光构 → 光构模型" (Gouo → Gouo models) manages which models clients can use: it lists models that are priced or configured on a channel, lets you enable, take down, re-price, change capabilities and set the default, and shows the supporting channels and groups and whether (and why) the model is visible to clients.
+- The models available to clients are managed in 光构 → 光构模型; see [section 3.2](#32-gouo-models).
 - The client's default model is set with "设为默认" (Set default) on that page or in 光构 → 光构设置 → "默认图片模型" (Gouo settings → default image model). It is used when the user has not picked a model or the picked model is no longer available; when empty or unavailable to the user, the first model in the catalog is used. Changes apply immediately to users who never picked a model. `VITE_GOUO_IMAGE_MODEL` is only a placeholder until the catalog loads. Manual choices are remembered per account and survive login/token refresh. Tasks and retries retain their original model.
 - `GET /api/gouo/models` requires the login cookie and that account's relay token in `X-Gouo-Token`. It intersects enabled models, valid prices, the actual token allowlist, and channels available to its groups. Missing prices and disabled models fail closed instead of falling back to generic pricing.
 - The client submits `X-Gouo-Price-Version`. Changed prices or capabilities return `409 image_price_changed`; refresh the catalog and confirm by submitting again. In product mode every retry asks the user to confirm the cost of the new request, showing the new price when it changed. Non-product API tokens may omit the version but still use a quote captured when the request starts.
@@ -111,7 +167,7 @@ GOUO_IMAGE_MODEL=gpt-image-2
 
 Image reservations create a durable ledger row in the same transaction. Upstream requests have a 15-minute deadline. At startup and every minute, the primary node refunds unsent reservations older than 20 minutes and marks dispatched requests with unknown outcomes for review. Settlement/refund, balances, statistics, and logs commit atomically; repeated resolution does not repeat the balance change.
 
-Browser timeouts, output downloads, or local storage failures do not mean a refund occurred. Users check image request status in Account → Usage; administrators reconcile upstream records in Operations → Image Billing and provide a reason before settling or refunding. Retrying creates a new paid request and does not recover the original result. Back up the database before upgrading. Historical interruptions without ledger rows require manual reconciliation against old logs.
+Browser timeouts, output downloads, or local storage failures do not mean a refund occurred. Users check image request status in Account → Usage; administrators reconcile upstream records in 光构 → 图片账务 (Image billing) and provide a reason before settling or refunding. Retrying creates a new paid request and does not recover the original result. Back up the database before upgrading. Historical interruptions without ledger rows require manual reconciliation against old logs.
 
 ## 5. Cloud library
 
@@ -156,8 +212,8 @@ Restoring only the database leaves library records without images. Restoring onl
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/status` | Backend status and enabled capabilities |
-| `GET /api/user/self` | Current user and balance; legacy image_price_cny is not a model quote |
+| `GET /api/status` | Backend status and client settings (registration and password sign-in switches, announcement, redemption instructions, support contact, email and Turnstile settings) |
+| `GET /api/user/self` | Current user, balance (`balance_cny`), and points conversion rate; legacy image_price_cny is not a model quote |
 | `GET /api/gouo/models` | Models, prices, capabilities, output limits, and price versions available to the current image token |
 | `POST /api/user/login` | Sign in |
 | `POST /api/user/register` | Register |
@@ -175,12 +231,16 @@ Restoring only the database leaves library records without images. Restoring onl
 | `GET /api/gouo/image-charges` | Current user's image charge records |
 | `GET /api/gouo/image-results` | Recover a paid image result by its original request ID |
 | `GET /api/gouo/agent/models` | Agent models available to the current user |
+| `GET/PUT /api/gouo/admin/settings` | Admins read and write Gouo client settings (announcement, default image model, redemption instructions, support contact) |
+| `GET/PUT /api/gouo/admin/models` | Admins view and change Gouo model prices, capabilities, and availability |
+| `GET /api/gouo/admin/image-charges`, `POST …/:id/resolve` | Admins review image billing and resolve pending requests |
+| `GET /api/gouo/admin/storage[/users…]`, `PUT …/users/:id/quota` | Admins view storage usage, browse a user's works, and change user quotas |
 
 Every user-data endpoint must enforce authentication and ownership on the server. Hiding a frontend control is not authorization.
 
 ## 8. Current boundaries
 
-- The public frontend includes sign-in, registration, user center, redemption codes, usage history, and cloud library.
+- The public frontend includes sign-in, registration, user center, redemption codes, usage history, cloud library, canvas, and Agent.
 - Online payment becomes a production feature only after One Hub configuration and callback, duplicate-notification, failure, and reconciliation testing.
 - Product-mode image endpoints currently use non-streaming backend settings; frontend-only mode retains streaming compatibility tests.
 - `server/docs/` describes general upstream One Hub features and does not imply that the public Gouo UI exposes every one of them.

@@ -65,7 +65,7 @@ Sign into `http://127.0.0.1:3000/panel` as an administrator, then:
 
 1. Add an OpenAI or compatible image channel.
 2. Store the upstream API key only in the backend channel.
-3. Configure image channels and mappings, then enable and price Gouo models with their capabilities and output limits in the single-model editor. `VITE_GOUO_IMAGE_MODEL` is only the initial default choice.
+3. Configure image channels and mappings, enable models with prices in points, capabilities, and output limits under 光构 → 光构模型 (Gouo models), and choose the default image model under 光构 → 光构设置 (Gouo settings). `VITE_GOUO_IMAGE_MODEL` is only a placeholder until the model catalog loads.
 4. Validate generations, edits, and variations routes.
 5. Use a regular account at `http://127.0.0.1:5173` to test login, generation, billing, and synchronization end to end.
 
@@ -121,7 +121,7 @@ Example:
 | `VITE_GOUO_BACKEND_ENABLED` | Frontend build/dev | Enables product mode only when exactly `true` |
 | `VITE_GOUO_BACKEND_URL` | Frontend build/dev | Backend base URL; empty for same-origin use |
 | `VITE_GOUO_BACKEND_DEV_TARGET` | Vite dev server | Local proxy target for `/api`, `/v1`, and `/panel` |
-| `VITE_GOUO_IMAGE_MODEL` | Frontend build/dev | Initial model choice; later choices are account-scoped and require enabled admin pricing |
+| `VITE_GOUO_IMAGE_MODEL` | Frontend build/dev | Placeholder model until the catalog loads; the real default comes from the admin panel's Gouo settings, and user choices are remembered per account |
 
 ### Frontend-only compatibility variables
 
