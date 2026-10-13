@@ -21,7 +21,7 @@ import {
 
 import Label from 'ui-component/Label';
 import TableSwitch from 'ui-component/Switch';
-import { renderQuota, renderNumber, timestamp2string, renderQuotaByMoney, showError } from 'utils/common';
+import { renderQuota, renderNumber, timestamp2string, renderQuotaByPoints, showError } from 'utils/common';
 import { Icon } from '@iconify/react';
 import { useTheme } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
@@ -70,11 +70,13 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
   };
 
   const handleChangeQuota = async () => {
-    if (money === 0) {
+    // 管理员按积分填写增减量，提交前换算成额度
+    const quota = renderQuotaByPoints(money);
+    if (quota === 0) {
       showError(t('userPage.changeQuotaNotEmpty'));
+      return;
     }
 
-    const quota = Number(renderQuotaByMoney(money));
 
     if (money < 0 && Math.abs(quota) > item.quota) {
       showError(t('userPage.changeQuotaNotEnough'));
@@ -263,10 +265,9 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
               value={money}
               onChange={(e) => setMoney(e.target.value)}
               InputProps={{
-                startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                endAdornment: <InputAdornment position="end">{renderQuotaByMoney(money)}</InputAdornment>
+                endAdornment: <InputAdornment position="end">积分（{renderQuotaByPoints(money)} 点额度）</InputAdornment>
               }}
-              helperText={t('userPage.changeQuotaHelperText', { quota: renderQuota(item.quota, 6) })}
+              helperText={t('userPage.changeQuotaHelperText', { quota: renderQuota(item.quota) })}
               sx={{ mt: 2 }}
             />
             <TextField

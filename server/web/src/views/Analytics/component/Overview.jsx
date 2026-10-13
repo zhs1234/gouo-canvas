@@ -227,8 +227,8 @@ function getBarChartOptions(data, dateRange) {
 
   let channelData = {};
 
-  channelData.costs = generateBarChartOptions(dates, Array.from(result.costs.data.values()), '美元', 3);
-  channelData.costs.options.title.text = '总消费：$' + renderChartNumber(result.costs.total, 3);
+  channelData.costs = generateBarChartOptions(dates, Array.from(result.costs.data.values()), '积分', 2);
+  channelData.costs.options.title.text = '总消费：' + renderChartNumber(result.costs.total, 2) + ' 积分';
 
   channelData.tokens = generateBarChartOptions(dates, Array.from(result.tokens.data.values()), '', 0);
   channelData.tokens.options.title.text = '总Tokens：' + renderChartNumber(result.tokens.total, 0);

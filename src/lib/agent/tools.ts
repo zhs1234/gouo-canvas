@@ -8,6 +8,7 @@ import { serializeCanvasProject } from '../canvas/document'
 import type { TaskParams } from '../../types'
 import type { AgentConversation, AgentToolDefinition } from './types'
 import { getAgentRequestId, getAgentTaskResult } from './taskRecovery'
+import { formatPoints } from '../accountUsage'
 
 // 单条用户消息内 Agent 无需确认即可提交的图片张数；超出时弹窗由用户确认，避免模型连续提交付费任务
 const AGENT_IMAGES_PER_MESSAGE = 4
@@ -202,7 +203,7 @@ export async function executeAgentTool(input: {
         const model = getActiveApiProfile(useAppStore.getState().settings).model
         try {
           const price = (await getImageModels()).find((entry) => entry.id === model)?.price_cny
-          if (price) cost = `模型「${model}」每张 ¥${price}，这 ${requested} 张全部成功预计扣费 ¥${(price * requested).toFixed(2)}。`
+          if (price) cost = `模型「${model}」每张 ${formatPoints(price)}，这 ${requested} 张全部成功预计扣费 ${formatPoints(price * requested)}。`
         } catch (err) {
           console.warn('读取图片模型价格失败', err)
         }

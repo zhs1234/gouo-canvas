@@ -22,7 +22,7 @@ import {
 import User1 from 'assets/images/users/user-round.svg';
 import useLogin from 'hooks/useLogin';
 import { useTranslation } from 'react-i18next';
-import { calculateQuota } from 'utils/common';
+import { renderQuota } from 'utils/common';
 
 // assets
 import { Icon } from '@iconify/react';
@@ -140,7 +140,7 @@ const ProfileDrawer = ({ open, onClose }) => {
               <Typography variant="body2" color="text.secondary">
                 {t('dashboard_index.balance')}
               </Typography>
-              <Typography variant="body2">{user?.quota ? '$' + calculateQuota(user.quota) : t('dashboard_index.unknown')}</Typography>
+              <Typography variant="body2">{user?.quota ? renderQuota(user.quota) : t('dashboard_index.unknown')}</Typography>
             </Box>
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -148,7 +148,7 @@ const ProfileDrawer = ({ open, onClose }) => {
                 {t('dashboard_index.used')}
               </Typography>
               <Typography variant="body2">
-                {user?.used_quota ? '$' + calculateQuota(user.used_quota) : t('dashboard_index.unknown')}
+                {user?.used_quota ? renderQuota(user.used_quota) : t('dashboard_index.unknown')}
               </Typography>
             </Box>
 
@@ -171,7 +171,7 @@ const ProfileDrawer = ({ open, onClose }) => {
                 {t('invite_reward')}
               </Typography>
               <Typography variant="body2">
-                {user?.aff_quota ? '$' + calculateQuota(user.aff_quota) : t('dashboard_index.unknown')}
+                {user?.aff_quota ? renderQuota(user.aff_quota) : t('dashboard_index.unknown')}
               </Typography>
             </Box>
           </Stack>

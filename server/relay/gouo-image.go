@@ -80,7 +80,7 @@ func responseImageClient(c *gin.Context, response *types.ImageResponse, usage *t
 	if value, ok := c.Get("gouo_image_quota"); ok {
 		quota := value.(*relay_util.Quota)
 		if err := quota.SaveImageResult(c, response); err != nil {
-			return common.StringErrorWrapperLocal("图片已生成，但恢复结果保存失败，额度待核对，请勿重复提交", "image_result_persist_failed", http.StatusInternalServerError)
+			return common.StringErrorWrapperLocal("图片已生成，但恢复结果保存失败，扣费待核对，请勿重复提交", "image_result_persist_failed", http.StatusInternalServerError)
 		}
 		if err := quota.CompleteImage(c, usage); err != nil {
 			return common.ErrorWrapperLocal(err, "image_billing_unconfirmed", http.StatusInternalServerError)

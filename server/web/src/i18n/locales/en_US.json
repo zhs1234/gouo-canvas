@@ -1390,7 +1390,7 @@
     "usernameRequired": "Username is required",
     "users": "Users",
     "changeQuota": "Change quota",
-    "changeQuotaHelperText": "Here is an increase or decrease, not a direct change to the user's balance. Enter dollars, you can deduct up to {{quota}} at most.",
+    "changeQuotaHelperText": "Here is an increase or decrease, not a direct change to the user's balance. Enter points (1 CNY = 100 points), you can deduct up to {{quota}} at most.",
     "changeQuotaNotEmpty": "Please fill in the change amount.",
     "changeQuotaNotEnough": "Cannot deduct an amount exceeding the user's balance.",
     "quotaRemark": "Remark"

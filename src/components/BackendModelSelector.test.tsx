@@ -27,13 +27,13 @@ beforeEach(() => {
   mocks.state = { settings: { model: 'image-b' }, params: { n: 1 }, inputImages: [], maskDraft: null }
 })
 
-it.each([[1, '0.10'], [2, '0.20'], [10, '1.00']])('allows %s total images with a single-image model and estimates the total', (n, total) => {
+it.each([[1, '10'], [2, '20'], [10, '100']])('allows %s total images with a single-image model and estimates the total', (n, total) => {
   mocks.state.params.n = n
   const onReady = vi.fn()
   const markup = renderToStaticMarkup(<BackendModelSelector compact showEstimate onReady={onReady} />)
   mocks.effects[1]()
   expect(onReady).toHaveBeenCalledWith(true)
-  expect(markup).toContain(`预计 ¥${total}`)
+  expect(markup).toContain(`预计 ${total} 积分`)
   expect(markup).toContain('按成功张数计费')
   expect(markup).not.toContain('最多支持 1 张')
 })
@@ -45,7 +45,7 @@ it.each([0, 11, 1.5])('disables submission for invalid total image count %s', (n
   mocks.effects[1]()
   expect(onReady).toHaveBeenCalledWith(false)
   expect(markup).toContain('图片总数量必须为 1 到 10 的整数')
-  expect(markup).not.toContain('预计 ¥')
+  expect(markup).not.toContain('预计 ')
 })
 
 it.each(['reference', 'mask'])('keeps the %s capability guard when multiple images are requested', (capability) => {
@@ -62,7 +62,7 @@ it.each(['reference', 'mask'])('keeps the %s capability guard when multiple imag
 it('keeps the home estimate out of the compact Agent selector by default', () => {
   mocks.state.params.n = 2
   const markup = renderToStaticMarkup(<BackendModelSelector compact onReady={() => {}} />)
-  expect(markup).not.toContain('预计 ¥')
+  expect(markup).not.toContain('预计 ')
 })
 
 it('switches to the backend default model when the user has not picked one', async () => {

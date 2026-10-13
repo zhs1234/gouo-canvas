@@ -477,7 +477,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 	if originUser.Quota != updatedUser.Quota {
-		model.RecordLog(originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", common.LogQuota(originUser.Quota), common.LogQuota(updatedUser.Quota)))
+		model.RecordLog(originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户积分从 %s 修改为 %s", common.LogQuota(originUser.Quota), common.LogQuota(updatedUser.Quota)))
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -895,7 +895,7 @@ func ChangeUserQuota(c *gin.Context) {
 		return
 	}
 
-	remark := fmt.Sprintf("管理员增减用户额度 %s", common.LogQuota(req.Quota))
+	remark := fmt.Sprintf("管理员增减用户积分 %s", common.LogQuota(req.Quota))
 
 	if req.Remark != "" {
 		remark = fmt.Sprintf("%s, 备注: %s", remark, req.Remark)

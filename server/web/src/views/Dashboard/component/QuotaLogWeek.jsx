@@ -31,7 +31,7 @@ const QuotaLogWeek = ({ data }) => {
           return {
             date,
             requests: totalRequests,
-            amount: calculateQuota(totalAmount, 6),
+            amount: calculateQuota(totalAmount, 2),
             tokens: `${totalInputTokens}/${totalOutputTokens}`,
             cacheTokens: 0, // 假设默认为0，如果API返回了相关数据则使用实际值
             duration: (totalDuration / 1000).toFixed(3)
@@ -82,7 +82,7 @@ const QuotaLogWeek = ({ data }) => {
                     {row.date}
                   </TableCell>
                   <TableCell align="right">{row.requests}</TableCell>
-                  <TableCell align="right">${row.amount}</TableCell>
+                  <TableCell align="right">{row.amount} 积分</TableCell>
                   <TableCell align="right">{row.tokens}</TableCell>
                   {/* <TableCell align="right">{row.cacheTokens}</TableCell> */}
                   <TableCell align="right">{row.duration}</TableCell>
