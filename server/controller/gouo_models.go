@@ -82,6 +82,8 @@ func GetGouoModels(c *gin.Context) {
 			}
 		}
 	}
+	// 按后台设置的顺序排列，同序按模型 ID；未设置默认模型时客户端用排在第一的
+	sort.SliceStable(data, func(i, j int) bool { return data[i].Sort < data[j].Sort })
 	markGouoDefaultModel(data, config.GouoDefaultImageModel)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "billing_unit": "successful_request", "currency": "CNY"})
 }

@@ -21,6 +21,8 @@ type gouoAgentModel struct {
 	MaxTokens        int    `json:"max_tokens"`
 	CapabilitySource string `json:"capability_source"`
 	Default          bool   `json:"default,omitempty"`
+	Description      string `json:"description,omitempty"`
+	sort             int
 }
 
 func gouoAgentCapabilities(price *model.Price) *gouoAgentModel {
@@ -42,7 +44,7 @@ func gouoAgentCapabilities(price *model.Price) *gouoAgentModel {
 	if name == "" {
 		name = price.Model
 	}
-	return &gouoAgentModel{ID: price.Model, Name: name, ToolCalls: true, Vision: slices.Contains(info.InputModalities, "image"), ContextLength: info.ContextLength, MaxTokens: info.MaxTokens, CapabilitySource: "model_info"}
+	return &gouoAgentModel{ID: price.Model, Name: name, ToolCalls: true, Vision: slices.Contains(info.InputModalities, "image"), ContextLength: info.ContextLength, MaxTokens: info.MaxTokens, CapabilitySource: "model_info", Description: strings.TrimSpace(info.Description), sort: price.GouoSort}
 }
 
 func GetGouoAgentModels(c *gin.Context) {
@@ -63,7 +65,13 @@ func GetGouoAgentModels(c *gin.Context) {
 		}
 	}
 	model.PricingInstance.RUnlock()
-	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
+	// 按后台设置的顺序排列，同序按模型 ID
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].sort != entries[j].sort {
+			return entries[i].sort < entries[j].sort
+		}
+		return entries[i].ID < entries[j].ID
+	})
 	data := make([]*gouoAgentModel, 0, len(entries))
 	limits := token.Setting.Data().Limits.LimitModelSetting
 	for _, entry := range entries {

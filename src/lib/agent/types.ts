@@ -7,6 +7,8 @@ export interface AgentModel {
   vision: boolean
   // 后台“光构设置”指定的默认 Agent 模型
   default?: boolean
+  // 后台填写的一句话说明
+  description?: string
   input_price_cny?: number
   output_price_cny?: number
 }

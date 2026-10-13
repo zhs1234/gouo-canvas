@@ -65,6 +65,8 @@ type Price struct {
 	GouoReference  bool    `json:"gouo_reference" gorm:"default:false"`
 	GouoMask       bool    `json:"gouo_mask" gorm:"default:false"`
 	GouoMaxOutputs int     `json:"gouo_max_outputs" gorm:"default:1"`
+	// 光构客户端模型列表的排列顺序，小的在前
+	GouoSort int `json:"gouo_sort" gorm:"default:0"`
 
 	ExtraRatios *datatypes.JSONType[map[string]float64] `json:"extra_ratios,omitempty" gorm:"type:json"`
 	ModelInfo   *ModelInfoResponse                      `json:"model_info,omitempty" gorm:"-"`
@@ -152,7 +154,7 @@ func (price *Price) FetchOutputCurrencyPrice(rate float64) string {
 }
 
 func UpdatePrices(tx *gorm.DB, models []string, prices *Price) error {
-	err := tx.Model(Price{}).Where("model IN (?)", models).Select("*").Omit("model", "gouo_enabled", "gouo_price_cny", "gouo_reference", "gouo_mask", "gouo_max_outputs").Updates(
+	err := tx.Model(Price{}).Where("model IN (?)", models).Select("*").Omit("model", "gouo_enabled", "gouo_price_cny", "gouo_reference", "gouo_mask", "gouo_max_outputs", "gouo_sort").Updates(
 		Price{
 			Type:        prices.Type,
 			ChannelType: prices.ChannelType,
