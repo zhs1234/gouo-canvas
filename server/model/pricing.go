@@ -179,7 +179,8 @@ func (p *Pricing) UpdatePrice(modelName string, price *Price) error {
 	if err := ValidateGouoPrice(price); err != nil {
 		return err
 	}
-	if price.GouoEnabled && !p.GetPrice(modelName).GouoEnabled {
+	// 改名时目标模型是新的，即使原记录已启用也要核对
+	if price.GouoEnabled && (price.Model != modelName || !p.GetPrice(modelName).GouoEnabled) {
 		if err := CheckGouoImageExclusive(price.Model); err != nil {
 			return err
 		}

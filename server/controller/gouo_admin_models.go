@@ -554,8 +554,9 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "该模型当前按次计费，改为按 token 计费需同时填写输入和输出价格")
 		return
 	}
-	// 两项都必须是正数：任一为 0 时换算倍率为 0 或无穷大，价格会被存成无穷大或 0（等于免费）
-	if pointsSet && !(config.PaymentUSDRate > 0 && config.QuotaPerUnit > 0) {
+	// 汇率和额度单位为 0、无穷大或 NaN 时换算倍率不是有限正数，价格会被存成无穷大或 0（等于免费）
+	rate := gouoPointsPerMillionTokens()
+	if pointsSet && !(rate > 0 && !math.IsInf(rate, 0)) {
 		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "支付汇率或额度单位未设置，无法换算积分价格")
 		return
 	}
@@ -589,7 +590,6 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	if !priced {
 		price = model.Price{Model: id, Type: model.TokensPriceType, ChannelType: config.ChannelTypeUnknown}
 	}
-	rate := gouoPointsPerMillionTokens()
 	if input.InputPoints != nil {
 		price.Type, price.Input = model.TokensPriceType, *input.InputPoints/rate
 	}

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -452,7 +453,13 @@ func TestGouoAdminAgentPriceKeepsBilling(t *testing.T) {
 	require.True(t, price.Locked)
 
 	// 汇率或额度单位未设置时无法换算，拒绝而不是存入无穷大或 0；也不能先把模型标成上架
-	for _, zero := range []func(){func() { config.PaymentUSDRate = 0 }, func() { config.PaymentUSDRate, config.QuotaPerUnit = 7.3, 0 }} {
+	for _, zero := range []func(){
+		func() { config.PaymentUSDRate = 0 },
+		func() { config.PaymentUSDRate, config.QuotaPerUnit = 7.3, 0 },
+		func() { config.PaymentUSDRate, config.QuotaPerUnit = math.Inf(1), 500000 },
+		func() { config.PaymentUSDRate, config.QuotaPerUnit = 7.3, math.Inf(1) },
+		func() { config.PaymentUSDRate, config.QuotaPerUnit = math.NaN(), 500000 },
+	} {
 		zero()
 		require.Equal(t, http.StatusBadRequest, update(`{"model":"chat-sync","listed":true,"input_points":1,"output_points":1}`))
 		require.InDelta(t, 1.0, model.PricingInstance.Prices["chat-sync"].Input, 1e-9)

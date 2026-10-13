@@ -199,4 +199,8 @@ func TestGouoImageExclusiveOnPriceWrites(t *testing.T) {
 	// 没有上架的模型照常启用
 	require.NoError(t, p.AddPrice(image("image-a")))
 	require.True(t, p.GetPrice("image-a").GouoEnabled)
+	// 已启用的图片模型改名为已上架的 Agent 模型也要拒绝
+	require.ErrorIs(t, p.UpdatePrice("image-a", image("chat-new")), ErrGouoAgentListed)
+	require.True(t, p.GetPrice("image-a").GouoEnabled)
+	require.NoError(t, p.UpdatePrice("image-a", image("image-a")))
 }
