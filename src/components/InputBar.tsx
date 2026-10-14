@@ -4,7 +4,7 @@ import { useStore, submitTask, addImageFromFile, createInputImageFromFile, delet
 import { DEFAULT_PARAMS } from '../types'
 import { getChangedParams, normalizeTaskParams } from '../lib/paramCompatibility'
 import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, getPromptMentionParts, getSelectedImageMentionLabel, getSelectedTextMentionLabel, imageMentionMatches, insertImageMentionAtVisibleRange, isCursorInSelectedImageMention, stripImageMentionMarkers } from '../lib/promptImageMentions'
-import { normalizeImageSize } from '../lib/size'
+import { getSizeTier, normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getMaxTaskImages } from '../lib/gouoBackend'
@@ -458,6 +458,10 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
     const next = (['high', 'medium', 'low'] as const).find((quality) => allowed.includes(quality))
     if (next) setParams({ quality: next })
   }, [backendModel, params.quality, setParams])
+  // 所选模型没有开放当前分辨率时回到自动尺寸
+  useEffect(() => {
+    if (backendModel && params.size !== 'auto' && !backendModel.sizes?.includes(getSizeTier(params.size)!)) setParams({ size: 'auto' })
+  }, [backendModel, params.size, setParams])
   const moderationDisabled = !backendStatus?.gouo_allow_low_moderation
   const transparentOutputAvailable = true
   const showTransparentOutputControl = transparentOutputAvailable && params.output_format === 'png'
@@ -1564,7 +1568,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
             currentSize={params.size}
             onSelect={(size) => setParams({ size })}
             onClose={() => setShowSizePicker(false)}
-            maxTier={backendModel?.max_size}
+            tiers={backendModel?.sizes ?? []}
           />
         </Suspense>
       )}

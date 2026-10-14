@@ -160,6 +160,14 @@ export const TIER_PIXEL_BUDGET: Record<SizeTier, number> = {
   '4K': MAX_PIXELS,  // 8_294_400
 }
 
+// 按像素数归入能容纳它的最小档位，与服务端校验一致；超出 4K 或格式无效时返回 null
+export function getSizeTier(size: string): SizeTier | null {
+  const match = size.match(SIZE_PATTERN)
+  if (!match) return null
+  const pixels = Number(match[1]) * Number(match[2])
+  return (['1K', '2K', '4K'] as const).find((tier) => pixels <= TIER_PIXEL_BUDGET[tier]) ?? null
+}
+
 /**
  * 常用比例优先使用官方示例或通用显示标准，避免按像素预算计算出不常见尺寸。
  * 其中 21:9 的常见显示器尺寸会按 16 倍数约束做轻微规整。

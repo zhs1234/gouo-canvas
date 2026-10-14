@@ -500,6 +500,24 @@ func gouoContentBytesMigration() *gormigrate.Migration {
 	}
 }
 
+// 旧版按“最大尺寸”限制，留空表示不限；换成等价的支持档位列表，升级后客户端可选的分辨率不变
+func gouoSizeTiersMigration() *gormigrate.Migration {
+	return &gormigrate.Migration{
+		ID: "202610140001",
+		Migrate: func(tx *gorm.DB) error {
+			if !tx.Migrator().HasColumn(&Price{}, "gouo_max_size") {
+				return nil
+			}
+			for old, sizes := range map[string]string{"": "1K,2K,4K", "1K": "1K", "2K": "1K,2K", "4K": "1K,2K,4K"} {
+				if err := tx.Model(&Price{}).Where("COALESCE(gouo_max_size, '') = ?", old).UpdateColumn("gouo_sizes", sizes).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func migrationAfter(db *gorm.DB) error {
 	// 从库不执行
 	if !config.IsMasterNode {
@@ -518,6 +536,7 @@ func migrationAfter(db *gorm.DB) error {
 			return tx.AutoMigrate(&GouoDocument{})
 		}},
 		gouoContentBytesMigration(),
+		gouoSizeTiersMigration(),
 	})
 	return m.Migrate()
 }

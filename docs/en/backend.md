@@ -151,7 +151,7 @@ In product mode the client does not import service-address parameters such as `a
 
 ## 4. Model-specific image billing
 
-Generation, edit, and variation routes charge the public model's CNY selling price per successful HTTP request. The existing `Price` table holds its enabled state, price, capabilities, and output limit. Sizes, quality levels, generation, and editing share one price per model. Group multipliers and upstream model mappings do not change that selling price. Edit and variation routes accept only `multipart/form-data`: reference images count against the model's limit by the actual number of `image` and `image[]` files in the form, and files under any other field name are rejected.
+Generation, edit, and variation routes charge the public model's CNY selling price per successful HTTP request. The existing `Price` table holds its enabled state, price, capabilities, and output limit. In 光构模型 (Gouo models), tick the resolution tiers (1K/2K/4K) the upstream supports; the client shows only those tiers, a model with none ticked offers only automatic size, and the server validates each size by the tier its pixel count falls into. Sizes, quality levels, generation, and editing share one price per model. Group multipliers and upstream model mappings do not change that selling price. Edit and variation routes accept only `multipart/form-data`: reference images count against the model's limit by the actual number of `image` and `image[]` files in the form, and files under any other field name are rejected.
 
 These legacy settings seed the default model only on the first migration. Change later prices in the admin UI:
 

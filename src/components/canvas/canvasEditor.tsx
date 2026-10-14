@@ -664,7 +664,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
             value={config.size || 'auto'}
             onChange={(event) => run(patchNode(node.id, { metadata: { size: event.target.value } }))}
           >
-            {['auto', '1024x1024', '1536x1024', '1024x1536'].map((value) => (
+            {['auto', ...(models.find((model) => model.id === (config.model || settings.model))?.sizes?.includes('1K') ? ['1024x1024', '1536x1024', '1024x1536'] : [])].map((value) => (
               <option key={value}>{value}</option>
             ))}
           </select>

@@ -40,7 +40,7 @@ type gouoAdminModel struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description"`
 	Sort        int                `json:"gouo_sort"`
-	MaxSize     string             `json:"gouo_max_size"`
+	Sizes       []string           `json:"gouo_sizes"`
 	Qualities   []string           `json:"gouo_qualities"`
 	MaxInputs   int                `json:"gouo_max_inputs"`
 	Error       string             `json:"error,omitempty"`
@@ -220,7 +220,7 @@ func ListGouoAdminModels(c *gin.Context) {
 		item.Priced = true
 		item.Enabled, item.PriceCNY, item.Reference, item.Mask, item.MaxOutputs, item.Sort = price.GouoEnabled, price.GouoPriceCNY, price.GouoReference, price.GouoMask, price.GouoMaxOutputs, price.GouoSort
 		item.Name, item.Description = gouoModelText(price)
-		item.MaxSize, item.Qualities, item.MaxInputs = price.GouoMaxSize, model.GouoQualityList(price), price.GouoMaxInputs
+		item.Sizes, item.Qualities, item.MaxInputs = model.GouoSizeList(price), model.GouoQualityList(price), price.GouoMaxInputs
 	}
 	model.PricingInstance.RUnlock()
 	for id, channels := range channelsByModel {
@@ -306,8 +306,8 @@ func UpdateGouoAdminModel(c *gin.Context) {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
 		Sort        *int    `json:"gouo_sort"`
-		// 尺寸、画质和参考图限制可以省略，省略时保持原值；空字符串、空列表或 0 表示不限
-		MaxSize   *string   `json:"gouo_max_size"`
+		// 分辨率档位、画质和参考图限制可以省略，省略时保持原值；档位空列表表示只能用自动尺寸，画质空列表或张数 0 表示不限
+		Sizes     *[]string `json:"gouo_sizes"`
 		Qualities *[]string `json:"gouo_qualities"`
 		MaxInputs *int      `json:"gouo_max_inputs"`
 	}
@@ -348,8 +348,8 @@ func UpdateGouoAdminModel(c *gin.Context) {
 	if input.Sort != nil {
 		price.GouoSort = *input.Sort
 	}
-	if input.MaxSize != nil {
-		price.GouoMaxSize = strings.ToUpper(strings.TrimSpace(*input.MaxSize))
+	if input.Sizes != nil {
+		price.GouoSizes = strings.Join(*input.Sizes, ",")
 	}
 	if input.Qualities != nil {
 		price.GouoQualities = strings.Join(*input.Qualities, ",")

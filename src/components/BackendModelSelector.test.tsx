@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   values: [] as unknown[],
   index: 0,
   effects: [] as (() => void | (() => void))[],
-  state: { settings: { model: 'image-b' } as { model: string; gouoModelSelected?: boolean }, params: { n: 1 }, inputImages: [] as string[], maskDraft: null as object | null },
+  state: { settings: { model: 'image-b' } as { model: string; gouoModelSelected?: boolean }, params: { n: 1, size: 'auto' }, inputImages: [] as string[], maskDraft: null as object | null },
   setSettings: vi.fn(),
   getImageModels: vi.fn(),
 }))
@@ -24,7 +24,7 @@ beforeEach(() => {
   mocks.index = 0
   mocks.effects = []
   mocks.setSettings.mockReset()
-  mocks.state = { settings: { model: 'image-b' }, params: { n: 1 }, inputImages: [], maskDraft: null }
+  mocks.state = { settings: { model: 'image-b' }, params: { n: 1, size: 'auto' }, inputImages: [], maskDraft: null }
 })
 
 it.each([[1, '10'], [2, '20'], [10, '100']])('allows %s total images with a single-image model and estimates the total', (n, total) => {

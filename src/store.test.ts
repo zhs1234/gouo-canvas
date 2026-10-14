@@ -105,8 +105,8 @@ const imageA = { id: 'image-a', dataUrl: 'data:image/png;base64,a' }
 const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
 
 const models = [
-  { id: 'image-a', name: '图片 A', price_cny: 0.1, price_version: 'quote-a', reference: true, mask: true, max_outputs: 2, quota: 100 },
-  { id: 'image-b', name: '图片 B', price_cny: 0.3, price_version: 'quote-b', reference: false, mask: false, max_outputs: 1, quota: 300 },
+  { id: 'image-a', name: '图片 A', price_cny: 0.1, price_version: 'quote-a', reference: true, mask: true, max_outputs: 2, quota: 100, sizes: ['1K', '2K', '4K'] },
+  { id: 'image-b', name: '图片 B', price_cny: 0.3, price_version: 'quote-b', reference: false, mask: false, max_outputs: 1, quota: 300, sizes: ['1K', '2K', '4K'] },
 ]
 
 // 后端令牌、模型目录和账号信息都返回同一份模型目录；账号信息里没有余额时由服务端判断

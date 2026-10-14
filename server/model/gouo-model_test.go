@@ -217,7 +217,7 @@ func TestPriceSyncKeepsGouoFields(t *testing.T) {
 		DB = db
 		require.NoError(t, db.Create(&Price{Model: "chat-a", Type: TokensPriceType, Input: 1, Output: 2, GouoSort: 3, GouoMaxTokens: 4000}).Error)
 		// 暂时停用的图片模型，单价和画质等配置留着以后重新启用
-		require.NoError(t, db.Create(&Price{Model: "image-off", Type: TimesPriceType, Input: 1, GouoPriceCNY: 0.2, GouoReference: true, GouoMaxOutputs: 4, GouoMaxSize: "2K", GouoQualities: "low,high", GouoMaxInputs: 3}).Error)
+		require.NoError(t, db.Create(&Price{Model: "image-off", Type: TimesPriceType, Input: 1, GouoPriceCNY: 0.2, GouoReference: true, GouoMaxOutputs: 4, GouoSizes: "1K,2K", GouoQualities: "low,high", GouoMaxInputs: 3}).Error)
 		p := &Pricing{Prices: map[string]*Price{}}
 		require.NoError(t, p.Init())
 		// 未锁定的价格随上游更新，但本地的光构配置保留
@@ -231,9 +231,28 @@ func TestPriceSyncKeepsGouoFields(t *testing.T) {
 		require.InDelta(t, 0.2, image.GouoPriceCNY, 1e-9, mode)
 		require.True(t, image.GouoReference, mode)
 		require.Equal(t, 4, image.GouoMaxOutputs, mode)
-		require.Equal(t, "2K", image.GouoMaxSize, mode)
+		require.Equal(t, "1K,2K", image.GouoSizes, mode)
 		require.Equal(t, "low,high", image.GouoQualities, mode)
 		require.Equal(t, 3, image.GouoMaxInputs, mode)
 		DB = oldDB
+	}
+}
+
+func TestGouoSizeTiersMigration(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "sizes.db")), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Price{}))
+	// 旧版的“最大尺寸”列，新版结构体已不再读写
+	require.NoError(t, db.Exec("ALTER TABLE prices ADD COLUMN gouo_max_size varchar(10)").Error)
+	for model, old := range map[string]any{"open": "", "null": nil, "small": "1K", "mid": "2K", "big": "4K"} {
+		require.NoError(t, db.Create(&Price{Model: model, Type: TimesPriceType}).Error)
+		require.NoError(t, db.Table("prices").Where("model = ?", model).Update("gouo_max_size", old).Error)
+	}
+	require.NoError(t, gouoSizeTiersMigration().Migrate(db))
+	want := map[string]string{"open": "1K,2K,4K", "null": "1K,2K,4K", "small": "1K", "mid": "1K,2K", "big": "1K,2K,4K"}
+	for model, sizes := range want {
+		var price Price
+		require.NoError(t, db.First(&price, "model = ?", model).Error)
+		require.Equal(t, sizes, price.GouoSizes, model)
 	}
 }

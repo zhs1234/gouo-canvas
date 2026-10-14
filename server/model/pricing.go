@@ -426,7 +426,7 @@ func (p *Pricing) SyncPriceWithOverwrite(pricing []*Price) error {
 func withLocalGouoFields(price, local *Price) *Price {
 	merged := *price
 	merged.GouoEnabled, merged.GouoPriceCNY, merged.GouoReference, merged.GouoMask, merged.GouoMaxOutputs = local.GouoEnabled, local.GouoPriceCNY, local.GouoReference, local.GouoMask, local.GouoMaxOutputs
-	merged.GouoSort, merged.GouoMaxSize, merged.GouoQualities, merged.GouoMaxInputs, merged.GouoMaxTokens = local.GouoSort, local.GouoMaxSize, local.GouoQualities, local.GouoMaxInputs, local.GouoMaxTokens
+	merged.GouoSort, merged.GouoSizes, merged.GouoQualities, merged.GouoMaxInputs, merged.GouoMaxTokens = local.GouoSort, local.GouoSizes, local.GouoQualities, local.GouoMaxInputs, local.GouoMaxTokens
 	return &merged
 }
 

@@ -129,25 +129,25 @@ func TestGouoAdminModelsListAndUpdate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "标准画质", after.Name)
 	require.Equal(t, -1, after.Sort)
-	// 尺寸、画质、参考图限制：保存后出现在目录和列表里，非法值拒绝
-	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_max_size":"2k","gouo_qualities":["low","medium"],"gouo_max_inputs":4}`).Code)
+	// 分辨率档位、画质、参考图限制：保存后出现在目录和列表里，非法值拒绝
+	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_sizes":["1k","2K"],"gouo_qualities":["low","medium"],"gouo_max_inputs":4}`).Code)
 	after, err = model.PricingInstance.GetGouoModel("image-new")
 	require.NoError(t, err)
-	require.Equal(t, "2K", after.MaxSize)
+	require.Equal(t, []string{"1K", "2K"}, after.Sizes)
 	require.Equal(t, []string{"low", "medium"}, after.Qualities)
 	require.Equal(t, 4, after.MaxInputs)
 	_, models = list()
-	require.Equal(t, "2K", models["image-new"]["gouo_max_size"])
+	require.Equal(t, []any{"1K", "2K"}, models["image-new"]["gouo_sizes"])
 	require.Equal(t, []any{"low", "medium"}, models["image-new"]["gouo_qualities"])
 	for _, body := range []string{
-		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_max_size":"8K"}`,
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_sizes":["8K"]}`,
 		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_qualities":["ultra"]}`,
 		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_max_inputs":17}`,
 	} {
 		require.Equal(t, http.StatusBadRequest, update(body).Code, body)
 	}
-	// 改回不限：价格版本回到原值
-	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_max_size":"","gouo_qualities":[],"gouo_max_inputs":0}`).Code)
+	// 改回原样（不开放档位、画质和张数不限）：价格版本回到原值
+	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_sizes":[],"gouo_qualities":[],"gouo_max_inputs":0}`).Code)
 	after, err = model.PricingInstance.GetGouoModel("image-new")
 	require.NoError(t, err)
 	require.Equal(t, before.PriceVersion, after.PriceVersion)
