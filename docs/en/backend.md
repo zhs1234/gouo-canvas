@@ -114,7 +114,7 @@ When creating codes, enter points in **按积分填写** (Enter in points); the 
 
 ![Image billing](../images/screenshots/panel-gouo-billing.webp)
 
-**图片账务** lists every image charge with its user, channel, model, unit price (points), status, and log. Interrupted requests that never reached upstream are refunded after about 20 minutes. Requests that were sent but whose outcome is unknown are marked "待核对" (awaiting review); an administrator checks the channel records, records the evidence, and either settles or refunds. See [section 4](#4-model-specific-image-billing).
+**图片账务** lists every image charge with its user, channel, model, unit price (points), status, and log. Any request that does not return an image to the user (upstream failure, timeout, disconnect, or a result-save or settlement failure) is refunded automatically. Legacy "待核对" (awaiting review) rows from older versions are refunded by the scheduled job, or an administrator can record evidence and settle or refund them manually. See [section 4](#4-model-specific-image-billing).
 
 ### 3.6 Gouo storage
 
@@ -170,9 +170,9 @@ GOUO_IMAGE_MODEL=gpt-image-2
 - The Gouo product client splits n images into n single-image requests, and each successful request is charged separately (billed per successful image), up to 10 images at a time. For direct API calls, multiple outputs within the model limit in one HTTP request cost one charge. Frontend compatibility modes can also split a task into separately charged requests.
 - Price synchronization and generic batch editing preserve enabled Gouo settings; change them in the single-model editor. Selling prices are independent of upstream costs, so operators must check actual upstream bills.
 
-Image reservations create a durable ledger row in the same transaction. Upstream requests have a 15-minute deadline. At startup and every minute, the primary node refunds unsent reservations older than 20 minutes and marks dispatched requests with unknown outcomes for review. Settlement/refund, balances, statistics, and logs commit atomically; repeated resolution does not repeat the balance change.
+Image reservations create a durable ledger row in the same transaction. Upstream requests have a 15-minute deadline. At startup and every minute, the primary node refunds every request still unsettled after 20 minutes, including legacy review rows. Requests with an unknown upstream outcome are also refunded immediately and are not retried on another channel; the platform absorbs any upstream cost for them. Settlement/refund, balances, statistics, and logs commit atomically; repeated resolution does not repeat the balance change.
 
-Browser timeouts, output downloads, or local storage failures do not mean a refund occurred. Users check image request status in Account → Usage; administrators reconcile upstream records in 光构 → 图片账务 (Image billing) and provide a reason before settling or refunding. Retrying creates a new paid request and does not recover the original result. Back up the database before upgrading. Historical interruptions without ledger rows require manual reconciliation against old logs.
+Results of settled requests are kept briefly so the browser can fetch them after a disconnect; a local browser save failure is not refunded. Users see charges and refunds in the point history under Account → Usage; administrators look up requests by ID in 光构 → 图片账务 (Image billing). Retrying creates a new paid request and does not recover the original result. Back up the database before upgrading. Historical interruptions without ledger rows require manual reconciliation against old logs.
 
 ## 5. Cloud library
 

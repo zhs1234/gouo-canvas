@@ -117,10 +117,6 @@ func DispatchGouoImageCharge(id string, channelID int) error {
 	return nil
 }
 
-func ReviewGouoImageCharge(id, note string) error {
-	return DB.Model(&GouoImageCharge{}).Where("id = ? AND status = ?", id, GouoChargeDispatched).Updates(map[string]any{"status": GouoChargeReview, "note": note}).Error
-}
-
 // 条件更新取得结算权；账务状态、额度、统计和日志必须一起成功或一起回滚。
 func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, note string) error {
 	if status != GouoChargeSettled && status != GouoChargeRefunded {
@@ -205,17 +201,15 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 
 func RecoverGouoImageCharges() error {
 	cutoff := time.Now().Add(-GouoImageRecoveryDelay).Unix()
-	var reserved []GouoImageCharge
-	if err := DB.Where("status = ? AND updated_at < ?", GouoChargeReserved, cutoff).Limit(100).Find(&reserved).Error; err != nil {
+	// 超过请求时限仍未结算的请求都按失败退款；旧版留下的待核对记录一并退回
+	var stale []GouoImageCharge
+	if err := DB.Where("status IN ? AND updated_at < ?", []string{GouoChargeReserved, GouoChargeDispatched, GouoChargeReview}, cutoff).Limit(100).Find(&stale).Error; err != nil {
 		return err
 	}
-	for _, charge := range reserved {
-		if err := FinishGouoImageCharge(charge.ID, GouoChargeReserved, GouoChargeRefunded, nil, 0, "请求中断且未发送上游，自动退回积分"); err != nil && !errors.Is(err, ErrGouoChargeState) {
+	for _, charge := range stale {
+		if err := FinishGouoImageCharge(charge.ID, charge.Status, GouoChargeRefunded, nil, 0, "请求中断，未返回图片，自动退回积分"); err != nil && !errors.Is(err, ErrGouoChargeState) {
 			return err
 		}
-	}
-	if err := DB.Model(&GouoImageCharge{}).Where("status = ? AND updated_at < ?", GouoChargeDispatched, cutoff).Updates(map[string]any{"status": GouoChargeReview, "note": "请求中断，上游结果未知，请核对渠道记录后结算或退款"}).Error; err != nil {
-		return err
 	}
 	return CleanupGouoImageResults()
 }

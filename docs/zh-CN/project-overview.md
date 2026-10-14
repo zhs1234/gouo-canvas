@@ -16,7 +16,7 @@
 | 收藏与数据 | 收藏夹、批量操作、ZIP 数据导入导出 | [favorites](../../src/components/favorites)、[DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
 | 画布 | 无限画布，文本、图片、生成配置和组节点，节点内生成并显示预计扣费，关联 Agent | [canvas](../../src/components/canvas)、[lib/canvas](../../src/lib/canvas) |
 | Agent | 对话式创作，调用图片生成和画布读写工具，模型由后台配置 | [agent](../../src/components/agent)、[lib/agent](../../src/lib/agent) |
-| 用户中心 | 积分余额、图片计费、兑换码、使用记录、图片请求状态和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
+| 用户中心 | 积分余额、图片计费、兑换码、使用记录和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | 云端作品库 | 任务及关联图片同步、空间用量、账号隔离 | [serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | 管理后台 | 仅限管理员登录；用户、渠道、兑换码、日志等 One Hub 管理能力，以及光构设置、光构模型、图片账务和光构存储 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
 

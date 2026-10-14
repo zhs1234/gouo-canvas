@@ -43,18 +43,6 @@ export interface GouoUsageLog {
   metadata?: Record<string, unknown>
 }
 
-export interface GouoImageCharge {
-  id: string
-  model_name: string
-  price_cny: number
-  status: 'reserved' | 'dispatched' | 'needs_review' | 'settled' | 'refunded'
-  created_at: number
-  note: string
-}
-
-export function getImageCharges(page = 1, status?: GouoImageCharge['status']) {
-  return backendRequest<{ data: GouoImageCharge[] | null; total_count: number }>(`/api/gouo/image-charges?page=${page}&size=20${status ? `&status=${status}` : ''}`)
-}
 
 export interface GouoImageModel {
   id: string

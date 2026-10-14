@@ -16,7 +16,7 @@ This document helps maintainers and new contributors understand the product scop
 | Collections and data | Collections, batch actions, ZIP data import and export | [favorites](../../src/components/favorites), [DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
 | Canvas | Infinite canvas with text, image, generation-settings, and group nodes; in-node generation with estimated charge; linked Agent | [canvas](../../src/components/canvas), [lib/canvas](../../src/lib/canvas) |
 | Agent | Conversational creation that calls image-generation and canvas tools; models configured in the admin panel | [agent](../../src/components/agent), [lib/agent](../../src/lib/agent) |
-| User center | Points balance, image billing, redemption codes, usage history, image request status, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
+| User center | Points balance, image billing, redemption codes, usage history, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | Cloud library | Server-saved artworks, storage usage, and account isolation | [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | Admin panel | Administrators only; One Hub user, channel, redemption-code, and log administration, plus Gouo settings, Gouo models, image billing, and Gouo storage | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
 

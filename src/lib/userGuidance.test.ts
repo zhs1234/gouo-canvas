@@ -28,11 +28,10 @@ describe('userGuidance', () => {
     expect(isBalanceError('network timeout')).toBe(false)
   })
 
-  it('requires billing checks for interrupted or locally failed paid requests', () => {
-    for (const message of ['Failed to fetch', '请求中断', '生成结果未确认', '生成结果已返回，但本地处理或保存失败：QuotaExceededError']) {
+  it('explains automatic refunds for interrupted or locally failed paid requests', () => {
+    for (const message of ['Failed to fetch', '请求中断', '生成结果未返回', '生成结果已返回，但本地处理或保存失败：QuotaExceededError']) {
       const guidance = getActionableErrorMessage(message, true)
-      expect(guidance).toContain('图片请求状态')
-      expect(guidance).toContain('不代表已退款')
+      expect(guidance).toContain('自动退回积分')
       expect(guidance).toContain('新建付费请求，多张图片分别计费')
       expect(guidance).not.toContain('稍后点击任务上的“重试”')
     }
@@ -40,7 +39,7 @@ describe('userGuidance', () => {
     // 平台内容审查在扣费前拦截，即使按付费请求处理也不提示核对账务
     const blocked = getActionableErrorMessage('提示词包含不允许的内容，请修改后重试 (request id: 1)', true)
     expect(blocked).toContain('没有扣费')
-    expect(blocked).not.toContain('图片请求状态')
+    expect(blocked).not.toContain('自动退回积分')
   })
 
 })

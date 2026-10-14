@@ -174,7 +174,7 @@ Enter a redemption code under **充值积分** (Add points) to credit your accou
 
 ![Redeeming points](../images/screenshots/client-redeem.webp)
 
-**使用记录** (Usage records) lists the status of each image request (settled, refunded, awaiting review, and so on) and every point top-up, point adjustment, image generation, and model charge. Filter by type, model, and date, or export to CSV.
+**使用记录** (Usage records) lists every point top-up, point adjustment, image generation, and model charge. Filter by type, model, and date, or export to CSV.
 
 ![Usage records](../images/screenshots/client-usage.webp)
 
@@ -210,9 +210,9 @@ Remove content that may involve sexual material, violence, illegal acts, infring
 
 Try PNG, JPEG, or WebP, or reduce the number or size of images. When using a mask, keep the masked image in the reference list.
 
-### Timeout or unconfirmed result
+### Timeout or failed generation
 
-A timeout, failed download, or local save failure does not mean you were refunded. Check the request status under **用户中心 → 使用记录**; give the request ID of anything marked "待核对" (awaiting review) to the operator. Retrying creates a new paid request.
+A request that does not return an image is refunded automatically; check the point history under **用户中心 → 使用记录**. Retrying creates a new paid request.
 
 ### A finished image is missing on another device
 

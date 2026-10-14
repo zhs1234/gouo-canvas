@@ -73,7 +73,7 @@ func TestGouoImageQuotaRetriesRefundAndSnapshot(t *testing.T) {
 	require.Equal(t, 0.2, logs[0].Metadata.Data()["price_cny"])
 	require.Equal(t, "successful_request", logs[0].Metadata.Data()["billing_unit"])
 
-	// 已拿到结果但结算写入失败时保留待核对记录，不能因返回错误而退款。
+	// 结算写入失败时不回传图片，按失败退回预扣。
 	q = NewQuota(c, "mapped-upstream", 0)
 	require.Nil(t, q.PreQuotaConsumption())
 	require.Nil(t, q.DispatchImage(c))
@@ -87,10 +87,14 @@ func TestGouoImageQuotaRetriesRefundAndSnapshot(t *testing.T) {
 	q.Undo(c)
 	var charge model.GouoImageCharge
 	require.NoError(t, db.First(&charge, "id = ?", q.imageCharge.ID).Error)
-	require.Equal(t, model.GouoChargeReview, charge.Status)
+	require.Equal(t, model.GouoChargeDispatched, charge.Status)
+	db.Callback().Create().Remove("fail_image_log")
+	q.Undo(c)
+	require.NoError(t, db.First(&charge, "id = ?", q.imageCharge.ID).Error)
+	require.Equal(t, model.GouoChargeRefunded, charge.Status)
 	balance, err = model.GetUserQuota(1)
 	require.NoError(t, err)
-	require.Equal(t, 980, balance)
+	require.Equal(t, 990, balance)
 	require.NoError(t, db.Where("type = ?", model.LogTypeConsume).Find(&logs).Error)
 	require.Len(t, logs, 1)
 
@@ -99,7 +103,6 @@ func TestGouoImageQuotaRetriesRefundAndSnapshot(t *testing.T) {
 	require.Equal(t, model.GouoImageRequestID(1, "agent-tool-call-1"), q.imageCharge.ID)
 	require.Nil(t, q.PreQuotaConsumption())
 	require.Nil(t, q.DispatchImage(c))
-	q.MarkImageUnknown(c, "连接中断")
 	duplicate := NewQuota(c, "mapped-upstream", 0)
 	duplicateErr := duplicate.PreQuotaConsumption()
 	require.NotNil(t, duplicateErr)
@@ -108,7 +111,7 @@ func TestGouoImageQuotaRetriesRefundAndSnapshot(t *testing.T) {
 	duplicate.Undo(c)
 	balance, err = model.GetUserQuota(1)
 	require.NoError(t, err)
-	require.Equal(t, 970, balance)
+	require.Equal(t, 980, balance)
 }
 
 func TestGouoImageModelRejectedOutsideImageBilling(t *testing.T) {

@@ -178,7 +178,7 @@ The outer proxy must:
 - Permanently redirect HTTP to HTTPS and send `Strict-Transport-Security: max-age=31536000` (enable it once HTTPS is stable for the whole site) so browsers stop making clear-text requests.
 - Preserve `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
 - Accept request bodies of at least 32 MiB so a 25 MiB asset reaches the backend.
-- Set `/v1/` read/send timeouts to at least 960 seconds and disable proxy buffering. A backend image request can take up to 15 minutes; if the proxy disconnects first, the reserved charge ends up waiting for manual review.
+- Set `/v1/` read/send timeouts to at least 960 seconds and disable proxy buffering. A backend image request can take up to 15 minutes; if the proxy disconnects first, the request fails and is refunded automatically, discarding any image generated upstream.
 - Set `/api/` read timeout to at least 300 seconds.
 - Keep backend 3000, MySQL 3306, and Redis 6379 private.
 
