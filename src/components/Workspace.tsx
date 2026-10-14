@@ -5,6 +5,7 @@ import { editOutputs, reuseConfig, useStore } from '../store'
 import { getAllAgentConversations, getAllCanvasProjects } from '../lib/db'
 import { INSPIRATION_TEMPLATES } from '../lib/inspirationTemplates'
 import { requestUserCenter } from '../lib/userGuidance'
+import { useThemeStore } from '../lib/canvas/uiStore'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import type { AgentConversation, CanvasProject } from '../types'
 import Header from './Header'
@@ -241,7 +242,7 @@ export default function Workspace() {
     window.addEventListener('gouo:documents-changed', refresh)
     return () => { active = false; window.removeEventListener('gouo:documents-changed', refresh) }
   }, [])
-  useEffect(() => { document.documentElement.classList.add('dark'); window.scrollTo(0, 0) }, [location.key])
+  useEffect(() => { document.documentElement.classList.toggle('dark', useThemeStore.getState().theme === 'dark'); window.scrollTo(0, 0) }, [location.key])
   // 浏览器后退等切换页面时，收藏夹选择窗口不应留在新页面上
   useEffect(() => { useStore.getState().closeFavoritePicker() }, [location.pathname])
   return <div className={`workspace-shell ${narrow ? 'sidebar-collapsed' : ''} ${canvas ? 'canvas-mode' : ''} ${location.pathname.startsWith('/agent') ? 'agent-mode-page' : ''}`}>
