@@ -9,7 +9,7 @@ import { CanvasEditor } from './canvasEditor'
 import { getTrashRetentionDays } from '../../lib/gouoBackend'
 import './canvas.css'
 
-export interface CanvasWorkspaceProps {
+interface CanvasWorkspaceProps {
   projectId?: string
   onOpenProject: (id: string) => void
   onOpenAgent?: (projectId: string) => void

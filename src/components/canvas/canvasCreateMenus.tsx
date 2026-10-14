@@ -8,7 +8,7 @@ import { useThemeStore } from '../../lib/canvas/uiStore'
 import { NODE_DEFINITIONS } from '../../lib/canvas/nodeRegistry'
 import type { Position } from '../../lib/canvas/types'
 
-export function ConnectionCreateOption({
+function ConnectionCreateOption({
   theme,
   icon,
   title,

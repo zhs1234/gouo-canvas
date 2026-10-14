@@ -1,9 +1,6 @@
 export type BrowserNotificationPermissionResult =
   | { ok: true }
   | { ok: false; reason: 'unsupported' | 'insecure' | 'denied' | 'default' | 'error'; error?: unknown }
-export type BrowserNotificationReadiness =
-  | { ok: true }
-  | { ok: false; reason: 'unsupported' | 'insecure' | 'denied' | 'default' }
 
 function getNotificationConstructor() {
   if (typeof window === 'undefined' || !('Notification' in window)) return null
@@ -14,17 +11,12 @@ function isSecureNotificationContext() {
   return typeof window !== 'undefined' && window.isSecureContext
 }
 
-export function getBrowserNotificationReadiness(): BrowserNotificationReadiness {
+export async function requestBrowserNotificationPermission(): Promise<BrowserNotificationPermissionResult> {
   const NotificationConstructor = getNotificationConstructor()
   if (!NotificationConstructor) return { ok: false, reason: 'unsupported' }
   if (!isSecureNotificationContext()) return { ok: false, reason: 'insecure' }
   if (NotificationConstructor.permission === 'granted') return { ok: true }
-  return { ok: false, reason: NotificationConstructor.permission }
-}
-
-export async function requestBrowserNotificationPermission(): Promise<BrowserNotificationPermissionResult> {
-  const readiness = getBrowserNotificationReadiness()
-  if (readiness.ok || readiness.reason !== 'default') return readiness
+  if (NotificationConstructor.permission === 'denied') return { ok: false, reason: 'denied' }
 
   try {
     const permission = await window.Notification.requestPermission()

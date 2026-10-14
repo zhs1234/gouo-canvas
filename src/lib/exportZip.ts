@@ -9,12 +9,12 @@ import { validateCanvasProject } from './canvas/document'
 
 type ZipFiles = Record<string, Uint8Array | [Uint8Array, { mtime: Date }]>
 
-export interface BuildExportZipOptions {
+interface BuildExportZipOptions {
   exportConfig?: boolean
   exportTasks?: boolean
 }
 
-export interface BuildExportZipParams {
+interface BuildExportZipParams {
   canvasProjects?: CanvasProject[]
   agentConversations?: AgentConversation[]
   options: BuildExportZipOptions
@@ -27,7 +27,7 @@ export interface BuildExportZipParams {
   defaultFavoriteCollectionId: string | null
 }
 
-export interface ExportZipContents {
+interface ExportZipContents {
   manifest: ExportData
   files: Record<string, Uint8Array>
 }

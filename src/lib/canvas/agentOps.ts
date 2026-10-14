@@ -4,7 +4,7 @@ import { isRecord } from '../storeInputNormalization'
 import { validateCanvasProject, validateMetadata } from './document'
 import type { CanvasNodeData, CanvasNodeMetadata, CanvasNodeTypeId, CanvasProject, ViewportTransform } from './types'
 
-export type CanvasAgentOp =
+type CanvasAgentOp =
   | {
       type: 'add_node'
       id?: string

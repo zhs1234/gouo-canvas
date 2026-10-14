@@ -1,6 +1,6 @@
 import type { CanvasConnection, CanvasNodeData } from './types'
 
-export type CanvasResourceKind = 'image' | 'text' | 'video' | 'audio'
+type CanvasResourceKind = 'image' | 'text' | 'video' | 'audio'
 export type CanvasResourceReference = {
   id: string
   nodeId: string

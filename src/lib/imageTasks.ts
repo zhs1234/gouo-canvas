@@ -12,7 +12,7 @@ import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
 import { isStorageScopeCurrent } from './storageScope'
 import { formatPoints } from './accountUsage'
 
-export interface ImageTaskInput {
+interface ImageTaskInput {
   prompt: string
   model?: string
   params?: Partial<TaskParams>

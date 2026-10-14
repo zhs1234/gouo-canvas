@@ -136,7 +136,7 @@ export function getImage(id: string): Promise<StoredImage | undefined> {
   return dbTransaction(STORE_IMAGES, 'readonly', (s) => s.get(id))
 }
 
-export function getStoredImageThumbnail(id: string): Promise<StoredImageThumbnail | undefined> {
+function getStoredImageThumbnail(id: string): Promise<StoredImageThumbnail | undefined> {
   return dbTransaction(STORE_THUMBNAILS, 'readonly', (s) => s.get(id))
 }
 
@@ -207,7 +207,7 @@ export function putImage(image: StoredImage): Promise<IDBValidKey> {
   return dbTransaction(STORE_IMAGES, 'readwrite', (s) => s.put(image))
 }
 
-export interface CloudAssetMapItem {
+interface CloudAssetMapItem {
   localImageId: string
   cloudAssetId: string
   contentUrl: string
@@ -406,7 +406,7 @@ function hashDataUrlFallback(dataUrl: string): string {
   return `fallback-${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`
 }
 
-export interface StoreImageResult {
+interface StoreImageResult {
   id: string
   width?: number
   height?: number

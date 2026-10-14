@@ -1,5 +1,5 @@
 // 基于 basketikun/infinite-canvas (MIT)，来源及适配说明见 UPSTREAM.md。
-export const CANVAS_IMAGE_PREVIEW_MAX_EDGE = 768
+const CANVAS_IMAGE_PREVIEW_MAX_EDGE = 768
 
 type ImageSourceChoice = {
   previewUrl?: string
@@ -33,14 +33,11 @@ export function pickImageSource({
   return requiredLongEdge > previewLongEdge ? originalUrl : previewUrl
 }
 
-export function getThumbnailDimensions(width: number, height: number, maxEdge = CANVAS_IMAGE_PREVIEW_MAX_EDGE) {
-  const scale = Math.min(1, maxEdge / Math.max(width, height))
-  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) }
-}
-
 export async function createImageThumbnail(blob: Blob, maxEdge = CANVAS_IMAGE_PREVIEW_MAX_EDGE) {
   const bitmap = await createImageBitmap(blob)
-  const { width, height } = getThumbnailDimensions(bitmap.width, bitmap.height, maxEdge)
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height))
+  const width = Math.max(1, Math.round(bitmap.width * scale))
+  const height = Math.max(1, Math.round(bitmap.height * scale))
   if (width === bitmap.width && height === bitmap.height) {
     bitmap.close()
     return undefined

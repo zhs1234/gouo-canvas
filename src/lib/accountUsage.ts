@@ -1,7 +1,7 @@
 import type { GouoUsageLog } from './gouoBackend'
 
 // 积分制：1 元 = 100 积分。服务端仍按人民币折算额度记账，界面统一换算成积分显示
-export const POINTS_PER_CNY = 100
+const POINTS_PER_CNY = 100
 
 export function toPoints(cny: number) {
   return Math.round(cny * POINTS_PER_CNY * 100) / 100
