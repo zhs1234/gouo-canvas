@@ -710,3 +710,12 @@ describe('custom providers', () => {
     expect(restoredProfile.apiProxy).toBe(false)
   })
 })
+
+describe('zipBatchDownload', () => {
+  it('migrates the old per-route ZIP setting to a single switch', () => {
+    expect(normalizeSettings({}).zipBatchDownload).toBe(true)
+    expect(normalizeSettings({ zipDownloadRoutes: ['task-selection'] }).zipBatchDownload).toBe(true)
+    expect(normalizeSettings({ zipDownloadRoutes: [] }).zipBatchDownload).toBe(false)
+    expect(normalizeSettings({ zipDownloadRoutes: ['task-selection'], zipBatchDownload: false }).zipBatchDownload).toBe(false)
+  })
+})

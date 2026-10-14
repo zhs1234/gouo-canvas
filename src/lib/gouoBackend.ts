@@ -52,8 +52,8 @@ export interface GouoImageCharge {
   note: string
 }
 
-export function getImageCharges(page = 1) {
-  return backendRequest<{ data: GouoImageCharge[] | null; total_count: number }>(`/api/gouo/image-charges?page=${page}&size=20`)
+export function getImageCharges(page = 1, status?: GouoImageCharge['status']) {
+  return backendRequest<{ data: GouoImageCharge[] | null; total_count: number }>(`/api/gouo/image-charges?page=${page}&size=20${status ? `&status=${status}` : ''}`)
 }
 
 export interface GouoImageModel {

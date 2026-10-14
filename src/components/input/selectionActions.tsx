@@ -129,7 +129,7 @@ export default function SelectionActions({ inline = false }: { inline?: boolean 
     try {
       const timeStr = formatExportFileTime(new Date())
       const fileNameBase = `batch-${timeStr}`
-      const { successCount, failCount } = settings.zipDownloadRoutes.includes('task-selection')
+      const { successCount, failCount } = settings.zipBatchDownload
         ? await downloadImageEntriesAsZip(getTaskOutputImageZipEntries(selectedTasks), fileNameBase)
         : await downloadImageIds(imageIds, fileNameBase)
 
@@ -145,7 +145,7 @@ export default function SelectionActions({ inline = false }: { inline?: boolean 
       showToast('下载失败', 'error')
     }
     clearSelection()
-  }, [tasks, selectedTaskIds, settings.zipDownloadRoutes, showToast, clearSelection])
+  }, [tasks, selectedTaskIds, settings.zipBatchDownload, showToast, clearSelection])
 
   const handleDownloadSelectedFavoriteCollections = useCallback(async () => {
     const selectedIdSet = new Set(selectedFavoriteCollectionIds)
@@ -155,7 +155,7 @@ export default function SelectionActions({ inline = false }: { inline?: boolean 
     let successCount = 0
     let failCount = 0
     let downloadedCollectionCount = 0
-    const useZipDownload = settings.zipDownloadRoutes.includes('favorite-collection-selection')
+    const useZipDownload = settings.zipBatchDownload
     const timeStr = formatExportFileTime(new Date())
 
     try {
@@ -192,7 +192,7 @@ export default function SelectionActions({ inline = false }: { inline?: boolean 
       showToast('下载失败', 'error')
     }
     clearFavoriteCollectionSelection()
-  }, [clearFavoriteCollectionSelection, favoriteCollectionCards, selectedFavoriteCollectionIds, settings.zipDownloadRoutes, showToast])
+  }, [clearFavoriteCollectionSelection, favoriteCollectionCards, selectedFavoriteCollectionIds, settings.zipBatchDownload, showToast])
 
   const handleDeleteSelectedFavoriteCollections = useCallback(() => {
     const selectedIdSet = new Set(selectedFavoriteCollectionIds)

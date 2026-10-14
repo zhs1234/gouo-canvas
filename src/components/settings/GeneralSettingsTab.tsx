@@ -1,21 +1,20 @@
 import type { AppSettings } from '../../types'
+import { isBackendAuthEnabled } from '../../lib/gouoBackend'
 import Select from '../Select'
 
 interface GeneralSettingsTabProps {
   draft: AppSettings
-  zipDownloadRouteSummary: string
   commitSettings: (nextDraft: AppSettings) => void
-  onOpenZipDownloadRouteManager: () => void
   toggleTaskCompletionNotification: () => Promise<void>
 }
 
 export default function GeneralSettingsTab({
   draft,
-  zipDownloadRouteSummary,
   commitSettings,
-  onOpenZipDownloadRouteManager,
   toggleTaskCompletionNotification,
 }: GeneralSettingsTabProps) {
+  // 光构后端模式没有多套 API 配置，也不走 Codex CLI / Responses API，相关开关不起作用
+  const backend = isBackendAuthEnabled()
   return (
     <div className="space-y-4">
       <div className="hidden sm:block">
@@ -95,18 +94,21 @@ export default function GeneralSettingsTab({
         </div>
       </div>
       <div className="block">
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <span className="block text-sm text-gray-600 dark:text-gray-300">使用压缩包进行的批量下载途径</span>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="block text-sm text-gray-600 dark:text-gray-300">批量下载时打包为 ZIP</span>
           <button
             type="button"
-            onClick={onOpenZipDownloadRouteManager}
-            className="shrink-0 rounded-xl border border-gray-200/80 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-gray-900 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-gray-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+            onClick={() => commitSettings({ ...draft, zipBatchDownload: !draft.zipBatchDownload })}
+            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.zipBatchDownload ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+            role="switch"
+            aria-checked={draft.zipBatchDownload}
+            aria-label="批量下载时打包为 ZIP"
           >
-            管理
+            <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.zipBatchDownload ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
           </button>
         </div>
         <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-          {zipDownloadRouteSummary}
+          多选下载、下载全部和下载中间步骤图时打包成一个 ZIP；关闭后逐张下载，浏览器可能会询问是否允许下载多个文件。
         </div>
       </div>
       <div className="block">
@@ -127,24 +129,26 @@ export default function GeneralSettingsTab({
           关闭后，不再持久化提示词和参考图，下次启动会使用空输入框。
         </div>
       </div>
-      <div className="block">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="block text-sm text-gray-600 dark:text-gray-300">复用配置时临时复用该任务的 API 配置</span>
-          <button
-            type="button"
-            onClick={() => commitSettings({ ...draft, reuseTaskApiProfileTemporarily: !draft.reuseTaskApiProfileTemporarily })}
-            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.reuseTaskApiProfileTemporarily ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-            role="switch"
-            aria-checked={draft.reuseTaskApiProfileTemporarily}
-            aria-label="复用配置时临时复用该任务的 API 配置"
-          >
-            <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.reuseTaskApiProfileTemporarily ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
-          </button>
+      {!backend && (
+        <div className="block">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="block text-sm text-gray-600 dark:text-gray-300">复用配置时临时复用该任务的 API 配置</span>
+            <button
+              type="button"
+              onClick={() => commitSettings({ ...draft, reuseTaskApiProfileTemporarily: !draft.reuseTaskApiProfileTemporarily })}
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.reuseTaskApiProfileTemporarily ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+              role="switch"
+              aria-checked={draft.reuseTaskApiProfileTemporarily}
+              aria-label="复用配置时临时复用该任务的 API 配置"
+            >
+              <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.reuseTaskApiProfileTemporarily ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
+            </button>
+          </div>
+          <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
+            开启后，复用历史任务时会临时使用该任务的 API 配置，找不到该配置时提交会提示；关闭后，会继续使用当前的 API 配置。
+          </div>
         </div>
-        <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-          开启后，复用历史任务时会临时使用该任务的 API 配置，找不到该配置时提交会提示；关闭后，会继续使用当前的 API 配置。
-        </div>
-      </div>
+      )}
       <div className="block">
         <div className="mb-1 flex items-center justify-between">
           <span className="block text-sm text-gray-600 dark:text-gray-300">成功任务仍然展示重试按钮</span>
@@ -160,27 +164,29 @@ export default function GeneralSettingsTab({
           </button>
         </div>
         <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-          开启后，即使任务成功生成，也会在任务卡片和详情页显示重试按钮。
+          开启后，即使任务成功生成，也会在任务卡片和详情页显示重试按钮。{backend && '重试会重新生成并计费。'}
         </div>
       </div>
-      <div className="block">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="block text-sm text-gray-600 dark:text-gray-300">允许模型改写优化提示词</span>
-          <button
-            type="button"
-            onClick={() => commitSettings({ ...draft, allowPromptRewrite: !draft.allowPromptRewrite })}
-            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.allowPromptRewrite ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-            role="switch"
-            aria-checked={draft.allowPromptRewrite}
-            aria-label="允许模型改写优化提示词"
-          >
-            <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.allowPromptRewrite ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
-          </button>
+      {!backend && (
+        <div className="block">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="block text-sm text-gray-600 dark:text-gray-300">允许模型改写优化提示词</span>
+            <button
+              type="button"
+              onClick={() => commitSettings({ ...draft, allowPromptRewrite: !draft.allowPromptRewrite })}
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.allowPromptRewrite ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+              role="switch"
+              aria-checked={draft.allowPromptRewrite}
+              aria-label="允许模型改写优化提示词"
+            >
+              <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.allowPromptRewrite ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
+            </button>
+          </div>
+          <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
+            开启后，Codex CLI 兼容模式下的 Image API 请求和所有 Responses API 请求都不再附加防改写提示词，允许模型按服务商策略优化提示词。
+          </div>
         </div>
-        <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-          开启后，Codex CLI 兼容模式下的 Image API 请求和所有 Responses API 请求都不再附加防改写提示词，允许模型按服务商策略优化提示词。
-        </div>
-      </div>
+      )}
       <div className="block">
         <div className="mb-1 flex items-center justify-between">
           <span className="block text-sm text-gray-600 dark:text-gray-300">任务完成后发送系统通知</span>

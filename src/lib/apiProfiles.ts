@@ -13,7 +13,7 @@ import type {
   CustomProviderTemplate,
   ReferenceImageEditAction,
 } from '../types'
-import { DEFAULT_STREAM_PARTIAL_IMAGES, DEFAULT_ZIP_DOWNLOAD_ROUTES, ZIP_DOWNLOAD_ROUTE_VALUES } from '../types'
+import { DEFAULT_STREAM_PARTIAL_IMAGES } from '../types'
 import { shouldUseApiProxy } from './devProxy'
 import { normalizeStreamPartialImages, parseDefaultApiUrl } from './defaultApiUrl'
 import { isImportableConfigUrl } from './customProviderConfigUrl'
@@ -74,12 +74,6 @@ export function isDefaultConfigOnlyEnabled(): boolean {
 
 function normalizeReferenceImageEditAction(value: unknown): ReferenceImageEditAction {
   return value === 'replace-reference' || value === 'add-mask' ? value : 'ask'
-}
-
-function normalizeZipDownloadRoutes(value: unknown) {
-  if (!Array.isArray(value)) return [...DEFAULT_ZIP_DOWNLOAD_ROUTES]
-  const allowed = new Set<string>(ZIP_DOWNLOAD_ROUTE_VALUES)
-  return value.filter((item): item is typeof ZIP_DOWNLOAD_ROUTE_VALUES[number] => typeof item === 'string' && allowed.has(item))
 }
 
 function normalizeProviderOrder(value: unknown, customProviders: CustomProviderDefinition[]): string[] | undefined {
@@ -529,7 +523,8 @@ export function normalizeSettings(input: Partial<AppSettings> | unknown): AppSet
     taskCompletionNotification: typeof record.taskCompletionNotification === 'boolean' ? record.taskCompletionNotification : false,
     enterSubmit: typeof record.enterSubmit === 'boolean' ? record.enterSubmit : false,
     referenceImageEditAction: normalizeReferenceImageEditAction(record.referenceImageEditAction),
-    zipDownloadRoutes: normalizeZipDownloadRoutes(record.zipDownloadRoutes),
+    // 旧版按入口分别设置 zipDownloadRoutes，开启过任一入口即视为开启
+    zipBatchDownload: typeof record.zipBatchDownload === 'boolean' ? record.zipBatchDownload : Array.isArray(record.zipDownloadRoutes) ? record.zipDownloadRoutes.length > 0 : true,
     profiles,
     activeProfileId,
   }
@@ -818,5 +813,5 @@ export const DEFAULT_SETTINGS: AppSettings = normalizeSettings({
   taskCompletionNotification: false,
   enterSubmit: false,
   referenceImageEditAction: 'ask',
-  zipDownloadRoutes: DEFAULT_ZIP_DOWNLOAD_ROUTES,
+  zipBatchDownload: true,
 })
