@@ -300,7 +300,6 @@ func (q *Quota) CompleteImage(c *gin.Context, usage *types.Usage) error {
 		return err
 	}
 	q.imageCompleted, q.HandelStatus = true, false
-	c.Header("X-Gouo-Billing-Status", model.GouoChargeSettled)
 	return nil
 }
 

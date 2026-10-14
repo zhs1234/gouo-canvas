@@ -14,7 +14,6 @@ const stats = { chatRequests: 0, imageSubmissions: 0, imageReplays: 0 }
 const imageModels = [{ id: 'gpt-image-2', name: 'MOCK 图片模型（本地免费）', price_cny: 0.01, price_version: priceVersion, reference: true, mask: true, max_outputs: 4, quota: 5000 }]
 const user = { id: 2147480901, username: 'MOCK-local', display_name: '本地验收 · MOCK', quota: 4999500000, used_quota: 0, request_count: 0, balance_cny: 9999, used_cny: 0, quota_cny_rate: 0.000002, image_price_cny: 0.01 }
 let password = 'MOCK-password-123'
-const charges = []
 const logs = []
 const redeemedCodes = new Set()
 
@@ -159,7 +158,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
     if (req.method === 'GET' && path === '/api/user/logout') { res.setHeader('Set-Cookie', 'gouo_mock_session=logged-out; HttpOnly; SameSite=Strict; Path=/'); ok(res, null); return }
-    if (req.method === 'GET' && path === '/api/gouo/image-charges') { ok(res, page(charges, url.searchParams)); return }
     if (req.method === 'GET' && path === '/api/log/self') {
       const query = url.searchParams
       const filtered = logs.filter((log) => (!query.get('model_name') || log.model_name === query.get('model_name')) && (!query.get('log_type') || log.type === Number(query.get('log_type'))) && (!query.get('start_timestamp') || log.created_at >= Number(query.get('start_timestamp'))) && (!query.get('end_timestamp') || log.created_at <= Number(query.get('end_timestamp'))))
@@ -190,7 +188,6 @@ const server = http.createServer(async (req, res) => {
       const result = { created, data: Array.from({ length: count }, () => ({ b64_json: data, revised_prompt: source ? `MOCK 回显首张参考图，已接收 ${references.length} 张参考图${payload.files.some(([key]) => key === 'mask') ? '及遮罩' : ''}，未执行真实图片编辑：${payload.prompt || ''}` : `MOCK 本地图片：${payload.prompt || ''}` })), output_format: source?.type.split('/')[1] || 'webp' }
       if (requestId) imageRequests.set(requestId, result)
       stats.imageSubmissions += 1
-      charges.unshift({ id: requestId || `mock-image-${stats.imageSubmissions}`, model_name: payload.model, price_cny: 0.01, status: 'settled', created_at: created, note: 'MOCK 模拟成功，未产生真实费用' })
       logs.unshift({ created_at: created, type: 2, content: 'MOCK 图片请求，非真实扣费', model_name: payload.model, quota: 5000, request_time: 1, metadata: { billing_unit: 'successful_request', price_cny: 0.01, image_count: count } })
       user.quota -= 5000
       user.used_quota += 5000
@@ -231,10 +228,6 @@ if (selfTest) {
     assert.deepEqual(first, second)
     assert.equal(stats.imageSubmissions, 1)
     assert.equal(stats.imageReplays, 1)
-    const chargePage = await requestApi('/api/gouo/image-charges?page=1&size=1')
-    assert.equal(chargePage.value.data.total_count, 1)
-    assert.equal(chargePage.value.data.data[0].id, 'self-test-idempotency')
-    assert.equal(chargePage.value.data.data[0].status, 'settled')
     assert.equal((await requestApi('/api/log/self?model_name=other-model')).value.data.total_count, 0)
     assert.equal((await requestApi('/api/log/self?model_name=gpt-image')).value.data.total_count, 0)
     assert.equal((await requestApi('/api/log/self?model_name=gpt-image-2&log_type=2')).value.data.total_count, 1)
