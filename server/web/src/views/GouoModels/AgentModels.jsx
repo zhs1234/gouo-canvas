@@ -240,7 +240,10 @@ export default function AgentModels() {
                             input_points: points ? points[0] : '',
                             output_points: points ? points[1] : '',
                             // 记下打开时的价格：没改价格就不提交，后端只在填写价格时才锁定，免得上游同步的价格被锁住
-                            initial_points: points
+                            initial_points: points,
+                            // 排序和回复上限也只在改动时提交，都没改时后端不重写价格记录
+                            initial_sort: row.gouo_sort || 0,
+                            initial_max_tokens: row.gouo_max_tokens || 0
                           });
                         }}
                       >
@@ -297,9 +300,11 @@ export default function AgentModels() {
                   listed: true,
                   name: editing.name,
                   description: editing.description,
-                  gouo_sort: Number(editing.gouo_sort || 0),
                   vision: editing.vision,
-                  gouo_max_tokens: Number(editing.gouo_max_tokens || 0),
+                  ...(Number(editing.gouo_sort || 0) === editing.initial_sort ? {} : { gouo_sort: Number(editing.gouo_sort || 0) }),
+                  ...(Number(editing.gouo_max_tokens || 0) === editing.initial_max_tokens
+                    ? {}
+                    : { gouo_max_tokens: Number(editing.gouo_max_tokens || 0) }),
                   ...(keepTimes ||
                   (editing.initial_points?.[0] === Number(editing.input_points) &&
                     editing.initial_points?.[1] === Number(editing.output_points))

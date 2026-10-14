@@ -144,6 +144,14 @@ func (p *Pricing) GetPrice(modelName string) *Price {
 	}
 }
 
+// gouoEnabledExact 只看这个模型自己的价格记录；GetPrice 会回退到通配符或默认价，拿到的可能是别的记录
+func (p *Pricing) gouoEnabledExact(modelName string) bool {
+	p.RLock()
+	defer p.RUnlock()
+	price, ok := p.Prices[modelName]
+	return ok && price.GouoEnabled
+}
+
 func (p *Pricing) GetAllPrices() map[string]*Price {
 	return p.Prices
 }
@@ -180,7 +188,7 @@ func (p *Pricing) UpdatePrice(modelName string, price *Price) error {
 		return err
 	}
 	// 改名时目标模型是新的，即使原记录已启用也要核对
-	if price.GouoEnabled && (price.Model != modelName || !p.GetPrice(modelName).GouoEnabled) {
+	if price.GouoEnabled && (price.Model != modelName || !p.gouoEnabledExact(modelName)) {
 		if err := CheckGouoImageExclusive(price.Model); err != nil {
 			return err
 		}
@@ -388,7 +396,7 @@ func (p *Pricing) SyncPriceWithOverwrite(pricing []*Price) error {
 			newPrices = append(newPrices, price)
 		} else {
 			if !p.Prices[price.Model].Locked && !p.Prices[price.Model].GouoEnabled {
-				newPrices = append(newPrices, withLocalGouoAgentFields(price, p.Prices[price.Model]))
+				newPrices = append(newPrices, withLocalGouoFields(price, p.Prices[price.Model]))
 			}
 		}
 	}
@@ -413,10 +421,12 @@ func (p *Pricing) SyncPriceWithOverwrite(pricing []*Price) error {
 	return p.Init()
 }
 
-// withLocalGouoAgentFields 上游价格不含光构 Agent 的排序和回复上限，同步替换未锁定的价格时沿用本地配置
-func withLocalGouoAgentFields(price, local *Price) *Price {
+// withLocalGouoFields 上游价格不含光构配置，同步替换未锁定的价格时沿用本地的全部光构字段；
+// 已停用图片模型的单价、画质等也在其中，重新启用时不用从头配置
+func withLocalGouoFields(price, local *Price) *Price {
 	merged := *price
-	merged.GouoSort, merged.GouoMaxTokens = local.GouoSort, local.GouoMaxTokens
+	merged.GouoEnabled, merged.GouoPriceCNY, merged.GouoReference, merged.GouoMask, merged.GouoMaxOutputs = local.GouoEnabled, local.GouoPriceCNY, local.GouoReference, local.GouoMask, local.GouoMaxOutputs
+	merged.GouoSort, merged.GouoMaxSize, merged.GouoQualities, merged.GouoMaxInputs, merged.GouoMaxTokens = local.GouoSort, local.GouoMaxSize, local.GouoQualities, local.GouoMaxInputs, local.GouoMaxTokens
 	return &merged
 }
 
@@ -428,7 +438,7 @@ func (p *Pricing) SyncPriceOnlyUpdate(pricing []*Price) error {
 	//系统内存在并且非lock的模型价格加入new price
 	for _, price := range pricing {
 		if p, ok := p.Prices[price.Model]; ok && !p.Locked && !p.GouoEnabled {
-			newPrices = append(newPrices, withLocalGouoAgentFields(price, p))
+			newPrices = append(newPrices, withLocalGouoFields(price, p))
 			newPricesName = append(newPricesName, price.Model)
 		}
 	}
@@ -519,7 +529,7 @@ func (p *Pricing) BatchSetPrices(batchPrices *BatchPrices, originalModels []stri
 		if err := ValidateGouoPrice(&price); err != nil {
 			return err
 		}
-		if price.GouoEnabled && !p.GetPrice(id).GouoEnabled {
+		if price.GouoEnabled && !p.gouoEnabledExact(id) {
 			if err := CheckGouoImageExclusive(id); err != nil {
 				return err
 			}

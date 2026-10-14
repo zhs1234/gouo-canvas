@@ -40,9 +40,10 @@ func ChatRealtime(c *gin.Context) {
 		common.AbortWithMessage(c, http.StatusBadRequest, "model_name_required")
 		return
 	}
-	// 平台令牌只给光构客户端的 Agent 用文本接口，后台关闭 Agent 后这里同样不能用（与 prepareGouoImage 一致）
-	if c.GetString("token_name") == "sys_playground" && !config.GouoAgentEnabled {
-		common.AbortWithMessage(c, http.StatusForbidden, "运营方已关闭 Agent")
+	// 平台令牌只给光构客户端的 Agent 走对话接口，客户端不用实时接口；
+	// 这里拿不到 prepareGouoImage 的 Agent 开关、回复上限等限制，直接拒绝
+	if c.GetString("token_name") == "sys_playground" {
+		common.AbortWithMessage(c, http.StatusForbidden, "平台令牌不能使用实时接口")
 		return
 	}
 

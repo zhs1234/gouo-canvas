@@ -205,7 +205,7 @@ func TestGouoImageExclusiveOnPriceWrites(t *testing.T) {
 	require.NoError(t, p.UpdatePrice("image-a", image("image-a")))
 }
 
-func TestPriceSyncKeepsGouoAgentFields(t *testing.T) {
+func TestPriceSyncKeepsGouoFields(t *testing.T) {
 	oldLogger := logger.Logger
 	logger.Logger = zap.NewNop()
 	t.Cleanup(func() { logger.Logger = oldLogger })
@@ -216,14 +216,24 @@ func TestPriceSyncKeepsGouoAgentFields(t *testing.T) {
 		oldDB := DB
 		DB = db
 		require.NoError(t, db.Create(&Price{Model: "chat-a", Type: TokensPriceType, Input: 1, Output: 2, GouoSort: 3, GouoMaxTokens: 4000}).Error)
+		// 暂时停用的图片模型，单价和画质等配置留着以后重新启用
+		require.NoError(t, db.Create(&Price{Model: "image-off", Type: TimesPriceType, Input: 1, GouoPriceCNY: 0.2, GouoReference: true, GouoMaxOutputs: 4, GouoMaxSize: "2K", GouoQualities: "low,high", GouoMaxInputs: 3}).Error)
 		p := &Pricing{Prices: map[string]*Price{}}
 		require.NoError(t, p.Init())
-		// 未锁定的价格随上游更新，但 Agent 页设置的排序和回复上限保留
-		require.NoError(t, p.SyncPricing([]*Price{{Model: "chat-a", Type: TokensPriceType, Input: 5, Output: 6}}, mode))
+		// 未锁定的价格随上游更新，但本地的光构配置保留
+		require.NoError(t, p.SyncPricing([]*Price{{Model: "chat-a", Type: TokensPriceType, Input: 5, Output: 6}, {Model: "image-off", Type: TimesPriceType, Input: 7}}, mode))
 		price := p.GetPrice("chat-a")
 		require.InDelta(t, 5.0, price.Input, 1e-9, mode)
 		require.Equal(t, 3, price.GouoSort, mode)
 		require.Equal(t, 4000, price.GouoMaxTokens, mode)
+		image := p.GetPrice("image-off")
+		require.InDelta(t, 7.0, image.Input, 1e-9, mode)
+		require.InDelta(t, 0.2, image.GouoPriceCNY, 1e-9, mode)
+		require.True(t, image.GouoReference, mode)
+		require.Equal(t, 4, image.GouoMaxOutputs, mode)
+		require.Equal(t, "2K", image.GouoMaxSize, mode)
+		require.Equal(t, "low,high", image.GouoQualities, mode)
+		require.Equal(t, 3, image.GouoMaxInputs, mode)
 		DB = oldDB
 	}
 }

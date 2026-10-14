@@ -350,14 +350,18 @@ func TestGouoImageEditFormChecks(t *testing.T) {
 	require.Equal(t, "image_edit_multipart_required", prepareGouoImage(c, r).Code)
 }
 
-func TestGouoRealtimeFollowsAgentSwitch(t *testing.T) {
+func TestGouoRealtimeRejectsPlatformToken(t *testing.T) {
 	old, oldLogger := config.GouoAgentEnabled, logger.Logger
-	config.GouoAgentEnabled, logger.Logger = false, zap.NewNop()
+	logger.Logger = zap.NewNop()
 	t.Cleanup(func() { config.GouoAgentEnabled, logger.Logger = old, oldLogger })
-	res := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(res)
-	c.Request = httptest.NewRequest("GET", "/v1/realtime?model=gpt-realtime", nil)
-	c.Set("token_name", "sys_playground")
-	ChatRealtime(c)
-	require.Equal(t, http.StatusForbidden, res.Code)
+	// 实时接口拿不到 Agent 的回复上限等限制，平台令牌无论 Agent 是否开启都不能用
+	for _, enabled := range []bool{false, true} {
+		config.GouoAgentEnabled = enabled
+		res := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(res)
+		c.Request = httptest.NewRequest("GET", "/v1/realtime?model=gpt-realtime", nil)
+		c.Set("token_name", "sys_playground")
+		ChatRealtime(c)
+		require.Equal(t, http.StatusForbidden, res.Code)
+	}
 }
