@@ -2,8 +2,7 @@ import { useStore as useAppStore } from '../../store'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { getImage } from '../db'
 import { submitImageTask } from '../imageTasks'
-import { getActiveApiProfile } from '../apiProfiles'
-import { getImageModels, getMaxTaskImages, isBackendAuthEnabled } from '../gouoBackend'
+import { getImageModels, getMaxTaskImages } from '../gouoBackend'
 import { serializeCanvasProject } from '../canvas/document'
 import type { TaskParams } from '../../types'
 import type { AgentConversation, AgentToolDefinition } from './types'
@@ -200,16 +199,14 @@ export async function executeAgentTool(input: {
     if (submitted + requested > getAgentLimits().confirmImages) {
       // 按当前目录价格显示预计扣费；读取失败时只提示按模型计费，提交时仍会校验价格版本
       let cost = '每张按所选图片模型的价格计费。'
-      if (isBackendAuthEnabled()) {
-        const model = getActiveApiProfile(useAppStore.getState().settings).model
-        try {
-          const price = (await getImageModels()).find((entry) => entry.id === model)?.price_cny
-          if (price) cost = `模型「${model}」每张 ${formatPoints(price)}，这 ${requested} 张全部成功预计扣费 ${formatPoints(price * requested)}。`
-        } catch (err) {
-          console.warn('读取图片模型价格失败', err)
-        }
-        input.signal.throwIfAborted()
+      const model = useAppStore.getState().settings.model
+      try {
+        const price = (await getImageModels()).find((entry) => entry.id === model)?.price_cny
+        if (price) cost = `模型「${model}」每张 ${formatPoints(price)}，这 ${requested} 张全部成功预计扣费 ${formatPoints(price * requested)}。`
+      } catch (err) {
+        console.warn('读取图片模型价格失败', err)
       }
+      input.signal.throwIfAborted()
       // 停止运行或取消确认时都不提交
       const confirmed = await new Promise<boolean>((resolve) => {
         const finish = (ok: boolean) => {

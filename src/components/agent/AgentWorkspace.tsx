@@ -5,7 +5,7 @@ import { useAgentStore } from '../../stores/agentStore'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { fileToDataUrl } from '../../lib/dataUrl'
 import { storeImageWithSize } from '../../lib/db'
-import { getMaxTaskImages, getMaxUploadBytes, isBackendAuthEnabled } from '../../lib/gouoBackend'
+import { getMaxTaskImages, getMaxUploadBytes } from '../../lib/gouoBackend'
 import { executeAgentTool } from '../../lib/agent/tools'
 import { formatPoints } from '../../lib/accountUsage'
 import { downloadImageIds, formatExportFileTime } from '../../lib/downloadImages'
@@ -126,7 +126,7 @@ function AgentTask({ taskId, conversation }: { taskId: string; conversation: Age
       </div>)}
     </div>}
     {(task.status === 'error' || Boolean(task.outputErrors?.length)) && <button type="button" className="agent-text-button" onClick={() => useStore.getState().setDetailTaskId(taskId)}>查看结果与失败原因</button>}
-    {isBackendAuthEnabled() && task.gouoPriceVersion && task.status === 'error' && !task.outputImages.length && <button type="button" className="agent-text-button" disabled={recovering} title="只取回原请求的图片，不会重新生成或扣费" onClick={() => {
+    {task.gouoPriceVersion && task.status === 'error' && !task.outputImages.length && <button type="button" className="agent-text-button" disabled={recovering} title="只取回原请求的图片，不会重新生成或扣费" onClick={() => {
       setRecovering(true)
       void executeTask(taskId, true).catch((error) => useStore.getState().showToast(error instanceof Error ? error.message : '取回结果失败', 'error')).finally(() => setRecovering(false))
     }}>取回原结果（不重新扣费）</button>}
@@ -279,7 +279,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
         useAgentStore.getState().configureConversation(id, { referenceImageIds: refs.includes(imageId) ? refs.filter((value) => value !== imageId) : [...refs, imageId] })
       }}><AgentImage id={imageId} /></button>)}{!referenceOptions.length && <span>暂无可引用的图片，可点 + 上传参考图。</span>}</div></div>}
     </form>
-    {isBackendAuthEnabled() && <div className="agent-image-model-summary"><span>图片模型</span><BackendModelSelector compact onReady={setImageModelReady} /></div>}
+    <div className="agent-image-model-summary"><span>图片模型</span><BackendModelSelector compact onReady={setImageModelReady} /></div>
     {(modelError || loadError) && <div role="alert" className="agent-inline-error">{modelError || loadError}<button type="button" onClick={() => void useAgentStore.getState().loadModels()}>刷新模型</button></div>}
     {unavailableModel && !modelError && <div role="alert" className="agent-inline-error">原 Agent 模型已不可用，请在下拉框重新选择后发送。</div>}
     {uploading && <p role="status" className="agent-composer-note">正在添加参考图…</p>}

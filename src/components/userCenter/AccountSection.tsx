@@ -48,7 +48,7 @@ export default function AccountSection({ user, status, onUserChanged }: { user: 
     setRefreshingToken(true)
     setTokenRefreshError('')
     try {
-      useStore.getState().setSettings(await createBackendSettings(true))
+      await createBackendSettings(true)
     } catch (err) {
       setTokenRefreshError(err instanceof Error ? err.message : String(err))
     } finally {

@@ -53,7 +53,6 @@ beforeEach(() => {
     getLoadedTrashRetentionMs: () => retention,
     refreshBackendStatus: async () => {},
     GouoAssetMissingError: class extends Error {},
-    isBackendAuthEnabled: () => true,
     getCloudStorage: vi.fn(async () => ({ enabled: true })),
     listCloudCollections: vi.fn(async () => []),
     listCloudTasks: vi.fn(async (hidden: boolean) => ({ data: pages[hidden ? 'hidden' : 'visible'], next_cursor: '' })),

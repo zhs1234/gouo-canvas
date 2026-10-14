@@ -12,14 +12,12 @@ function createWindowMock(initial: Record<string, string> = {}) {
 }
 
 afterEach(() => {
-  vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.resetModules()
 })
 
 describe('storageScope', () => {
   it('uses an isolated storage name for the active authenticated user', async () => {
-    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
     vi.stubGlobal('window', createWindowMock({ 'gouo-canvas:active-user': '7' }))
     const scope = await import('./storageScope')
 
@@ -33,17 +31,7 @@ describe('storageScope', () => {
     expect(window.localStorage.getItem(scope.ACTIVE_STORAGE_USER_KEY)).toBeNull()
   })
 
-  it('keeps standalone mode on the legacy local storage name', async () => {
-    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'false')
-    vi.stubGlobal('window', createWindowMock({ 'gouo-canvas:active-user': '7' }))
-    const scope = await import('./storageScope')
-
-    expect(scope.getLoadedStorageName()).toBe('gouo-canvas')
-    expect(scope.getLoadedStorageUserId()).toBeNull()
-  })
-
   it('rejects invalid user identifiers', async () => {
-    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
     vi.stubGlobal('window', createWindowMock())
     const scope = await import('./storageScope')
 

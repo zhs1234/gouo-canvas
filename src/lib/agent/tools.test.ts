@@ -11,13 +11,12 @@ const mocks = vi.hoisted(() => ({
   projects: [] as Pick<CanvasProject, 'id' | 'nodes' | 'hiddenAt'>[],
   tasks: [] as Array<{ id: string; status: string; outputImages: string[]; prompt: string; error: string | null; params: { n: number } }>,
   dialog: null as null | { message?: string; action?: () => void; cancelAction?: () => void },
-  backend: false,
   models: vi.fn(),
   listeners: new Set<(state: { confirmDialog: unknown }) => void>(),
 }))
 vi.mock('../../store', () => ({
   useStore: {
-    getState: () => ({ tasks: mocks.tasks, settings: {}, confirmDialog: mocks.dialog, setConfirmDialog: (dialog: typeof mocks.dialog) => {
+    getState: () => ({ tasks: mocks.tasks, settings: { model: 'gpt-image-2' }, confirmDialog: mocks.dialog, setConfirmDialog: (dialog: typeof mocks.dialog) => {
       mocks.dialog = dialog
       for (const listener of [...mocks.listeners]) listener({ confirmDialog: dialog })
     } }),
@@ -27,8 +26,7 @@ vi.mock('../../store', () => ({
     },
   },
 }))
-vi.mock('../apiProfiles', () => ({ getActiveApiProfile: () => ({ model: 'gpt-image-2' }) }))
-vi.mock('../gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getImageModels: mocks.models, getMaxTaskImages: () => mocks.maxImages, isLowModerationAllowed: () => false }))
+vi.mock('../gouoBackend', () => ({ getImageModels: mocks.models, getMaxTaskImages: () => mocks.maxImages, isLowModerationAllowed: () => false }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))
@@ -44,7 +42,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.tasks = []
   mocks.dialog = null
-  mocks.backend = false
   mocks.projects = [{ id: 'canvas', nodes: [{ id: 'canvas-image', type: 'image', title: '参考图', position: { x: 0, y: 0 }, width: 100, height: 100, metadata: { imageId: 'canvas-reference' } }] }]
   mocks.snapshot.mockReturnValue({ id: 'canvas', nodes: [], revision: 2 })
   mocks.apply.mockResolvedValue({ id: 'canvas', nodes: [], revision: 3 })
@@ -88,7 +85,6 @@ describe('Agent tool boundary', () => {
   })
 
   it('shows the expected charge from the current model price in the confirmation', async () => {
-    mocks.backend = true
     mocks.models.mockResolvedValue([{ id: 'gpt-image-2', price_cny: 0.15 }])
     const pending = run('create_image_task', { prompt: '海报', params: { n: 5 } })
     await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())

@@ -1,10 +1,9 @@
 import type { AppSettings } from '../../types'
-import { isBackendAuthEnabled } from '../../lib/gouoBackend'
 import Select from '../Select'
 
 interface GeneralSettingsTabProps {
   draft: AppSettings
-  commitSettings: (nextDraft: AppSettings) => void
+  commitSettings: (patch: Partial<AppSettings>) => void
   toggleTaskCompletionNotification: () => Promise<void>
 }
 
@@ -13,8 +12,6 @@ export default function GeneralSettingsTab({
   commitSettings,
   toggleTaskCompletionNotification,
 }: GeneralSettingsTabProps) {
-  // 光构后端模式没有多套 API 配置，也不走 Codex CLI / Responses API，相关开关不起作用
-  const backend = isBackendAuthEnabled()
   return (
     <div className="space-y-4">
       <div className="hidden sm:block">
@@ -23,7 +20,7 @@ export default function GeneralSettingsTab({
           <div className="w-28 shrink-0">
             <Select
               value={draft.enterSubmit ? 'enter' : 'ctrl-enter'}
-              onChange={(val) => commitSettings({ ...draft, enterSubmit: val === 'enter' })}
+              onChange={(val) => commitSettings({ enterSubmit: val === 'enter' })}
               options={[
                 { label: navigator.userAgent.includes('Mac') ? '⌘ + Enter' : 'Ctrl + Enter', value: 'ctrl-enter' },
                 { label: 'Enter', value: 'enter' }
@@ -42,7 +39,7 @@ export default function GeneralSettingsTab({
           <div className="w-28 shrink-0">
             <Select
               value={draft.enterSubmit ? 'enter' : 'button'}
-              onChange={(val) => commitSettings({ ...draft, enterSubmit: val === 'enter' })}
+              onChange={(val) => commitSettings({ enterSubmit: val === 'enter' })}
               options={[
                 { label: '发送按钮', value: 'button' },
                 { label: '回车/发送按钮', value: 'enter' }
@@ -60,7 +57,7 @@ export default function GeneralSettingsTab({
           <span className="block text-sm text-gray-600 dark:text-gray-300">提交任务后清空输入框</span>
           <button
             type="button"
-            onClick={() => commitSettings({ ...draft, clearInputAfterSubmit: !draft.clearInputAfterSubmit })}
+            onClick={() => commitSettings({ clearInputAfterSubmit: !draft.clearInputAfterSubmit })}
             className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.clearInputAfterSubmit ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
             role="switch"
             aria-checked={draft.clearInputAfterSubmit}
@@ -79,7 +76,7 @@ export default function GeneralSettingsTab({
           <div className="w-28 shrink-0">
             <Select
               value={draft.referenceImageEditAction}
-              onChange={(val) => commitSettings({ ...draft, referenceImageEditAction: val as AppSettings['referenceImageEditAction'] })}
+              onChange={(val) => commitSettings({ referenceImageEditAction: val as AppSettings['referenceImageEditAction'] })}
               options={[
                 { label: '询问', value: 'ask' },
                 { label: '替换参考图', value: 'replace-reference' },
@@ -98,7 +95,7 @@ export default function GeneralSettingsTab({
           <span className="block text-sm text-gray-600 dark:text-gray-300">批量下载时打包为 ZIP</span>
           <button
             type="button"
-            onClick={() => commitSettings({ ...draft, zipBatchDownload: !draft.zipBatchDownload })}
+            onClick={() => commitSettings({ zipBatchDownload: !draft.zipBatchDownload })}
             className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.zipBatchDownload ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
             role="switch"
             aria-checked={draft.zipBatchDownload}
@@ -116,7 +113,7 @@ export default function GeneralSettingsTab({
           <span className="block text-sm text-gray-600 dark:text-gray-300">重启后加载上次的输入框</span>
           <button
             type="button"
-            onClick={() => commitSettings({ ...draft, persistInputOnRestart: !draft.persistInputOnRestart })}
+            onClick={() => commitSettings({ persistInputOnRestart: !draft.persistInputOnRestart })}
             className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.persistInputOnRestart ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
             role="switch"
             aria-checked={draft.persistInputOnRestart}
@@ -129,32 +126,12 @@ export default function GeneralSettingsTab({
           关闭后，不再持久化提示词和参考图，下次启动会使用空输入框。
         </div>
       </div>
-      {!backend && (
-        <div className="block">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="block text-sm text-gray-600 dark:text-gray-300">复用配置时临时复用该任务的 API 配置</span>
-            <button
-              type="button"
-              onClick={() => commitSettings({ ...draft, reuseTaskApiProfileTemporarily: !draft.reuseTaskApiProfileTemporarily })}
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.reuseTaskApiProfileTemporarily ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-              role="switch"
-              aria-checked={draft.reuseTaskApiProfileTemporarily}
-              aria-label="复用配置时临时复用该任务的 API 配置"
-            >
-              <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.reuseTaskApiProfileTemporarily ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
-            </button>
-          </div>
-          <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-            开启后，复用历史任务时会临时使用该任务的 API 配置，找不到该配置时提交会提示；关闭后，会继续使用当前的 API 配置。
-          </div>
-        </div>
-      )}
       <div className="block">
         <div className="mb-1 flex items-center justify-between">
           <span className="block text-sm text-gray-600 dark:text-gray-300">成功任务仍然展示重试按钮</span>
           <button
             type="button"
-            onClick={() => commitSettings({ ...draft, alwaysShowRetryButton: !draft.alwaysShowRetryButton })}
+            onClick={() => commitSettings({ alwaysShowRetryButton: !draft.alwaysShowRetryButton })}
             className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.alwaysShowRetryButton ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
             role="switch"
             aria-checked={draft.alwaysShowRetryButton}
@@ -164,29 +141,9 @@ export default function GeneralSettingsTab({
           </button>
         </div>
         <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-          开启后，即使任务成功生成，也会在任务卡片和详情页显示重试按钮。{backend && '重试会重新生成并计费。'}
+          开启后，即使任务成功生成，也会在任务卡片和详情页显示重试按钮。重试会重新生成并计费。
         </div>
       </div>
-      {!backend && (
-        <div className="block">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="block text-sm text-gray-600 dark:text-gray-300">允许模型改写优化提示词</span>
-            <button
-              type="button"
-              onClick={() => commitSettings({ ...draft, allowPromptRewrite: !draft.allowPromptRewrite })}
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.allowPromptRewrite ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-              role="switch"
-              aria-checked={draft.allowPromptRewrite}
-              aria-label="允许模型改写优化提示词"
-            >
-              <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.allowPromptRewrite ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
-            </button>
-          </div>
-          <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-            开启后，Codex CLI 兼容模式下的 Image API 请求和所有 Responses API 请求都不再附加防改写提示词，允许模型按服务商策略优化提示词。
-          </div>
-        </div>
-      )}
       <div className="block">
         <div className="mb-1 flex items-center justify-between">
           <span className="block text-sm text-gray-600 dark:text-gray-300">任务完成后发送系统通知</span>

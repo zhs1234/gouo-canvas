@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_PARAMS } from './types'
-import { createDefaultFalProfile, createDefaultOpenAIProfile, DEFAULT_SETTINGS, normalizeSettings } from './lib/apiProfiles'
+import { DEFAULT_SETTINGS, normalizeSettings } from './lib/settings'
 import type { ExportData, StoredImage, StoredImageThumbnail, TaskRecord } from './types'
 import { getSelectedImageMentionLabel } from './lib/promptImageMentions'
 vi.mock('./lib/db', () => {
@@ -36,6 +36,7 @@ vi.mock('./lib/db', () => {
     getStoredFreshImageThumbnail: async (id: string) => thumbnails.get(id),
     getAllImageIds: async () => [...images.keys()],
     getAllImages: async () => [...images.values()],
+    getCloudAssetMapItem: async () => undefined,
     putImage: async (image: StoredImage) => {
       images.set(image.id, image)
       return image.id
@@ -81,15 +82,6 @@ vi.mock('./lib/api', () => ({
     revisedPrompts: [],
   })),
 }))
-vi.mock('./lib/falAiImageApi', () => ({
-  getFalErrorMessage: vi.fn((err: unknown) => err instanceof Error ? err.message : String(err)),
-  getFalQueuedImageResult: vi.fn(async () => ({
-    images: [],
-    actualParams: {},
-    actualParamsList: [],
-    revisedPrompts: [],
-  })),
-}))
 vi.mock('./lib/transparentImage', () => ({
   GREEN_KEY_COLOR: '#00FF00',
   MAGENTA_KEY_COLOR: '#FF00FF',
@@ -106,36 +98,38 @@ vi.mock('./lib/transparentImage', () => ({
   removeKeyedBackgroundFromDataUrl: vi.fn(async (dataUrl: string) => `transparent:${dataUrl}`),
 }))
 import { clearImages, clearTasks, getAllTasks, getImage, putImage, putTask as putDbTask } from './lib/db'
-import { getFalQueuedImageResult } from './lib/falAiImageApi'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
-import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, getTaskApiProfile, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
+import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
 
 const imageA = { id: 'image-a', dataUrl: 'data:image/png;base64,a' }
 const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
 
-describe('product model task snapshots', () => {
-  const models = [
-    { id: 'image-a', name: '图片 A', price_cny: 0.1, price_version: 'quote-a', reference: true, mask: true, max_outputs: 2, quota: 100 },
-    { id: 'image-b', name: '图片 B', price_cny: 0.3, price_version: 'quote-b', reference: false, mask: false, max_outputs: 1, quota: 300 },
-  ]
+const models = [
+  { id: 'image-a', name: '图片 A', price_cny: 0.1, price_version: 'quote-a', reference: true, mask: true, max_outputs: 2, quota: 100 },
+  { id: 'image-b', name: '图片 B', price_cny: 0.3, price_version: 'quote-b', reference: false, mask: false, max_outputs: 1, quota: 300 },
+]
 
+// 后端令牌、模型目录和账号信息都返回同一份模型目录；账号信息里没有余额时由服务端判断
+async function mockBackend() {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => new Response(JSON.stringify({ success: true, data: String(url).includes('/token/') ? 'user-token' : models }), { status: 200 }))
+  const { createBackendSettings } = await import('./lib/gouoBackend')
+  await createBackendSettings(true)
+}
+
+describe('product model task snapshots', () => {
   beforeEach(async () => {
-    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
     await clearTasks()
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => new Response(JSON.stringify({ success: true, data: String(url).includes('/token/') ? 'user-token' : models }), { status: 200 }))
-    const { createBackendSettings } = await import('./lib/gouoBackend')
-    await createBackendSettings(true)
+    await mockBackend()
     const { callImageApi } = await import('./lib/api')
     vi.mocked(callImageApi).mockClear()
     useStore.setState({
-      settings: normalizeSettings({ ...DEFAULT_SETTINGS, profiles: [], apiKey: 'test-key', model: 'image-a', gouoPriceVersion: 'quote-a', gouoModelSelected: true }),
+      settings: normalizeSettings({ model: 'image-a', gouoPriceVersion: 'quote-a', gouoModelSelected: true }),
       tasks: [], prompt: '图片', params: { ...DEFAULT_PARAMS }, inputImages: [], maskDraft: null,
-      reusedTaskApiProfileId: null, reusedTaskApiProfileMissing: false, showToast: vi.fn(), setConfirmDialog: vi.fn(),
+      showToast: vi.fn(), setConfirmDialog: vi.fn(),
     })
   })
 
   afterEach(() => {
-    vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
 
@@ -144,14 +138,8 @@ describe('product model task snapshots', () => {
     useStore.getState().setSettings({ model: 'image-b', gouoPriceVersion: 'quote-b' })
     const { callImageApi } = await import('./lib/api')
     expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
-    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ settings: { model: 'image-a' }, gouoPriceVersion: 'quote-a' })
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
-  })
-
-  it('does not persist the platform account token', () => {
-    const persisted = JSON.stringify(getPersistedState(useStore.getState()))
-    expect(useStore.getState().settings.apiKey).toBe('test-key')
-    expect(persisted).not.toContain('test-key')
   })
 
   it('blocks duplicate submissions until task creation and then permits the next task', async () => {
@@ -242,7 +230,7 @@ describe('product model task snapshots', () => {
     expect(confirmation).toMatchObject({ title: '确认付费重试', message: expect.stringContaining('全部成功预计扣费 10 积分') })
     await confirmation?.action?.()
     expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
-    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ settings: { model: 'image-a' }, gouoPriceVersion: 'quote-a' })
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
   })
 
   it('requires confirmation before retrying a legacy task at the current price', async () => {
@@ -314,12 +302,11 @@ describe('product model task snapshots', () => {
       const { callImageApi } = await import('./lib/api')
       let finish!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
       vi.mocked(callImageApi).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
-      useStore.getState().setSettings({ timeout: 1 })
       const running = task({ status: 'running', createdAt: Date.now(), params: { ...DEFAULT_PARAMS, n: 2 } })
       useStore.setState({ tasks: [running] })
       const { executeTask } = await import('./store')
       const execution = executeTask(running.id)
-      await vi.advanceTimersByTimeAsync(1500)
+      await vi.advanceTimersByTimeAsync(601_000)
       expect(useStore.getState().tasks[0].status).toBe('running')
       finish({ images: ['data:image/png;base64,success'], actualParamsList: [{ size: '1024x1024' }], failedRequests: [{ requestIndex: 1, error: '请求超时' }] })
       await execution
@@ -336,12 +323,11 @@ describe('product model task snapshots', () => {
       const { callImageApi } = await import('./lib/api')
       let finish!: (value: Awaited<ReturnType<typeof callImageApi>>) => void
       vi.mocked(callImageApi).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
-      useStore.getState().setSettings({ timeout: 1 })
       const running = task({ status: 'running', gouoPriceVersion: 'quote-a', createdAt: Date.now() })
       useStore.setState({ tasks: [running] })
       const { executeTask } = await import('./store')
       const execution = executeTask(running.id)
-      await vi.advanceTimersByTimeAsync(1_000)
+      await vi.advanceTimersByTimeAsync(600_000)
       expect(useStore.getState().tasks[0].status).toBe('error')
       // 请求自身的超时恢复随后取回了已扣费的结果
       finish({ images: ['data:image/png;base64,late-result'] })
@@ -357,7 +343,7 @@ describe('product model task snapshots', () => {
     const { callImageApi } = await import('./lib/api')
     const { executeTask } = await import('./store')
     vi.mocked(callImageApi).mockResolvedValueOnce({ images: ['data:image/png;base64,recovered'] })
-    const failed = task({ status: 'error', requestId: 'agent:conversation:call-original', gouoPriceVersion: 'quote-a', createdAt: 1, inputImageIds: ['missing-input'], maskImageId: 'missing-mask', apiProfileId: 'removed-profile' })
+    const failed = task({ status: 'error', requestId: 'agent:conversation:call-original', gouoPriceVersion: 'quote-a', createdAt: 1, inputImageIds: ['missing-input'], maskImageId: 'missing-mask' })
     useStore.setState({ tasks: [failed] })
     await executeTask(failed.id, true)
     expect(callImageApi).toHaveBeenCalledTimes(1)
@@ -393,12 +379,11 @@ describe('product model task snapshots', () => {
       const save = db.storeImageWithSize
       const gate = new Promise<void>((resolve) => { releaseSave = resolve })
       vi.spyOn(db, 'storeImageWithSize').mockImplementationOnce(async (...args) => { await gate; return save(...args) })
-      useStore.getState().setSettings({ timeout: 1 })
       const running = task({ status: 'running', gouoPriceVersion: 'quote-a', createdAt: Date.now() })
       useStore.setState({ tasks: [running] })
       const execution = executeTask(running.id)
       // 结果在截止前已到，保存图片跨过截止时间：不能判为超时，也不能丢掉结果
-      await vi.advanceTimersByTimeAsync(2_000)
+      await vi.advanceTimersByTimeAsync(601_000)
       expect(useStore.getState().tasks[0].status).toBe('running')
       releaseSave()
       await execution
@@ -421,11 +406,10 @@ describe('product model task snapshots', () => {
       vi.mocked(callImageApi)
         .mockImplementationOnce(() => new Promise((resolve, reject) => { finishOld = resolve; failOld = reject }))
         .mockImplementationOnce(() => new Promise((resolve) => { finishRecovery = resolve }))
-      useStore.getState().setSettings({ timeout: 1 })
       const running = task({ status: 'running', gouoPriceVersion: 'quote-a', requestId: 'original-request', createdAt: Date.now() })
       useStore.setState({ tasks: [running] })
       const original = executeTask(running.id)
-      await vi.advanceTimersByTimeAsync(1_000)
+      await vi.advanceTimersByTimeAsync(600_000)
       expect(useStore.getState().tasks[0].status).toBe('error')
       const recovery = executeTask(running.id, true)
       if (outcome === 'failure') failOld(new Error('old request aborted'))
@@ -433,7 +417,7 @@ describe('product model task snapshots', () => {
       await original
       expect(useStore.getState().tasks[0]).toMatchObject({ status: 'running', error: null, outputImages: [] })
       expect((await db.getAllImages()).some((image) => image.dataUrl === 'data:image/png;base64,stale-original')).toBe(false)
-      await vi.advanceTimersByTimeAsync(2_000)
+      await vi.advanceTimersByTimeAsync(601_000)
       expect(useStore.getState().tasks[0].status).toBe('running')
       finishRecovery({ images: ['data:image/png;base64,recovery-result'] })
       await recovery
@@ -542,9 +526,10 @@ describe('favorite collection deletion', () => {
 })
 
 describe('mask draft lifecycle in store actions', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await mockBackend()
     useStore.setState({
-      settings: { ...DEFAULT_SETTINGS, apiKey: 'test-key' },
+      settings: normalizeSettings({ model: 'image-a', gouoPriceVersion: 'quote-a', gouoModelSelected: true }),
       prompt: 'prompt',
       inputImages: [],
       maskDraft: null,
@@ -739,51 +724,6 @@ describe('mask draft lifecycle in store actions', () => {
     await clearImages()
   })
 
-  it('supports transparent background post-processing for fal gallery tasks', async () => {
-    const { callImageApi } = await import('./lib/api')
-    const falProfile = createDefaultFalProfile({ id: 'fal-profile', apiKey: 'fal-key' })
-    vi.mocked(callImageApi).mockClear()
-    vi.mocked(removeKeyedBackgroundFromDataUrl).mockClear()
-    vi.mocked(callImageApi).mockResolvedValueOnce({
-      images: ['data:image/png;base64,fal-generated'],
-      actualParams: { output_format: 'png' },
-      actualParamsList: [{ output_format: 'png' }],
-      revisedPrompts: [],
-    })
-    useStore.setState({
-      settings: normalizeSettings({
-        ...DEFAULT_SETTINGS,
-        profiles: [falProfile],
-        activeProfileId: falProfile.id,
-      }),
-      prompt: '单主体图标素材',
-      params: {
-        ...DEFAULT_PARAMS,
-        output_format: 'png',
-        transparent_output: true,
-      },
-    })
-
-    await submitTask()
-    for (let i = 0; i < 5; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    }
-
-    expect(callImageApi).toHaveBeenCalledWith(expect.objectContaining({
-      params: expect.objectContaining({
-        output_format: 'png',
-        transparent_output: true,
-      }),
-    }))
-    expect(removeKeyedBackgroundFromDataUrl).toHaveBeenCalledWith('data:image/png;base64,fal-generated')
-    const [task] = useStore.getState().tasks
-    expect(task.apiProvider).toBe('fal')
-    expect(task.transparentOutput).toBe(true)
-    expect(task.transparentOriginalImages).toHaveLength(1)
-    await clearTasks()
-    await clearImages()
-  })
-
   it('preserves selected image mentions when replacing a mask target with an equivalent image id', () => {
     const replacement = { id: 'image-a-replacement', dataUrl: imageA.dataUrl }
     const prompt = `参考 ${getSelectedImageMentionLabel(0)} 生成`
@@ -826,8 +766,8 @@ describe('multi-tab favorite collections', () => {
 describe('interrupted OpenAI running tasks', () => {
   it('leaves tasks that another tab is still executing as running', async () => {
     await clearTasks()
-    await putDbTask(task({ id: 'other-tab', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
-    await putDbTask(task({ id: 'abandoned', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
+    await putDbTask(task({ id: 'other-tab', status: 'running', finishedAt: null, elapsed: null }))
+    await putDbTask(task({ id: 'abandoned', status: 'running', finishedAt: null, elapsed: null }))
     // 另一个标签页正在执行 other-tab，持有它的任务锁
     let release = () => {}
     const released = new Promise<void>((resolve) => { release = resolve })
@@ -850,7 +790,7 @@ describe('interrupted OpenAI running tasks', () => {
       const byId = Object.fromEntries(useStore.getState().tasks.map((item) => [item.id, item.status]))
       expect(byId).toMatchObject({ 'other-tab': 'running', abandoned: 'error' })
       // 其他标签页完成后释放锁，本页取回结果
-      await putDbTask(task({ id: 'other-tab', apiProvider: 'openai', status: 'done', outputImages: ['out'] }))
+      await putDbTask(task({ id: 'other-tab', status: 'done', outputImages: ['out'] }))
       release()
       await reloaded
       expect(useStore.getState().tasks.find((item) => item.id === 'other-tab')).toMatchObject({ status: 'done', outputImages: ['out'] })
@@ -861,7 +801,7 @@ describe('interrupted OpenAI running tasks', () => {
 
   it('marks a task interrupted when the other tab closes mid-run', async () => {
     await clearTasks()
-    await putDbTask(task({ id: 'closed-tab', apiProvider: 'openai', status: 'running', finishedAt: null, elapsed: null }))
+    await putDbTask(task({ id: 'closed-tab', status: 'running', finishedAt: null, elapsed: null }))
     let reloaded: Promise<unknown> = Promise.resolve()
     vi.stubGlobal('navigator', { locks: {
       query: async () => ({ held: [{ name: 'gouo-task:closed-tab' }] }),
@@ -884,12 +824,10 @@ describe('interrupted OpenAI running tasks', () => {
   it('marks legacy and OpenAI running tasks as interrupted', () => {
     const now = 10_000
     const legacyRunning = task({ id: 'legacy-running', status: 'running', createdAt: 1_000, finishedAt: null, elapsed: null })
-    const openAIRunning = task({ id: 'openai-running', apiProvider: 'openai', status: 'running', createdAt: 2_000, finishedAt: null, elapsed: null })
-    const falRunning = task({ id: 'fal-running', apiProvider: 'fal', status: 'running', createdAt: 3_000, finishedAt: null, elapsed: null })
-    const customAsyncRunning = task({ id: 'custom-running', apiProvider: 'custom-provider', customTaskId: 'task-1', status: 'running', createdAt: 4_000, finishedAt: null, elapsed: null })
-    const doneTask = task({ id: 'done-task', apiProvider: 'openai', status: 'done' })
+    const openAIRunning = task({ id: 'openai-running', status: 'running', createdAt: 2_000, finishedAt: null, elapsed: null })
+    const doneTask = task({ id: 'done-task', status: 'done' })
 
-    const result = markInterruptedOpenAIRunningTasks([legacyRunning, openAIRunning, falRunning, customAsyncRunning, doneTask], now)
+    const result = markInterruptedOpenAIRunningTasks([legacyRunning, openAIRunning, doneTask], now)
 
     expect(result.interruptedTasks.map((item) => item.id)).toEqual(['legacy-running', 'openai-running'])
     expect(result.tasks.find((item) => item.id === 'legacy-running')).toMatchObject({
@@ -904,8 +842,6 @@ describe('interrupted OpenAI running tasks', () => {
       finishedAt: now,
       elapsed: 8_000,
     })
-    expect(result.tasks.find((item) => item.id === 'fal-running')).toEqual(falRunning)
-    expect(result.tasks.find((item) => item.id === 'custom-running')).toEqual(customAsyncRunning)
     expect(result.tasks.find((item) => item.id === 'done-task')).toEqual(doneTask)
   })
 })
@@ -916,7 +852,6 @@ describe('input persistence setting', () => {
       settings: { ...DEFAULT_SETTINGS },
       prompt: 'prompt',
       inputImages: [imageA],
-      dismissedCodexCliPrompts: [],
     })
   })
 
@@ -946,75 +881,6 @@ describe('input persistence setting', () => {
   })
 })
 
-describe('fal task recovery', () => {
-  beforeEach(async () => {
-    await clearTasks()
-    await clearImages()
-    vi.mocked(getFalQueuedImageResult).mockClear()
-    vi.mocked(removeKeyedBackgroundFromDataUrl).mockClear()
-    const falProfile = createDefaultFalProfile({ id: 'fal-profile', apiKey: 'fal-key' })
-    useStore.setState({
-      settings: normalizeSettings({
-        ...DEFAULT_SETTINGS,
-        profiles: [falProfile],
-        activeProfileId: falProfile.id,
-      }),
-      tasks: [],
-      inputImages: [],
-      showToast: vi.fn(),
-    })
-  })
-
-  it('applies transparent post-processing when a fal task recovers', async () => {
-    const falTask = task({
-      id: 'fal-transparent-task',
-      apiProvider: 'fal',
-      apiProfileId: 'fal-profile',
-      apiProfileName: 'fal',
-      apiModel: 'fal-model',
-      params: {
-        ...DEFAULT_PARAMS,
-        output_format: 'png',
-        transparent_output: true,
-      },
-      transparentOutput: true,
-      transparentPrompt: 'transparent:prompt',
-      status: 'error',
-      error: '连接已断开，等待自动恢复',
-      falRequestId: 'fal-request-id',
-      falEndpoint: 'fal-endpoint',
-      falRecoverable: true,
-      finishedAt: null,
-      elapsed: null,
-    })
-    await putDbTask(falTask)
-    vi.mocked(getFalQueuedImageResult).mockResolvedValueOnce({
-      images: ['data:image/png;base64,fal-recovered'],
-      actualParams: { output_format: 'png' },
-      actualParamsList: [{ output_format: 'png' }],
-      revisedPrompts: [],
-    })
-
-    await initStore()
-    for (let i = 0; i < 5; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    }
-
-    expect(removeKeyedBackgroundFromDataUrl).toHaveBeenCalledWith('data:image/png;base64,fal-recovered')
-    const recovered = useStore.getState().tasks.find((item) => item.id === falTask.id)
-    expect(recovered).toMatchObject({
-      status: 'done',
-      falRecoverable: false,
-      transparentOutput: true,
-    })
-    expect(recovered?.transparentOriginalImages).toHaveLength(1)
-    const outputImage = await getImage(recovered!.outputImages[0])
-    const originalImage = await getImage(recovered!.transparentOriginalImages![0])
-    expect(outputImage?.dataUrl).toBe('transparent:data:image/png;base64,fal-recovered')
-    expect(originalImage?.dataUrl).toBe('data:image/png;base64,fal-recovered')
-  })
-
-})
 describe('data import', () => {
   beforeEach(async () => {
     await clearTasks()
@@ -1053,7 +919,8 @@ describe('data import', () => {
     const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'existing', prompt: 'old' }), task({ id: 'new', outputImages: ['new-image'], cloudId: 'foreign' })], imageFiles: { 'new-image': { path: 'images/new.png' } } }, { 'images/new.png': new Uint8Array([1, 2, 3]) }), { importTasks: true })
     expect(result).toBe(true)
     expect((await getAllTasks()).find((item) => item.id === 'existing')).toEqual(existing)
-    expect((await getAllTasks()).find((item) => item.id === 'new')).toMatchObject({ cloudId: undefined, outputImages: ['new-image'] })
+    // 云端可能还有未拉取的同 ID 作品，导入的新任务换新 ID
+    expect((await getAllTasks()).find((item) => item.id !== 'existing')).toMatchObject({ cloudId: undefined, outputImages: ['new-image'] })
     expect(await getImage('new-image')).toMatchObject({ dataUrl: 'data:image/png;base64,AQID' })
     expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 1 个任务，保留 1 个同 ID 的现有任务', 'success')
   })
@@ -1067,19 +934,6 @@ describe('data import', () => {
     expect(await getAllTasks()).toEqual([])
     expect(useStore.getState().tasks).toEqual([])
     expect(useStore.getState().settings).toBe(settings)
-  })
-
-  it('assigns a fresh task identity in account mode to preserve cloud records not yet downloaded', async () => {
-    vi.stubEnv('VITE_GOUO_BACKEND_ENABLED', 'true')
-    try {
-      const result = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'old-cloud-client-id', cloudId: 'old-cloud-id' })], imageFiles: {} }), { importTasks: true })
-      expect(result).toBe(true)
-      const [restored] = await getAllTasks()
-      expect(restored.id).not.toBe('old-cloud-client-id')
-      expect(restored.cloudId).toBeUndefined()
-    } finally {
-      vi.unstubAllEnvs()
-    }
   })
 
   it('restores favorite collections and default collection when importing task data', async () => {
@@ -1107,11 +961,12 @@ describe('data import', () => {
     expect(imported).toBe(true)
     expect(state.favoriteCollections).toEqual(expect.arrayContaining(importedCollections))
     expect(state.defaultFavoriteCollectionId).toBe(importedCollections[1].id)
-    expect(state.tasks.find((item) => item.id === importedTask.id)).toMatchObject({
+    // 导入的任务换了新 ID
+    expect(state.tasks[0]).toMatchObject({
       favoriteCollectionIds: [importedCollections[1].id],
       isFavorite: true,
     })
-    expect((await getAllTasks()).find((item) => item.id === importedTask.id)).toMatchObject({
+    expect((await getAllTasks())[0]).toMatchObject({
       favoriteCollectionIds: [importedCollections[1].id],
       isFavorite: true,
     })
@@ -1184,155 +1039,22 @@ describe('failed task cleanup', () => {
   })
 })
 
-describe('reused task API profile', () => {
-  const openaiProfile = createDefaultOpenAIProfile({ id: 'openai-profile', apiKey: 'openai-key' })
-  const falProfile = createDefaultFalProfile({ id: 'fal-profile', name: 'fal 配置', apiKey: 'fal-key' })
-
-  beforeEach(() => {
-    useStore.setState({
-      settings: normalizeSettings({
-        ...DEFAULT_SETTINGS,
-        profiles: [openaiProfile, falProfile],
-        activeProfileId: openaiProfile.id,
-        reuseTaskApiProfileTemporarily: true,
-      }),
-      prompt: '',
-      inputImages: [],
-      maskDraft: null,
-      params: { ...DEFAULT_PARAMS },
-      tasks: [],
-      showSettings: false,
-      toast: null,
-      reusedTaskApiProfileId: null,
-      reusedTaskApiProfileName: null,
-      reusedTaskApiProfileMissing: false,
-      showToast: vi.fn(),
-      setConfirmDialog: vi.fn(),
-    })
-  })
-
-  it('resolves a task API profile by stored profile id', () => {
-    const resolved = getTaskApiProfile(useStore.getState().settings, task({ apiProvider: 'fal', apiProfileId: falProfile.id }))
-
-    expect(resolved?.id).toBe(falProfile.id)
-  })
-
-  it('does not resolve a task API profile by stored name or model', () => {
-    const resolved = getTaskApiProfile(useStore.getState().settings, task({
-      apiProvider: 'fal',
-      apiProfileName: falProfile.name,
-      apiModel: falProfile.model,
-    }))
-
-    expect(resolved).toBeNull()
-  })
-
-  it('reuses the task API profile temporarily without switching the active profile', async () => {
-    await reuseConfig(task({
-      apiProvider: 'fal',
-      apiProfileId: falProfile.id,
-      params: { ...DEFAULT_PARAMS, n: 8, size: 'auto', quality: 'auto' },
-    }))
-
-    const state = useStore.getState()
-    expect(state.settings.activeProfileId).toBe(openaiProfile.id)
-    expect(state.reusedTaskApiProfileId).toBe(falProfile.id)
-    expect(state.params).toMatchObject({ n: 4, size: '1360x1024', quality: 'high' })
-    expect(state.showToast).toHaveBeenCalledWith('已临时复用该任务的 API 配置「fal 配置」', 'success')
-  })
-
-  it('keeps selected image mentions when reusing a task with different current input images', async () => {
-    await clearImages()
-    await putImage(imageA)
-    await putImage(imageB)
-    const taskPrompt = `参考 ${getSelectedImageMentionLabel(1)} 生成`
-
-    useStore.setState({
-      prompt: `当前 ${getSelectedImageMentionLabel(1)}`,
-      inputImages: [
-        { id: 'current-x', dataUrl: 'data:image/png;base64,x' },
-        { id: 'current-y', dataUrl: 'data:image/png;base64,y' },
-      ],
-    })
-
-    await reuseConfig(task({
-      apiProvider: 'openai',
-      apiProfileId: openaiProfile.id,
-      prompt: taskPrompt,
-      inputImageIds: [imageA.id, imageB.id],
-    }))
-
-    const state = useStore.getState()
-    expect(state.inputImages.map((img) => img.id)).toEqual([imageA.id, imageB.id])
-    expect(state.prompt).toBe(taskPrompt)
-  })
-
-  it('clears temporary reuse when switching current settings to the reused API profile', async () => {
-    await reuseConfig(task({ apiProvider: 'fal', apiProfileId: falProfile.id }))
-
-    useStore.getState().setSettings({ activeProfileId: falProfile.id })
-
-    const state = useStore.getState()
-    expect(state.settings.activeProfileId).toBe(falProfile.id)
-    expect(state.reusedTaskApiProfileId).toBeNull()
-    expect(state.reusedTaskApiProfileMissing).toBe(false)
-  })
-
-  it('normalizes reused params to the current API profile when temporary reuse is disabled', async () => {
-    useStore.setState({
-      settings: normalizeSettings({
-        ...useStore.getState().settings,
-        reuseTaskApiProfileTemporarily: false,
-      }),
-    })
-
-    await reuseConfig(task({
-      apiProvider: 'fal',
-      apiProfileId: falProfile.id,
-      params: { ...DEFAULT_PARAMS, n: 8, size: 'auto', quality: 'auto' },
-    }))
-
-    const state = useStore.getState()
-    expect(state.settings.activeProfileId).toBe(openaiProfile.id)
-    expect(state.reusedTaskApiProfileId).toBeNull()
-    expect(state.params).toMatchObject({ n: 8, size: 'auto', quality: 'auto' })
-  })
-
-  it('asks whether to submit with current API profile when the reused API profile is missing', async () => {
-    await reuseConfig(task({ apiProvider: 'fal', apiProfileId: 'missing-profile' }))
-
-    const state = useStore.getState()
-    expect(state.tasks).toEqual([])
-    expect(state.setConfirmDialog).toHaveBeenCalledWith(expect.objectContaining({
-      title: '找不到 API 配置',
-      message: '找不到复用任务所使用的 API 配置「未知配置」，要使用当前的 API 配置「默认」提交任务吗？',
-      confirmText: '使用当前配置提交',
-      cancelText: '放弃提交',
-    }))
-    expect(state.showSettings).toBe(false)
-  })
-})
-
-
 describe('return to creation after reusing library work', () => {
-  const profile = createDefaultOpenAIProfile({ id: 'creation-profile', apiKey: 'test-key' })
-
   beforeEach(async () => {
     vi.stubGlobal('window', new EventTarget())
     await clearImages()
     const { callImageApi } = await import('./lib/api')
     vi.mocked(callImageApi).mockClear()
     useStore.setState({
-      settings: normalizeSettings({ ...DEFAULT_SETTINGS, profiles: [profile], activeProfileId: profile.id, reuseTaskApiProfileTemporarily: true }),
+      settings: { ...DEFAULT_SETTINGS },
       prompt: '', inputImages: [], maskDraft: null, params: { ...DEFAULT_PARAMS }, tasks: [],
-      reusedTaskApiProfileId: null, reusedTaskApiProfileMissing: false,
       showToast: vi.fn(), setConfirmDialog: vi.fn(),
     })
   })
 
   afterEach(() => vi.unstubAllGlobals())
 
-  it.each([false, true])('signals only after restoring prompt, images, and mask (missing profile: %s)', async (missingProfile) => {
+  it('signals only after restoring prompt, images, and mask', async () => {
     await putImage(imageA)
     await putImage({ id: 'creation-mask', dataUrl: 'data:image/png;base64,mask', source: 'upload', createdAt: 1 })
     const onOpen = vi.fn(() => {
@@ -1342,7 +1064,6 @@ describe('return to creation after reusing library work', () => {
     window.addEventListener('gouo:open-creation', onOpen)
 
     await reuseConfig(task({
-      apiProvider: 'openai', apiProfileId: missingProfile ? 'missing-profile' : profile.id,
       prompt: '收藏中的提示词', inputImageIds: [imageA.id], maskTargetImageId: imageA.id, maskImageId: 'creation-mask',
     }))
 
@@ -1350,10 +1071,28 @@ describe('return to creation after reusing library work', () => {
     expect(onOpen.mock.results[0].value).toMatchObject({
       prompt: '收藏中的提示词', images: [imageA], mask: { targetImageId: imageA.id, maskDataUrl: 'data:image/png;base64,mask' },
     })
-    expect(useStore.getState().setConfirmDialog).toHaveBeenCalledTimes(missingProfile ? 1 : 0)
     expect(useStore.getState().tasks).toEqual([])
     const { callImageApi } = await import('./lib/api')
     expect(callImageApi).not.toHaveBeenCalled()
+  })
+
+  it('keeps selected image mentions when reusing a task with different current input images', async () => {
+    await putImage(imageB)
+    const taskPrompt = `参考 ${getSelectedImageMentionLabel(1)} 生成`
+    useStore.setState({
+      prompt: `当前 ${getSelectedImageMentionLabel(1)}`,
+      inputImages: [
+        { id: 'current-x', dataUrl: 'data:image/png;base64,x' },
+        { id: 'current-y', dataUrl: 'data:image/png;base64,y' },
+      ],
+    })
+
+    await putImage(imageA)
+    await reuseConfig(task({ prompt: taskPrompt, inputImageIds: [imageA.id, imageB.id] }))
+
+    const state = useStore.getState()
+    expect(state.inputImages.map((img) => img.id)).toEqual([imageA.id, imageB.id])
+    expect(state.prompt).toBe(taskPrompt)
   })
 
   it('signals after output references are ready without submitting a task', async () => {

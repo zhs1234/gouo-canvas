@@ -26,8 +26,7 @@ export function getUserStorageName(userId: number | string): string {
   return `${BASE_STORAGE_NAME}:user:${normalized}`
 }
 
-const backendAuthEnabled = import.meta.env.VITE_GOUO_BACKEND_ENABLED === 'true'
-const loadedUserId = backendAuthEnabled ? readActiveUserId() : null
+const loadedUserId = readActiveUserId()
 const loadedStorageName = loadedUserId ? getUserStorageName(loadedUserId) : BASE_STORAGE_NAME
 
 export function getLoadedStorageName(): string {
@@ -64,10 +63,9 @@ export function deactivateUserStorage() {
 
 export function shouldReloadForStorageScopeChange(event: StorageEvent): boolean {
   if (event.key !== ACTIVE_STORAGE_USER_KEY) return false
-  if (!backendAuthEnabled) return false
   return readActiveUserId() !== loadedUserId
 }
 
 export function isStorageScopeCurrent(): boolean {
-  return !backendAuthEnabled || readActiveUserId() === loadedUserId
+  return readActiveUserId() === loadedUserId
 }

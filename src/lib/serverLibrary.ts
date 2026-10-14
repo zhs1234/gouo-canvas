@@ -20,7 +20,6 @@ import {
   getLoadedTrashRetentionMs,
   refreshBackendStatus,
   hideCloudCollection,
-  isBackendAuthEnabled,
   listCloudCollections,
   listCloudTasks,
   patchCloudTaskMeta,
@@ -108,8 +107,6 @@ function getTaskResultMeta(task: TaskRecord) {
   return {
     source: task.source,
     requestId: task.requestId,
-    apiProvider: task.apiProvider,
-    apiProfileName: task.apiProfileName,
     gouoPriceVersion: task.gouoPriceVersion,
     gouoPriceCNY: task.gouoPriceCNY,
     actualParams: task.actualParams,
@@ -144,9 +141,6 @@ async function serverTaskToLocal(task: GouoCloudTask): Promise<TaskRecord> {
     source: meta.source && typeof meta.source === 'object' && ['generate', 'canvas', 'agent'].includes(String((meta.source as Record<string, unknown>).kind)) ? meta.source as TaskRecord['source'] : undefined,
     requestId: typeof meta.requestId === 'string' ? meta.requestId : task.client_task_id,
     params: task.params as unknown as TaskParams,
-    apiProvider: meta.apiProvider as TaskRecord['apiProvider'],
-    apiProfileName: typeof meta.apiProfileName === 'string' ? meta.apiProfileName : undefined,
-    apiMode: 'images',
     apiModel: task.model,
     gouoPriceVersion: typeof meta.gouoPriceVersion === 'string' ? meta.gouoPriceVersion : undefined,
     gouoPriceCNY: typeof meta.gouoPriceCNY === 'number' && meta.gouoPriceCNY > 0 ? meta.gouoPriceCNY : undefined,
@@ -340,7 +334,7 @@ export function startServerLibrary() {
 }
 
 async function startOnce() {
-  if (!isBackendAuthEnabled() || enabled) return
+  if (enabled) return
   try {
     if (!(await getCloudStorage()).enabled) return
   } catch (err) {

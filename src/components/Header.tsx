@@ -3,7 +3,6 @@ import { Moon, Sun } from 'lucide-react'
 import { useStore } from '../store'
 import { useTooltip } from '../hooks/useTooltip'
 import { BRAND } from '../config/brand'
-import { isBackendAuthEnabled } from '../lib/gouoBackend'
 import { useThemeStore } from '../lib/canvas/uiStore'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import type { UserCenterSection } from '../lib/userGuidance'
@@ -146,7 +145,7 @@ export default function Header({ compact = false }: { compact?: boolean }) {
             </div>
           )}
           <div className="flex items-center gap-1 shrink-0">
-            {compact && isBackendAuthEnabled() && <AccountBalance refreshKey={showUserCenter} onClick={() => {
+            {compact && <AccountBalance refreshKey={showUserCenter} onClick={() => {
               dismissAllTooltips()
               setUserCenterSection('overview')
               setShowUserCenter(true)
@@ -166,24 +165,22 @@ export default function Header({ compact = false }: { compact?: boolean }) {
               </button>
               <ViewportTooltip visible={inspirationTooltip.visible} className="whitespace-nowrap">灵感库</ViewportTooltip>
             </div>}
-            {isBackendAuthEnabled() && (
-              <div className="relative" {...userCenterTooltip.handlers}>
-                <button
-                  onClick={() => {
-                    dismissAllTooltips()
-                    setUserCenterSection('overview')
-                    setShowUserCenter(true)
-                  }}
-                  className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-500/20 transition hover:brightness-110"
-                  aria-label="用户中心"
-                >
-                  <UserIcon className="h-5 w-5" />
-                </button>
-                <ViewportTooltip visible={userCenterTooltip.visible} className="whitespace-nowrap">
-                  用户中心
-                </ViewportTooltip>
-              </div>
-            )}
+            <div className="relative" {...userCenterTooltip.handlers}>
+              <button
+                onClick={() => {
+                  dismissAllTooltips()
+                  setUserCenterSection('overview')
+                  setShowUserCenter(true)
+                }}
+                className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-500/20 transition hover:brightness-110"
+                aria-label="用户中心"
+              >
+                <UserIcon className="h-5 w-5" />
+              </button>
+              <ViewportTooltip visible={userCenterTooltip.visible} className="whitespace-nowrap">
+                用户中心
+              </ViewportTooltip>
+            </div>
             {!isPwaInstalled && (
               <div
                 className="relative"

@@ -5,7 +5,7 @@ import { App, Button, Modal } from 'antd'
 import { Brush, Crop, Download, ImagePlus, Play, Settings2 } from 'lucide-react'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { useStore, ensureImageCached } from '../../store'
-import { getImageModels, getTrashRetentionDays, isBackendAuthEnabled, type GouoImageModel } from '../../lib/gouoBackend'
+import { getImageModels, getTrashRetentionDays, type GouoImageModel } from '../../lib/gouoBackend'
 import { storeImage, storeImageWithSize } from '../../lib/db'
 import { loadImage } from '../../lib/canvasImage'
 import {
@@ -155,7 +155,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
     for (const id of ids) void ensureCanvasImagePreview(id).catch(report)
   }, [visibleNodes, report])
   useEffect(() => {
-    if (isBackendAuthEnabled()) void getImageModels().then(setModels).catch(report)
+    void getImageModels().then(setModels).catch(report)
   }, [report])
   useEffect(() => () => viewportPersistence.dispose(), [viewportPersistence])
   useEffect(() => {
@@ -590,7 +590,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
       }
     }
     // 重试会新建付费请求，原请求可能已扣费；与作品列表的重试一样先确认
-    if (retry && isBackendAuthEnabled()) {
+    if (retry) {
       const count = target?.metadata?.count || 1
       modal.confirm({
         title: '确认重新生成？',
