@@ -191,6 +191,11 @@ func SaveGouoImageModel(row *GouoImageModelConfig) error {
 	if err := row.Validate(); err != nil {
 		return err
 	}
+	if agent, err := GetGouoAgentModel(row.Model); err != nil {
+		return err
+	} else if agent != nil && row.Enabled {
+		return errors.New("该模型已作为 Agent 模型上架，请先在 Agent 模型里下架")
+	}
 	if err := DB.Save(row).Error; err != nil {
 		return err
 	}

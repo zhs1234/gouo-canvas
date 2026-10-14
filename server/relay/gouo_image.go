@@ -10,6 +10,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -25,6 +26,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/gouo_setting"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +43,7 @@ type gouoImageState struct {
 	entry    *model.GouoImageModel
 	charge   *model.GouoImageCharge
 	settled  bool
+	capture  *gouoImageCapture
 	original gin.ResponseWriter
 	buffer   *gouoBufferWriter
 }
@@ -87,9 +90,26 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 	playground := c.GetString("token_name") == GouoPlaygroundTokenName
 	isImage := info.RelayMode == relayconstant.RelayModeImagesGenerations || info.RelayMode == relayconstant.RelayModeImagesEdits
 	if !enabled {
+		if !playground || isImage {
+			return nil
+		}
 		// 光构客户端只有 Agent 走文本接口，后台关闭 Agent 后不能再用平台令牌直接调用
-		if playground && !isImage && !gouo_setting.Get().AgentEnabled {
+		if !gouo_setting.Get().AgentEnabled {
 			return gouoError("运营方已关闭 Agent", "agent_disabled", http.StatusForbidden)
+		}
+		// 后台为模型设置了单次回复上限时，客户端请求一律按上限截断
+		agent, err := model.GetGouoAgentModel(info.OriginModelName)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+		}
+		if request, ok := info.Request.(*dto.GeneralOpenAIRequest); ok && agent != nil && agent.MaxTokens > 0 {
+			limit := uint(agent.MaxTokens)
+			if request.MaxCompletionTokens == nil || *request.MaxCompletionTokens == 0 || *request.MaxCompletionTokens > limit {
+				request.MaxCompletionTokens = &limit
+			}
+			if request.MaxTokens != nil && *request.MaxTokens > limit {
+				request.MaxTokens = &limit
+			}
 		}
 		return nil
 	}
@@ -161,6 +181,30 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 	if version := c.GetHeader("X-Gouo-Price-Version"); (playground || version != "") && version != entry.PriceVersion {
 		return gouoError("模型价格或能力已更新，请刷新模型列表并重新确认提交", "image_price_changed", http.StatusConflict)
 	}
+	var capture *gouoImageCapture
+	if taskID := c.GetHeader("X-Gouo-Task-Id"); taskID != "" && gouo_setting.Get().CloudLibraryEnabled {
+		if len(taskID) > 128 || !gouoRequestIDPattern.MatchString(taskID) {
+			return gouoError("作品编号无效", "invalid_image_task_id", http.StatusBadRequest)
+		}
+		index, err := strconv.Atoi(c.GetHeader("X-Gouo-Request-Index"))
+		if err != nil || index < 0 || index >= gouo_setting.Get().AssetMaxTaskFiles {
+			index = 0
+		}
+		capture = &gouoImageCapture{taskID: taskID, index: index, prompt: request.Prompt, model: request.Model, operation: "generation",
+			params: map[string]any{"n": 1, "size": request.Size, "quality": request.Quality}}
+		var format string
+		if len(request.OutputFormat) > 0 && common.Unmarshal(request.OutputFormat, &format) == nil {
+			capture.params["output_format"] = format
+		}
+		if edit {
+			capture.operation = "edit"
+			capture.params["output_format"] = c.Request.PostForm.Get("output_format")
+			capture.inputs = append(slices.Clone(form.File["image"]), form.File["image[]"]...)
+			if mask {
+				capture.mask = form.File["mask"][0]
+			}
+		}
+	}
 	requestID := c.GetHeader("X-Gouo-Request-Id")
 	if requestID == "" {
 		requestID = "auto:" + c.GetString(common.RequestIdKey)
@@ -174,7 +218,7 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 		return gouoError(err.Error(), "insufficient_image_quota", http.StatusPaymentRequired)
 	}
 	c.Header("X-Gouo-Charge-Id", charge.ID)
-	c.Set(helper.GouoImageContextKey, &gouoImageState{entry: entry, charge: charge})
+	c.Set(helper.GouoImageContextKey, &gouoImageState{entry: entry, charge: charge, capture: capture})
 	return nil
 }
 
@@ -266,6 +310,9 @@ func finishGouoImage(c *gin.Context, info *relaycommon.RelayInfo) (bool, *types.
 		TokenId: info.TokenId, Group: info.UsingGroup, Other: other, UseTimeSeconds: int(common.GetTimestamp() - info.StartTime.Unix()),
 		Content: []*common.Message{common.NewMessage("光构图片按次计费 {{price}} 元", map[string]any{"price": state.entry.PriceCNY})},
 	})
+	if state.capture != nil {
+		recordGouoGeneration(c, state.capture, response.Data)
+	}
 	c.Writer = state.original
 	for key, values := range state.buffer.header {
 		c.Writer.Header()[key] = values
@@ -344,4 +391,115 @@ func validGouoImages(items []dto.ImageData) bool {
 		}
 	}
 	return true
+}
+
+type gouoImageCapture struct {
+	taskID    string
+	index     int
+	prompt    string
+	model     string
+	operation string
+	params    map[string]any
+	inputs    []*multipart.FileHeader
+	mask      *multipart.FileHeader
+}
+
+// ponytail: 生成图上限 64 MB；接入更大输出前调整
+const gouoGeneratedImageMaxBytes = 64 * 1024 * 1024
+
+// recordGouoGeneration 在返回图片前把结果写入用户作品库；失败只记日志，图片仍照常返回，并可从恢复缓存取回
+func recordGouoGeneration(c *gin.Context, capture *gouoImageCapture, items []dto.ImageData) {
+	userID := c.GetInt("id")
+	// 已付费的生成结果不受空间配额限制；用户上传的参考图和遮罩按普通上传处理
+	save := func(data []byte, name string, enforceQuota bool) (*model.GouoAsset, error) {
+		asset, _, err := model.SaveGouoAssetBytes(userID, data, name, enforceQuota)
+		return asset, err
+	}
+	record := model.GouoGenerationRecord{UserID: userID, ClientTaskID: capture.taskID, Index: capture.index, Prompt: capture.prompt, Model: capture.model, Operation: capture.operation}
+	record.Params, _ = common.Marshal(capture.params)
+	for i, item := range items {
+		data, err := gouoImageBytes(item)
+		if err == nil {
+			var asset *model.GouoAsset
+			if asset, err = save(data, fmt.Sprintf("output-%d-%d", capture.index, i), false); err == nil {
+				record.Outputs = append(record.Outputs, asset)
+				continue
+			}
+		}
+		logger.LogError(c, "保存生成图片失败: "+err.Error())
+		return
+	}
+	maxBytes := gouo_setting.Get().AssetMaxFileBytes
+	readUpload := func(header *multipart.FileHeader) (*model.GouoAsset, error) {
+		file, err := header.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(data)) > maxBytes {
+			return nil, fmt.Errorf("文件超过 %d MB", maxBytes/1024/1024)
+		}
+		return save(data, header.Filename, true)
+	}
+	for _, header := range capture.inputs {
+		asset, err := readUpload(header)
+		if err != nil {
+			logger.LogError(c, "保存参考图失败: "+err.Error())
+		}
+		// 失败时追加 nil 占位，客户端按下标绑定参考图编号
+		record.Inputs = append(record.Inputs, asset)
+	}
+	if capture.mask != nil {
+		if asset, err := readUpload(capture.mask); err == nil {
+			record.Mask = asset
+		} else {
+			logger.LogError(c, "保存遮罩失败: "+err.Error())
+		}
+	}
+	if err := model.RecordGouoGeneration(record); err != nil {
+		logger.LogError(c, "写入作品记录失败: "+err.Error())
+	}
+}
+
+func gouoImageBytes(item dto.ImageData) ([]byte, error) {
+	encoded := strings.TrimSpace(item.B64Json)
+	if encoded == "" && strings.HasPrefix(item.Url, "data:image/") {
+		encoded = item.Url
+	}
+	if encoded != "" {
+		if _, payload, ok := strings.Cut(encoded, ";base64,"); ok {
+			encoded = payload
+		}
+		encoding := base64.StdEncoding
+		if len(encoded)%4 != 0 {
+			encoding = base64.RawStdEncoding
+		}
+		return readGouoImage(base64.NewDecoder(encoding, strings.NewReader(encoded)))
+	}
+	// 图片地址来自供应商响应，按后台的抓取安全设置下载，防止访问内网
+	resp, err := service.DoDownloadRequest(item.Url, "gouo image result")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("下载生成图片失败：HTTP %d", resp.StatusCode)
+	}
+	return readGouoImage(resp.Body)
+}
+
+// readGouoImage 超过上限直接报错，截断的图片不能入库
+func readGouoImage(r io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, gouoGeneratedImageMaxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > gouoGeneratedImageMaxBytes {
+		return nil, fmt.Errorf("生成图片超过 %d MB", gouoGeneratedImageMaxBytes/1024/1024)
+	}
+	return data, nil
 }

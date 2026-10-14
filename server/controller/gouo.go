@@ -20,6 +20,9 @@ import (
 
 var gouoClientRequestID = regexp.MustCompile(`^[a-zA-Z0-9_:-]{1,512}$`)
 
+// 素材 ID 由服务端生成（32 位小写十六进制）；MySQL 比较不区分大小写，而清理时在 Go 里按原样比较，大写 ID 会让被引用的图片被清理
+var gouoAssetIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
 func gouoFail(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"success": false, "message": message, "code": code})
 }

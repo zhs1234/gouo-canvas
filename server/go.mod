@@ -85,6 +85,7 @@ require (
 	go.opentelemetry.io/otel v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	gorm.io/datatypes v1.2.0 // indirect
 )
 
 require (
