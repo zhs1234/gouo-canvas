@@ -30,7 +30,7 @@ vi.mock('../../stores/agentStore', () => ({
 }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: (select: (state: { projects: [] }) => unknown) => select({ projects: [] }) }))
 vi.mock('../../lib/db', () => ({ storeImageWithSize: vi.fn() }))
-vi.mock('../../lib/gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend }))
+vi.mock('../../lib/gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getMaxTaskImages: () => 10 }))
 vi.mock('../../lib/agent/tools', () => ({ executeAgentTool: mocks.tool }))
 vi.mock('../BackendModelSelector', () => ({ default: () => null }))
 vi.mock('../ModelSelect', async (original) => {

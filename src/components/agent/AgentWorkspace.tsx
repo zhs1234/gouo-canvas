@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { ensureImageCached, executeTask, useStore } from '../../store'
 import { useAgentStore } from '../../stores/agentStore'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { fileToDataUrl } from '../../lib/dataUrl'
 import { storeImageWithSize } from '../../lib/db'
-import { getMaxUploadBytes, isBackendAuthEnabled } from '../../lib/gouoBackend'
+import { getMaxTaskImages, getMaxUploadBytes, isBackendAuthEnabled } from '../../lib/gouoBackend'
 import { executeAgentTool } from '../../lib/agent/tools'
 import { formatPoints } from '../../lib/accountUsage'
+import { downloadImageIds, formatExportFileTime } from '../../lib/downloadImages'
 import type { AgentConversation, AgentToolCall } from '../../lib/agent/types'
 import BackendModelSelector from '../BackendModelSelector'
 import ModelSelect from '../ModelSelect'
-import { CloseIcon, CopyIcon, PlusIcon, RefreshIcon, SparklesIcon } from '../icons'
+import { CloseIcon, CopyIcon, DownloadIcon, PlusIcon, RefreshIcon, SparklesIcon } from '../icons'
 import './agent.css'
 
 const toolLabels: Record<string, string> = {
@@ -22,7 +24,8 @@ const toolLabels: Record<string, string> = {
   select_reference: '选择参考图',
 }
 
-function AgentImage({ id, onRemove }: { id: string; onRemove?: () => void }) {
+// gallery 为点开大图时可左右切换的图片；只在会话消息里传，输入框附件和参考图选择器里不可点开
+function AgentImage({ id, onRemove, gallery }: { id: string; onRemove?: () => void; gallery?: string[] }) {
   const [url, setUrl] = useState<string>()
   const [unavailable, setUnavailable] = useState(false)
   useEffect(() => {
@@ -37,8 +40,17 @@ function AgentImage({ id, onRemove }: { id: string; onRemove?: () => void }) {
     })
     return () => { disposed = true }
   }, [id])
+  const img = url ? <img src={url} alt="创作参考图" loading="lazy" /> : <span>{unavailable ? '图片暂不可用' : '图片加载中'}</span>
+  if (gallery && url) return <span className="agent-reference is-interactive" data-image-id={id}>
+    <button type="button" className="agent-reference-open" aria-label="查看大图" onClick={() => useStore.getState().setLightboxImageId(id, gallery)}>{img}</button>
+    <button type="button" className="agent-reference-download" aria-label="下载图片" title="下载图片" onClick={() => {
+      void downloadImageIds([id], `agent-${formatExportFileTime(new Date())}`).then((result) => {
+        if (result.failCount) useStore.getState().showToast('图片下载失败', 'error')
+      })
+    }}><DownloadIcon width={14} height={14} /></button>
+  </span>
   return <span className="agent-reference" data-image-id={id}>
-    {url ? <img src={url} alt="创作参考图" loading="lazy" /> : <span>{unavailable ? '图片暂不可用' : '图片加载中'}</span>}
+    {img}
     {onRemove && <button type="button" onClick={onRemove} aria-label="移除参考图"><CloseIcon width={12} height={12} /></button>}
   </span>
 }
@@ -66,7 +78,26 @@ function AgentTask({ taskId, conversation }: { taskId: string; conversation: Age
   const [addError, setAddError] = useState('')
   const [added, setAdded] = useState(false)
   const [recovering, setRecovering] = useState(false)
+  const [now, setNow] = useState(Date.now)
+  const running = task?.status === 'running'
+  useEffect(() => {
+    if (!running) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [running])
   if (!task) return <div className="agent-task">图片任务记录已移除，附件仍保留在会话中。</div>
+  // 生成中按目标尺寸占位，auto 尺寸按方图
+  const sizeMatch = task.params.size.match(/^(\d+)x(\d+)$/)
+  const ratio = sizeMatch ? Number(sizeMatch[1]) / Number(sizeMatch[2]) : 1
+  const pendingCount = running ? Math.max(1, task.params.n - task.outputImages.length - (task.outputErrors?.length ?? 0)) : 0
+  const elapsed = Math.max(0, Math.floor((now - task.createdAt) / 1000))
+  // 阶段按用时推算，不代表上游真实进度
+  const stage = elapsed < 6 ? ['读懂你的想法', '提炼主体、风格与氛围']
+    : elapsed < 18 ? ['铺陈构图', '安排画面布局与视角']
+      : elapsed < 40 ? ['落笔上色', '一层层画出形体与色彩']
+        : elapsed < 80 ? ['打磨光影细节', '调整质感、光线与边缘']
+          : ['最后润色', '马上就好，请稍候']
+  const elapsedText = elapsed < 60 ? `${elapsed} 秒` : `${Math.floor(elapsed / 60)} 分 ${String(elapsed % 60).padStart(2, '0')} 秒`
   const addToCanvas = async () => {
     setAdding(true)
     setAddError('')
@@ -84,7 +115,16 @@ function AgentTask({ taskId, conversation }: { taskId: string; conversation: Age
     <div className="agent-task-heading"><span className={`agent-status-dot ${task.status === 'running' ? 'is-running' : ''}`} />{recovering ? '正在取回原请求结果，不会重新生成' : task.status === 'running' ? '图片正在生成，切换页面后仍会继续' : task.outputErrors?.length ? `成功 ${task.outputImages.length} 张，失败 ${task.outputErrors.length} 张（共 ${Math.max(task.params.n, task.outputImages.length + task.outputErrors.length)} 张）` : task.status === 'error' ? '图片生成未完成' : `已生成 ${task.outputImages.length} 张图片`}</div>
     {task.error && <p className="agent-error">{task.error}</p>}
     {task.outputErrors?.map((entry) => <p className="agent-error" key={entry.requestIndex}>第 {entry.requestIndex + 1} 张：{entry.error}</p>)}
-    {task.outputImages.length > 0 && <div className="agent-result-images">{task.outputImages.map((id) => <AgentImage key={id} id={id} />)}</div>}
+    {(task.outputImages.length > 0 || pendingCount > 0) && <div className="agent-result-images">
+      {task.outputImages.map((id) => <AgentImage key={id} id={id} gallery={task.outputImages} />)}
+      {Array.from({ length: pendingCount }, (_, idx) => <div key={idx} className="agent-image-pending" style={{ '--ratio': ratio } as CSSProperties} role="status">
+        <div key={stage[0]} className="agent-image-pending-text">
+          <strong>{stage[0]}</strong>
+          <span>{stage[1]}</span>
+        </div>
+        <span className="agent-image-pending-meta">{sizeMatch ? `${sizeMatch[1]} × ${sizeMatch[2]} · ` : ''}{elapsedText}</span>
+      </div>)}
+    </div>}
     {(task.status === 'error' || Boolean(task.outputErrors?.length)) && <button type="button" className="agent-text-button" onClick={() => useStore.getState().setDetailTaskId(taskId)}>查看结果与失败原因</button>}
     {isBackendAuthEnabled() && task.gouoPriceVersion && task.status === 'error' && !task.outputImages.length && <button type="button" className="agent-text-button" disabled={recovering} title="只取回原请求的图片，不会重新生成或扣费" onClick={() => {
       setRecovering(true)
@@ -226,6 +266,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
         </div>
         {model && <span className="agent-model-price" title="按后台定价计费，实际扣费还会乘以账号分组倍率">{model.input_price_cny || model.output_price_cny ? `输入 ${formatPoints(model.input_price_cny)} · 输出 ${formatPoints(model.output_price_cny)} / 百万 token` : '免费'}</span>}
         <button type="button" className={`agent-text-button ${showReferences ? 'is-active' : ''}`} aria-label="选择已有图片作为参考" aria-expanded={showReferences} disabled={running || !conversation} onClick={() => setShowReferences(!showReferences)}>@</button>
+        <label className="agent-count-select" title="Agent 生成图片时默认每次的张数；在消息里写明张数时以消息为准"><span>张数</span><select aria-label="每次生成张数" value={Math.min(conversation?.imageCount ?? 1, getMaxTaskImages())} disabled={running || !conversation} onChange={(event) => useAgentStore.getState().configureConversation(id, { imageCount: Number(event.target.value) })}>{Array.from({ length: getMaxTaskImages() }, (_, idx) => <option key={idx} value={idx + 1}>{idx + 1} 张</option>)}</select></label>
         <label className="agent-canvas-select"><span>画布</span><select aria-label="关联画布" value={conversation?.projectId || ''} disabled={running || !conversation} onChange={(event) => useAgentStore.getState().configureConversation(id, { projectId: event.target.value || undefined })}><option value="">未关联</option>{conversation?.projectId && !linkedProject && <option value={conversation.projectId} disabled>原画布已不可用</option>}{projects.filter((project) => !project.hiddenAt).map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label>
         <span className="agent-composer-spacer" />
         {running ? <button type="button" className="agent-send agent-stop" aria-label="停止 Agent" title="停止对话；已提交的图片继续生成" onClick={() => useAgentStore.getState().stop(id)}><span /></button> : <button className="agent-send" type="submit" aria-label="发送" disabled={!conversation?.draft.trim() || uploading || !model || modelsLoading}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></button>}
@@ -257,11 +298,11 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
             if (message.role === 'tool') {
               const taskImages = new Set(tasks.filter((task) => message.taskIds?.includes(task.id)).flatMap((task) => task.outputImages))
               const attachments = (message.referenceImageIds || []).filter((imageId) => !taskImages.has(imageId))
-              return <div className="agent-tool-results" key={message.id}>{message.taskIds?.map((taskId) => <AgentTask key={taskId} taskId={taskId} conversation={conversation} />)}{attachments.length && message.toolName !== 'select_reference' ? <div className="agent-attachments">{attachments.map((imageId) => <AgentImage key={imageId} id={imageId} />)}</div> : null}</div>
+              return <div className="agent-tool-results" key={message.id}>{message.taskIds?.map((taskId) => <AgentTask key={taskId} taskId={taskId} conversation={conversation} />)}{attachments.length && message.toolName !== 'select_reference' ? <div className="agent-attachments">{attachments.map((imageId) => <AgentImage key={imageId} id={imageId} gallery={attachments} />)}</div> : null}</div>
             }
             return <article className={`agent-message agent-message-${message.role}`} key={message.id}>
               {message.role === 'assistant' && <div className="agent-message-state">{running && message === conversation.messages[conversation.messages.length - 1] ? <><span className="agent-status-dot is-running" />正在创作</> : '光构 Agent'}</div>}
-              {message.referenceImageIds?.length ? <div className="agent-attachments">{message.referenceImageIds.map((imageId) => <AgentImage key={imageId} id={imageId} />)}</div> : null}
+              {message.referenceImageIds?.length ? <div className="agent-attachments">{message.referenceImageIds.map((imageId, _, list) => <AgentImage key={imageId} id={imageId} gallery={list} />)}</div> : null}
               {message.content && <div className="agent-message-content">{message.content}</div>}
               {message.toolCalls?.map((call) => <ToolCall key={call.id || call.name} call={call} conversationId={conversation.id} running={running} />)}
               {message.role === 'assistant' && message.content && <div className="agent-message-actions"><button type="button" title="复制回复" aria-label="复制回复" onClick={() => { void navigator.clipboard.writeText(message.content).then(() => useStore.getState().showToast('已复制回复', 'success')).catch(() => useStore.getState().showToast('复制失败，请手动选择文字', 'error')) }}><CopyIcon width={15} height={15} /></button><span>内容由 AI 生成</span></div>}

@@ -30,6 +30,7 @@ export function normalizeAgentConversation(value: unknown): AgentConversation | 
     ...item as AgentConversation,
     messages: item.status === 'running' ? item.messages.map((msg) => ({ ...msg, toolCalls: msg.toolCalls?.map((call) => call.status === 'running' || call.status === 'pending' ? { ...call, status: 'error' } : call) })) : item.messages,
     draft: typeof item.draft === 'string' ? item.draft : '',
+    imageCount: Number.isInteger(item.imageCount) && item.imageCount! >= 1 && item.imageCount! <= 10 ? item.imageCount : undefined,
     status: item.status === 'running' ? 'interrupted' : ['idle', 'completed', 'stopped', 'error', 'interrupted'].includes(item.status || '') ? item.status! : 'idle',
     error: item.status === 'running' ? '上次会话连接已中断，已保留内容。请检查已提交的图片任务后手动继续。' : item.error,
   }
@@ -85,6 +86,7 @@ export async function buildAgentMessages(conversation: AgentConversation, model:
   // 运营方附加要求排在内置规则之后，不能放宽计费、工具和安全约束
   if (operatorPrompt) result[0].content += `\n运营方补充要求（不得违背以上规则）：\n${operatorPrompt}`
   result[0].content += '\n本次图片提交后全部任务已安排、且无需后续规划或画布操作时，将 create_image_task 的 finishAfterSubmit 设为 true，系统会直接确认提交并结束本轮；多任务未安排完或仍需画布操作时保持 false。此标志不表示图片已生成完成。'
+  result[0].content += `\n用户在输入框选择每次生成 ${conversation.imageCount ?? 1} 张图片：create_image_task 不填 params.n 时按这个张数提交；只有用户在消息里明确要求其他张数时才填写 params.n。多张图片在一个任务里用同一提示词生成，需要不同内容时分成多个任务。`
   const unstartedCallIds = new Set(conversation.messages.flatMap((msg) => msg.toolCalls || []).filter((call) => call.execution === 'not_started').map((call) => call.id))
   const completedCallIds = new Set(messages.filter((msg) => msg.role === 'tool').map((msg) => msg.toolCallId))
   const callExecutions = new Map<string, AgentToolCall['execution']>()
@@ -231,7 +233,7 @@ interface AgentState {
   loadModels: () => Promise<void>
   createConversation: (projectId?: string) => Promise<AgentConversation>
   updateDraft: (id: string, draft: string) => void
-  configureConversation: (id: string, patch: Pick<Partial<AgentConversation>, 'modelId' | 'projectId' | 'referenceImageIds' | 'title'>) => void
+  configureConversation: (id: string, patch: Pick<Partial<AgentConversation>, 'modelId' | 'projectId' | 'referenceImageIds' | 'title' | 'imageCount'>) => void
   acknowledgeImageRecovery: (id: string, callId: string) => void
   hideConversation: (id: string) => Promise<void>
   send: (id: string, text?: string) => Promise<void>
