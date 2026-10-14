@@ -24,20 +24,13 @@ This document helps maintainers and new contributors understand the product scop
 
 The frontend also includes an inspiration library, dark theme, and PWA installation. The service worker caches pages and static assets while bypassing `/api`, `/v1`, and `/panel`; it does not generate images offline. See [main.tsx](../../src/main.tsx) and [sw.js](../../public/sw.js).
 
-## Runtime modes
+## Identity and data
 
-| Setting | Full product mode | Frontend-only development mode |
-| --- | --- | --- |
-| Switch | `VITE_GOUO_BACKEND_ENABLED=true` | `false` or unset |
-| Identity | Backend Cookie session; login is checked before opening the workspace | No product login gate |
-| Image configuration | Backend channels; default model set in the admin panel's Gouo settings | User-configured OpenAI-compatible, fal.ai, or custom providers |
-| API keys | Platform upstream keys remain on the server; the browser uses a user relay token | Provider credentials supplied by the user may enter local browser settings |
-| Data | Local cache scoped to the account, plus the cloud library when enabled | Data in the current browser |
-| Use | Hosted product and account/billing integration | Protocol compatibility, streaming, async polling, and mock API debugging |
+The client has a single runtime mode. It checks the backend Cookie session before opening the workspace. Image requests go through platform backend channels; upstream keys stay on the server and the browser uses the relay token issued after login. The default model is set in the admin panel's Gouo settings.
 
-Vite reads the mode at startup or build time. Restart the development server after changing `.env.local`; rebuild production frontend assets after changing `VITE_*` configuration. Never put backend channel secrets in `VITE_*` variables.
+Local cache is scoped to the account as `gouo-canvas:user:<user ID>`. Seeing different artwork after switching accounts does not, by itself, prove data loss. See [storageScope.ts](../../src/lib/storageScope.ts).
 
-The modes use separate storage scopes. Product mode uses `gouo-canvas:user:<user ID>`; frontend-only mode uses `gouo-canvas`. Seeing different artwork after changing modes or accounts does not, by itself, prove data loss. See [storageScope.ts](../../src/lib/storageScope.ts) and the [development guide](./development.md).
+Vite reads `VITE_*` variables at startup or build time. Restart the development server after changing `.env.local`; rebuild production frontend assets after changing them. Never put backend channel secrets in `VITE_*` variables.
 
 ## Technology and code ownership
 
@@ -94,9 +87,9 @@ Prompt, parameters, references, and mask
 
 Mask submission validates the target reference and mask dimensions; a mask covering the whole image requires user confirmation. Successful results retain image IDs, actual parameters, and elapsed time. Failures retain details, and some protocols also retain raw image URLs or responses for diagnosis. A retry creates a new task and can cause another upstream call and charge.
 
-Product mode uses Images API through `createBackendSettings` and disables streaming. Frontend-only mode retains Responses API, partial streaming images, fal.ai, and custom asynchronous provider support. These compatibility capabilities do not establish that the hosted product exposes all of them.
+Image requests obtain a relay token through `createBackendSettings` and use the backend Images API without streaming. A batch is split into numbered concurrent single-image requests, each billed separately.
 
-A normal page refresh cannot resume an interrupted OpenAI request. Initialization marks these locally running tasks as failed. fal.ai and custom asynchronous providers can query results again when their server task ID has been saved. Synchronizing artwork records does not replace a durable server-side generation queue.
+A normal page refresh cannot resume an interrupted request. Initialization marks locally running tasks as failed. A task whose request was already sent can fetch its result from the server by the original request ID without generating or charging again. Synchronizing artwork records does not replace a durable server-side generation queue.
 
 Sources: [store.ts](../../src/store.ts), [api.ts](../../src/lib/api.ts), [gouoBackend.ts](../../src/lib/gouoBackend.ts).
 

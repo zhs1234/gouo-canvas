@@ -41,7 +41,6 @@ go run .
 Frontend `.env.local`:
 
 ```dotenv
-VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:3000
 ```
@@ -250,5 +249,5 @@ Every user-data endpoint must enforce authentication and ownership on the server
 
 - The public frontend includes sign-in, registration, user center, redemption codes, usage history, cloud library, canvas, and Agent.
 - Online payment becomes a production feature only after One Hub configuration and callback, duplicate-notification, failure, and reconciliation testing.
-- Product-mode image endpoints currently use non-streaming backend settings; frontend-only mode retains streaming compatibility tests.
+- The client calls image endpoints without streaming.
 - `server/docs/` describes general upstream One Hub features and does not imply that the public Gouo UI exposes every one of them.

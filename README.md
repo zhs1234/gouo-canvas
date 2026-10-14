@@ -49,7 +49,7 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api`, `/v1`, and `/panel` to `VITE_
 
 An empty database creates `root` / `123456`. **Change this password immediately, before exposing the service.** In `http://127.0.0.1:3000/panel`, configure an image channel and its upstream API key, then enable the model and set its price in points under 光构 → 光构模型 (Gouo models). Generation needs a working channel and enough points.
 
-See the [development guide](./docs/en/development.md) for full setup, frontend-only mode, and frontend variables. Backend settings, cloud storage limits, and backups are in the [backend guide](./docs/en/backend.md); environment examples are in [`.env.example`](./.env.example) and [`deploy/.env.example`](./deploy/.env.example).
+See the [development guide](./docs/en/development.md) for full setup and frontend variables. Backend settings, cloud storage limits, and backups are in the [backend guide](./docs/en/backend.md); environment examples are in [`.env.example`](./.env.example) and [`deploy/.env.example`](./deploy/.env.example).
 
 ### Enable Agent models
 
@@ -62,7 +62,6 @@ In the backend admin panel, configure a text model's pricing, available channel,
 The bundled mock listens only on localhost and never forwards requests upstream. It needs no real API keys or points. Create `.env.mock.local` at the repository root, leaving your existing `.env.local` unchanged:
 
 ```dotenv
-VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:5190
 VITE_CANVAS_ENABLED=true
@@ -104,7 +103,7 @@ Use one public origin: serve the frontend and proxy `/api` and `/v1` to the back
 Choose [Docker Compose](./docs/en/deployment/docker.md) or [manual Linux deployment](./docs/en/deployment/manual.md). Read the [deployment overview](./docs/en/deployment/index.md) and complete the [production checklist](./docs/en/deployment/checklist.md) before opening registration or payments.
 
 - Keep session and relay-token secrets stable and private. Never commit real environment files, credentials, databases, logs, or private keys.
-- In product mode, unsynchronized work may exist only in the browser; IndexedDB is a cache, not a backup. In frontend-only mode, data stays in the browser unless the provider stores request data.
+- Unsynchronized work may exist only in the browser; IndexedDB is a cache, not a backup.
 - The local asset directory supports one backend instance. Multiple instances need shared storage.
 - Fixed user pricing is separate from upstream cost. Validate costs for each model, quality, size, and edit type. Payments need a configured provider, verified callbacks, public pricing and refund terms, and reconciliation; use redemption codes until this is ready.
 

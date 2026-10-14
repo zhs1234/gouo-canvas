@@ -49,7 +49,7 @@ npm run dev
 
 空数据库首次启动会创建 `root` / `123456`。**立即修改初始密码，改好前不要对外开放。** 在 `http://127.0.0.1:3000/panel` 配置图片渠道和上游 API Key，然后在“光构 → 光构模型”启用模型并设置积分售价。生成图片需要可用渠道和足够的积分。
 
-完整启动步骤、纯前端模式和前端变量见[开发指南](./docs/zh-CN/development.md)。后端配置、云库限额和备份见[后端说明](./docs/zh-CN/backend.md)，环境示例见 [`.env.example`](./.env.example) 和 [`deploy/.env.example`](./deploy/.env.example)。
+完整启动步骤和前端变量见[开发指南](./docs/zh-CN/development.md)。后端配置、云库限额和备份见[后端说明](./docs/zh-CN/backend.md)，环境示例见 [`.env.example`](./.env.example) 和 [`deploy/.env.example`](./deploy/.env.example)。
 
 ### 启用 Agent 模型
 
@@ -62,7 +62,6 @@ npm run dev
 仓库提供只监听本机、不转发上游请求的模拟服务，无需真实密钥或积分。在根目录新建 `.env.mock.local`，保持现有 `.env.local` 不变：
 
 ```dotenv
-VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:5190
 VITE_CANVAS_ENABLED=true
@@ -104,7 +103,7 @@ go test ./relay/relay_util -run '^TestGouoImage'
 选择 [Docker Compose](./docs/zh-CN/deployment/docker.md) 或 [Linux 手动部署](./docs/zh-CN/deployment/manual.md)。先看[部署总览](./docs/zh-CN/deployment/index.md)，开放注册或支付前完成[上线检查清单](./docs/zh-CN/deployment/checklist.md)。
 
 - 会话和中继令牌密钥需保持固定并保密，不要提交真实环境文件、凭据、数据库、日志或私钥。
-- 生产模式下，未同步的作品可能只在原浏览器中；IndexedDB 是缓存，不是备份。纯前端模式下，数据保存在浏览器中，上游服务商可能另行保存请求数据。
+- 未同步的作品可能只在原浏览器中；IndexedDB 是缓存，不是备份。
 - 本地资产目录适用于单后端实例，多实例需要共享存储。
 - 用户固定售价不等于上游成本，需按模型、质量、尺寸和编辑类型核对。支付上线需要正式渠道、回调验签、公开价格与退款规则以及对账流程；这些就绪前使用兑换码。
 

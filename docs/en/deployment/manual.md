@@ -183,7 +183,6 @@ npm ci
 Create a production-only `.env.production.local`:
 
 ```dotenv
-VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 ```
 

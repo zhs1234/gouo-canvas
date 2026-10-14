@@ -185,7 +185,6 @@ npm ci
 创建只用于生产构建的 `.env.production.local`：
 
 ```dotenv
-VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 ```
 

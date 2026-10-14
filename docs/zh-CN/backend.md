@@ -41,7 +41,6 @@ go run .
 前端 `.env.local`：
 
 ```dotenv
-VITE_GOUO_BACKEND_ENABLED=true
 VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:3000
 ```
@@ -250,5 +249,5 @@ GOUO_ASSET_MAX_TASK_FILES=32
 
 - 光构公开前端已经提供登录、注册、用户中心、兑换码、使用记录、云端作品库、画布和 Agent。
 - 在线支付只有在 One Hub 侧配置完成并经过回调、重复通知、失败和对账测试后才可作为正式能力。
-- 图片端点当前按非流式响应接入产品后端配置；纯前端模式仍保留流式兼容测试能力。
+- 客户端按非流式响应调用图片端点。
 - `server/docs/` 描述的是上游 One Hub 通用能力，不自动代表光构前端已经开放对应入口。
