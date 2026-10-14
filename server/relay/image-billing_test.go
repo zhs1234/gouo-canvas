@@ -185,14 +185,12 @@ func TestImageResultBillingAndRefund(t *testing.T) {
 			if tc.unknown || tc.storageFail {
 				var charge model.GouoImageCharge
 				require.NoError(t, db.Where("id = ?", res.Header().Get("X-Gouo-Charge-Id")).First(&charge).Error)
-				require.Equal(t, model.GouoChargeReview, charge.Status)
+				// 用户没有拿到图片，结果不明也直接退款；诊断只写日志
+				require.Equal(t, model.GouoChargeRefunded, charge.Status)
 				require.Equal(t, 1, charge.Attempts)
-				require.Zero(t, charge.LogID)
+				require.Positive(t, charge.LogID)
 				require.EqualValues(t, 1, requests.Load())
-				require.Contains(t, charge.Note, tc.diagnostic)
-				if tc.storageFail {
-					require.Contains(t, charge.Note, "恢复结果保存失败")
-				}
+				require.Equal(t, "生成失败，退回预扣积分", charge.Note)
 				logs := observedLogs.FilterMessageSnippet("image result uncertain:").All()
 				require.Len(t, logs, 1)
 				require.Contains(t, logs[0].Message, tc.diagnostic)
@@ -205,7 +203,7 @@ func TestImageResultBillingAndRefund(t *testing.T) {
 			require.NoError(t, err)
 			token, err := model.GetTokenById(1)
 			require.NoError(t, err)
-			if tc.retry || tc.failWrite || tc.unknown || tc.success || tc.storageFail {
+			if tc.retry || tc.failWrite || tc.success {
 				require.Equal(t, 90, quota)
 				require.Equal(t, 90, token.RemainQuota)
 				require.Equal(t, 10, token.UsedQuota)

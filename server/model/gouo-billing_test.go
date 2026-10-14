@@ -65,13 +65,18 @@ func TestGouoBillingDurableRecoveryAndAtomicFinalization(t *testing.T) {
 	require.NoError(t, db.Callback().Create().Remove("billing_fail_charge"))
 
 	reserved, dispatched, recent := newCharge("reserved"), newCharge("dispatched"), newCharge("recent")
-	for _, charge := range []*GouoImageCharge{reserved, dispatched, recent} {
+	// 旧版留下的待核对记录：过期的由定时任务退款，较新的仍可由管理员核对。
+	staleReview, legacy := newCharge("stale-review"), newCharge("legacy-review")
+	for _, charge := range []*GouoImageCharge{reserved, dispatched, recent, staleReview, legacy} {
 		require.NoError(t, ReserveGouoQuota(charge))
 	}
-	require.NoError(t, DispatchGouoImageCharge(dispatched.ID, channel.Id))
+	for _, charge := range []*GouoImageCharge{dispatched, staleReview, legacy} {
+		require.NoError(t, DispatchGouoImageCharge(charge.ID, channel.Id))
+	}
+	require.NoError(t, db.Model(&GouoImageCharge{}).Where("id IN ?", []string{staleReview.ID, legacy.ID}).UpdateColumn("status", GouoChargeReview).Error)
 	old := time.Now().Add(-GouoImageRecoveryDelay - time.Minute).Unix()
-	require.NoError(t, db.Model(&GouoImageCharge{}).Where("id IN ?", []string{reserved.ID, dispatched.ID}).UpdateColumn("updated_at", old).Error)
-	assertBalance(970)
+	require.NoError(t, db.Model(&GouoImageCharge{}).Where("id IN ?", []string{reserved.ID, dispatched.ID, staleReview.ID}).UpdateColumn("updated_at", old).Error)
+	assertBalance(950)
 
 	// 关闭并重新打开数据库，不保留 Quota 对象或进程内记录。
 	conn, err := db.DB()
@@ -89,11 +94,13 @@ func TestGouoBillingDurableRecoveryAndAtomicFinalization(t *testing.T) {
 	require.NoError(t, RecoverGouoImageCharges())
 	assertBalance(980)
 	require.Equal(t, GouoChargeRefunded, read(reserved.ID).Status)
-	require.Equal(t, GouoChargeReview, read(dispatched.ID).Status)
+	require.Equal(t, GouoChargeRefunded, read(dispatched.ID).Status)
+	require.Equal(t, GouoChargeRefunded, read(staleReview.ID).Status)
 	require.Equal(t, GouoChargeReserved, read(recent.ID).Status)
+	require.Equal(t, GouoChargeReview, read(legacy.ID).Status)
 	require.ErrorIs(t, DispatchGouoImageCharge(reserved.ID, channel.Id), ErrGouoChargeState)
 	require.ErrorIs(t, ResolveGouoImageCharge(recent.ID, GouoChargeRefunded, 1, "仍在处理"), ErrGouoChargeState)
-	require.Error(t, ResolveGouoImageCharge(dispatched.ID, GouoChargeRefunded, 1, ""))
+	require.Error(t, ResolveGouoImageCharge(legacy.ID, GouoChargeRefunded, 1, ""))
 
 	// 结算日志失败时，状态、消费统计和额度都不能部分提交。
 	require.NoError(t, db.Callback().Create().Before("gorm:create").Register("billing_fail_log", func(tx *gorm.DB) {
@@ -101,8 +108,8 @@ func TestGouoBillingDurableRecoveryAndAtomicFinalization(t *testing.T) {
 			tx.AddError(errors.New("simulated log failure"))
 		}
 	}))
-	require.Error(t, ResolveGouoImageCharge(dispatched.ID, GouoChargeSettled, 1, "已确认上游成功"))
-	require.Equal(t, GouoChargeReview, read(dispatched.ID).Status)
+	require.Error(t, ResolveGouoImageCharge(legacy.ID, GouoChargeSettled, 1, "已确认上游成功"))
+	require.Equal(t, GouoChargeReview, read(legacy.ID).Status)
 	var current User
 	require.NoError(t, db.First(&current, user.Id).Error)
 	require.Zero(t, current.UsedQuota)
@@ -119,7 +126,7 @@ func TestGouoBillingDurableRecoveryAndAtomicFinalization(t *testing.T) {
 			if i%2 == 0 {
 				status = GouoChargeRefunded
 			}
-			errCh <- ResolveGouoImageCharge(dispatched.ID, status, 1, "模拟渠道核对依据")
+			errCh <- ResolveGouoImageCharge(legacy.ID, status, 1, "模拟渠道核对依据")
 		}(i)
 	}
 	wg.Wait()
@@ -129,27 +136,27 @@ func TestGouoBillingDurableRecoveryAndAtomicFinalization(t *testing.T) {
 			require.ErrorIs(t, err, ErrGouoChargeState)
 		}
 	}
-	final := read(dispatched.ID)
+	final := read(legacy.ID)
 	require.Contains(t, []string{GouoChargeSettled, GouoChargeRefunded}, final.Status)
 	require.Positive(t, final.LogID)
 	require.Equal(t, 1, final.ResolvedBy)
-	require.NoError(t, ResolveGouoImageCharge(dispatched.ID, final.Status, 1, "重复提交"))
+	require.NoError(t, ResolveGouoImageCharge(legacy.ID, final.Status, 1, "重复提交"))
 	var log Log
 	require.NoError(t, db.First(&log, final.LogID).Error)
-	require.Equal(t, dispatched.ID, log.Metadata.Data()["request_id"])
+	require.Equal(t, legacy.ID, log.Metadata.Data()["request_id"])
 	require.Equal(t, "frozen-price", log.Metadata.Data()["price_version"])
 	var count int64
 	require.NoError(t, db.Model(&Log{}).Where("user_id = ?", user.Id).Count(&count).Error)
-	require.EqualValues(t, 2, count)
+	require.EqualValues(t, 4, count)
 	if final.Status == GouoChargeRefunded {
 		assertBalance(990)
 	} else {
 		assertBalance(980)
 	}
-	page, err := ListGouoImageCharges(user.Id+1, 0, dispatched.ID, "", &PaginationParams{Page: 1, Size: 20})
+	page, err := ListGouoImageCharges(user.Id+1, 0, legacy.ID, "", &PaginationParams{Page: 1, Size: 20})
 	require.NoError(t, err)
 	require.Zero(t, page.TotalCount)
-	page, err = ListGouoImageCharges(user.Id, 0, dispatched.ID, "", &PaginationParams{Page: 1, Size: 20})
+	page, err = ListGouoImageCharges(user.Id, 0, legacy.ID, "", &PaginationParams{Page: 1, Size: 20})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, page.TotalCount)
 }

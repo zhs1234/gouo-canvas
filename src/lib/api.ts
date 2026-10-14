@@ -157,8 +157,8 @@ async function recoverImageResult(opts: CallApiOptions, relay: Relay, signal: Ab
         await sleep(2_000, signal)
         continue
       }
-      const reason = result.reason === 'result_expired' ? '保存期限已过' : result.status === 'refunded' ? '请求已退款' : '服务端未保存可恢复结果'
-      throw new Error(`原图片请求暂不可恢复：${reason}；未重新生成，请查看图片请求状态`)
+      if (result.status === 'refunded') throw new Error('生成失败，预扣积分已自动退回，可直接重试')
+      throw new Error(`原图片请求暂不可恢复：${result.reason === 'result_expired' ? '保存期限已过' : '服务端未保存可恢复结果'}；未重新生成`)
     }
     throw new Error('等待原图片请求结果超时；未重新生成，请稍后在作品中恢复结果')
   } catch (err) {

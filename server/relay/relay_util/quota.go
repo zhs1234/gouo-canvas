@@ -36,8 +36,6 @@ type Quota struct {
 	fixedQuota        int
 	imageModel        *model.GouoImageModel
 	imageCharge       *model.GouoImageCharge
-	imageUncertain    bool
-	imageFailureKnown bool
 	imageCompleted    bool
 	HandelStatus      bool
 
@@ -230,10 +228,7 @@ func (q *Quota) Undo(c *gin.Context) {
 		if !q.HandelStatus || q.imageCompleted {
 			return
 		}
-		if q.imageUncertain || (q.imageCharge.Status == model.GouoChargeDispatched && !q.imageFailureKnown) {
-			q.MarkImageUnknown(c, "上游结果或结算未确认，请核对请求记录")
-			return
-		}
+		// 用户没有拿到图片就退回预扣，包括上游结果未知的情况；这类上游费用由平台承担
 		if err := model.FinishGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, model.GouoChargeRefunded, nil, 0, "生成失败，退回预扣积分"); err != nil {
 			logger.LogError(c.Request.Context(), "图片预扣退款失败: "+err.Error())
 			return
@@ -278,11 +273,8 @@ func (q *Quota) DispatchImage(c *gin.Context) *types.OpenAIErrorWithStatusCode {
 		return common.ErrorWrapperLocal(err, "image_billing_state_changed", http.StatusConflict)
 	}
 	q.imageCharge.Status = model.GouoChargeDispatched
-	q.imageFailureKnown = false
 	return nil
 }
-
-func (q *Quota) MarkImageFailed() { q.imageFailureKnown = true }
 
 func (q *Quota) SaveImageResult(c *gin.Context, response *types.ImageResponse) error {
 	// 只有带客户端请求 ID 的结果能被取回；其余保存只会占用缓存。
@@ -290,19 +282,10 @@ func (q *Quota) SaveImageResult(c *gin.Context, response *types.ImageResponse) e
 		return nil
 	}
 	if err := model.SaveGouoImageResult(q.imageCharge.ID, response); err != nil {
-		q.MarkImageUnknown(c, "上游已返回图片，但恢复结果保存失败，请管理员核对存储与渠道记录")
 		logger.LogError(c.Request.Context(), "图片恢复结果保存失败: "+err.Error())
 		return err
 	}
 	return nil
-}
-
-func (q *Quota) MarkImageUnknown(c *gin.Context, note string) {
-	q.imageUncertain = true
-	if err := model.ReviewGouoImageCharge(q.imageCharge.ID, note); err != nil {
-		logger.LogError(c.Request.Context(), "图片待核对状态保存失败: "+err.Error())
-	}
-	c.Header("X-Gouo-Billing-Status", model.GouoChargeReview)
 }
 
 // 上游成功后先提交账务，再回传图片；浏览器断开不能把已经成功的生成误退。
@@ -312,8 +295,8 @@ func (q *Quota) CompleteImage(c *gin.Context, usage *types.Usage) error {
 	}
 	q.startTime = c.GetTime("requestStartTime")
 	entry := &model.Log{PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, RequestTime: q.getRequestTime(), SourceIp: c.ClientIP(), Metadata: datatypes.NewJSONType(q.GetLogMeta(usage))}
+	// 结算失败时不回传图片，请求结束时按失败退回预扣
 	if err := model.FinishGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, model.GouoChargeSettled, entry, 0, "上游已返回有效图片"); err != nil {
-		q.MarkImageUnknown(c, "上游已返回图片，但结算提交未确认，请核对数据库与渠道记录")
 		return err
 	}
 	q.imageCompleted, q.HandelStatus = true, false

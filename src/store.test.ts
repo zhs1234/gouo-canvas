@@ -252,8 +252,7 @@ describe('product model task snapshots', () => {
 
   it('preserves billing guidance when a running backend task is interrupted', () => {
     const result = markInterruptedOpenAIRunningTasks([task({ status: 'running' })])
-    expect(result.tasks[0].error).toContain('图片请求状态')
-    expect(result.tasks[0].error).toContain('不代表已退款')
+    expect(result.tasks[0].error).toContain('自动退回积分')
   })
 
   it('distinguishes local save failure after a paid result from an upstream failure', async () => {
@@ -264,7 +263,7 @@ describe('product model task snapshots', () => {
     await submitTask()
     await vi.waitFor(() => expect(useStore.getState().tasks[0].status).toBe('error'))
     expect(useStore.getState().tasks[0].error).toContain('生成结果已返回，但本地处理或保存失败')
-    expect(useStore.getState().tasks[0].error).toContain('不代表已退款')
+    expect(useStore.getState().tasks[0].error).toContain('自动退回积分')
     expect(callImageApi).toHaveBeenCalledTimes(1)
   })
 

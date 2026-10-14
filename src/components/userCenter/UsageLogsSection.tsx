@@ -4,7 +4,6 @@ import { getUsageLogs } from '../../lib/gouoBackend'
 import { formatPoints, getLogContent, getUsageDisplay, toPoints } from '../../lib/accountUsage'
 import { createLatestRequest } from '../../lib/latestRequest'
 import { RefreshIcon } from '../icons'
-import ImageBillingRecords from '../ImageBillingRecords'
 
 const PAGE_SIZE = 10
 
@@ -86,7 +85,6 @@ export default function UsageLogsSection({ user }: { user: GouoUser }) {
 
   return (
     <section className="overflow-hidden rounded-2xl border border-gray-100 dark:border-white/[0.08]">
-      <ImageBillingRecords />
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-white/[0.08]">
         <div>
           <p className="font-semibold text-gray-900 dark:text-white">积分明细</p>
