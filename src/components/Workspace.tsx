@@ -74,7 +74,7 @@ function RecentResults() {
   if (!recent.length) return null
   return <section className="recent-results" aria-label="本次生成">
     <div className="section-label">本次生成<span><Link to="/works">全部作品 ↗</Link></span></div>
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-5">
       {recent.map((task) => <TaskCard key={task.id} task={task} onClick={() => setDetailTaskId(task.id)} onReuse={() => reuseConfig(task)} onEditOutputs={() => editOutputs(task)} onDelete={() => confirmRemoveTask(task)} />)}
     </div>
   </section>
