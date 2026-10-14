@@ -6,8 +6,8 @@
 @tailwind utilities;
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 10%;
+  --background: 43 50% 97%;
+  --foreground: 240 4% 9%;
   --muted: 240 5% 96%;
   --muted-foreground: 240 4% 46%;
   --border: 240 6% 90%;
@@ -23,6 +23,10 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
   scrollbar-gutter: stable;
+  /* 浅色主题的强调色：首页暖橙色系，Tailwind 的 blue-* 都映射到这里 */
+  --c-blue-50: 253 244 236; --c-blue-100: 251 230 213; --c-blue-200: 246 205 173; --c-blue-300: 240 173 128;
+  --c-blue-400: 232 138 86; --c-blue-500: 214 104 44; --c-blue-600: 190 85 32; --c-blue-700: 158 68 27;
+  --c-blue-800: 128 56 26; --c-blue-900: 105 47 24; --c-blue-950: 58 24 11;
 }
 
 html {
@@ -69,23 +73,25 @@ body.drag-selecting * {
   user-select: none !important;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 240 10% 4%;
-    --foreground: 0 0% 98%;
-    --muted: 240 4% 16%;
-    --muted-foreground: 240 5% 65%;
-    --border: 240 4% 22%;
-    --input: 240 4% 22%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --sidebar: 240 5% 12%;
-    --sidebar-foreground: 0 0% 98%;
-  }
+:root.dark {
+  --background: 240 10% 4%;
+  --foreground: 0 0% 98%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 65%;
+  --border: 240 4% 22%;
+  --input: 240 4% 22%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --sidebar: 240 5% 12%;
+  --sidebar-foreground: 0 0% 98%;
+  /* 深色主题保持原来的 Tailwind 蓝 */
+  --c-blue-50: 239 246 255; --c-blue-100: 219 234 254; --c-blue-200: 191 219 254; --c-blue-300: 147 197 253;
+  --c-blue-400: 96 165 250; --c-blue-500: 59 130 246; --c-blue-600: 37 99 235; --c-blue-700: 29 78 216;
+  --c-blue-800: 30 64 175; --c-blue-900: 30 58 138; --c-blue-950: 23 37 84;
+}
 
-  * {
-    scrollbar-color: #3f3f46 transparent;
-  }
+.dark * {
+  scrollbar-color: #3f3f46 transparent;
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -103,9 +109,14 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-@media (prefers-color-scheme: dark) {
-  ::-webkit-scrollbar-thumb { background: #3f3f46; }
-  ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+.dark::-webkit-scrollbar-thumb, .dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
+.dark::-webkit-scrollbar-thumb:hover, .dark ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+/* 明暗切换：关掉默认的整页淡入淡出，由 setTheme 让新主题从按钮处以圆形扩散 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 @keyframes pulse-border {
@@ -289,35 +300,33 @@ input[type="number"] {
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
 }
 
-@media (prefers-color-scheme: dark) {
-  .mention-tag {
-    background: rgba(59, 130, 246, 0.12);
-    color: #93c5fd;
-    border-color: rgba(59, 130, 246, 0.2);
-  }
+.dark .mention-tag {
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.2);
+}
 
-  .mention-tag::selection,
-  .mention-tag *::selection {
-    background: transparent !important;
-    color: inherit !important;
-  }
+.dark .mention-tag::selection,
+.dark .mention-tag *::selection {
+  background: transparent !important;
+  color: inherit !important;
+}
 
-  [contenteditable]::selection,
-  [contenteditable] *::selection {
-    background: rgba(59, 130, 246, 0.3);
-    color: inherit;
-  }
+.dark [contenteditable]::selection,
+.dark [contenteditable] *::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: inherit;
+}
 
-  .mention-tag:hover {
-    background: rgba(59, 130, 246, 0.2);
-  }
+.dark .mention-tag:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
 
-  .mention-tag.selected {
-    background: #3b82f6;
-    color: #ffffff;
-    border-color: #60a5fa;
-    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.35);
-  }
+.dark .mention-tag.selected {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #60a5fa;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.35);
 }
 
 /* 修复 iOS/Webkit 上带圆角的滚动容器内容/滚动条溢出的 bug */

@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 import { useStore } from '../store'
 import { useTooltip } from '../hooks/useTooltip'
 import { BRAND } from '../config/brand'
 import { isBackendAuthEnabled } from '../lib/gouoBackend'
+import { useThemeStore } from '../lib/canvas/uiStore'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
 import type { UserCenterSection } from '../lib/userGuidance'
 import ViewportTooltip from './ViewportTooltip'
@@ -41,6 +43,9 @@ export default function Header({ compact = false }: { compact?: boolean }) {
   const installTooltip = useTooltip()
   const helpTooltip = useTooltip()
   const settingsTooltip = useTooltip()
+  const themeTooltip = useTooltip()
+  const theme = useThemeStore((state) => state.theme)
+  const setTheme = useThemeStore((state) => state.setTheme)
   const inspirationTooltip = useTooltip()
   const userCenterTooltip = useTooltip()
 
@@ -217,6 +222,25 @@ export default function Header({ compact = false }: { compact?: boolean }) {
                 操作指南
               </ViewportTooltip>
             </div>}
+            <div className="relative" {...themeTooltip.handlers}>
+              <button
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  setTheme(theme === 'dark' ? 'light' : 'dark', { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+                }}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
+                aria-label={theme === 'dark' ? '切换到浅色' : '切换到深色'}
+              >
+                {/* 太阳和月亮叠在一起，切换时一个转出、一个转入 */}
+                <span className="relative block w-5 h-5 text-gray-600 dark:text-gray-400">
+                  <Sun className={`absolute inset-0 w-5 h-5 transition-all duration-500 ease-out motion-reduce:transition-none ${theme === 'dark' ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-0 opacity-0'}`} />
+                  <Moon className={`absolute inset-0 w-5 h-5 transition-all duration-500 ease-out motion-reduce:transition-none ${theme === 'dark' ? 'rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
+                </span>
+              </button>
+              <ViewportTooltip visible={themeTooltip.visible} className="whitespace-nowrap">
+                {theme === 'dark' ? '浅色模式' : '深色模式'}
+              </ViewportTooltip>
+            </div>
             {/* 创作空间也需要设置入口：数据导入导出、习惯配置都在这里 */}
             <div
               className="relative"

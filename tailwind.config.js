@@ -10,6 +10,8 @@ export default {
         background: 'hsl(var(--background) / <alpha-value>)',
         border: 'hsl(var(--border) / <alpha-value>)',
         gray: colors.zinc,
+        // 强调色随主题切换：深色沿用 Tailwind 蓝，浅色换成首页同系的暖橙，色值见 index.css 的 --c-blue-*
+        blue: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((shade) => [shade, `rgb(var(--c-blue-${shade}) / <alpha-value>)`])),
         foreground: 'hsl(var(--foreground) / <alpha-value>)',
         input: 'hsl(var(--input) / <alpha-value>)',
         muted: {

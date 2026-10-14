@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1020" />
+    <meta name="theme-color" content="#faf8f3" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="光构" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -12,6 +12,7 @@
     <link rel="apple-touch-icon" href="./gouo-logo-180.png" />
     <link rel="icon" href="./gouo-logo-64.png" type="image/png" />
     <title>光构 · Gouo Canvas</title>
+    <script>try { if (localStorage.getItem('gouo-theme') === 'dark') { document.documentElement.classList.add('dark'); document.querySelector('meta[name="theme-color"]').setAttribute('content', '#111111') } } catch {}</script>
   </head>
   <body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 min-h-screen">
     <div id="root"></div>
