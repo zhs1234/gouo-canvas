@@ -217,15 +217,22 @@ func TestGouoImageParamLimits(t *testing.T) {
 	oldLow := config.GouoAllowLowModeration
 	t.Cleanup(func() { config.GouoAllowLowModeration = oldLow })
 	config.GouoAllowLowModeration = false
-	open := &model.GouoImageModel{}
-	limited := &model.GouoImageModel{MaxSize: "1K", Qualities: []string{"low", "medium"}, MaxInputs: 2}
-	// 不限时任何尺寸、画质、参考图张数都放行
+	open := &model.GouoImageModel{Sizes: model.GouoSizeTiers}
+	limited := &model.GouoImageModel{Sizes: []string{"1K"}, Qualities: []string{"low", "medium"}, MaxInputs: 2}
+	// 开放全部档位、画质和张数不限时都放行
 	require.Empty(t, checkGouoImageParams(open, "3840x2160", "high", "", 16))
-	// 尺寸按档位的像素上限比较，auto 放行
+	// 尺寸按像素数归入档位，只放行开放的档位；auto 始终放行
 	require.Empty(t, checkGouoImageParams(limited, "1024x1536", "low", "", 0))
 	require.Empty(t, checkGouoImageParams(limited, "auto", "low", "", 0))
-	require.Contains(t, checkGouoImageParams(limited, "2048x2048", "low", "", 0), "最大支持 1K")
+	require.Contains(t, checkGouoImageParams(limited, "2048x2048", "low", "", 0), "不支持该分辨率")
 	require.Equal(t, "图片尺寸无效", checkGouoImageParams(limited, "big", "low", "", 0))
+	onlyHigh := &model.GouoImageModel{Sizes: []string{"2K"}}
+	require.Contains(t, checkGouoImageParams(onlyHigh, "1024x1024", "", "", 0), "不支持该分辨率")
+	require.Empty(t, checkGouoImageParams(onlyHigh, "2048x2048", "", "", 0))
+	require.Contains(t, checkGouoImageParams(open, "4096x4096", "", "", 0), "不支持该分辨率")
+	// 没有开放任何档位时只能用自动尺寸
+	require.Contains(t, checkGouoImageParams(&model.GouoImageModel{}, "1024x1024", "", "", 0), "不支持该分辨率")
+	require.Empty(t, checkGouoImageParams(&model.GouoImageModel{}, "auto", "", "", 0))
 	// 只开放部分画质时，自动画质可能被上游选成高画质，不放行
 	require.Contains(t, checkGouoImageParams(limited, "auto", "high", "", 0), "不开放所选画质")
 	require.Contains(t, checkGouoImageParams(limited, "auto", "auto", "", 0), "不开放自动画质")
@@ -241,7 +248,7 @@ func TestGouoImageParamLimits(t *testing.T) {
 func TestGouoImageParamLimitsInRequest(t *testing.T) {
 	old := model.PricingInstance
 	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{
-		"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1, GouoMaxSize: "1K", GouoQualities: "low,medium"},
+		"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1, GouoSizes: "1K", GouoQualities: "low,medium"},
 		"image-b": {Model: "image-b", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1},
 	}}
 	t.Cleanup(func() { model.PricingInstance = old })
@@ -251,7 +258,7 @@ func TestGouoImageParamLimitsInRequest(t *testing.T) {
 	openEntry, err := model.PricingInstance.GetGouoModel("image-b")
 	require.NoError(t, err)
 	// 不限时目录里不出现限制字段，原有模型的价格版本保持不变
-	require.Empty(t, openEntry.MaxSize)
+	require.Empty(t, openEntry.Sizes)
 	require.NotEqual(t, limitedEntry.PriceVersion, openEntry.PriceVersion)
 	generate := func(size, quality string) *types.OpenAIErrorWithStatusCode {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())

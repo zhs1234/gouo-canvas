@@ -10,7 +10,6 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  MenuItem,
   Stack,
   Switch,
   Table,
@@ -28,6 +27,7 @@ import { API } from 'utils/api';
 import { GOUO_POINTS_PER_CNY, renderGouoPoints, showError, showSuccess } from 'utils/common';
 import AgentModels from './AgentModels';
 
+const SIZE_TIERS = ['1K', '2K', '4K'];
 const QUALITY_OPTIONS = [
   ['low', '低'],
   ['medium', '中'],
@@ -36,7 +36,7 @@ const QUALITY_OPTIONS = [
 // 能力列里的成本相关限制，未设置的不显示
 const limitText = (row) =>
   [
-    row.gouo_max_size && `最大 ${row.gouo_max_size}`,
+    row.gouo_sizes?.length ? `分辨率 ${row.gouo_sizes.join('/')}` : '仅自动尺寸',
     row.gouo_qualities?.length &&
       `画质 ${row.gouo_qualities.map((value) => QUALITY_OPTIONS.find(([key]) => key === value)?.[1] || value).join('/')}`,
     row.gouo_max_inputs > 0 && `参考图最多 ${row.gouo_max_inputs} 张`
@@ -96,7 +96,7 @@ function ImageModels() {
           name: values.display_name,
           description: values.display_description,
           gouo_sort: Number(values.display_sort || 0),
-          gouo_max_size: values.cap_size,
+          gouo_sizes: values.cap_sizes,
           // 三种画质都开放即不限
           gouo_qualities: values.cap_qualities.length === QUALITY_OPTIONS.length ? [] : values.cap_qualities,
           gouo_max_inputs: Number(values.cap_inputs || 0)
@@ -258,7 +258,7 @@ function ImageModels() {
                             display_name: row.name || '',
                             display_description: row.description || '',
                             display_sort: row.gouo_sort || 0,
-                            cap_size: row.gouo_max_size || '',
+                            cap_sizes: row.gouo_sizes || [],
                             cap_qualities: row.gouo_qualities?.length ? row.gouo_qualities : QUALITY_OPTIONS.map(([value]) => value),
                             cap_inputs: row.gouo_max_inputs || 0
                           })
@@ -380,20 +380,32 @@ function ImageModels() {
                 <Alert severity="warning">
                   按张计价时，尺寸越大、画质越高、参考图越多，上游成本越高。以下限制由服务端校验，客户端只显示允许的选项。
                 </Alert>
-                <TextField
-                  select
-                  label="最大尺寸"
-                  value={editing.cap_size}
-                  onChange={(event) => setEditing({ ...editing, cap_size: event.target.value })}
-                  helperText="1K 约 1024×1536，2K 约 2048×2048，4K 约 3840×2160"
-                >
-                  <MenuItem value="">不限</MenuItem>
-                  {['1K', '2K', '4K'].map((tier) => (
-                    <MenuItem key={tier} value={tier}>
-                      {tier}
-                    </MenuItem>
+                <Box>
+                  <Typography variant="body2">支持的分辨率</Typography>
+                  {SIZE_TIERS.map((tier) => (
+                    <FormControlLabel
+                      key={tier}
+                      control={
+                        <Checkbox
+                          checked={editing.cap_sizes.includes(tier)}
+                          onChange={(event) =>
+                            setEditing({
+                              ...editing,
+                              cap_sizes: event.target.checked
+                                ? SIZE_TIERS.filter((key) => key === tier || editing.cap_sizes.includes(key))
+                                : editing.cap_sizes.filter((key) => key !== tier)
+                            })
+                          }
+                        />
+                      }
+                      label={tier}
+                    />
                   ))}
-                </TextField>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    只勾选上游实际支持的档位，客户端只显示勾选的档位；都不勾选时只能用自动尺寸。1K 约 1024×1536，2K 约 2048×2048，4K 约
+                    3840×2160。
+                  </Typography>
+                </Box>
                 <Box>
                   <Typography variant="body2">开放的画质</Typography>
                   {QUALITY_OPTIONS.map(([value, label]) => (

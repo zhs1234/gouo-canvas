@@ -23,8 +23,8 @@ type GouoImageModel struct {
 	Mask       bool    `json:"mask"`
 	MaxOutputs int     `json:"max_outputs"`
 	Quota      int     `json:"quota"`
-	// 后台限定的尺寸、画质和参考图张数，参与价格版本；不限时省略，原有模型的价格版本不变
-	MaxSize      string   `json:"max_size,omitempty"`
+	// 后台限定的分辨率档位、画质和参考图张数，参与价格版本；档位为空表示只能用自动尺寸，画质和张数不限时省略
+	Sizes        []string `json:"sizes,omitempty"`
 	Qualities    []string `json:"qualities,omitempty"`
 	MaxInputs    int      `json:"max_inputs,omitempty"`
 	PriceVersion string   `json:"price_version"`
@@ -34,8 +34,30 @@ type GouoImageModel struct {
 	Sort        int    `json:"-"`
 }
 
-// 各尺寸档位允许的最大像素数，与客户端尺寸选择的档位一致
+// 各分辨率档位允许的最大像素数，与客户端尺寸选择的档位一致；尺寸按像素数归入能容纳它的最小档位
 var GouoSizeTierPixels = map[string]int{"1K": 1024 * 1536, "2K": 2048 * 2048, "4K": 3840 * 2160}
+var GouoSizeTiers = []string{"1K", "2K", "4K"}
+
+// GouoSizeTier 返回 WxH 尺寸所属的分辨率档位，超出 4K 或格式无效时返回空
+func GouoSizeTier(width, height int) string {
+	for _, tier := range GouoSizeTiers {
+		if width*height <= GouoSizeTierPixels[tier] {
+			return tier
+		}
+	}
+	return ""
+}
+
+// GouoSizeList 返回后台开放的分辨率档位，空表示只能用自动尺寸
+func GouoSizeList(price *Price) []string {
+	var list []string
+	for _, item := range strings.Split(price.GouoSizes, ",") {
+		if item = strings.ToUpper(strings.TrimSpace(item)); item != "" {
+			list = append(list, item)
+		}
+	}
+	return list
+}
 
 var gouoQualityValues = []string{"low", "medium", "high"}
 
@@ -94,8 +116,10 @@ func ValidateGouoPrice(price *Price) error {
 	if price.GouoMaxOutputs < 1 || price.GouoMaxOutputs > 10 || (price.GouoMask && !price.GouoReference) {
 		return errors.New("光构单次输出上限必须在 1 到 10 之间；遮罩编辑需要支持参考图")
 	}
-	if _, ok := GouoSizeTierPixels[price.GouoMaxSize]; price.GouoMaxSize != "" && !ok {
-		return errors.New("最大尺寸只能是 1K、2K 或 4K")
+	for _, tier := range GouoSizeList(price) {
+		if !slices.Contains(GouoSizeTiers, tier) {
+			return errors.New("分辨率档位只能是 1K、2K、4K")
+		}
 	}
 	for _, quality := range GouoQualityList(price) {
 		if !slices.Contains(gouoQualityValues, quality) {
@@ -134,7 +158,7 @@ func (p *Pricing) GetGouoModel(id string) (*GouoImageModel, error) {
 	}
 	result := &GouoImageModel{ID: id, Name: id, PriceCNY: price.GouoPriceCNY,
 		Reference: price.GouoReference, Mask: price.GouoMask, MaxOutputs: price.GouoMaxOutputs, Quota: int(quota),
-		MaxSize: price.GouoMaxSize, Qualities: GouoQualityList(price), MaxInputs: price.GouoMaxInputs}
+		Sizes: GouoSizeList(price), Qualities: GouoQualityList(price), MaxInputs: price.GouoMaxInputs}
 	data, _ := json.Marshal(result)
 	hash := sha256.Sum256(data)
 	result.PriceVersion = hex.EncodeToString(hash[:])

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { calculateImageSize, normalizeImageSize, parseRatio, type SizeTier } from '../lib/size'
+import { calculateImageSize, getSizeTier, normalizeImageSize, parseRatio, type SizeTier } from '../lib/size'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import ViewportTooltip from './ViewportTooltip'
 
@@ -20,9 +20,8 @@ interface Props {
   currentSize: string
   onSelect: (size: string) => void
   onClose: () => void
-  allowAuto?: boolean
-  // 后台为所选模型限定的最大尺寸档位
-  maxTier?: SizeTier
+  // 后台为所选模型开放的分辨率档位，为空时只能用自动尺寸
+  tiers: SizeTier[]
 }
 
 type Mode = 'auto' | 'ratio' | 'resolution'
@@ -45,8 +44,8 @@ function findPresetForSize(size: string) {
   return null
 }
 
-export default function SizePickerModal({ currentSize, onSelect, onClose, allowAuto = true, maxTier }: Props) {
-  const tiers = maxTier ? TIERS.slice(0, TIERS.indexOf(maxTier) + 1) : TIERS
+export default function SizePickerModal({ currentSize, onSelect, onClose, tiers: allowedTiers }: Props) {
+  const tiers = TIERS.filter((tier) => allowedTiers.includes(tier))
   usePreventBackgroundScroll(true)
 
   const modalRef = useRef<HTMLDivElement>(null)
@@ -75,14 +74,14 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
   const currentPreset = findPresetForSize(currentSize)
   const currentParsedSize = parseSize(currentSize)
   const [mode, setMode] = useState<Mode>(() => {
-    if (!currentSize || currentSize === 'auto') return allowAuto ? 'auto' : 'ratio'
+    if (!currentSize || currentSize === 'auto' || !tiers.length) return 'auto'
     if (currentPreset) return 'ratio'
     return 'resolution'
   })
 
   // Ratio mode state
-  const [tier, setTier] = useState<SizeTier>(currentPreset?.tier ?? '1K')
-  const [ratio, setRatio] = useState(currentPreset?.ratio ?? (allowAuto ? '1:1' : '4:3'))
+  const [tier, setTier] = useState<SizeTier>(currentPreset && tiers.includes(currentPreset.tier) ? currentPreset.tier : tiers[0] ?? '1K')
+  const [ratio, setRatio] = useState(currentPreset?.ratio ?? '1:1')
   const [customRatio, setCustomRatio] = useState('16:9')
 
   // Resolution mode state
@@ -137,6 +136,9 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
     }
     return false
   }, [mode, ratio, customRatioClamped, customW, customH, previewSize])
+  // 自定义宽高也要落在开放的档位里，否则上游可能不支持
+  const previewTier = previewSize && previewSize !== 'auto' ? getSizeTier(previewSize) : null
+  const tierBlocked = Boolean(previewSize && previewSize !== 'auto' && !(previewTier && tiers.includes(previewTier)))
 
   const showHint = () => setHintVisible(true)
   const hideHint = () => {
@@ -157,7 +159,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
   }
 
   const applySize = () => {
-    if (!previewSize) return
+    if (!previewSize || tierBlocked) return
     onSelect(previewSize)
     onClose()
   }
@@ -199,14 +201,13 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
 
         <div className="space-y-6">
           <div className="flex rounded-xl bg-gray-100/80 p-1 dark:bg-white/[0.04]">
-            {allowAuto && (
-              <button
-                onClick={() => setMode('auto')}
-                className={`flex-1 rounded-lg py-1.5 text-sm font-medium transition ${mode === 'auto' ? 'bg-white text-gray-800 shadow-sm dark:bg-gray-700 dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
-              >
-                自动
-              </button>
-            )}
+            <button
+              onClick={() => setMode('auto')}
+              className={`flex-1 rounded-lg py-1.5 text-sm font-medium transition ${mode === 'auto' ? 'bg-white text-gray-800 shadow-sm dark:bg-gray-700 dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+            >
+              自动
+            </button>
+            {tiers.length > 0 && <>
             <button
               onClick={() => setMode('ratio')}
               className={`flex-1 rounded-lg py-1.5 text-sm font-medium transition ${mode === 'ratio' ? 'bg-white text-gray-800 shadow-sm dark:bg-gray-700 dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
@@ -219,6 +220,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
             >
               自定义宽高
             </button>
+            </>}
           </div>
 
           <div className="h-[380px] max-h-[55vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-white/10 pr-1 -mr-1 pb-2">
@@ -236,6 +238,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
                     <br />
                     由模型自己决定生成尺寸
                   </p>
+                  {!tiers.length && <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">当前模型只支持自动尺寸</p>}
                 </div>
               </div>
             )}
@@ -353,6 +356,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
               <span className="font-mono text-lg font-semibold text-gray-800 dark:text-gray-100">
                 {previewSize || '尺寸无效'}
               </span>
+              {tierBlocked && <span className="text-xs text-red-500">{previewTier ? `当前模型未开放 ${previewTier} 分辨率` : '超出 4K 分辨率'}</span>}
               {isClamped && (
                 <div
                   className="relative flex items-center"
@@ -384,7 +388,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, allowA
           </button>
           <button
             onClick={applySize}
-            disabled={!previewSize}
+            disabled={!previewSize || tierBlocked}
             className="flex-1 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             确定

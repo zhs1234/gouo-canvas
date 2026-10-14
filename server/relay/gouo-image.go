@@ -252,17 +252,16 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 
 // 图片按张计价，尺寸、画质和参考图张数直接影响上游成本，按后台为模型限定的范围校验；审核强度按运营方设置
 func checkGouoImageParams(entry *model.GouoImageModel, size, quality, moderation string, inputs int) string {
-	if entry.MaxSize != "" {
-		if size = strings.ToLower(strings.TrimSpace(size)); size != "" && size != "auto" {
-			width, height, ok := strings.Cut(size, "x")
-			w, errW := strconv.Atoi(width)
-			h, errH := strconv.Atoi(height)
-			if !ok || errW != nil || errH != nil || w <= 0 || h <= 0 {
-				return "图片尺寸无效"
-			}
-			if w*h > model.GouoSizeTierPixels[entry.MaxSize] {
-				return "此模型最大支持 " + entry.MaxSize + " 尺寸，请调小尺寸"
-			}
+	// 很多上游不支持任意分辨率，只放行后台为模型开放的档位；没有开放档位时只能用自动尺寸
+	if size = strings.ToLower(strings.TrimSpace(size)); size != "" && size != "auto" {
+		width, height, ok := strings.Cut(size, "x")
+		w, errW := strconv.Atoi(width)
+		h, errH := strconv.Atoi(height)
+		if !ok || errW != nil || errH != nil || w <= 0 || h <= 0 {
+			return "图片尺寸无效"
+		}
+		if !slices.Contains(entry.Sizes, model.GouoSizeTier(w, h)) {
+			return "此模型不支持该分辨率，请选择自动尺寸或已开放的分辨率"
 		}
 	}
 	if len(entry.Qualities) > 0 {

@@ -1,6 +1,6 @@
 import type { TaskParams } from '../types'
 import { getLoadedStorageUserId } from './storageScope'
-import { TIER_PIXEL_BUDGET, type SizeTier } from './size'
+import { getSizeTier, type SizeTier } from './size'
 
 interface BackendEnvelope<T> {
   success: boolean
@@ -57,8 +57,8 @@ export interface GouoImageModel {
   default?: boolean
   // 后台填写的一句话说明；name 是后台设置的显示名称，未设置时为模型 ID
   description?: string
-  // 后台限定的最大尺寸档位、可选画质和最多参考图张数，缺省表示不限；服务端同样校验
-  max_size?: SizeTier
+  // 后台开放的分辨率档位（缺省表示只能用自动尺寸）、可选画质和最多参考图张数（缺省表示不限）；服务端同样校验
+  sizes?: SizeTier[]
   qualities?: string[]
   max_inputs?: number
 }
@@ -121,10 +121,7 @@ export function isLowModerationAllowed() {
 
 // 与服务端的参数校验一致：图片按张计价，尺寸、画质和参考图张数不能超出后台为模型限定的范围
 export function getImageParamIssue(model: GouoImageModel, params: Pick<TaskParams, 'size' | 'quality' | 'moderation'>, inputCount: number) {
-  if (model.max_size && params.size !== 'auto') {
-    const [width, height] = params.size.split('x').map(Number)
-    if (!(width > 0 && height > 0) || width * height > TIER_PIXEL_BUDGET[model.max_size]) return `此模型最大支持 ${model.max_size} 尺寸，请调小尺寸`
-  }
+  if (params.size !== 'auto' && !model.sizes?.includes(getSizeTier(params.size)!)) return '此模型不支持该分辨率，请选择自动尺寸或已开放的分辨率'
   if (model.qualities?.length && (params.quality === 'auto' ? !model.qualities.includes('high') : !model.qualities.includes(params.quality))) {
     return params.quality === 'auto' ? '此模型不开放自动画质，请选择具体画质' : '此模型不开放所选画质，请重新选择'
   }

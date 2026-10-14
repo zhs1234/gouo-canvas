@@ -250,17 +250,23 @@ describe('gouoBackend', () => {
     const { getImageParamIssue } = await import('./gouoBackend')
     const base = { id: 'image-a', name: 'A', price_cny: 0.1, price_version: 'v', reference: true, mask: false, max_outputs: 1, quota: 1 }
     const params = { size: '1024x1024', quality: 'medium' as const, moderation: 'auto' as const }
-    // 不限时任何参数都放行
-    expect(getImageParamIssue(base, { ...params, size: '3840x2160', quality: 'high' }, 16)).toBe('')
-    const limited = { ...base, max_size: '1K' as const, qualities: ['low', 'medium'], max_inputs: 2 }
+    // 开放全部档位、画质和张数不限时都放行；没有开放档位时只能用自动尺寸
+    const open = { ...base, sizes: ['1K', '2K', '4K'] as const }
+    expect(getImageParamIssue({ ...open, sizes: [...open.sizes] }, { ...params, size: '3840x2160', quality: 'high' }, 16)).toBe('')
+    expect(getImageParamIssue(base, params, 0)).toContain('不支持该分辨率')
+    expect(getImageParamIssue(base, { ...params, size: 'auto' }, 0)).toBe('')
+    const limited = { ...base, sizes: ['1K' as const], qualities: ['low', 'medium'], max_inputs: 2 }
     expect(getImageParamIssue(limited, params, 2)).toBe('')
     expect(getImageParamIssue(limited, { ...params, size: 'auto' }, 0)).toBe('')
-    expect(getImageParamIssue(limited, { ...params, size: '2048x2048' }, 0)).toContain('最大支持 1K')
+    expect(getImageParamIssue(limited, { ...params, size: '2048x2048' }, 0)).toContain('不支持该分辨率')
+    // 只开放 2K 时，1K 档位的尺寸也不放行
+    expect(getImageParamIssue({ ...base, sizes: ['2K' as const] }, params, 0)).toContain('不支持该分辨率')
+    expect(getImageParamIssue({ ...base, sizes: ['2K' as const] }, { ...params, size: '2048x2048' }, 0)).toBe('')
     expect(getImageParamIssue(limited, { ...params, quality: 'high' }, 0)).toContain('不开放所选画质')
     // 自动画质可能被上游选成高画质，只开放部分画质时不放行
     expect(getImageParamIssue(limited, { ...params, quality: 'auto' }, 0)).toContain('不开放自动画质')
     expect(getImageParamIssue(limited, params, 3)).toContain('最多使用 2 张参考图')
     // 后台未开放宽松审核
-    expect(getImageParamIssue(base, { ...params, moderation: 'low' }, 0)).toBe('运营方未开放宽松审核')
+    expect(getImageParamIssue(base, { ...params, size: 'auto', moderation: 'low' }, 0)).toBe('运营方未开放宽松审核')
   })
 })
