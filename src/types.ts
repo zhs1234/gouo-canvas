@@ -2,15 +2,6 @@
 
 export type ApiMode = 'images' | 'responses'
 export type ReferenceImageEditAction = 'ask' | 'replace-reference' | 'add-mask'
-export const ZIP_DOWNLOAD_ROUTE_VALUES = [
-  'task-selection',
-  'favorite-collection-selection',
-  'image-context-menu-all',
-  'task-detail-all',
-  'task-detail-partial',
-] as const
-export type ZipDownloadRoute = typeof ZIP_DOWNLOAD_ROUTE_VALUES[number]
-export const DEFAULT_ZIP_DOWNLOAD_ROUTES: ZipDownloadRoute[] = ['task-selection', 'favorite-collection-selection']
 type BuiltInApiProvider = 'openai' | 'fal'
 export type ApiProvider = BuiltInApiProvider | string
 export type CustomProviderTemplate = 'http-image'
@@ -104,7 +95,8 @@ export interface AppSettings {
   taskCompletionNotification: boolean
   enterSubmit: boolean
   referenceImageEditAction: ReferenceImageEditAction
-  zipDownloadRoutes: ZipDownloadRoute[]
+  // 批量下载多张图片时打包为 ZIP；关闭时逐张下载
+  zipBatchDownload: boolean
   profiles: ApiProfile[]
   activeProfileId: string
 }

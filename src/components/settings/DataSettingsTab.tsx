@@ -35,7 +35,7 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
         </svg>
         <div className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
           <p>{!backend ? '配置、任务和图片保存在当前浏览器；生成请求中的提示词和参考图会发送给您配置的服务商。' : isServerLibraryEnabled() ? '生成的图片在出图时即由服务端保存到当前账号，画布和会话保存后也会写到服务端，换设备登录即可看到；浏览器只保留缓存。' : '当前未启用云端作品库，作品、画布和会话只保存在当前浏览器。'}</p>
-          <p className="mt-2">清理站点数据或换设备前请导出备份。含配置的备份可能包含 API 密钥，请妥善保管，勿公开分享。</p>
+          <p className="mt-2">{backend ? '导出的偏好设置不含账号凭据和密钥；需要离线保留作品时可导出任务和图片。' : '清理站点数据或换设备前请导出备份。含配置的备份可能包含 API 密钥，请妥善保管，勿公开分享。'}</p>
         </div>
       </div>
 
@@ -45,7 +45,7 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
           <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100">导出数据</h4>
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-3">
-          <Checkbox checked={props.exportConfig} onChange={props.setExportConfig} label="包含配置" />
+          <Checkbox checked={props.exportConfig} onChange={props.setExportConfig} label={backend ? '包含偏好设置' : '包含配置'} />
           <Checkbox checked={props.exportTasks} onChange={props.setExportTasks} label="包含任务和图片" />
         </div>
         <button
@@ -64,7 +64,7 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
         </div>
         <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">导入前校验备份完整性；同 ID 的本地任务保留现有记录，相同图片可复用，图片内容冲突时整批拒绝。新任务和图片一起保存。{backend && '新增任务作为独立副本同步到当前账号，重复导入可能产生副本。'}</p>
         <div className="flex flex-wrap gap-x-6 gap-y-3">
-          <Checkbox checked={props.importConfig} onChange={props.setImportConfig} label="包含配置" />
+          <Checkbox checked={props.importConfig} onChange={props.setImportConfig} label={backend ? '包含偏好设置' : '包含配置'} />
           <Checkbox checked={props.importTasks} onChange={props.setImportTasks} label="包含任务和图片" />
         </div>
         <button
@@ -84,7 +84,7 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
         </div>
         <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">此处仅清理当前浏览器的所选数据。{backend ? `已同步的云端内容仍保留，后续同步可能重新下载。删除云端作品请在作品列表操作，再从作品列表的筛选菜单选择“回收站”查看或恢复；回收站中的内容保留 ${getTrashRetentionDays()} 天后彻底删除，期间仍占云端空间。` : '未备份的本地任务和图片无法恢复。'}</p>
         <div className="flex flex-wrap gap-x-6 gap-y-3">
-          <Checkbox checked={props.clearConfig} onChange={props.setClearConfig} label="包含配置" tone="danger" />
+          <Checkbox checked={props.clearConfig} onChange={props.setClearConfig} label={backend ? '包含偏好设置' : '包含配置'} tone="danger" />
           <Checkbox checked={props.clearTasks} onChange={props.setClearTasks} label="包含任务和图片" tone="danger" />
         </div>
         <button

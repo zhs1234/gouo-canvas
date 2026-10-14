@@ -153,7 +153,7 @@ export default function ImageContextMenu() {
       }
 
       const settings = useStore.getState().settings
-      const result = settings.zipDownloadRoutes.includes('image-context-menu-all')
+      const result = settings.zipBatchDownload
         ? await downloadImageEntriesAsZip(getImageZipEntries(outputImageIds, fileNameBase), fileNameBase)
         : await downloadImageIds(outputImageIds, fileNameBase)
       if (result.successCount === 0) {

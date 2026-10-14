@@ -2,7 +2,7 @@ import { type ReactElement, type ReactNode, isValidElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import BackendAuthGate from './BackendAuthGate'
 import LandingPage from './landing/LandingPage'
-import UserCenterModal from './UserCenterModal'
+import AccountSection from './userCenter/AccountSection'
 
 // 直接驱动组件事件与 hook 状态，检查真实 JSX 的禁用条件；不发送网络请求或模拟验证码。
 const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: [] as Array<() => unknown> }))
@@ -85,6 +85,9 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+// 账户页的邮件与人机验证配置由用户中心弹窗读取后传入
+const accountStatus = { emailService: true, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '', loading: false, error: '', reload: () => {} }
+
 describe('account email and password forms', () => {
   it('restores the reset recipient and locks it while sending, then clears the old code on recipient change', async () => {
     window.location.search = '?email=creator%2Breset%40example.invalid&token=reset-code'
@@ -154,7 +157,7 @@ describe('account email and password forms', () => {
 
   it('locks binding and resend together and clears verification when the recipient changes', async () => {
     api.getCurrentUser.mockResolvedValue({ id: 1, username: 'creator' })
-    const draw = () => UserCenterModal({ initialSection: 'security', onClose: vi.fn() })
+    const draw = () => AccountSection({ user: { id: 1, username: 'creator' }, status: accountStatus, onUserChanged: async () => {} })
     render(draw)
     await flush()
     fire(field(render(draw), 'placeholder', '邮箱地址'), 'onChange', 'first@example.invalid')
@@ -185,7 +188,7 @@ describe('account email and password forms', () => {
     api.getCurrentUser.mockResolvedValue({ id: 1, username: 'creator' })
     api.updatePassword.mockResolvedValue(undefined)
     api.createBackendSettings.mockRejectedValueOnce(new Error('network unavailable')).mockResolvedValue({ apiKey: 'new-token' })
-    const draw = () => UserCenterModal({ initialSection: 'security', onClose: vi.fn() })
+    const draw = () => AccountSection({ user: { id: 1, username: 'creator' }, status: accountStatus, onUserChanged: async () => {} })
     render(draw)
     await flush()
     for (const [placeholder, value] of [['当前密码', 'old-password'], ['新密码（8–20 个字符）', 'new-password'], ['再次输入新密码', 'new-password']]) {

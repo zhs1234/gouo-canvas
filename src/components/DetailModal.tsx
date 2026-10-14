@@ -389,7 +389,7 @@ export default function DetailModal() {
 
     try {
       const fileNameBase = `task-${task.id}`
-      const result = settings.zipDownloadRoutes.includes('task-detail-all')
+      const result = settings.zipBatchDownload
         ? await downloadImageEntriesAsZip(getImageZipEntries(task.outputImages, fileNameBase), fileNameBase)
         : await downloadImageIds(task.outputImages, fileNameBase)
       if (result.successCount === 0) {
@@ -410,7 +410,7 @@ export default function DetailModal() {
 
     try {
       const fileNameBase = `task-${task.id}-partial`
-      const result = settings.zipDownloadRoutes.includes('task-detail-partial')
+      const result = settings.zipBatchDownload
         ? await downloadImageEntriesAsZip(getImageZipEntries(streamPartialImageIds, fileNameBase), fileNameBase)
         : await downloadImageIds(streamPartialImageIds, fileNameBase)
       if (result.successCount === 0) {
