@@ -165,6 +165,7 @@ func GetStatus(c *gin.Context) {
 		}
 		data["custom_oauth_providers"] = providersInfo
 	}
+	addGouoStatus(data)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

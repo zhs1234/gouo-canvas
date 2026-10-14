@@ -128,6 +128,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if billingErr := service.PrepareImageBillingForRequest(c, info, imageCount); billingErr != nil {
 		return billingErr
 	}
+	if gouoErr := beginGouoAttempt(c, info); gouoErr != nil {
+		return gouoErr
+	}
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
@@ -157,6 +160,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
+	}
+	if handled, gouoErr := finishGouoImage(c, info); handled {
+		return gouoErr
 	}
 
 	// The log content shows the settled count: the count the handler derived

@@ -139,6 +139,13 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}()
 
+	if newAPIError = relay.CheckGouoRequest(c, relayInfo); newAPIError != nil {
+		return
+	}
+	defer func() {
+		newAPIError = relay.EndGouoImage(c, newAPIError)
+	}()
+
 	if newAPIError = relay.PrepareRequestBilling(c, relayInfo); newAPIError != nil {
 		return
 	}
