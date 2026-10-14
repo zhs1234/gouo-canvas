@@ -1,7 +1,5 @@
 import type { ImportedProviderSettings } from './apiProfiles'
-import { importCustomProviderSettingsFromJson } from './apiProfiles'
-
-const DEFAULT_API_URL = import.meta.env.VITE_DEFAULT_API_URL?.trim() ?? ''
+import { importCustomProviderSettingsFromJson, RAW_DEFAULT_API_URL } from './apiProfiles'
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -17,7 +15,7 @@ export function isImportableConfigUrl(value: string): boolean {
   }
 }
 
-export function getCustomProviderConfigUrl(defaultApiUrl = DEFAULT_API_URL): string {
+export function getCustomProviderConfigUrl(defaultApiUrl = RAW_DEFAULT_API_URL): string {
   const url = defaultApiUrl.trim()
   return isImportableConfigUrl(url) ? url : ''
 }

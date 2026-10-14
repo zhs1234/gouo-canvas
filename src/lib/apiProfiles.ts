@@ -20,7 +20,7 @@ import { isImportableConfigUrl } from './customProviderConfigUrl'
 import { isRecord } from './storeInputNormalization'
 
 const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
-const RAW_DEFAULT_API_URL = import.meta.env.VITE_DEFAULT_API_URL?.trim() ?? ''
+export const RAW_DEFAULT_API_URL = import.meta.env.VITE_DEFAULT_API_URL?.trim() ?? ''
 const DEFAULT_OPENAI_API_PROXY = import.meta.env.VITE_API_PROXY_AVAILABLE?.trim() === 'true'
 const SHOW_DEFAULT_CONFIG_ONLY = import.meta.env.VITE_SHOW_DEFAULT_CONFIG_ONLY?.trim() === 'true'
 const DEFAULT_API_URL_PATCH = isImportableConfigUrl(RAW_DEFAULT_API_URL)

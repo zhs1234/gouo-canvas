@@ -74,7 +74,7 @@ type gouoAdminAgentModel struct {
 }
 
 // 常见图片模型的名称特征，模型资料没有声明输出类型时用来区分图片模型和文本模型
-var gouoImageNameHints = []string{"image", "dall-e", "flux", "midjourney", "imagen", "seedream", "stable-diffusion", "recraft", "ideogram", "cogview", "kolors", "jimeng", "wanx", "t2i"}
+var gouoImageNameHints = []string{"image", "dall-e", "flux", "midjourney", "seedream", "stable-diffusion", "recraft", "ideogram", "cogview", "kolors", "jimeng", "wanx", "t2i"}
 
 // 近期主流文本模型的名称前缀，用于还没有价格记录、只配在渠道上的模型；图片模型先按上面的名称特征排除，
 // 所以 gemini-3-pro-image 这类名称不会被 gemini-3 归成文本模型
@@ -541,7 +541,13 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		price = *existing
 	}
 	model.PricingInstance.RUnlock()
-	if priced && price.GouoEnabled {
+	// 与 CheckGouoImageExclusive 一样直接读数据库：本实例的价格缓存可能还没看到别的实例刚启用的图片模型
+	var imageEnabled int64
+	if err := model.DB.Model(&model.Price{}).Where("model = ? AND gouo_enabled = ?", id, true).Count(&imageEnabled).Error; err != nil {
+		gouoFail(c, http.StatusInternalServerError, "pricing_unavailable", "读取价格记录失败")
+		return
+	}
+	if imageEnabled > 0 {
 		gouoFail(c, http.StatusBadRequest, "image_model_enabled", "该模型已作为图片模型启用，请先在图片模型里下架")
 		return
 	}
