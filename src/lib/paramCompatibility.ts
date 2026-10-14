@@ -1,49 +1,16 @@
-import { DEFAULT_PARAMS, type AppSettings, type TaskParams } from '../types'
-import { getActiveApiProfile } from './apiProfiles'
-import { getMaxTaskImages, isBackendAuthEnabled, isLowModerationAllowed } from './gouoBackend'
+import { DEFAULT_PARAMS, type TaskParams } from '../types'
+import { getMaxTaskImages, isLowModerationAllowed } from './gouoBackend'
 import { normalizeImageSize } from './size'
 
-export const DEFAULT_FAL_IMAGE_SIZE = '1360x1024'
-const MAX_FAL_OUTPUT_IMAGES = 4
-const MAX_OPENAI_OUTPUT_IMAGES = 10
-
-export function getOutputImageLimitForSettings(settings: AppSettings) {
-  // 产品模式按后台“光构设置”的一次最多生成张数
-  if (isBackendAuthEnabled()) return getMaxTaskImages()
-  return getActiveApiProfile(settings).provider === 'fal' ? MAX_FAL_OUTPUT_IMAGES : MAX_OPENAI_OUTPUT_IMAGES
-}
-
-export function normalizeParamsForSettings(
-  params: TaskParams,
-  settings: AppSettings,
-  options: { hasInputImages?: boolean } = {},
-): TaskParams {
-  const activeProfile = getActiveApiProfile(settings)
-  const outputImageLimit = getOutputImageLimitForSettings(settings)
+export function normalizeTaskParams(params: TaskParams): TaskParams {
   const nextParams: TaskParams = {
     ...params,
     size: normalizeImageSize(params.size) || DEFAULT_PARAMS.size,
-    n: Math.min(outputImageLimit, Math.max(1, params.n || DEFAULT_PARAMS.n)),
+    // 一次最多生成张数和宽松审核都由后台“光构设置”决定
+    n: Math.min(getMaxTaskImages(), Math.max(1, params.n || DEFAULT_PARAMS.n)),
+    moderation: isLowModerationAllowed() ? params.moderation : 'auto',
   }
-
-  if (activeProfile.provider === 'openai' && activeProfile.codexCli) {
-    nextParams.quality = DEFAULT_PARAMS.quality
-  }
-
-  if (activeProfile.provider === 'fal') {
-    if (!options.hasInputImages && nextParams.size === 'auto') nextParams.size = DEFAULT_FAL_IMAGE_SIZE
-    if (nextParams.quality === 'auto') nextParams.quality = 'high'
-    nextParams.moderation = DEFAULT_PARAMS.moderation
-    nextParams.output_compression = DEFAULT_PARAMS.output_compression
-  }
-
-  // 产品模式下宽松审核由后台“光构设置”决定，未开放时一律按自动
-  if (isBackendAuthEnabled() && !isLowModerationAllowed()) nextParams.moderation = 'auto'
-
-  if (nextParams.output_format === 'png') {
-    nextParams.output_compression = DEFAULT_PARAMS.output_compression
-  }
-
+  if (nextParams.output_format === 'png') nextParams.output_compression = DEFAULT_PARAMS.output_compression
   return nextParams
 }
 

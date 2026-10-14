@@ -3,8 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ENV VITE_GOUO_BACKEND_ENABLED=true \
-    VITE_GOUO_BACKEND_URL=
+ENV VITE_GOUO_BACKEND_URL=
 RUN npm run build
 
 FROM nginx:1.29-alpine

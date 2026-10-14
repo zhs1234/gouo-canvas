@@ -1,104 +1,20 @@
 // ===== 设置 =====
 
-export type ApiMode = 'images' | 'responses'
 export type ReferenceImageEditAction = 'ask' | 'replace-reference' | 'add-mask'
-type BuiltInApiProvider = 'openai' | 'fal'
-export type ApiProvider = BuiltInApiProvider | string
-export type CustomProviderTemplate = 'http-image'
-export const DEFAULT_STREAM_PARTIAL_IMAGES = 1
-
-export type CustomProviderRequestMethod = 'GET' | 'POST'
-export type CustomProviderContentType = 'json' | 'multipart'
-type CustomProviderFileSource = 'inputImages' | 'mask'
-
-export interface CustomProviderFileMapping {
-  field: string
-  source: CustomProviderFileSource
-  array?: boolean
-}
-
-export interface CustomProviderResultMapping {
-  imageUrlPaths?: string[]
-  b64JsonPaths?: string[]
-}
-
-export interface CustomProviderSubmitMapping {
-  path: string
-  method?: CustomProviderRequestMethod
-  contentType?: CustomProviderContentType
-  query?: Record<string, string>
-  body?: Record<string, unknown>
-  files?: CustomProviderFileMapping[]
-  taskIdPath?: string
-  result?: CustomProviderResultMapping
-}
-
-export interface CustomProviderPollMapping {
-  path: string
-  method?: CustomProviderRequestMethod
-  query?: Record<string, string>
-  intervalSeconds?: number
-  statusPath: string
-  successValues: string[]
-  failureValues: string[]
-  errorPath?: string
-  result: CustomProviderResultMapping
-}
-
-export interface CustomProviderDefinition {
-  id: string
-  name: string
-  template?: CustomProviderTemplate
-  submit: CustomProviderSubmitMapping
-  editSubmit?: CustomProviderSubmitMapping
-  poll?: CustomProviderPollMapping
-}
-
-export interface ApiProfile {
-  id: string
-  name: string
-  provider: ApiProvider
-  baseUrl: string
-  apiKey: string
-  model: string
-  timeout: number
-  apiMode: ApiMode
-  codexCli: boolean
-  apiProxy: boolean
-  responseFormatB64Json?: boolean
-  streamImages?: boolean
-  streamPartialImages?: number
-  providerDrafts?: Partial<Record<ApiProvider, Partial<Pick<ApiProfile, 'baseUrl' | 'model' | 'apiMode' | 'codexCli' | 'apiProxy' | 'responseFormatB64Json' | 'streamImages' | 'streamPartialImages'>>>>
-}
 
 export interface AppSettings {
-  /** 产品模式按账号记忆选择，报价只用于提交确认，最终由服务端结算。 */
+  /** 按账号记忆选择的图片模型；报价只用于提交确认，最终由服务端结算。 */
+  model: string
   gouoModelSelected?: boolean
   gouoPriceVersion?: string
-  /** 旧版单配置字段：保留用于导入/查询参数兼容，实际请求以 active profile 为准 */
-  baseUrl: string
-  apiKey: string
-  model: string
-  timeout: number
-  apiMode: ApiMode
-  codexCli: boolean
-  apiProxy: boolean
-  streamImages?: boolean
-  streamPartialImages?: number
-  customProviders: CustomProviderDefinition[]
-  providerOrder?: string[]
   clearInputAfterSubmit: boolean
   persistInputOnRestart: boolean
-  reuseTaskApiProfileTemporarily: boolean
   alwaysShowRetryButton: boolean
-  allowPromptRewrite: boolean
   taskCompletionNotification: boolean
   enterSubmit: boolean
   referenceImageEditAction: ReferenceImageEditAction
   // 批量下载多张图片时打包为 ZIP；关闭时逐张下载
   zipBatchDownload: boolean
-  profiles: ApiProfile[]
-  activeProfileId: string
 }
 
 // ===== 任务参数 =====
@@ -148,28 +64,10 @@ export interface TaskRecord {
   id: string
   prompt: string
   params: TaskParams
-  /** 生成时使用的 Provider 类型 */
-  apiProvider?: ApiProvider
-  /** 生成时使用的 API 配置 ID */
-  apiProfileId?: string
-  /** 生成时使用的 Provider 名称 */
-  apiProfileName?: string
-  /** 生成时使用的 API 模式 */
-  apiMode?: ApiMode
   /** 生成时使用的模型 ID */
   apiModel?: string
   gouoPriceVersion?: string
   gouoPriceCNY?: number
-  /** fal.ai 队列请求 ID，用于连接断开后的结果恢复 */
-  falRequestId?: string
-  /** fal.ai 队列 endpoint，用于连接断开后的状态和结果查询 */
-  falEndpoint?: string
-  /** fal.ai 任务连接断开后是否等待自动恢复 */
-  falRecoverable?: boolean
-  /** 自定义异步服务商任务 ID，用于重启后继续查询结果 */
-  customTaskId?: string
-  /** 自定义异步任务是否等待自动恢复 */
-  customRecoverable?: boolean
   /** API 返回的实际生效参数，用于标记与请求值不一致的情况 */
   actualParams?: Partial<TaskParams>
   /** 输出图片对应的实际生效参数，key 为 outputImages 中的图片 id */
@@ -267,83 +165,6 @@ export interface ImageApiResponse {
   output_compression?: number
   moderation?: string
   n?: number
-}
-
-export interface ResponsesOutputItem {
-  id?: string
-  type?: string
-  status?: string
-  action?: string | Record<string, unknown>
-  /** function_call: unique call id for sending back function_call_output */
-  call_id?: string
-  /** function_call: function name */
-  name?: string
-  /** function_call: JSON-encoded arguments string */
-  arguments?: string
-  /** function_call_output: JSON/text output string */
-  output?: string
-  annotations?: Array<{
-    type?: string
-    start_index?: number
-    end_index?: number
-    url?: string
-    title?: string
-  }>
-  content?: Array<{
-    type?: string
-    text?: string
-    annotations?: Array<{
-      type?: string
-      start_index?: number
-      end_index?: number
-      url?: string
-      title?: string
-    }>
-  }>
-  result?: string | {
-    b64_json?: string
-    base64?: string
-    image?: string
-    data?: string
-  }
-  size?: string
-  quality?: string
-  output_format?: string
-  output_compression?: number
-  moderation?: string
-  revised_prompt?: string
-}
-
-export interface ResponsesApiResponse {
-  id?: string
-  output?: ResponsesOutputItem[]
-  tools?: Array<{
-    type?: string
-    size?: string
-    quality?: string
-    output_format?: string
-    output_compression?: number
-    moderation?: string
-    n?: number
-  }>
-}
-
-interface FalImageFile {
-  url?: string
-  content_type?: string
-  file_name?: string
-  width?: number
-  height?: number
-  b64_json?: string
-  base64?: string
-  data?: string
-}
-
-export interface FalApiResponse {
-  images?: FalImageFile[]
-  image?: FalImageFile | string
-  url?: string
-  seed?: number
 }
 
 // ===== 导出数据 =====

@@ -1,18 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskRecord } from '../types'
 import { DEFAULT_PARAMS } from '../types'
-import { DEFAULT_SETTINGS } from './apiProfiles'
+import { DEFAULT_SETTINGS } from './settings'
 
-const fixtures = vi.hoisted(() => ({ state: {} as Record<string, unknown>, saved: [] as TaskRecord[], execute: vi.fn(), backend: false, quote: vi.fn(), user: vi.fn() }))
+const fixtures = vi.hoisted(() => ({ state: {} as Record<string, unknown>, saved: [] as TaskRecord[], execute: vi.fn(), quote: vi.fn(), user: vi.fn() }))
 vi.mock('../store', () => ({
   useStore: { getState: () => fixtures.state, setState: vi.fn() },
   ensureImageCached: vi.fn(async () => 'data:image/png;base64,aA=='),
   cacheImage: vi.fn(),
-  createSettingsForApiProfile: (settings: unknown) => settings,
   executeTask: fixtures.execute,
 }))
 vi.mock('./db', () => ({ putTask: vi.fn(async (task: TaskRecord) => { fixtures.saved.push(task) }), storeImage: vi.fn(async () => 'image') }))
-vi.mock('./gouoBackend', () => ({ isBackendAuthEnabled: () => fixtures.backend, getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user, getMaxTaskImages: () => 10, isLowModerationAllowed: () => false }))
+vi.mock('./gouoBackend', () => ({ getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user, getMaxTaskImages: () => 10, isLowModerationAllowed: () => false }))
 vi.mock('./userGuidance', () => ({ getActionableErrorMessage: (message: string) => message, requestUserCenter: vi.fn() }))
 vi.mock('./canvasImage', () => ({ validateMaskMatchesImage: vi.fn(async () => 'partial') }))
 
@@ -21,23 +20,22 @@ import { validateMaskMatchesImage } from './canvasImage'
 import { requestUserCenter } from './userGuidance'
 
 beforeEach(() => {
-  fixtures.backend = false
   fixtures.quote.mockReset()
+  fixtures.quote.mockResolvedValue({ id: 'gpt-image-2', price_cny: 0.1, price_version: 'v1' })
   fixtures.user.mockReset()
   fixtures.user.mockResolvedValue({ balance_cny: 100 })
   fixtures.saved.length = 0
   fixtures.execute.mockClear()
   vi.mocked(validateMaskMatchesImage).mockResolvedValue('partial')
   fixtures.state = {
-    settings: { ...DEFAULT_SETTINGS, apiKey: 'test-key', profiles: DEFAULT_SETTINGS.profiles.map((profile) => ({ ...profile, apiKey: 'test-key' })) },
+    settings: { ...DEFAULT_SETTINGS },
     prompt: '首页草稿', params: DEFAULT_PARAMS, inputImages: [], tasks: [],
     showToast: vi.fn(), setConfirmDialog: vi.fn(), setTasks: (tasks: TaskRecord[]) => { fixtures.state.tasks = tasks },
   }
 })
 
 describe('统一图片任务入口', () => {
-  it('平台模式下与全局模型不同的模型使用调用方提供的价格版本', async () => {
-    fixtures.backend = true
+  it('与全局模型不同的模型使用调用方提供的价格版本', async () => {
     fixtures.quote.mockResolvedValue({ id: 'image-b', price_cny: 0.3, price_version: 'quote-b' })
     await submitImageTask({ prompt: '海报', model: 'image-b', priceVersion: 'quote-b', source: { kind: 'canvas' } })
     expect(fixtures.quote).toHaveBeenCalledWith('image-b', 0, false, 1, 'quote-b', expect.objectContaining({ size: 'auto', quality: 'auto', moderation: 'auto' }))
@@ -45,7 +43,6 @@ describe('统一图片任务入口', () => {
   })
 
   it('余额不足时不建任务，直接打开兑换页', async () => {
-    fixtures.backend = true
     fixtures.quote.mockResolvedValue({ id: 'gpt-image-2', price_cny: 0.1, price_version: 'v1' })
     fixtures.user.mockResolvedValue({ balance_cny: 0.15 })
     await expect(submitImageTask({ prompt: '海报', params: { n: 2 }, source: { kind: 'canvas' } })).rejects.toThrow('余额不足')
@@ -70,7 +67,6 @@ describe('统一图片任务入口', () => {
     expect(fixtures.saved).toHaveLength(1)
   })
   it('等待报价期间被停止时不保存也不派发任务', async () => {
-    fixtures.backend = true
     let resolveQuote = (_quote: unknown) => {}
     fixtures.quote.mockReturnValue(new Promise((resolve) => { resolveQuote = resolve }))
     const controller = new AbortController()

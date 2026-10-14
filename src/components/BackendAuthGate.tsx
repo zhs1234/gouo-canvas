@@ -1,10 +1,8 @@
 import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useState } from 'react'
 import { BRAND } from '../config/brand'
 import {
-  createBackendSettings,
   getBackendStatus,
   getCurrentUser,
-  isBackendAuthEnabled,
   login,
   register,
   resetPassword,
@@ -13,7 +11,6 @@ import {
   type GouoUser,
 } from '../lib/gouoBackend'
 import { activateUserStorage, shouldReloadForStorageScopeChange } from '../lib/storageScope'
-import { useStore } from '../store'
 import TurnstileChallenge from './TurnstileChallenge'
 import LandingPage from './landing/LandingPage'
 
@@ -33,15 +30,11 @@ async function initializeUser(user: GouoUser): Promise<GouoUser | null> {
     window.location.reload()
     return null
   }
-  const settings = await createBackendSettings()
-  // 未手动选过模型时清空，由模型目录按后台默认模型选择，客户端不预设模型
-  useStore.getState().setSettings({ ...settings, ...(!useStore.getState().settings.gouoModelSelected ? { model: '' } : {}) })
   return user
 }
 
 export default function BackendAuthGate({ children }: { children: ReactNode }) {
-  const enabled = isBackendAuthEnabled()
-  const [checking, setChecking] = useState(enabled)
+  const [checking, setChecking] = useState(true)
   const [user, setUser] = useState<GouoUser | null>(null)
   const resetParams = new URLSearchParams(window.location.search)
   const [mode, setMode] = useState<AuthMode>(resetParams.get('token') && resetParams.get('email') ? 'reset' : 'login')
@@ -55,7 +48,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [emailService, setEmailService] = useState(false)
   const [emailVerification, setEmailVerification] = useState(false)
-  const [backendStatusLoaded, setBackendStatusLoaded] = useState(!enabled)
+  const [backendStatusLoaded, setBackendStatusLoaded] = useState(false)
   const [statusError, setStatusError] = useState('')
   const [statusAttempt, setStatusAttempt] = useState(0)
   const [turnstileEnabled, setTurnstileEnabled] = useState(false)
@@ -71,7 +64,6 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!enabled) return
     let cancelled = false
     getCurrentUser()
       .then(initializeUser)
@@ -88,19 +80,17 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
         if (!cancelled) setChecking(false)
       })
     return () => { cancelled = true }
-  }, [enabled])
+  }, [])
 
   useEffect(() => {
-    if (!enabled) return
     const handleStorage = (event: StorageEvent) => {
       if (shouldReloadForStorageScopeChange(event)) window.location.reload()
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [enabled])
+  }, [])
 
   useEffect(() => {
-    if (!enabled) return
     let active = true
     setBackendStatusLoaded(false)
     setStatusError('')
@@ -118,9 +108,9 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
       })
       .catch((err) => { if (active) setStatusError(err instanceof Error ? err.message : String(err)) })
     return () => { active = false }
-  }, [enabled, statusAttempt])
+  }, [statusAttempt])
 
-  if (!enabled || user) return <>{children}</>
+  if (user) return <>{children}</>
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()

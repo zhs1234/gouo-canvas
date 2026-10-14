@@ -1,14 +1,13 @@
-import { lazy, Suspense, useRef, useEffect, useCallback, useState, useMemo, useLayoutEffect } from 'react'
+import { lazy, Suspense, useRef, useEffect, useCallback, useState, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useStore, submitTask, addImageFromFile, createInputImageFromFile, deleteImageIfUnreferenced } from '../store'
 import { DEFAULT_PARAMS } from '../types'
-import { getActiveApiProfile, normalizeSettings } from '../lib/apiProfiles'
-import { DEFAULT_FAL_IMAGE_SIZE, getChangedParams, getOutputImageLimitForSettings, normalizeParamsForSettings } from '../lib/paramCompatibility'
+import { getChangedParams, normalizeTaskParams } from '../lib/paramCompatibility'
 import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, getPromptMentionParts, getSelectedImageMentionLabel, getSelectedTextMentionLabel, imageMentionMatches, insertImageMentionAtVisibleRange, isCursorInSelectedImageMention, stripImageMentionMarkers } from '../lib/promptImageMentions'
 import { normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
-import { isBackendAuthEnabled } from '../lib/gouoBackend'
+import { getMaxTaskImages } from '../lib/gouoBackend'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import { useImageModels } from '../hooks/useImageModels'
 import BackendModelSelector from './BackendModelSelector'
@@ -346,8 +345,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const setParams = useStore((s) => s.setParams)
   const settings = useStore((s) => s.settings)
   const setSettings = useStore((s) => s.setSettings)
-  const reusedTaskApiProfileId = useStore((s) => s.reusedTaskApiProfileId)
-  const setShowSettings = useStore((s) => s.setShowSettings)
   const setLightboxImageId = useStore((s) => s.setLightboxImageId)
   const showToast = useStore((s) => s.showToast)
   const setConfirmDialog = useStore((s) => s.setConfirmDialog)
@@ -365,13 +362,12 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
   const [isDragging, setIsDragging] = useState(false)
   const [isSingleLine, setIsSingleLine] = useState(true)
-  const [submitHover, setSubmitHover] = useState(false)
   const [attachHover, setAttachHover] = useState(false)
   const [imageHintId, setImageHintId] = useState<string | null>(null)
   const [mobileCollapsed, setMobileCollapsed] = useState(false)
   const [showSizePicker, setShowSizePicker] = useState(false)
   const [showMobileUploadMenu, setShowMobileUploadMenu] = useState(false)
-  const [backendModelReady, setBackendModelReady] = useState(!isBackendAuthEnabled())
+  const [backendModelReady, setBackendModelReady] = useState(false)
   const [maskPreviewUrl, setMaskPreviewUrl] = useState('')
   const [imageDragIndex, setImageDragIndex] = useState<number | null>(null)
   const [imageDragOverIndex, setImageDragOverIndex] = useState<number | null>(null)
@@ -434,23 +430,8 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const dragCounter = useRef(0)
   const isMobile = useIsMobile()
 
-  const settingsActiveProfile = useMemo(() => getActiveApiProfile(settings), [settings])
-  const activeProfile = useMemo(() => (
-    settings.reuseTaskApiProfileTemporarily && reusedTaskApiProfileId
-      ? settings.profiles.find((profile) => profile.id === reusedTaskApiProfileId) ?? settingsActiveProfile
-      : settingsActiveProfile
-  ), [reusedTaskApiProfileId, settings, settingsActiveProfile])
-  const effectiveSettings = useMemo(() => (
-    activeProfile.id === settingsActiveProfile.id
-      ? settings
-      : normalizeSettings({ ...settings, activeProfileId: activeProfile.id })
-  ), [activeProfile.id, settingsActiveProfile.id, settings])
-  const hasSubmitApiConfig = Boolean(activeProfile.apiKey)
-  const canSubmit = Boolean(prompt.trim() && hasSubmitApiConfig && backendModelReady && !isSubmitting)
-  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : hasSubmitApiConfig
-    ? maskDraft ? '遮罩编辑' : '生成图像'
-    : '请先配置 API'
-  const submitTooltipText = '尚未完成 API 配置，请在右上角设置中进行'
+  const canSubmit = Boolean(prompt.trim() && backendModelReady && !isSubmitting)
+  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : maskDraft ? '遮罩编辑' : '生成图像'
   const promptPlaceholder = '描述你想生成的图片，可输入 @ 来指定参考图...'
   const submitCurrentMode = useCallback(() => {
     void submitTask()
@@ -464,12 +445,10 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
     syncMentionTagSelection(el)
     setPrompt(getContentEditablePlainText(el))
   }, [setPrompt])
-  const activeProvider = activeProfile.provider
-  const isFalProvider = activeProvider === 'fal'
-  // 产品模式按后台为所选模型限定的画质、尺寸档位和参考图张数；宽松审核由后台决定是否开放
+  // 按后台为所选模型限定的画质、尺寸档位和参考图张数；宽松审核由后台决定是否开放
   const imageModels = useImageModels()
   const backendStatus = useBackendStatus()
-  const backendModel = isBackendAuthEnabled() ? imageModels.find((model) => model.id === settings.model) : undefined
+  const backendModel = imageModels.find((model) => model.id === settings.model)
   const maxInputImages = backendModel?.max_inputs || API_MAX_IMAGES
 
   // 所选模型不开放当前画质时，自动换成开放的最高画质，免得用户卡在提示上
@@ -479,39 +458,25 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
     const next = (['high', 'medium', 'low'] as const).find((quality) => allowed.includes(quality))
     if (next) setParams({ quality: next })
   }, [backendModel, params.quality, setParams])
-  const moderationDisabled = isFalProvider || (isBackendAuthEnabled() && !backendStatus?.gouo_allow_low_moderation)
+  const moderationDisabled = !backendStatus?.gouo_allow_low_moderation
   const transparentOutputAvailable = true
   const showTransparentOutputControl = transparentOutputAvailable && params.output_format === 'png'
   const transparentOutputEnabled = transparentOutputAvailable && showTransparentOutputControl && params.transparent_output
-  const compressionDisabled = params.output_format === 'png' || isFalProvider
-  const outputImageLimit = getOutputImageLimitForSettings(effectiveSettings)
-  const isFalTextToImage = isFalProvider && inputImages.length === 0
+  const compressionDisabled = params.output_format === 'png'
+  const outputImageLimit = getMaxTaskImages()
   const nDraftValue = Number(nInput)
   const effectiveNValue = Number.isNaN(nDraftValue) ? params.n : nDraftValue
-  const streamConcurrentByN = (isBackendAuthEnabled() || (activeProfile.provider === 'openai' && activeProfile.streamImages === true)) && effectiveNValue > 1
-  const nLimitHintText = isBackendAuthEnabled()
-    ? `本次最多生成 ${outputImageLimit} 张图片`
-    : isFalProvider
-    ? `fal.ai 最大请求数量为 ${outputImageLimit}`
-    : `OpenAI 最大请求数量为 ${outputImageLimit}`
-  const displaySize = isFalTextToImage && params.size === 'auto'
-    ? DEFAULT_FAL_IMAGE_SIZE
-    : normalizeImageSize(params.size) || DEFAULT_PARAMS.size
+  const streamConcurrentByN = effectiveNValue > 1
+  const nLimitHintText = `本次最多生成 ${outputImageLimit} 张图片`
+  const displaySize = normalizeImageSize(params.size) || DEFAULT_PARAMS.size
 
-  const qualityOptions = (isFalProvider
-    ? [
-        { label: 'low', value: 'low' },
-        { label: 'medium', value: 'medium' },
-        { label: 'high', value: 'high' },
-      ]
-    : [
-        { label: 'auto', value: 'auto' },
-        { label: 'low', value: 'low' },
-        { label: 'medium', value: 'medium' },
-        { label: 'high', value: 'high' },
-      ]
   // 自动画质可能由上游选成高画质，只有开放高画质时才提供
-  ).filter((option) => !backendModel?.qualities?.length || backendModel.qualities.includes(option.value === 'auto' ? 'high' : option.value))
+  const qualityOptions = [
+    { label: 'auto', value: 'auto' },
+    { label: 'low', value: 'low' },
+    { label: 'medium', value: 'medium' },
+    { label: 'high', value: 'high' },
+  ].filter((option) => !backendModel?.qualities?.length || backendModel.qualities.includes(option.value === 'auto' ? 'high' : option.value))
   const atImageLimit = inputImages.length >= maxInputImages
   const uploadImageTooltipText = atImageLimit ? `参考图数量已达上限（${maxInputImages} 张），无法继续添加` : '上传图片'
   const transparentOutputHint = useHintTooltip()
@@ -520,8 +485,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   }, [transparentOutputHint.hide])
   const compressionHint = useHintTooltip({ enabled: () => compressionDisabled })
   const moderationHint = useHintTooltip({ enabled: () => moderationDisabled })
-  const sizeHint = useHintTooltip({ enabled: () => isFalTextToImage })
-  const qualityHint = useHintTooltip({ enabled: () => activeProfile.codexCli || isFalProvider })
   const nLimitHint = useHintTooltip({ autoHideMs: 2000 })
   const streamConcurrentHint = useHintTooltip({ enabled: () => streamConcurrentByN })
   const maskTargetImage = maskDraft
@@ -635,12 +598,11 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   }, [params.n])
 
   useEffect(() => {
-    const normalizedParams = normalizeParamsForSettings(params, effectiveSettings, { hasInputImages: inputImages.length > 0 })
-    const patch = getChangedParams(params, normalizedParams)
+    const patch = getChangedParams(params, normalizeTaskParams(params))
     if (Object.keys(patch).length) {
       setParams(patch)
     }
-  }, [inputImages.length, params, effectiveSettings, setParams])
+  }, [params, setParams])
 
   useEffect(() => () => {
     if (imageHintTimerRef.current != null) {
@@ -1562,9 +1524,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       cols={cols}
       params={params}
       setParams={setParams}
-      activeProfile={activeProfile}
-      isFalProvider={isFalProvider}
-      isFalTextToImage={isFalTextToImage}
       displaySize={displaySize}
       qualityOptions={qualityOptions}
       selectClass={selectClass}
@@ -1591,8 +1550,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       nLimitHintText={nLimitHintText}
       streamConcurrentByN={streamConcurrentByN}
       streamConcurrentHint={streamConcurrentHint}
-      sizeHint={sizeHint}
-      qualityHint={qualityHint}
       onOpenSizePicker={() => setShowSizePicker(true)}
     />
   )
@@ -1604,10 +1561,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       {showSizePicker && (
         <Suspense fallback={null}>
           <SizePickerModal
-            currentSize={isFalTextToImage && params.size === 'auto' ? DEFAULT_FAL_IMAGE_SIZE : params.size}
+            currentSize={params.size}
             onSelect={(size) => setParams({ size })}
             onClose={() => setShowSizePicker(false)}
-            allowAuto={!isFalTextToImage}
             maxTier={backendModel?.max_size}
           />
         </Suspense>
@@ -1751,7 +1707,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
           {/* 参数 + 按钮 */}
           <div className="mt-3">
-            {!inline && isBackendAuthEnabled() && (
+            {!inline && (
               <BackendModelSelector onReady={setBackendModelReady} />
             )}
             {inline && !isMobile && showInlineParams && <div className="mb-3">{renderParams('grid-cols-2 lg:grid-cols-6')}</div>}
@@ -1759,7 +1715,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
             <div className={`hidden sm:flex items-end justify-between gap-3${inline ? ' flex-wrap' : ''}`}>
               {inline ? (
                 <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 self-center text-xs text-gray-400">
-                  {!isMobile && isBackendAuthEnabled() && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
+                  {!isMobile && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
                   <button type="button" aria-expanded={showInlineParams} className="inline-flex items-center gap-1.5" onClick={() => setShowInlineParams(!showInlineParams)}><SettingsIcon className="h-4 w-4" />{showInlineParams ? '收起参数' : '自定义参数'}</button>
                   <span>{params.size} · {params.n} 张</span>
                   <span>输入 @ 引用图片</span>
@@ -1788,20 +1744,11 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
                     </svg>}
                   </button>
                 </div>
-                <div
-                  className="relative"
-                  onMouseEnter={() => setSubmitHover(true)}
-                  onMouseLeave={() => setSubmitHover(false)}
-                >
-                  <ButtonTooltip visible={!hasSubmitApiConfig && submitHover} text={submitTooltipText} />
+                <div className="relative">
                   <button
-                    onClick={() => hasSubmitApiConfig ? submitCurrentMode() : setShowSettings(true)}
-                    disabled={hasSubmitApiConfig ? !canSubmit : false}
-                    className={`p-2.5 rounded-xl transition-all shadow-sm hover:shadow ${
-                      !hasSubmitApiConfig
-                        ? 'bg-gray-300 dark:bg-white/[0.06] text-white cursor-pointer'
-                        : 'bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed'
-                    }`}
+                    onClick={submitCurrentMode}
+                    disabled={!canSubmit}
+                    className="p-2.5 rounded-xl transition-all shadow-sm hover:shadow bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label={submitButtonAriaLabel}
                     aria-busy={isSubmitting}
                   >
@@ -1816,7 +1763,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
             {/* 移动端布局 */}
             <div className="sm:hidden flex flex-col gap-2">
               {inline && <div className="flex flex-wrap items-center gap-2">
-                {isMobile && isBackendAuthEnabled() && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
+                {isMobile && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
                 <button type="button" aria-expanded={showInlineParams} onClick={() => setShowInlineParams(!showInlineParams)} className="flex items-center gap-2 self-start py-2 text-xs text-gray-400"><SettingsIcon className="h-4 w-4" />{showInlineParams ? '收起参数' : '自定义参数'}<span className="ml-2">{params.size} · {params.n} 张</span></button>
               </div>}
               <div className={`collapse-section${inline ? (!showInlineParams ? ' collapsed' : '') : mobileCollapsed ? ' collapsed' : ''}`}>
@@ -1894,22 +1841,13 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
                     </>
                   )}
                 </div>
-                <div
-                  className="relative flex-1"
-                  onMouseEnter={() => setSubmitHover(true)}
-                  onMouseLeave={() => setSubmitHover(false)}
-                >
-                  <ButtonTooltip visible={!hasSubmitApiConfig && submitHover} text={submitTooltipText} />
+                <div className="relative flex-1">
                   <button
-                    onClick={() => hasSubmitApiConfig ? submitCurrentMode() : setShowSettings(true)}
-                    disabled={hasSubmitApiConfig ? !canSubmit : false}
+                    onClick={submitCurrentMode}
+                    disabled={!canSubmit}
                     aria-label={submitButtonAriaLabel}
                     aria-busy={isSubmitting}
-                    className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm ${
-                      !hasSubmitApiConfig
-                        ? 'bg-gray-300 dark:bg-white/[0.06] text-white cursor-pointer'
-                        : 'bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed'
-                    }`}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />

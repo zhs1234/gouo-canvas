@@ -1,7 +1,7 @@
 import type { ChangeEvent, RefObject } from 'react'
 import { Checkbox } from '../Checkbox'
 import { ExportIcon, ImportIcon, TrashIcon } from '../icons'
-import { getTrashRetentionDays, isBackendAuthEnabled } from '../../lib/gouoBackend'
+import { getTrashRetentionDays } from '../../lib/gouoBackend'
 import { isServerLibraryEnabled } from '../../lib/serverLibrary'
 
 interface DataSettingsTabProps {
@@ -26,7 +26,6 @@ interface DataSettingsTabProps {
 }
 
 export default function DataSettingsTab(props: DataSettingsTabProps) {
-  const backend = isBackendAuthEnabled()
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-gray-50/80 p-4 border border-gray-200/60 dark:bg-white/[0.02] dark:border-white/[0.05] flex items-start gap-3">
@@ -34,8 +33,8 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
         </svg>
         <div className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-          <p>{!backend ? '配置、任务和图片保存在当前浏览器；生成请求中的提示词和参考图会发送给您配置的服务商。' : isServerLibraryEnabled() ? '生成的图片在出图时即由服务端保存到当前账号，画布和会话保存后也会写到服务端，换设备登录即可看到；浏览器只保留缓存。' : '当前未启用云端作品库，作品、画布和会话只保存在当前浏览器。'}</p>
-          <p className="mt-2">{backend ? '导出的偏好设置不含账号凭据和密钥；需要离线保留作品时可导出任务和图片。' : '清理站点数据或换设备前请导出备份。含配置的备份可能包含 API 密钥，请妥善保管，勿公开分享。'}</p>
+          <p>{isServerLibraryEnabled() ? '生成的图片在出图时即由服务端保存到当前账号，画布和会话保存后也会写到服务端，换设备登录即可看到；浏览器只保留缓存。' : '当前未启用云端作品库，作品、画布和会话只保存在当前浏览器。'}</p>
+          <p className="mt-2">导出的偏好设置不含账号凭据和密钥；需要离线保留作品时可导出任务和图片。</p>
         </div>
       </div>
 
@@ -45,7 +44,7 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
           <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100">导出数据</h4>
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-3">
-          <Checkbox checked={props.exportConfig} onChange={props.setExportConfig} label={backend ? '包含偏好设置' : '包含配置'} />
+          <Checkbox checked={props.exportConfig} onChange={props.setExportConfig} label="包含偏好设置" />
           <Checkbox checked={props.exportTasks} onChange={props.setExportTasks} label="包含任务和图片" />
         </div>
         <button
@@ -62,9 +61,9 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
           <ImportIcon className="w-4 h-4 text-gray-700 dark:text-gray-300" />
           <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100">导入数据</h4>
         </div>
-        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">导入前校验备份完整性；同 ID 的本地任务保留现有记录，相同图片可复用，图片内容冲突时整批拒绝。新任务和图片一起保存。{backend && '新增任务作为独立副本同步到当前账号，重复导入可能产生副本。'}</p>
+        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">导入前校验备份完整性；同 ID 的本地任务保留现有记录，相同图片可复用，图片内容冲突时整批拒绝。新任务和图片一起保存。新增任务作为独立副本同步到当前账号，重复导入可能产生副本。</p>
         <div className="flex flex-wrap gap-x-6 gap-y-3">
-          <Checkbox checked={props.importConfig} onChange={props.setImportConfig} label={backend ? '包含偏好设置' : '包含配置'} />
+          <Checkbox checked={props.importConfig} onChange={props.setImportConfig} label="包含偏好设置" />
           <Checkbox checked={props.importTasks} onChange={props.setImportTasks} label="包含任务和图片" />
         </div>
         <button
@@ -82,9 +81,9 @@ export default function DataSettingsTab(props: DataSettingsTabProps) {
           <TrashIcon className="w-4 h-4 text-red-500/90 dark:text-red-400" />
           <h4 className="text-sm font-bold text-red-500/90 dark:text-red-400">清除数据</h4>
         </div>
-        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">此处仅清理当前浏览器的所选数据。{backend ? `已同步的云端内容仍保留，后续同步可能重新下载。删除云端作品请在作品列表操作，再从作品列表的筛选菜单选择“回收站”查看或恢复；回收站中的内容保留 ${getTrashRetentionDays()} 天后彻底删除，期间仍占云端空间。` : '未备份的本地任务和图片无法恢复。'}</p>
+        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">此处仅清理当前浏览器的所选数据。已同步的云端内容仍保留，后续同步可能重新下载。删除云端作品请在作品列表操作，再从作品列表的筛选菜单选择“回收站”查看或恢复；回收站中的内容保留 {getTrashRetentionDays()} 天后彻底删除，期间仍占云端空间。</p>
         <div className="flex flex-wrap gap-x-6 gap-y-3">
-          <Checkbox checked={props.clearConfig} onChange={props.setClearConfig} label={backend ? '包含偏好设置' : '包含配置'} tone="danger" />
+          <Checkbox checked={props.clearConfig} onChange={props.setClearConfig} label="包含偏好设置" tone="danger" />
           <Checkbox checked={props.clearTasks} onChange={props.setClearTasks} label="包含任务和图片" tone="danger" />
         </div>
         <button

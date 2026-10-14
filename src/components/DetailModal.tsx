@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useStore, getCachedImage, ensureImageCached, reuseConfig, editOutputs, removeTask, showCodexCliPrompt, getCodexCliPromptKey, retryTask } from '../store'
+import { useStore, getCachedImage, ensureImageCached, reuseConfig, editOutputs, removeTask, retryTask } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { useTooltip } from '../hooks/useTooltip'
@@ -23,9 +23,6 @@ export default function DetailModal() {
   const showToast = useStore((s) => s.showToast)
   const openFavoritePicker = useStore((s) => s.openFavoritePicker)
   const settings = useStore((s) => s.settings)
-  const dismissedCodexCliPrompts = useStore((s) => s.dismissedCodexCliPrompts)
-  const streamPreviewSrc = useStore((s) => detailTaskId ? s.streamPreviews[detailTaskId] || '' : '')
-  const streamPreviewSlots = useStore((s) => detailTaskId ? s.streamPreviewSlots[detailTaskId] : undefined)
 
   const [imageIndex, setImageIndex] = useState(0)
   const [imageSrcs, setImageSrcs] = useState<Record<string, string>>({})
@@ -36,7 +33,6 @@ export default function DetailModal() {
   const [now, setNow] = useState(Date.now())
   const [showRawUrlsModal, setShowRawUrlsModal] = useState(false)
   const [showRawResponseModal, setShowRawResponseModal] = useState(false)
-  const [streamPreviewLoaded, setStreamPreviewLoaded] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
   const rawUrlsModalRef = useRef<HTMLDivElement>(null)
   const rawResponseModalRef = useRef<HTMLDivElement>(null)
@@ -47,7 +43,6 @@ export default function DetailModal() {
   const copyErrorTooltip = useTooltip()
   const copyRawUrlsTooltip = useTooltip()
   const viewRawResponseTooltip = useTooltip()
-  const downloadPartialImagesTooltip = useTooltip()
   const retryTooltip = useTooltip()
   const downloadImageTooltip = useTooltip()
   const downloadOriginalImageTooltip = useTooltip()
@@ -62,38 +57,12 @@ export default function DetailModal() {
     () => tasks.find((t) => t.id === detailTaskId) ?? null,
     [tasks, detailTaskId],
   )
-  const streamPreviewItems = useMemo(() => {
-    const slotEntries = streamPreviewSlots
-      ? Object.entries(streamPreviewSlots)
-          .filter(([, src]) => Boolean(src))
-          .sort(([a], [b]) => Number(a) - Number(b))
-      : []
-    const count = Math.max(
-      task?.status === 'running' ? task.params.n : 0,
-      slotEntries.length ? Math.max(...slotEntries.map(([key]) => Number(key) + 1)) : 0,
-      streamPreviewSrc ? 1 : 0,
-    )
-    const byIndex = new Map(slotEntries.map(([key, src]) => [Number(key), src]))
-
-    return Array.from({ length: count }, (_, index) => ({
-      key: String(index),
-      src: byIndex.get(index) ?? (index === 0 ? streamPreviewSrc : ''),
-    }))
-  }, [task?.params.n, task?.status, streamPreviewSlots, streamPreviewSrc])
-  const activeStreamPreviewSrc = streamPreviewItems[imageIndex]?.src || ''
-
   useEffect(() => {
-    setStreamPreviewLoaded(false)
-  }, [activeStreamPreviewSrc, detailTaskId, imageIndex])
-
-  useEffect(() => {
-    const count = task?.status === 'running'
-      ? streamPreviewItems.length
-      : task
+    const count = task
       ? (task.outputErrors?.length ? Math.max(task.params.n, task.outputImages.length + task.outputErrors.length) : task.outputImages.length)
       : 0
     if (count > 0 && imageIndex >= count) setImageIndex(count - 1)
-  }, [imageIndex, streamPreviewItems.length, task, task?.status])
+  }, [imageIndex, task])
 
   useCloseOnEscape(Boolean(task), () => setDetailTaskId(null))
   usePreventBackgroundScroll(Boolean(task), [modalRef, rawUrlsModalRef, rawResponseModalRef])
@@ -104,11 +73,11 @@ export default function DetailModal() {
   }, [detailTaskId])
 
   useEffect(() => {
-    if (task?.status !== 'running' && !(task?.status === 'error' && (task.falRecoverable || task.customRecoverable))) return
+    if (task?.status !== 'running') return
     const id = window.setInterval(() => setNow(Date.now()), 1000)
     setNow(Date.now())
     return () => window.clearInterval(id)
-  }, [task?.customRecoverable, task?.falRecoverable, task?.status])
+  }, [task?.status])
 
   // 加载所有相关图片
   useEffect(() => {
@@ -247,21 +216,7 @@ export default function DetailModal() {
     : task.prompt
   const promptSentToApi = replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length).trim()
   const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== promptSentToApi)
-  const codexCliPromptKey = getCodexCliPromptKey(settings)
-  const hasHandledPromptWarning = settings.codexCli || dismissedCodexCliPrompts.includes(codexCliPromptKey)
-  const taskProvider = task.apiProvider
-  const isOpenAiTask = (taskProvider ?? 'openai') === 'openai'
-  const showPromptWarning = Boolean(isOpenAiTask && task.apiMode === 'responses' && currentOutputImageId && (!currentRevisedPrompt || showRevisedPrompt) && !hasHandledPromptWarning)
-  const taskProviderName = taskProvider === 'fal' ? 'fal.ai' : taskProvider ? 'OpenAI' : '未知'
-  const taskProfileName = task.apiProfileName || '未知'
-  const taskModel = task.apiModel || '未知'
-  const showSourceInfo = Boolean(task.apiProvider || task.apiProfileName || task.apiModel)
-  const isFalReconnecting = task.status === 'error' && task.falRecoverable
-  const isCustomReconnecting = task.status === 'error' && task.customRecoverable
   const rawImageUrls = task.rawImageUrls ?? []
-  const streamPreviewLen = streamPreviewItems.length
-  const currentStreamPreviewSrc = activeStreamPreviewSrc
-  const streamPartialImageIds = task.streamPartialImageIds ?? []
   const isPngOutput = task.params.output_format === 'png'
   const transparentOutputText = task.transparentOutput || task.params.transparent_output ? 'true' : 'false'
   const currentTransparentOutputFailed = Boolean(currentOutputImageId && task.transparentOutput && task.transparentOriginalImages?.[currentOutputImageIndex] === '')
@@ -273,7 +228,7 @@ export default function DetailModal() {
   }
 
   const formatDuration = () => {
-    if (task.status === 'running' || isFalReconnecting || isCustomReconnecting) {
+    if (task.status === 'running') {
       const seconds = Math.max(0, Math.floor((now - task.createdAt) / 1000))
       const mm = String(Math.floor(seconds / 60)).padStart(2, '0')
       const ss = String(seconds % 60).padStart(2, '0')
@@ -327,13 +282,6 @@ export default function DetailModal() {
     } catch (err) {
       showToast(getClipboardFailureMessage('复制提示词失败', err), 'error')
     }
-  }
-
-  const handleShowPromptWarning = () => {
-    showCodexCliPrompt(
-      true,
-      currentRevisedPrompt ? '接口返回的提示词已被改写' : '接口没有返回官方 API 会返回的部分信息',
-    )
   }
 
   const handleCopyInputImage = async () => {
@@ -398,27 +346,6 @@ export default function DetailModal() {
         showToast(`部分下载失败：成功 ${result.successCount}，失败 ${result.failCount}`, 'error')
       } else {
         showToast(result.successCount > 1 ? `下载成功：${result.successCount} 张图片` : '下载成功', 'success')
-      }
-    } catch (err) {
-      console.error(err)
-      showToast('下载失败', 'error')
-    }
-  }
-
-  const handleDownloadPartialImages = async () => {
-    if (!task || !streamPartialImageIds.length) return
-
-    try {
-      const fileNameBase = `task-${task.id}-partial`
-      const result = settings.zipBatchDownload
-        ? await downloadImageEntriesAsZip(getImageZipEntries(streamPartialImageIds, fileNameBase), fileNameBase)
-        : await downloadImageIds(streamPartialImageIds, fileNameBase)
-      if (result.successCount === 0) {
-        showToast('下载失败', 'error')
-      } else if (result.failCount > 0) {
-        showToast(`部分下载失败：成功 ${result.successCount}，失败 ${result.failCount}`, 'error')
-      } else {
-        showToast(`下载成功：${result.successCount} 张中间步骤图`, 'success')
       }
     } catch (err) {
       console.error(err)
@@ -635,7 +562,7 @@ export default function DetailModal() {
               )}
             </div>
           )}
-          {(task.status === 'running' || isFalReconnecting) && (
+          {task.status === 'running' && (
             <>
               <div className="absolute left-4 top-4 flex items-center gap-1 bg-black/50 text-white text-xs px-2 py-0.5 rounded backdrop-blur-sm font-mono">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -643,70 +570,13 @@ export default function DetailModal() {
                 </svg>
                 {formatDuration()}
               </div>
-              {task.status === 'running' && streamPreviewLen > 0 && (
-                <>
-                  {currentStreamPreviewSrc ? (
-                    <img
-                      src={currentStreamPreviewSrc}
-                      className={`max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] object-contain ${streamPreviewLoaded ? '' : 'hidden'}`}
-                      alt=""
-                      onLoad={() => setStreamPreviewLoaded(true)}
-                      onError={() => setStreamPreviewLoaded(false)}
-                    />
-                  ) : null}
-                  {(!currentStreamPreviewSrc || !streamPreviewLoaded) && (
-                    <svg className="w-10 h-10 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  )}
-                  {streamPreviewLoaded && (
-                    <span className="absolute top-4 right-4 flex items-center gap-1 rounded bg-blue-500 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-                      流式预览
-                    </span>
-                  )}
-                  {streamPreviewLen > 1 && (
-                    <>
-                      <button
-                        onClick={() => setImageIndex((imageIndex - 1 + streamPreviewLen) % streamPreviewLen)}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/30 text-white hover:bg-black/50 transition"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setImageIndex((imageIndex + 1) % streamPreviewLen)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-black/30 text-white hover:bg-black/50 transition"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                      <span className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full">
-                        {imageIndex + 1} / {streamPreviewLen}
-                      </span>
-                    </>
-                  )}
-                </>
-              )}
-              {task.status === 'running' && streamPreviewLen === 0 && (
-                <svg className="w-10 h-10 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              )}
+              <svg className="w-10 h-10 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
             </>
           )}
-          {task.status === 'error' && isFalReconnecting && (
-            <div className="w-full max-w-md px-4 text-center">
-              <svg className="w-10 h-10 text-yellow-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <p className="text-sm font-medium text-yellow-500">重连中</p>
-            </div>
-          )}
-          {task.status === 'error' && !isFalReconnecting && (
+          {task.status === 'error' && (
             <div className="w-full max-w-md px-4 text-center">
               <svg className="w-10 h-10 text-red-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -787,25 +657,6 @@ export default function DetailModal() {
                     </ViewportTooltip>
                   </div>
                 )}
-                {streamPartialImageIds.length > 0 && (
-                  <div className="relative group">
-                    <button
-                      type="button"
-                      {...downloadPartialImagesTooltip.handlers}
-                      onClick={() => {
-                        downloadPartialImagesTooltip.handlers.onClick()
-                        void handleDownloadPartialImages()
-                      }}
-                      className="inline-flex items-center justify-center rounded-full border border-amber-200/80 bg-amber-50 px-3 py-1.5 text-amber-600 transition hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/20"
-                      aria-label="下载中间步骤图"
-                    >
-                      <DownloadIcon className="h-4 w-4" />
-                    </button>
-                    <ViewportTooltip visible={downloadPartialImagesTooltip.visible} className="whitespace-nowrap">
-                      下载中间步骤图
-                    </ViewportTooltip>
-                  </div>
-                )}
                 <div className="relative group">
                   <button
                     type="button"
@@ -853,20 +704,6 @@ export default function DetailModal() {
                 >
                   <CopyIcon className="h-4 w-4" />
                 </button>
-              )}
-              {showPromptWarning && (
-                <span className="relative inline-flex">
-                  <button
-                    type="button"
-                    className="p-1 rounded text-amber-500 hover:bg-amber-50 dark:text-yellow-300 dark:hover:bg-yellow-500/10 transition"
-                    onClick={handleShowPromptWarning}
-                    aria-label="提示词已被改写"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    </svg>
-                  </button>
-                </span>
               )}
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4">
@@ -943,14 +780,11 @@ export default function DetailModal() {
             <h3 className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
               参数配置
             </h3>
-            {showSourceInfo && (
+            {task.apiModel && (
               <div className="mb-2 min-w-0 overflow-hidden rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-white/[0.03]">
-                <span className="text-gray-400 dark:text-gray-500">来源</span>
+                <span className="text-gray-400 dark:text-gray-500">模型</span>
                 <br />
-                <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2">
-                  <span className="font-medium text-gray-700 dark:text-gray-200">{taskProviderName}</span>
-                  <span className="text-gray-400 dark:text-gray-500"> · {taskProfileName} · {taskModel}</span>
-                </div>
+                <div className="mt-0.5 overflow-x-auto hide-scrollbar whitespace-nowrap mask-edge-r pr-2 font-medium text-gray-700 dark:text-gray-200">{task.apiModel}</div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-2 text-xs mb-4 min-w-0">

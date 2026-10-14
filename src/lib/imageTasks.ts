@@ -1,12 +1,11 @@
 import type { TaskParams, TaskRecord } from '../types'
 import { DEFAULT_PARAMS } from '../types'
-import { useStore, ensureImageCached, cacheImage, executeTask, createSettingsForApiProfile } from '../store'
-import { normalizeSettings, getActiveApiProfile, validateApiProfile } from './apiProfiles'
+import { useStore, ensureImageCached, cacheImage, executeTask } from '../store'
 import { putTask, storeImage } from './db'
 import { orderInputImagesForMask } from './mask'
 import { validateMaskMatchesImage } from './canvasImage'
-import { getCurrentUser, getImageModelQuote, getMaxTaskImages, isBackendAuthEnabled } from './gouoBackend'
-import { getChangedParams, normalizeParamsForSettings } from './paramCompatibility'
+import { getCurrentUser, getImageModelQuote, getMaxTaskImages } from './gouoBackend'
+import { getChangedParams, normalizeTaskParams } from './paramCompatibility'
 import { getTransparentRequestParams, createTransparentOutputMeta } from './transparentImage'
 import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
 import { isStorageScopeCurrent } from './storageScope'
@@ -28,7 +27,7 @@ interface ImageTaskInput {
   signal?: AbortSignal
 }
 
-type SubmitOptions = { allowFullMask?: boolean; useCurrentApiProfileWhenReusedMissing?: boolean }
+type SubmitOptions = { allowFullMask?: boolean }
 const pendingRequests = new Map<string, Promise<string>>()
 
 export function submitImageTask(input: ImageTaskInput): Promise<string> {
@@ -71,47 +70,12 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       targetImageId: input.maskTargetImageId ?? input.inputImageIds?.[0] ?? '',
       maskDataUrl,
     } : null) : state.maskDraft
-    const reusedTaskApiProfileId = input ? null : state.reusedTaskApiProfileId
-    const reusedTaskApiProfileName = state.reusedTaskApiProfileName
-    const reusedTaskApiProfileMissing = !input && state.reusedTaskApiProfileMissing
     if (input?.requestId) {
       const existing = useStore.getState().tasks.find((task) => task.requestId === input.requestId)
       if (existing) return existing.id
     }
 
-    const normalizedSettings = normalizeSettings(settings)
-    let activeProfile = getActiveApiProfile(settings)
-    if (input?.model) activeProfile = { ...activeProfile, model: input.model }
-    let requestSettings = createSettingsForApiProfile(normalizedSettings, activeProfile)
-    if (normalizedSettings.reuseTaskApiProfileTemporarily && (reusedTaskApiProfileId || reusedTaskApiProfileMissing)) {
-      const reusedProfile = normalizedSettings.profiles.find((profile) => profile.id === reusedTaskApiProfileId)
-      if (!reusedProfile) {
-        if (options.useCurrentApiProfileWhenReusedMissing) {
-          useStore.getState().setReusedTaskApiProfile(null)
-        } else {
-          setConfirmDialog({
-            title: '找不到 API 配置',
-        message: `找不到复用任务所使用的 API 配置「${reusedTaskApiProfileName || '未知配置'}」，要使用当前的 API 配置「${activeProfile.name}」提交任务吗？`,
-        confirmText: '使用当前配置提交',
-        cancelText: '放弃提交',
-        action: () => {
-          void submitTask({ ...options, useCurrentApiProfileWhenReusedMissing: true })
-        },
-          })
-          return
-        }
-      } else {
-        activeProfile = reusedProfile
-        requestSettings = createSettingsForApiProfile(normalizedSettings, reusedProfile)
-      }
-    }
-
-    if (validateApiProfile(activeProfile)) {
-      if (input) throw new Error(`请先完善请求 API 配置：${validateApiProfile(activeProfile)}`)
-      showToast(`请先完善请求 API 配置：${validateApiProfile(activeProfile)}`, 'error')
-      useStore.getState().setShowSettings(true)
-      return
-    }
+    const model = input?.model || settings.model
 
     if (!prompt.trim()) {
       if (input) throw new Error('请输入提示词')
@@ -119,25 +83,23 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       return
     }
 
-    let quote: Awaited<ReturnType<typeof getImageModelQuote>> | undefined
-    if (isBackendAuthEnabled()) {
-      try {
-        quote = await getImageModelQuote(activeProfile.model, inputImages.length, Boolean(maskDraft), params.n, input?.model && input.model !== settings.model ? input.priceVersion : settings.gouoPriceVersion, params)
-      } catch (err) {
-        if (input) throw err
-        showToast(err instanceof Error ? err.message : String(err), 'error')
-        return
-      }
-      // 余额明显不够时不建任务，免得先提示"已提交"再失败；读不到余额就交给服务端判断
-      const user = await getCurrentUser().catch(() => null)
-      const cost = quote.price_cny * params.n
-      if (typeof user?.balance_cny === 'number' && user.balance_cny + 1e-9 < cost) {
-        const message = `余额不足：本次预计 ${formatPoints(cost)}，当前余额 ${formatPoints(user.balance_cny)}`
-        requestUserCenter('topup')
-        if (input) throw new Error(message)
-        showToast(`${message}，请先兑换积分`, 'error')
-        return
-      }
+    let quote: Awaited<ReturnType<typeof getImageModelQuote>>
+    try {
+      quote = await getImageModelQuote(model, inputImages.length, Boolean(maskDraft), params.n, input?.model && input.model !== settings.model ? input.priceVersion : settings.gouoPriceVersion, params)
+    } catch (err) {
+      if (input) throw err
+      showToast(err instanceof Error ? err.message : String(err), 'error')
+      return
+    }
+    // 余额明显不够时不建任务，免得先提示"已提交"再失败；读不到余额就交给服务端判断
+    const user = await getCurrentUser().catch(() => null)
+    const cost = quote.price_cny * params.n
+    if (typeof user?.balance_cny === 'number' && user.balance_cny + 1e-9 < cost) {
+      const message = `余额不足：本次预计 ${formatPoints(cost)}，当前余额 ${formatPoints(user.balance_cny)}`
+      requestUserCenter('topup')
+      if (input) throw new Error(message)
+      showToast(`${message}，请先兑换积分`, 'error')
+      return
     }
 
     let orderedInputImages = inputImages
@@ -179,7 +141,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       await storeImage(img.dataUrl)
     }
 
-    const normalizedParams = normalizeParamsForSettings(params, requestSettings, { hasInputImages: orderedInputImages.length > 0 })
+    const normalizedParams = normalizeTaskParams(params)
     const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
     const taskParams = shouldUseTransparentOutput
       ? getTransparentRequestParams(normalizedParams)
@@ -199,13 +161,9 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       requestId: input?.requestId ?? taskId,
       prompt: prompt.trim(),
       params: taskParams,
-      apiProvider: activeProfile.provider,
-      apiProfileId: activeProfile.id,
-      apiProfileName: activeProfile.name,
-      apiMode: activeProfile.apiMode,
-      apiModel: activeProfile.model,
-      gouoPriceVersion: quote?.price_version,
-      gouoPriceCNY: quote?.price_cny,
+      apiModel: model,
+      gouoPriceVersion: quote.price_version,
+      gouoPriceCNY: quote.price_cny,
       inputImageIds: orderedInputImages.map((i) => i.id),
       maskTargetImageId,
       maskImageId,
@@ -233,7 +191,6 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
         latest.setPrompt('')
         latest.clearInputImages()
       }
-      if (latest.reusedTaskApiProfileId === reusedTaskApiProfileId) latest.setReusedTaskApiProfile(null)
     }
 
     // 异步调用 API

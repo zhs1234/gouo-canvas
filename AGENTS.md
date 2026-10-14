@@ -62,7 +62,7 @@
 - **PascalCase**：组件、类型、接口。
 - **camelCase**：函数、变量、参数。
 - **UPPER_SNAKE_CASE**：模块级常量。
-- 文件名小写驼峰：`apiProfiles.ts`、`maskPreprocess.ts`。
+- 文件名小写驼峰：`serverLibrary.ts`、`maskPreprocess.ts`。
 - 局部变量优先短名：`ctx`、`el`、`msg`、`idx`、`opts`、`err`。多词名仅在单词不够清晰时使用。
 
 ### 解构
@@ -165,6 +165,6 @@ else params = baseParams
   - 持久化逻辑和数据迁移（`persist` middleware + IndexedDB）。
   - 模块顶部的 `normalize*` 函数用于从 IndexedDB/localStorage 恢复时清洗旧格式数据，修改需保持向后兼容。
   - 新增 state 字段时，考虑是否需要持久化以及升级路径。
-- `src/lib/apiProfiles.ts` 包含多供应商配置，修改时注意向后兼容。
+- `src/lib/settings.ts` 的 `normalizeSettings` 负责从旧版持久化数据（含已移除的多套 API 配置字段）恢复设置，修改时注意向后兼容。
 - `src/lib/db.ts` 是 IndexedDB 封装层，修改 schema 时需升级 `DB_VERSION` 并处理 `onupgradeneeded`。
 - 修改完成后优先运行 `npm run build` 验证编译，再运行 `npm test` 验证测试。

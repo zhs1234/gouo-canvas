@@ -1,4 +1,4 @@
-import { createBackendSettings, isBackendAuthEnabled } from '../gouoBackend'
+import { createBackendSettings } from '../gouoBackend'
 import type { AgentModel, AgentToolCall, AgentToolDefinition, ChatMessage } from './types'
 
 // 每条用户消息最多工具轮数、单条消息需确认的图片张数，由后台“光构设置”下发；读取目录前按后台默认值
@@ -10,13 +10,12 @@ export function getAgentLimits() {
 
 // 目录同时带回运营方在后台填写的附加提示词和 Agent 限制
 export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string }> {
-  if (!isBackendAuthEnabled()) throw new Error('Agent 需要启用光构平台服务，请先配置平台后端')
   const settings = await createBackendSettings()
-  const base = settings.baseUrl!.replace(/\/v1\/?$/, '')
+  const base = settings.baseUrl.replace(/\/v1\/?$/, '')
   const response = await fetch(`${base}/api/gouo/agent/models`, {
     credentials: 'include',
     cache: 'no-store',
-    headers: { 'X-Gouo-Token': settings.apiKey! },
+    headers: { 'X-Gouo-Token': settings.apiKey },
   })
   const payload = await response.json()
   if (!response.ok || payload.success !== true) throw new Error(payload.message || `加载 Agent 模型失败（HTTP ${response.status}）`)
@@ -127,7 +126,7 @@ export async function streamAgentCompletion(input: {
 }) {
   const settings = await createBackendSettings()
   input.signal.throwIfAborted()
-  const response = await fetch(`${settings.baseUrl!.replace(/\/$/, '')}/chat/completions`, {
+  const response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },

@@ -220,7 +220,7 @@ Make sure you are signed in to the same account and that the original browser fi
 
 ### There is no API configuration
 
-This is expected in product mode. The platform manages upstream APIs, and users never handle platform API keys. Developers who need to test APIs directly should use the frontend-only mode in the [development guide](./development.md).
+This is expected. The platform manages upstream APIs; users never handle platform API keys and only need to sign in and choose an image model in the input box.
 
 ## 17. Data and privacy
 

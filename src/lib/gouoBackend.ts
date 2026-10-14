@@ -1,4 +1,4 @@
-import type { AppSettings, TaskParams } from '../types'
+import type { TaskParams } from '../types'
 import { getLoadedStorageUserId } from './storageScope'
 import { TIER_PIXEL_BUDGET, type SizeTier } from './size'
 
@@ -267,10 +267,6 @@ interface GouoCloudTaskMeta {
 const configuredBaseUrl = (import.meta.env.VITE_GOUO_BACKEND_URL ?? '').trim().replace(/\/+$/, '')
 let backendToken = ''
 
-export function isBackendAuthEnabled(): boolean {
-  return import.meta.env.VITE_GOUO_BACKEND_ENABLED === 'true'
-}
-
 function apiUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
   return `${configuredBaseUrl}${normalizedPath}`
@@ -448,17 +444,10 @@ export function getPlaygroundToken(): Promise<string> {
   return backendRequest<string>('/api/token/playground')
 }
 
-export async function createBackendSettings(forceRefresh = false): Promise<Partial<AppSettings>> {
+export async function createBackendSettings(forceRefresh = false) {
   if (!backendToken || forceRefresh) backendToken = await getPlaygroundToken()
   const sameOriginBaseUrl = typeof window === 'undefined' ? '/v1' : `${window.location.origin}/v1`
-  return {
-    baseUrl: configuredBaseUrl ? `${configuredBaseUrl}/v1` : sameOriginBaseUrl,
-    apiKey: backendToken,
-    apiMode: 'images',
-    codexCli: false,
-    apiProxy: false,
-    streamImages: false,
-  }
+  return { baseUrl: configuredBaseUrl ? `${configuredBaseUrl}/v1` : sameOriginBaseUrl, apiKey: backendToken }
 }
 
 export function isInvalidBackendTokenError(error: unknown): boolean {

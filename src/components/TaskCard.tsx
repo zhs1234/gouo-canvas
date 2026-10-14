@@ -3,8 +3,7 @@ import type { TaskRecord } from '../types'
 import { useStore, ensureImageThumbnailCached, subscribeImageThumbnail, retryTask } from '../store'
 import { formatImageRatio } from '../lib/size'
 import { getParamDisplay, ActualValueBadge } from '../lib/paramDisplay'
-import { DEFAULT_IMAGES_MODEL, DEFAULT_FAL_MODEL } from '../lib/apiProfiles'
-import { CodeIcon, TransparentBgIcon } from './icons'
+import { TransparentBgIcon } from './icons'
 import ViewportTooltip from './ViewportTooltip'
 
 interface Props {
@@ -73,11 +72,9 @@ export default function TaskCard({
   const [swipeStartedSelected, setSwipeStartedSelected] = useState(false)
   const [swipeActionActive, setSwipeActionActive] = useState(false)
   const [swipeDirection, setSwipeDirection] = useState<-1 | 0 | 1>(0)
-  const [streamPreviewLoaded, setStreamPreviewLoaded] = useState(false)
   const toggleTaskSelection = useStore((s) => s.toggleTaskSelection)
   const settings = useStore((s) => s.settings)
   const openFavoritePicker = useStore((s) => s.openFavoritePicker)
-  const streamPreviewSrc = useStore((s) => s.streamPreviews[task.id] || '')
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const swipeResetTimerRef = useRef<number | null>(null)
   const suppressClickUntilRef = useRef(0)
@@ -232,17 +229,13 @@ export default function TaskCard({
     }
   }, [isSwiping])
 
-  useEffect(() => {
-    setStreamPreviewLoaded(false)
-  }, [streamPreviewSrc, task.id])
-
   // 定时更新运行中任务的计时
   useEffect(() => {
-    if (task.status !== 'running' && !(task.status === 'error' && (task.falRecoverable || task.customRecoverable))) return
+    if (task.status !== 'running') return
     const id = setInterval(() => setNow(Date.now()), 1000)
     setNow(Date.now())
     return () => clearInterval(id)
-  }, [task.customRecoverable, task.falRecoverable, task.status])
+  }, [task.status])
 
   // 加载缩略图
   useEffect(() => {
@@ -281,7 +274,7 @@ export default function TaskCard({
 
   const duration = (() => {
     let seconds: number
-    if (task.status === 'running' || task.falRecoverable || task.customRecoverable) {
+    if (task.status === 'running') {
       seconds = Math.floor((now - task.createdAt) / 1000)
     } else if (task.elapsed != null) {
       seconds = Math.floor(task.elapsed / 1000)
@@ -293,9 +286,7 @@ export default function TaskCard({
     return `${mm}:${ss}`
   })()
   const showSwipeAction = swipeActionActive
-  const isFalReconnecting = task.status === 'error' && task.falRecoverable
-  const isCustomReconnecting = task.status === 'error' && task.customRecoverable
-  const showRunningTimer = task.status === 'running' || isFalReconnecting || isCustomReconnecting
+  const showRunningTimer = task.status === 'running'
   const swipeBgClass = showSwipeAction
     ? swipeStartedSelected
       ? 'bg-gray-500 dark:bg-gray-600'
@@ -319,8 +310,6 @@ export default function TaskCard({
   const requestedOutputCount = Math.max(task.params.n, outputSuccessCount + outputErrorCount)
   const hasPartialOutputFailure = task.status === 'done' && outputErrorCount > 0
 
-  const defaultModelForProvider = task.apiProvider === 'fal' ? DEFAULT_FAL_MODEL : DEFAULT_IMAGES_MODEL
-  const showModel = task.apiModel && task.apiModel !== defaultModelForProvider
   const isInterrupted = task.status === 'error' && task.error === '已停止生成。'
 
   return (
@@ -382,23 +371,7 @@ export default function TaskCard({
       <div className="flex h-40">
         {/* 左侧图片区域 */}
         <div className="w-40 min-w-[10rem] h-full bg-gray-100 dark:bg-black/20 relative flex items-center justify-center overflow-hidden flex-shrink-0">
-          {task.status === 'running' && streamPreviewSrc && (
-            <>
-              <img
-                src={streamPreviewSrc}
-                className={`h-full w-full object-cover ${streamPreviewLoaded ? '' : 'hidden'}`}
-                alt=""
-                onLoad={() => setStreamPreviewLoaded(true)}
-                onError={() => setStreamPreviewLoaded(false)}
-              />
-              {streamPreviewLoaded && (
-                <span className="absolute top-1.5 right-1.5 flex items-center gap-1 rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm sm:text-xs">
-                  预览
-                </span>
-              )}
-            </>
-          )}
-          {task.status === 'running' && (!streamPreviewSrc || !streamPreviewLoaded) && (
+          {task.status === 'running' && (
             <div className="flex flex-col items-center gap-2">
               <svg
                 className="w-8 h-8 text-blue-400 animate-spin"
@@ -422,27 +395,7 @@ export default function TaskCard({
               <span className="text-xs text-gray-400 dark:text-gray-500">生成中...</span>
             </div>
           )}
-          {task.status === 'error' && isFalReconnecting && (
-            <div className="flex flex-col items-center gap-1 px-2">
-              <svg
-                className="w-7 h-7 text-yellow-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              <span className="text-xs text-yellow-500 text-center leading-tight">
-                重连中
-              </span>
-            </div>
-          )}
-          {task.status === 'error' && !isFalReconnecting && (
+          {task.status === 'error' && (
             <div className="flex flex-col items-center gap-1 px-2">
               <svg
                 className={`w-7 h-7 ${isInterrupted ? 'text-yellow-400' : 'text-red-400'}`}
@@ -533,20 +486,8 @@ export default function TaskCard({
               onTouchEnd={(e) => e.stopPropagation()}
               onTouchCancel={(e) => e.stopPropagation()}
             >
-              {/* API Name */}
-              {(task.apiProfileName || task.apiProvider) && (
-                <span 
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.04] text-gray-600 dark:text-gray-300 text-xs flex-shrink-0"
-                  title={task.apiProfileName || task.apiProvider}
-                >
-                  <CodeIcon className="w-3 h-3 flex-shrink-0 text-gray-400" />
-                  <span className="truncate max-w-[8rem]">
-                    {task.apiProfileName || task.apiProvider}
-                  </span>
-                </span>
-              )}
               {/* Model */}
-              {showModel && (
+              {task.apiModel && (
                 <span 
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.04] text-gray-600 dark:text-gray-300 text-xs flex-shrink-0"
                   title={task.apiModel}
@@ -611,7 +552,7 @@ export default function TaskCard({
               onTouchEnd={(e) => e.stopPropagation()}
               onTouchCancel={(e) => e.stopPropagation()}
             >
-              {((task.status === 'error' && !isFalReconnecting) || settings.alwaysShowRetryButton) && (
+              {(task.status === 'error' || settings.alwaysShowRetryButton) && (
                 <TaskActionButton
                   tooltip="重试任务"
                   onClick={() => retryTask(task)}

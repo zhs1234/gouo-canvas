@@ -1,4 +1,4 @@
-import type { AppSettings, TaskParams } from '../types'
+import type { TaskParams } from '../types'
 import { blobToDataUrl } from './dataUrl'
 
 export const MIME_MAP: Record<string, string> = {
@@ -11,7 +11,7 @@ const MAX_MASK_EDIT_FILE_BYTES = 50 * 1024 * 1024
 const MAX_IMAGE_INPUT_PAYLOAD_BYTES = 512 * 1024 * 1024
 
 export interface CallApiOptions {
-  settings: AppSettings
+  model: string
   prompt: string
   params: TaskParams
   /** 输入图片的 data URL 列表 */
@@ -24,9 +24,6 @@ export interface CallApiOptions {
   recoverOnly?: boolean
   signal?: AbortSignal
   gouoPriceVersion?: string
-  onFalRequestEnqueued?: (request: { requestId: string; endpoint: string }) => void
-  onCustomTaskEnqueued?: (task: { taskId: string }) => void
-  onPartialImage?: (partial: { image: string; partialImageIndex?: number; requestIndex?: number }) => void
 }
 
 export interface CallApiResult {
@@ -60,23 +57,6 @@ function formatMiB(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
 }
 
-export function getDataUrlEncodedByteSize(dataUrl: string): number {
-  return dataUrl.length
-}
-
-export function getDataUrlDecodedByteSize(dataUrl: string): number {
-  const commaIndex = dataUrl.indexOf(',')
-  if (commaIndex < 0) return dataUrl.length
-
-  const meta = dataUrl.slice(0, commaIndex)
-  const payload = dataUrl.slice(commaIndex + 1)
-  if (!/;base64/i.test(meta)) return decodeURIComponent(payload).length
-
-  const normalized = payload.replace(/\s/g, '')
-  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0
-  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding)
-}
-
 function assertMaxBytes(label: string, bytes: number, maxBytes: number) {
   if (bytes > maxBytes) {
     throw new Error(`${label}过大：${formatMiB(bytes)}，上限为 ${formatMiB(maxBytes)}`)
@@ -91,22 +71,7 @@ export function assertMaskEditFileSize(label: string, bytes: number) {
   assertMaxBytes(label, bytes, MAX_MASK_EDIT_FILE_BYTES)
 }
 
-export const IMAGE_FETCH_CORS_HINT = ' 可点链接按钮复制结果链接，或尝试开启「返回 Base64 图片数据」避免此问题。'
-const STREAMING_UNSUPPORTED_HINT = '提示：当前使用的 API 可能不支持流式传输，请尝试关闭「流式传输」功能。'
-const STREAMING_FORMAT_HINT = '提示：API 返回了无法解析的流式数据格式，请尝试关闭「流式传输」功能。'
-
-export function appendStreamingFormatHint(message: string): string {
-  return message ? `${message}\n${STREAMING_FORMAT_HINT}` : STREAMING_FORMAT_HINT
-}
-
-/** 排除明确与流式无关的状态码后追加提示 */
-export function maybeAppendStreamingHint(message: string, status: number, streamImages?: boolean): string {
-  if (!streamImages) return message
-  if (status === 401 || status === 403 || status === 404 || status === 408 || status === 429 || status >= 500) {
-    return message
-  }
-  return message ? `${message}\n${STREAMING_UNSUPPORTED_HINT}` : STREAMING_UNSUPPORTED_HINT
-}
+const IMAGE_FETCH_CORS_HINT = ' 可点链接按钮复制结果链接。'
 
 async function probeNoCorsReachability(url: string, timeoutMs = 8000): Promise<'opaque' | 'reachable' | 'failed'> {
   const controller = new AbortController()

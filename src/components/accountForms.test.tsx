@@ -32,7 +32,7 @@ vi.mock('react', async (load) => ({
   },
 }))
 vi.mock('react-dom', () => ({ createPortal: (node: unknown) => node }))
-vi.mock('../lib/gouoBackend', () => ({ ...api, isBackendAuthEnabled: () => true }))
+vi.mock('../lib/gouoBackend', () => api)
 vi.mock('../store', () => ({ useStore: { getState: () => api } }))
 vi.mock('../lib/serverLibrary', () => ({ importLocalTasks: vi.fn() }))
 vi.mock('../hooks/useCloseOnEscape', () => ({ useCloseOnEscape: () => {} }))
@@ -207,6 +207,5 @@ describe('account email and password forms', () => {
     expect(text(tree)).not.toContain('密码已修改，但创作凭据刷新失败')
     expect(api.updatePassword).toHaveBeenCalledTimes(1)
     expect(api.createBackendSettings).toHaveBeenCalledTimes(2)
-    expect(api.setSettings).toHaveBeenCalledWith({ apiKey: 'new-token' })
   })
 })

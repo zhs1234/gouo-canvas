@@ -173,12 +173,7 @@ describe('gouoBackend', () => {
     vi.stubGlobal('fetch', fetchMock)
     const { createBackendSettings } = await import('./gouoBackend')
 
-    await expect(createBackendSettings()).resolves.toMatchObject({
-      baseUrl: '/v1',
-      apiKey: 'user-token',
-      apiMode: 'images',
-      streamImages: false,
-    })
+    await expect(createBackendSettings()).resolves.toEqual({ baseUrl: '/v1', apiKey: 'user-token' })
     expect(await createBackendSettings()).not.toHaveProperty('model')
   })
 

@@ -165,7 +165,7 @@ export async function reconcileCanvasTasks() {
               maskImageId: images.length ? undefined : node.metadata.maskImageId,
               maskTargetImageId: images.length ? undefined : node.metadata.maskTargetImageId,
               status: task.status === 'done' || images.length ? ('success' as const) : ('error' as const),
-              // 自定义服务商可能返回很长的错误页，超过画布元数据长度上限会让整次回填失败
+              // 上游可能返回很长的错误页，超过画布元数据长度上限会让整次回填失败
               errorDetails: task.error?.slice(0, 10000) || undefined,
               // 错误信息可能是整页 HTML，超过画布元数据长度上限会让整次回填失败
               outputErrors: task.outputErrors?.slice(0, 100).map((item) => ({ ...item, error: item.error.slice(0, 10000) })),

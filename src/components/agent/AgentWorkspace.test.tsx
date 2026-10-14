@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   setConfirmDialog: vi.fn(),
   acknowledge: vi.fn(),
   tool: vi.fn(),
-  backend: false,
   executeTask: vi.fn(),
   modelProps: undefined as { value: string; onChange: (id: string) => void } | undefined,
 }))
@@ -30,7 +29,7 @@ vi.mock('../../stores/agentStore', () => ({
 }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: (select: (state: { projects: [] }) => unknown) => select({ projects: [] }) }))
 vi.mock('../../lib/db', () => ({ storeImageWithSize: vi.fn() }))
-vi.mock('../../lib/gouoBackend', () => ({ isBackendAuthEnabled: () => mocks.backend, getMaxTaskImages: () => 10 }))
+vi.mock('../../lib/gouoBackend', () => ({ getMaxTaskImages: () => 10 }))
 vi.mock('../../lib/agent/tools', () => ({ executeAgentTool: mocks.tool }))
 vi.mock('../BackendModelSelector', () => ({ default: () => null }))
 vi.mock('../ModelSelect', async (original) => {
@@ -45,7 +44,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.conversations = [structuredClone(base)]
   mocks.tasks = []
-  mocks.backend = false
   mocks.configure.mockImplementation((id: string, patch: Partial<AgentConversation>) => { mocks.conversations = mocks.conversations.map((item) => item.id === id ? { ...item, ...patch } : item) })
 })
 
@@ -91,7 +89,6 @@ it('shows partial failure counts and causes, with an existing details entry and 
 })
 
 it('offers read-only result recovery for a failed platform task', () => {
-  mocks.backend = true
   mocks.tasks = [{ id: 'task', prompt: '海报', params: DEFAULT_PARAMS, inputImageIds: [], outputImages: [], status: 'error', error: 'Failed to fetch', gouoPriceVersion: 'quote', requestId: 'original-request', createdAt: 1, finishedAt: 2, elapsed: 1 }]
   expect(render()).toContain('取回原结果（不重新扣费）')
   mocks.tasks[0].gouoPriceVersion = undefined
