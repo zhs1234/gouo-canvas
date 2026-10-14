@@ -51,14 +51,14 @@ export function snapNodesIntoGroup(movedIds: Set<string>, nodes: CanvasNodeData[
   })
 }
 
-export const GROUP_WRAP_PADDING = 24
-export const GROUP_WRAP_TOP_PADDING = 52
+const GROUP_WRAP_PADDING = 24
+const GROUP_WRAP_TOP_PADDING = 52
 
 function selectedGroupIds(selectedIds: Set<string>, nodes: CanvasNodeData[]) {
   return new Set(nodes.filter((node) => selectedIds.has(node.id) && node.type === CanvasNodeType.Group).map((node) => node.id))
 }
 
-export function collectGroupMemberNodes(selectedIds: Set<string>, nodes: CanvasNodeData[]) {
+function collectGroupMemberNodes(selectedIds: Set<string>, nodes: CanvasNodeData[]) {
   const groups = selectedGroupIds(selectedIds, nodes)
   return nodes.filter(
     (node) => node.type !== CanvasNodeType.Group && (selectedIds.has(node.id) || (node.metadata?.groupId != null && groups.has(node.metadata.groupId))),

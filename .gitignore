@@ -18,5 +18,4 @@ server/data/
 *.pfx
 .idea/
 .vscode/
-.wrangler/
 .local-runtime/

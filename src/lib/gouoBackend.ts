@@ -25,7 +25,7 @@ export interface GouoUser {
   image_price_cny?: number
 }
 
-export interface RegisterInput {
+interface RegisterInput {
   username: string
   password: string
   email?: string
@@ -177,7 +177,7 @@ interface GouoUsageLogPage {
   total_count: number
 }
 
-export interface GouoBackendStatus {
+interface GouoBackendStatus {
   turnstile_check?: boolean
   turnstile_site_key?: string
   email_service?: boolean
@@ -245,7 +245,7 @@ export interface GouoCloudTask {
   favorite_collection_ids?: string[]
 }
 
-export interface GouoCloudCollection {
+interface GouoCloudCollection {
   id: string
   name: string
   created_at: number
@@ -253,7 +253,7 @@ export interface GouoCloudCollection {
   hidden_at?: number
 }
 
-export interface GouoCloudTaskMeta {
+interface GouoCloudTaskMeta {
   prompt?: string
   params?: Record<string, unknown>
   result_meta?: Record<string, unknown>

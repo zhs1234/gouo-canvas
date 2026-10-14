@@ -3,17 +3,17 @@ import { canvasToBlob, loadImage } from './canvasImage'
 import { blobToDataUrl } from './dataUrl'
 import { floorToMultiple } from './size'
 
-export const DEFAULT_MASK_WORKING_MAX_EDGE = 1920
-export const MASK_WORKING_DIMENSION_MULTIPLE = 16
+const DEFAULT_MASK_WORKING_MAX_EDGE = 1920
+const MASK_WORKING_DIMENSION_MULTIPLE = 16
 
-export interface MaskWorkingSize {
+interface MaskWorkingSize {
   width: number
   height: number
   scale: number
   wasResized: boolean
 }
 
-export interface PreparedMaskTarget extends MaskWorkingSize {
+interface PreparedMaskTarget extends MaskWorkingSize {
   dataUrl: string
   originalWidth: number
   originalHeight: number

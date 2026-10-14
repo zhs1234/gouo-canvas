@@ -10,12 +10,12 @@ const MIME_EXTENSIONS: Record<string, string> = {
   'image/gif': 'gif',
 }
 
-export interface DownloadImagesResult {
+interface DownloadImagesResult {
   successCount: number
   failCount: number
 }
 
-export interface DownloadImageZipEntry {
+interface DownloadImageZipEntry {
   imageId: string
   fileNameBase?: string
 }

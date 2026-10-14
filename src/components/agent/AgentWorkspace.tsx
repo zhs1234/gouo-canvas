@@ -22,7 +22,7 @@ const toolLabels: Record<string, string> = {
   select_reference: '选择参考图',
 }
 
-export function AgentImage({ id, onRemove }: { id: string; onRemove?: () => void }) {
+function AgentImage({ id, onRemove }: { id: string; onRemove?: () => void }) {
   const [url, setUrl] = useState<string>()
   const [unavailable, setUnavailable] = useState(false)
   useEffect(() => {

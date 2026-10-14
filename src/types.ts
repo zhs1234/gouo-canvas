@@ -11,14 +11,14 @@ export const ZIP_DOWNLOAD_ROUTE_VALUES = [
 ] as const
 export type ZipDownloadRoute = typeof ZIP_DOWNLOAD_ROUTE_VALUES[number]
 export const DEFAULT_ZIP_DOWNLOAD_ROUTES: ZipDownloadRoute[] = ['task-selection', 'favorite-collection-selection']
-export type BuiltInApiProvider = 'openai' | 'fal'
+type BuiltInApiProvider = 'openai' | 'fal'
 export type ApiProvider = BuiltInApiProvider | string
 export type CustomProviderTemplate = 'http-image'
 export const DEFAULT_STREAM_PARTIAL_IMAGES = 1
 
 export type CustomProviderRequestMethod = 'GET' | 'POST'
 export type CustomProviderContentType = 'json' | 'multipart'
-export type CustomProviderFileSource = 'inputImages' | 'mask'
+type CustomProviderFileSource = 'inputImages' | 'mask'
 
 export interface CustomProviderFileMapping {
   field: string
@@ -148,7 +148,7 @@ export interface MaskDraft {
 
 // ===== 任务记录 =====
 
-export type TaskStatus = 'running' | 'done' | 'error'
+type TaskStatus = 'running' | 'done' | 'error'
 
 export interface TaskRecord {
   source?: { kind: 'generate' | 'canvas' | 'agent'; projectId?: string; nodeId?: string; conversationId?: string }
@@ -336,7 +336,7 @@ export interface ResponsesApiResponse {
   }>
 }
 
-export interface FalImageFile {
+interface FalImageFile {
   url?: string
   content_type?: string
   file_name?: string

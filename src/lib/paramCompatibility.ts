@@ -4,8 +4,8 @@ import { getMaxTaskImages, isBackendAuthEnabled, isLowModerationAllowed } from '
 import { normalizeImageSize } from './size'
 
 export const DEFAULT_FAL_IMAGE_SIZE = '1360x1024'
-export const MAX_FAL_OUTPUT_IMAGES = 4
-export const MAX_OPENAI_OUTPUT_IMAGES = 10
+const MAX_FAL_OUTPUT_IMAGES = 4
+const MAX_OPENAI_OUTPUT_IMAGES = 10
 
 export function getOutputImageLimitForSettings(settings: AppSettings) {
   // 产品模式按后台“光构设置”的一次最多生成张数

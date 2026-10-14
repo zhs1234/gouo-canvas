@@ -20,9 +20,9 @@ export enum CanvasNodeType {
 // Node types are open strings: built-ins use CanvasNodeType and plugins use "<pluginId>:<name>".
 export type CanvasNodeTypeId = CanvasNodeType | (string & {})
 
-export type CanvasNodeStatus = 'idle' | 'success' | 'loading' | 'error'
-export type CanvasGenerationMode = 'text' | 'image' | 'video' | 'audio'
-export type CanvasImageGenerationType = 'generation' | 'edit'
+type CanvasNodeStatus = 'idle' | 'success' | 'loading' | 'error'
+type CanvasGenerationMode = 'text' | 'image' | 'video' | 'audio'
+type CanvasImageGenerationType = 'generation' | 'edit'
 
 export type CanvasNodeImage = {
   id: string

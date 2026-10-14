@@ -3,7 +3,7 @@ export interface Point {
   y: number
 }
 
-export interface Size {
+interface Size {
   width: number
   height: number
 }
@@ -14,7 +14,7 @@ export interface ViewTransform {
   y: number
 }
 
-export interface ClientRectLike {
+interface ClientRectLike {
   left: number
   top: number
   width: number

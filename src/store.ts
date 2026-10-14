@@ -60,8 +60,8 @@ import { formatPoints } from './lib/accountUsage'
 export { taskHasOutputErrors, taskMatchesFilterStatus, taskMatchesSearchQuery, type TaskFilterStatus } from './lib/taskFilters'
 
 export const ALL_FAVORITES_COLLECTION_ID = '__all_favorites__'
-export const DEFAULT_FAVORITE_COLLECTION_ID = '__default_favorites__'
-export const DEFAULT_FAVORITE_COLLECTION_NAME = '默认'
+const DEFAULT_FAVORITE_COLLECTION_ID = '__default_favorites__'
+const DEFAULT_FAVORITE_COLLECTION_NAME = '默认'
 
 // ===== Image cache =====
 // 内存缓存，id → dataUrl。只保留少量最近使用图片，避免大量 4K data URL 常驻内存。
@@ -408,7 +408,7 @@ function maybeOpenSupportPrompt(previousTasks: TaskRecord[], nextTasks: TaskReco
   }
 }
 
-export function migratePersistedState(persistedState: unknown): unknown {
+function migratePersistedState(persistedState: unknown): unknown {
   if (!isRecord(persistedState)) return persistedState
   const next = { ...persistedState }
   delete next.appMode
@@ -989,7 +989,7 @@ export const useStore = create<AppState>()(
     {
       name: getLoadedStorageName(),
       version: 2,
-      migrate: (persistedState) => migratePersistedState(persistedState),
+      migrate: migratePersistedState,
       partialize: getPersistedState,
       merge: mergePersistedState,
     },
@@ -1892,7 +1892,7 @@ function normalizeFavoritePatch(task: TaskRecord, patch: Partial<TaskRecord>, de
   return patch
 }
 
-export function updateTaskInStore(taskId: string, patch: Partial<TaskRecord>) {
+function updateTaskInStore(taskId: string, patch: Partial<TaskRecord>) {
   const { tasks, setTasks, defaultFavoriteCollectionId } = useStore.getState()
   const updated = tasks.map((t) =>
     t.id === taskId ? { ...t, ...normalizeFavoritePatch(t, patch, defaultFavoriteCollectionId) } : t,
@@ -2346,7 +2346,7 @@ export async function removeTask(task: TaskRecord) {
 }
 
 /** 清空数据选项 */
-export interface ClearOptions {
+interface ClearOptions {
   clearConfig?: boolean
   clearTasks?: boolean
 }
@@ -2442,7 +2442,7 @@ async function recoverCustomTask(taskId: string) {
 }
 
 /** 导出选项 */
-export interface ExportOptions {
+interface ExportOptions {
   exportConfig?: boolean
   exportTasks?: boolean
 }
@@ -2517,7 +2517,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
 }
 
 /** 导入选项 */
-export interface ImportOptions {
+interface ImportOptions {
   importConfig?: boolean
   importTasks?: boolean
 }

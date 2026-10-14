@@ -5,7 +5,7 @@ const MENTION_END = '\u2064'
 const SELECTED_IMAGE_MENTION_RE = /\u2063@图(\d+)\u2064/g
 const SELECTED_MENTION_RE = /\u2063(@图(\d+))\u2064/g
 
-export interface AtImageQuery {
+interface AtImageQuery {
   start: number
   query: string
 }
@@ -104,7 +104,7 @@ export function remapImageMentionsForOrder(
   })
 }
 
-export type PromptMentionPart =
+type PromptMentionPart =
   | { type: 'text'; text: string }
   | { type: 'mention'; text: string; imageIndex: number }
 

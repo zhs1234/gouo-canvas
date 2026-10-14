@@ -12,7 +12,7 @@ import { formatPoints } from '../accountUsage'
 import { getAgentLimits } from './api'
 
 
-export const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference'] as const
+const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference'] as const
 
 export const agentToolDefinitions: AgentToolDefinition[] = [
   {
@@ -106,7 +106,7 @@ function getConversationTask(conversation: AgentConversation, value: unknown) {
   return task
 }
 
-export function getAllowedAgentImageIds(conversation: AgentConversation): Set<string> {
+function getAllowedAgentImageIds(conversation: AgentConversation): Set<string> {
   const ids = new Set([...conversation.referenceImageIds, ...conversation.messages.flatMap((msg) => msg.referenceImageIds || [])])
   const project = useCanvasStore.getState().projects.find((item) => item.id === conversation.projectId && !item.hiddenAt)
   for (const node of project?.nodes || []) {

@@ -4,7 +4,7 @@ import { loadImage } from './canvasImage'
 export const GREEN_KEY_COLOR = '#00FF00'
 export const MAGENTA_KEY_COLOR = '#FF00FF'
 
-export interface TransparentOutputMeta {
+interface TransparentOutputMeta {
   transparentOutput: true
   effectivePrompt: string
 }

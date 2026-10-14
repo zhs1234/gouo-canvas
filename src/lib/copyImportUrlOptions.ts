@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'gouo-canvas.copy-import-url-options'
 
-export const DEFAULT_COPY_IMPORT_URL_OPTIONS = {
+const DEFAULT_COPY_IMPORT_URL_OPTIONS = {
   includeApiKey: false,
   useNewApiAddress: false,
   useNewApiKey: true,

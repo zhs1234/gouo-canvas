@@ -10,7 +10,7 @@ export function normalizeStreamPartialImages(value: unknown, fallback: number | 
   return Math.min(3, Math.max(0, Math.trunc(numeric)))
 }
 
-export interface DefaultApiUrlPatch {
+interface DefaultApiUrlPatch {
   baseUrl: string
   apiKey?: string
   apiMode?: ApiMode

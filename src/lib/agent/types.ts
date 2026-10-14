@@ -1,4 +1,4 @@
-export type AgentRunStatus = 'idle' | 'running' | 'completed' | 'stopped' | 'error' | 'interrupted'
+type AgentRunStatus = 'idle' | 'running' | 'completed' | 'stopped' | 'error' | 'interrupted'
 
 export interface AgentModel {
   id: string
