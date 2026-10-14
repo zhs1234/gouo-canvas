@@ -133,6 +133,13 @@ describe('Agent tool boundary', () => {
     expect(mocks.submit).toHaveBeenCalledWith({ prompt: '海报', inputImageIds: ['reference'], params: { n: 1 }, source: { kind: 'agent', conversationId: 'conversation', projectId: 'canvas' }, requestId: 'agent:conversation:call_1', signal: expect.any(AbortSignal) })
   })
 
+  it('uses the image count chosen in the composer unless the Agent specifies n', async () => {
+    await run('create_image_task', { prompt: '海报' }, { ...conversation, imageCount: 3 })
+    expect(mocks.submit).toHaveBeenLastCalledWith(expect.objectContaining({ params: { n: 3 } }))
+    await run('create_image_task', { prompt: '海报', params: { n: 1 } }, { ...conversation, imageCount: 3 })
+    expect(mocks.submit).toHaveBeenLastCalledWith(expect.objectContaining({ params: { n: 1 } }))
+  })
+
   it.each([undefined, false, true])('ends after image submission only when explicitly requested (%s)', async (finishAfterSubmit) => {
     const output = await run('create_image_task', { prompt: '海报', finishAfterSubmit })
     expect(output).toMatchObject({ taskIds: ['task'], finishAfterSubmit: finishAfterSubmit === true })

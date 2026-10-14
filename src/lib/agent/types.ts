@@ -46,6 +46,8 @@ export interface AgentConversation {
   messages: AgentMessage[]
   draft: string
   referenceImageIds: string[]
+  // 输入框选择的每次生成张数，Agent 没有另行指定时按它提交；旧会话没有此字段，按 1 张
+  imageCount?: number
   status: AgentRunStatus
   error?: string
   createdAt: number

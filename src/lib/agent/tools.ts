@@ -183,18 +183,20 @@ export async function executeAgentTool(input: {
     if (values.quality !== undefined && !['auto', 'low', 'medium', 'high'].includes(values.quality as string)) throw new Error('图片质量无效')
     if (values.n !== undefined && (!Number.isInteger(values.n) || (values.n as number) < 1 || (values.n as number) > getMaxTaskImages())) throw new Error(`图片数量必须为 1 到 ${getMaxTaskImages()}`)
     if (values.output_format !== undefined && !['png', 'jpeg', 'webp'].includes(values.output_format as string)) throw new Error('图片格式无效')
+    // 没有指定张数时按输入框选择的张数；运营方后来调低上限时按上限
+    const defaultCount = Math.min(conversation.imageCount ?? 1, getMaxTaskImages())
     // 从最近一条用户消息起累计已提交的张数
     const start = conversation.messages.map((message) => message.role).lastIndexOf('user')
     const submitted = conversation.messages.slice(start + 1).flatMap((message) => message.toolCalls ?? [])
       .filter((call) => call.name === 'create_image_task' && call.status === 'done' && call.id !== input.callId)
       .reduce((sum, call) => {
         try {
-          return sum + (Number(JSON.parse(call.arguments)?.params?.n) || 1)
+          return sum + (Number(JSON.parse(call.arguments)?.params?.n) || defaultCount)
         } catch {
-          return sum + 1
+          return sum + defaultCount
         }
       }, 0)
-    const requested = (values.n as number | undefined) ?? 1
+    const requested = (values.n as number | undefined) ?? defaultCount
     if (submitted + requested > getAgentLimits().confirmImages) {
       // 按当前目录价格显示预计扣费；读取失败时只提示按模型计费，提交时仍会校验价格版本
       let cost = '每张按所选图片模型的价格计费。'
@@ -237,7 +239,7 @@ export async function executeAgentTool(input: {
       input.signal.throwIfAborted()
       if (!confirmed) throw new Error('用户没有确认继续生成更多图片，本次未提交。')
     }
-    const taskId = await submitImageTask({ prompt: args.prompt, params: values as Partial<TaskParams>, inputImageIds: refs, source: { kind: 'agent', conversationId: conversation.id, projectId: conversation.projectId }, requestId: getAgentRequestId(conversation.id, input.callId), signal: input.signal })
+    const taskId = await submitImageTask({ prompt: args.prompt, params: { ...values, n: requested } as Partial<TaskParams>, inputImageIds: refs, source: { kind: 'agent', conversationId: conversation.id, projectId: conversation.projectId }, requestId: getAgentRequestId(conversation.id, input.callId), signal: input.signal })
     const task = useAppStore.getState().tasks.find((entry) => entry.id === taskId)
     return { result: JSON.stringify({ ...(task ? getAgentTaskResult(task) : { taskId, status: 'running' }), message: '图片已提交，后台继续生成；请勿重复提交。' }), taskIds: [taskId], referenceImageIds: task?.outputImages, finishAfterSubmit: args.finishAfterSubmit === true && task?.status !== 'error' && !task?.outputErrors?.length }
   }
