@@ -1921,7 +1921,8 @@ export async function importData(file: File, options: ImportOptions = { importCo
       // 导入文档使用新 ID，避免覆盖另一个设备尚未拉取的项目。
       const canvasIds = new Map((data.canvasProjects ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
       const conversationIds = new Map((data.agentConversations ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
-      const taskIds = new Map(freshTasks.map((task) => [task.id, importedId(task.id)]))
+      // 之前导入过的任务已存为 imported-<id>，重复导入的文档也要指向它
+      const taskIds = new Map(data.tasks.filter((task) => !existingIds.has(task.id)).map((task) => [task.id, importedId(task.id)]))
       const remapDocument = <T,>(doc: T): T => JSON.parse(JSON.stringify(doc, (key, value) => {
         if (key === 'taskId') return taskIds.get(value) ?? value
         if (key === 'taskIds' && Array.isArray(value)) return value.map((id) => taskIds.get(id) ?? id)

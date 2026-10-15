@@ -97,7 +97,7 @@ vi.mock('./lib/transparentImage', () => ({
   })),
   removeKeyedBackgroundFromDataUrl: vi.fn(async (dataUrl: string) => `transparent:${dataUrl}`),
 }))
-import { clearImages, clearTasks, getAllTasks, getImage, putImage, putTask as putDbTask } from './lib/db'
+import { clearImages, clearTasks, getAllTasks, getImage, importTaskData, putImage, putTask as putDbTask } from './lib/db'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
 
@@ -923,9 +923,14 @@ describe('data import', () => {
     expect(await getImage('new-image')).toMatchObject({ dataUrl: 'data:image/png;base64,AQID' })
     expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 1 个任务，保留 1 个同 ID 的现有任务', 'success')
     // 再次导入同一份备份不能重复添加任务
-    const again = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'existing', prompt: 'old' }), task({ id: 'new', outputImages: ['new-image'], cloudId: 'foreign' })], imageFiles: { 'new-image': { path: 'images/new.png' } } }, { 'images/new.png': new Uint8Array([1, 2, 3]) }), { importTasks: true })
+    const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [{ id: 'msg', role: 'assistant' as const, content: '', taskIds: ['new'], createdAt: 1 }], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1 }
+    vi.stubGlobal('window', new EventTarget())
+    const again = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'existing', prompt: 'old' }), task({ id: 'new', outputImages: ['new-image'], cloudId: 'foreign' })], agentConversations: [conversation], imageFiles: { 'new-image': { path: 'images/new.png' } } }, { 'images/new.png': new Uint8Array([1, 2, 3]) }), { importTasks: true })
     expect(again).toBe(true)
     expect(await getAllTasks()).toHaveLength(2)
+    // 重复导入的会话仍要指向之前导入的任务
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations?.[0].messages[0]).toMatchObject({ taskIds: ['imported-new'] })
+    vi.unstubAllGlobals()
   })
 
   it('does not change UI data or configuration when the import transaction fails', async () => {
