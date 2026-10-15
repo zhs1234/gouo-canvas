@@ -40,6 +40,17 @@ func PurgeGouoTrash(now time.Time) error {
 			users[id] = true
 		}
 	}
+	// 没有挂在任何作品上的旧图片（从画布或会话里删掉的、上传后没用上的）也要清理，否则一直占着空间，
+	// 而用户看不到也删不掉；只被文档引用的图片会在逐个账号清理时保留下来
+	var orphanUsers []int
+	if err := DB.Model(&GouoAsset{}).Where("updated_at < ?", cutoff).
+		Where("NOT EXISTS (SELECT 1 FROM gouo_task_assets WHERE gouo_task_assets.asset_id = gouo_assets.id)").
+		Distinct("user_id").Pluck("user_id", &orphanUsers).Error; err != nil {
+		return err
+	}
+	for _, id := range orphanUsers {
+		users[id] = true
+	}
 	for _, id := range deletedUsers {
 		for _, model := range []any{&GouoTask{}, &GouoAsset{}, &GouoDocument{}, &GouoFavoriteCollection{}} {
 			var count int64

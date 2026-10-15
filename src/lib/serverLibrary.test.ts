@@ -131,6 +131,21 @@ describe('server library', () => {
     expect(meta.get('tasks:seen')).toBe(12)
   })
 
+  it('reads a task again later when it was skipped because it was still running locally', async () => {
+    pages.visible = [cloudTask({ updated_at: 10 }), cloudTask({ id: 'cloud-2', client_task_id: 'task-2', updated_at: 9 })]
+    const library = await import('./serverLibrary')
+    state.tasks = [localTask({ status: 'running', outputImages: [] })]
+    await library.startServerLibrary()
+    // 本地仍在生成的任务没有合并，游标不能越过它
+    expect(state.tasks.find((task) => task.id === 'task-1')?.status).toBe('running')
+    expect(meta.get('tasks:seen')).toBe(9)
+    // 页面刷新后本地标成中断，再次同步时取回服务端已扣费的结果
+    state.tasks = state.tasks.map((task) => task.id === 'task-1' ? { ...task, status: 'error' as const } : task)
+    await library.refreshServerLibrary()
+    expect(state.tasks.find((task) => task.id === 'task-1')).toMatchObject({ status: 'done', outputImages: ['cloud-a-out'] })
+    expect(meta.get('tasks:seen')).toBe(10)
+  })
+
   it('downloads all server works again after local tasks are cleared', async () => {
     pages.visible = [cloudTask()]
     const library = await import('./serverLibrary')

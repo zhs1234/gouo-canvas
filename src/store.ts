@@ -74,8 +74,9 @@ const openAIWatchdogTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const watchdogTimedOutTasks = new Set<string>()
 const taskExecutions = new Map<string, symbol>()
 const OPENAI_INTERRUPTED_ERROR = '请求中断'
-// 单图请求的看门狗；请求本身在 api.ts 里按 960 秒中止并转入结果恢复
-const REQUEST_WATCHDOG_SECONDS = 600
+// 单图请求的看门狗，只兜底卡死的情况：请求本身在 api.ts 里按 960 秒中止，再用最多 960 秒恢复结果。
+// 看门狗必须晚于这两段，否则请求仍在进行时就提示失败，用户点重试会再扣一次费
+const REQUEST_WATCHDOG_SECONDS = 960 * 2 + 60
 // 执行中的任务持有的 Web Locks 名称前缀，供其他标签页判断任务仍在执行
 const TASK_LOCK_PREFIX = 'gouo-task:'
 // 每个打开的标签页持有它的共享锁，用来判断是否还有其他标签页

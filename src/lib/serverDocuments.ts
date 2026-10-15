@@ -50,7 +50,12 @@ async function writeLocal(kind: Kind, doc: Document, expectedRevision: number, f
   const edited = current && current.revision !== before.revision ? current : undefined
   if (kind === 'canvases') {
     markCanvasPersisted(doc as CanvasProject)
-    useCanvasStore.setState((state) => ({ projects: [...state.projects.filter((item) => item.id !== doc.id), doc as CanvasProject] }))
+    useCanvasStore.setState((state) => {
+      // 换成服务端版本后，原来的撤销记录还是被替换前的内容，撤销一次就会把其他设备的修改覆盖回去
+      const histories = { ...state.histories }
+      if (fromServer) delete histories[doc.id]
+      return { projects: [...state.projects.filter((item) => item.id !== doc.id), doc as CanvasProject], histories }
+    })
   } else {
     markAgentPersisted(doc as AgentConversation)
     useAgentStore.setState((state) => ({ conversations: [...state.conversations.filter((item) => item.id !== doc.id), doc as AgentConversation] }))

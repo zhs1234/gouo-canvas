@@ -184,8 +184,10 @@ function mergeWithLocal(local: TaskRecord | undefined, server: TaskRecord): Task
   }
 }
 
+// 返回因本地仍在生成而没有合并的任务 ID
 function applyServerTasks(serverTasks: TaskRecord[]) {
-  if (!serverTasks.length || !isStorageScopeCurrent()) return
+  const skipped = new Set<string>()
+  if (!serverTasks.length || !isStorageScopeCurrent()) return skipped
   const state = useStore.getState()
   const pending = new Map(serverTasks.map((task) => [task.id, task]))
   const changed: TaskRecord[] = []
@@ -194,7 +196,10 @@ function applyServerTasks(serverTasks: TaskRecord[]) {
     if (!server) return local
     pending.delete(local.id)
     // 正在生成的任务以本地进度为准，完成后会再次读取。
-    if (local.status === 'running') return local
+    if (local.status === 'running') {
+      skipped.add(local.id)
+      return local
+    }
     const merged = mergeWithLocal(local, server)
     changed.push(merged)
     return merged
@@ -210,6 +215,7 @@ function applyServerTasks(serverTasks: TaskRecord[]) {
     applyingServer = false
   }
   for (const task of changed) void putTask(task)
+  return skipped
 }
 
 // 服务端按更新时间倒序返回，读到上次已见过的记录即可停止；首次登录读取全部。
@@ -220,6 +226,7 @@ async function loadTasks(hidden: boolean) {
   let cursor = ''
   let newest = seen
   const loaded: TaskRecord[] = []
+  const updatedAt = new Map<string, number>()
   do {
     const page = await listCloudTasks(hidden, cursor)
     let reachedSeen = false
@@ -229,12 +236,16 @@ async function loadTasks(hidden: boolean) {
         break
       }
       newest = Math.max(newest, task.updated_at)
-      loaded.push(await serverTaskToLocal(task))
+      const local = await serverTaskToLocal(task)
+      updatedAt.set(local.id, task.updated_at)
+      loaded.push(local)
     }
     cursor = reachedSeen ? '' : page.next_cursor
   } while (cursor)
   if (generation !== cursorGeneration) return
-  applyServerTasks(loaded)
+  // 本地还在生成而没合并的任务：游标停在它之前，下次再读。否则页面刷新、本地标成中断后，
+  // 服务端已扣费的结果在这台设备上再也读不到
+  for (const id of applyServerTasks(loaded)) newest = Math.min(newest, (updatedAt.get(id) ?? newest + 1) - 1)
   await putCloudMeta(key, newest)
 }
 

@@ -46,6 +46,11 @@ func Relay(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), model.GouoImageRequestTimeout)
 		defer cancel()
 		c.Request = c.Request.WithContext(ctx)
+		// 上游请求要受同一个截止时间约束，否则卡住超过退款等待时间后会先退款、再白白付上游费用；
+		// 但不能随客户端断开而取消，断开后服务端还要把结果存下来供恢复
+		upstreamCtx, cancelUpstream := context.WithTimeout(context.WithoutCancel(c.Request.Context()), model.GouoImageRequestTimeout)
+		defer cancelUpstream()
+		c.Set(config.GinGouoUpstreamContextKey, upstreamCtx)
 	}
 	defer func() {
 		if value, ok := c.Get("gouo_image_quota"); ok {

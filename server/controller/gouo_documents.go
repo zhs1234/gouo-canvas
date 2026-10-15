@@ -122,7 +122,10 @@ func validateGouoDocument(value any, depth int) bool {
 			}
 		}
 	case string:
-		if strings.Contains(strings.ToLower(value), "data:image/") || strings.HasPrefix(value, "blob:") {
+		// 只拦整个值就是内嵌图片或本地临时地址的字段（图片应先上传为作品库文件）；
+		// 聊天文字或工具参数里提到 data:image/ 不算，否则这份文档会永远存不上服务器
+		lower := strings.ToLower(strings.TrimSpace(value))
+		if strings.HasPrefix(lower, "data:image/") || strings.HasPrefix(lower, "blob:") {
 			return false
 		}
 	}

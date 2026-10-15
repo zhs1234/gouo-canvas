@@ -144,7 +144,9 @@ const Setting = {
           url: '/panel/redemption',
           icon: icons.IconCoin,
           breadcrumbs: false,
-          isAdmin: true
+          isAdmin: true,
+          // 兑换码接口只允许 root
+          isRoot: true
         },
         {
           id: 'payment',

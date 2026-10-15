@@ -86,6 +86,28 @@ describe('server documents', () => {
     expect(meta.get('documents-cursor:conversations')).toBe('next')
   })
 
+  it('drops canvas undo history when the server version replaces the local one', async () => {
+    const canvas = (patch: Record<string, unknown>) => ({ id: 'cv', title: '画布', nodes: [], revision: 1, ...patch })
+    const local = canvas({ title: '本地' })
+    const canvasState: { projects: unknown[]; histories: Record<string, unknown> } = { projects: [local], histories: { cv: { past: [canvas({ title: '冲突前' })], future: [] }, other: { past: [], future: [] } } }
+    meta.set('document:canvases:cv', { revision: 1, fingerprint: JSON.stringify(local) })
+    vi.doMock('./canvas/document', () => ({ serializeCanvasProject: (doc: unknown) => doc, validateCanvasProject: () => {} }))
+    vi.doMock('../stores/canvasStore', () => ({
+      markCanvasPersisted: vi.fn(),
+      useCanvasStore: {
+        getState: () => ({ ...canvasState, hydrate: async () => {} }),
+        setState: (update: (state: typeof canvasState) => Partial<typeof canvasState>) => Object.assign(canvasState, update(canvasState)),
+      },
+    }))
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.backendRequest).mockImplementation(async (path: string) => ({ items: path.includes('canvases') ? [{ client_id: 'cv', title: '服务端', revision: 2, document: canvas({ title: '服务端', revision: 3 }), assets: [] }] : [], next_cursor: 'next', has_more: false }) as never)
+    const docs = await import('./serverDocuments')
+    await docs.startServerDocuments()
+    // 换成其他设备的版本后不能再撤销回冲突前的内容，否则会把对方的修改覆盖回去
+    expect(canvasState.histories).not.toHaveProperty('cv')
+    expect(canvasState.histories).toHaveProperty('other')
+  })
+
   it('keeps a draft typed while remote assets are downloading', async () => {
     const local = conversation({ draft: '' })
     stored.set('conv', local)
