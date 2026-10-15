@@ -75,6 +75,7 @@ export type GouoImageModel = {
 
 export type GouoAgentModel = {
   model: string
+  billing_mode?: 'ratio' | 'tiered_expr' | 'per_request'
   listed: boolean
   vision: boolean
   sort: number

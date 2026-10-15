@@ -29,6 +29,23 @@ var ErrGouoChargeState = errors.New("请求账务状态已变化，请刷新后�
 var ErrGouoImageRequestExists = errors.New("此图片请求已受理，请查询原任务；结果未知时请勿重新派发")
 var ErrGouoInsufficientQuota = errors.New("余额不足")
 
+// CreateGouoImageRequest 只登记去重与结果恢复；New API 负责新请求的全部扣费和退款。
+func CreateGouoImageRequest(charge *GouoImageCharge) error {
+	if charge.ID == "" || len(charge.ID) > 64 || charge.UserID <= 0 {
+		return errors.New("图片请求无效")
+	}
+	charge.Quota, charge.PriceCNY, charge.Status = 0, 0, GouoChargeReserved
+	err := DB.Create(charge).Error
+	if err == nil {
+		return nil
+	}
+	var count int64
+	if DB.Model(&GouoImageCharge{}).Where("id = ?", charge.ID).Count(&count).Error == nil && count > 0 {
+		return ErrGouoImageRequestExists
+	}
+	return err
+}
+
 // GouoImageRequestID 把客户端请求 ID 绑定到用户，不同用户用同一个 ID 不会冲突
 func GouoImageRequestID(userID int, requestID string) string {
 	hash := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", userID, requestID)))
@@ -138,6 +155,9 @@ func FinishGouoImageCharge(id, status, note string) (*GouoImageCharge, error) {
 		if err := tx.Where("id = ?", id).First(&charge).Error; err != nil {
 			return err
 		}
+		if charge.Quota == 0 {
+			return nil
+		}
 		if err := tx.Unscoped().Select("id", "key").First(&token, charge.TokenID).Error; err != nil {
 			return err
 		}
@@ -157,6 +177,9 @@ func FinishGouoImageCharge(id, status, note string) (*GouoImageCharge, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if charge.Quota == 0 {
+		return &charge, nil
 	}
 	invalidateGouoQuotaCache(charge.UserID, token.Key)
 	if status == GouoChargeSettled {

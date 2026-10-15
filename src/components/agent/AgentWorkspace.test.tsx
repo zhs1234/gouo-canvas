@@ -61,10 +61,31 @@ it('shows an obsolete model as unselected and lets the sole available model actu
   expect(mocks.tool).not.toHaveBeenCalled()
 })
 
+it('labels expression pricing without claiming the Agent model is free or has a flat token price', () => {
+  mocks.models[0] = { ...mocks.models[0], billing_mode: 'tiered_expr', input_price_cny: 0, output_price_cny: 0 }
+  try {
+    const markup = render()
+    expect(markup).toContain('按表达式计费')
+    expect(markup).not.toContain('>免费</span>')
+    expect(markup).not.toContain('/ 百万 token')
+  } finally {
+    mocks.models[0] = { id: 'available', name: '可用模型', tool_calls: true, vision: false }
+  }
+})
+
 it('renders preserved image attachments after their original task has been deleted', () => {
   const markup = render()
   expect(markup).toContain('图片任务记录已移除')
   expect(markup).toContain('data-image-id="kept-image"')
+})
+
+it('renders native reasoning in a separate collapsed section', () => {
+  mocks.conversations[0].messages = [{ id: 'reply', role: 'assistant', content: '方案正文', reasoning: '先分析构图', createdAt: 1 }]
+  const markup = render()
+  expect(markup).toContain('<summary>思考过程</summary>')
+  expect(markup).toContain('先分析构图')
+  expect(markup).toContain('方案正文')
+  expect(markup).not.toContain('<details class="agent-message-reasoning" open')
 })
 
 it('shows an unavailable linked canvas explicitly and keeps unlinking and sending available', () => {

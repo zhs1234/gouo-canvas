@@ -100,9 +100,9 @@ describe('product image result recovery', () => {
     expect(fetchMock.mock.calls[0][1]?.method).toBe('GET')
   })
 
-  it('tells the user a failed request was refunded automatically', async () => {
+  it('asks users to check native billing when the original image request failed', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: { status: 'refunded', recoverable: false, reason: 'result_unavailable' } })))
-    await expect(callImageApi({ ...options, recoverOnly: true })).rejects.toMatchObject({ imageResultRecovery: true, message: expect.stringContaining('已自动退回') })
+    await expect(callImageApi({ ...options, recoverOnly: true })).rejects.toMatchObject({ imageResultRecovery: true, message: expect.stringContaining('核对扣费或退款') })
   })
 
   it('stops recovery at the original request timeout', async () => {

@@ -119,9 +119,12 @@ export function AgentModelDrawer(props: AgentModelDrawerProps) {
               )}
             />
             <p className='text-muted-foreground text-sm'>
-              {t(
-                'Billed by tokens with the New API model price and the user group ratio.'
-              )}{' '}
+              {row?.billing_mode === 'per_request' && t('Per request')}
+              {row?.billing_mode === 'tiered_expr' && t('Expression billing')}
+              {(!row?.billing_mode || row.billing_mode === 'ratio') &&
+                t(
+                  'Billed by tokens with the New API model price and the user group ratio.'
+                )}{' '}
               <Link
                 to='/system-settings/billing/$section'
                 params={{ section: GOUO_MODEL_PRICING_SECTION }}

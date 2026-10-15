@@ -9,7 +9,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/gouo_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -144,4 +147,43 @@ func TestGouoAdminAPIs(t *testing.T) {
 func itoa(value int) string {
 	data, _ := common.Marshal(value)
 	return string(data)
+}
+
+func TestGouoAgentExpressionPricing(t *testing.T) {
+	setting := config.GlobalConfig.Get("billing_setting").(*billing_setting.BillingSetting)
+	previous := *setting
+	prices, err := common.Marshal(ratio_setting.GetModelPriceCopy())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		*setting = previous
+		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(prices)))
+	})
+	// 切换到表达式后，旧按次价格仍会保存，不能让它挡住生效的表达式。
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"gouo-expr-test":0.01}`))
+	setting.BillingMode = map[string]string{"gouo-expr-test": billing_setting.BillingModeTieredExpr}
+	for _, test := range []struct {
+		name, expression, reason string
+	}{
+		{"token and cache", `tier("base", p * 2 + c * 8 + cr * 0.2)`, ""},
+		{"context tiers", `len <= 200000 ? tier("short", p * 2 + c * 8) : tier("long", p * 4 + c * 12)`, ""},
+		{"request multiplier", `tier("base", p * 2 + c * 8) * (param("service_tier") == "fast" ? 2 : 1)`, ""},
+		{"fixed request", `tier("request", fixed(0.01))`, ""},
+		{"explicit free", `tier("request", fixed(0))`, ""},
+		{"missing", "", "No price is set in model pricing yet"},
+		{"invalid", `tier(`, "Expression error"},
+		{"negative", `tier("base", p * -2)`, "Expression error"},
+		{"task usage", `tier("task", u("seconds") * 0.4)`, "Expression error"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setting.BillingExpr = map[string]string{"gouo-expr-test": test.expression}
+			input, output, reason := gouoAgentPrice("gouo-expr-test")
+			assert.Equal(t, test.reason, reason)
+			assert.Zero(t, input)
+			assert.Zero(t, output)
+		})
+	}
+	setting.BillingMode = map[string]string{}
+	_, _, reason := gouoAgentPrice("gouo-expr-test")
+	assert.Empty(t, reason)
+	assert.Equal(t, "per_request", model.GouoBillingMode("gouo-expr-test"))
 }

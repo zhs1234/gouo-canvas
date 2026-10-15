@@ -228,7 +228,7 @@ describe('product model task snapshots', () => {
     expect(callImageApi).not.toHaveBeenCalled()
     expect(useStore.getState().tasks).toEqual([])
     const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
-    expect(confirmation).toMatchObject({ title: '确认付费重试', message: expect.stringContaining('全部成功预计扣费 10 积分') })
+    expect(confirmation).toMatchObject({ title: '确认付费重试', message: expect.stringContaining('实际用量和账号分组倍率结算') })
     await confirmation?.action?.()
     expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
     expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
@@ -237,7 +237,7 @@ describe('product model task snapshots', () => {
   it('requires confirmation before retrying a legacy task at the current price', async () => {
     await retryTask(task({ apiModel: 'image-a', status: 'error' }))
     expect(useStore.getState().tasks).toEqual([])
-    expect(useStore.getState().setConfirmDialog).toHaveBeenCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('当前价格为 10 积分/张。重试会新建 1 次单图请求') }))
+    expect(useStore.getState().setConfirmDialog).toHaveBeenCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('重试会新建 1 张图片') }))
   })
 
   it('rechecks the quote after the user confirms a retry', async () => {
@@ -248,12 +248,12 @@ describe('product model task snapshots', () => {
     const { callImageApi } = await import('./lib/api')
     expect(callImageApi).not.toHaveBeenCalled()
     expect(useStore.getState().tasks).toEqual([])
-    expect(useStore.getState().setConfirmDialog).toHaveBeenLastCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('50 积分') }))
+    expect(useStore.getState().setConfirmDialog).toHaveBeenLastCalledWith(expect.objectContaining({ title: '确认重试价格', message: expect.stringContaining('定价或能力已更新') }))
   })
 
   it('preserves billing guidance when a running backend task is interrupted', () => {
     const result = markInterruptedOpenAIRunningTasks([task({ status: 'running' })])
-    expect(result.tasks[0].error).toContain('自动退回积分')
+    expect(result.tasks[0].error).toContain('核对实际扣费或退款')
   })
 
   it('distinguishes local save failure after a paid result from an upstream failure', async () => {
@@ -264,7 +264,7 @@ describe('product model task snapshots', () => {
     await submitTask()
     await vi.waitFor(() => expect(useStore.getState().tasks[0].status).toBe('error'))
     expect(useStore.getState().tasks[0].error).toContain('生成结果已返回，但本地处理或保存失败')
-    expect(useStore.getState().tasks[0].error).toContain('自动退回积分')
+    expect(useStore.getState().tasks[0].error).toContain('核对实际扣费或退款')
     expect(callImageApi).toHaveBeenCalledTimes(1)
   })
 
@@ -286,8 +286,8 @@ describe('product model task snapshots', () => {
     const { callImageApi } = await import('./lib/api')
     expect(callImageApi).not.toHaveBeenCalled()
     const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
-    expect(confirmation?.message).toContain('2 次单图请求')
-    expect(confirmation?.message).toContain('全部成功预计扣费 60 积分')
+    expect(confirmation?.message).toContain('2 张图片')
+    expect(confirmation?.message).toContain('实际用量和账号分组倍率结算')
     expect(confirmation?.message).toContain('包含已经成功的图片')
     await confirmation?.action?.()
     expect(useStore.getState().tasks).toHaveLength(2)

@@ -111,7 +111,7 @@ describe('server library', () => {
 
   it('loads server works, keeps local image ids, derives transparent outputs, and reads only newer pages later', async () => {
     pages.visible = [
-      cloudTask(),
+      cloudTask({ result_meta: { nativeImageBatch: true } }),
       cloudTask({ id: 'cloud-2', client_task_id: 'task-2', updated_at: 9, result_meta: { transparentOutput: true }, assets: [{ asset_id: 'a-raw', role: 'output', position: 0, client_image_id: '', asset: asset('a-raw') }] }),
     ]
     const backend = await import('./gouoBackend')
@@ -119,7 +119,7 @@ describe('server library', () => {
     state.tasks = [localTask()]
     await library.startServerLibrary()
     const generated = state.tasks.find((task) => task.id === 'task-1')!
-    expect(generated).toMatchObject({ cloudId: 'cloud-1', outputImages: ['local-out'] })
+    expect(generated).toMatchObject({ cloudId: 'cloud-1', outputImages: ['local-out'], nativeImageBatch: true })
     const other = state.tasks.find((task) => task.id === 'task-2')!
     expect(other).toMatchObject({ transparentOutput: true, transparentOriginalImages: ['cloud-a-raw'], outputImages: ['cloud-a-raw~transparent'] })
     expect(assetMap.get('cloud-a-raw~transparent')).toMatchObject({ cloudAssetId: 'a-raw', derive: 'transparent' })
@@ -128,6 +128,7 @@ describe('server library', () => {
     pages.visible = [cloudTask({ updated_at: 12, prompt: '改名后' }), cloudTask({ id: 'cloud-2', client_task_id: 'task-2', updated_at: 9 })]
     await library.refreshServerLibrary()
     expect(state.tasks.find((task) => task.id === 'task-1')?.prompt).toBe('改名后')
+    expect(state.tasks.find((task) => task.id === 'task-1')?.nativeImageBatch).toBe(true)
     expect(meta.get('tasks:seen')).toBe(12)
   })
 

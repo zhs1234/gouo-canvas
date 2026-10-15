@@ -53,7 +53,7 @@ export async function listGouoImageModels(): Promise<
 }
 
 export async function saveGouoImageModel(
-  data: Omit<GouoImageModel, 'groups' | 'error' | 'updated_at'>
+  data: Omit<GouoImageModel, 'groups' | 'error' | 'updated_at' | 'price_cny'>
 ): Promise<ApiResponse> {
   const res = await api.put(`${BASE}/models`, data)
   return res.data

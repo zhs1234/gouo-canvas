@@ -4,12 +4,11 @@ import { useStore, ensureImageCached, cacheImage, executeTask } from '../store'
 import { putTask, storeImage } from './db'
 import { orderInputImagesForMask } from './mask'
 import { validateMaskMatchesImage } from './canvasImage'
-import { getCurrentUser, getImageModelQuote, getMaxTaskImages } from './gouoBackend'
+import { getImageModelQuote, getMaxTaskImages } from './gouoBackend'
 import { getChangedParams, normalizeTaskParams } from './paramCompatibility'
 import { getTransparentRequestParams, createTransparentOutputMeta } from './transparentImage'
-import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
+import { getActionableErrorMessage } from './userGuidance'
 import { isStorageScopeCurrent } from './storageScope'
-import { formatPoints } from './accountUsage'
 
 interface ImageTaskInput {
   prompt: string
@@ -91,17 +90,6 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       showToast(err instanceof Error ? err.message : String(err), 'error')
       return
     }
-    // 余额明显不够时不建任务，免得先提示"已提交"再失败；读不到余额就交给服务端判断
-    const user = await getCurrentUser().catch(() => null)
-    const cost = quote.price_cny * params.n
-    if (typeof user?.balance_cny === 'number' && user.balance_cny + 1e-9 < cost) {
-      const message = `余额不足：本次预计 ${formatPoints(cost)}，当前余额 ${formatPoints(user.balance_cny)}`
-      requestUserCenter('topup')
-      if (input) throw new Error(message)
-      showToast(`${message}，请先兑换积分`, 'error')
-      return
-    }
-
     let orderedInputImages = inputImages
     let maskImageId: string | null = null
     let maskTargetImageId: string | null = null
@@ -164,6 +152,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       apiModel: model,
       gouoPriceVersion: quote.price_version,
       gouoPriceCNY: quote.price_cny,
+      nativeImageBatch: Boolean(quote.billing_mode && taskParams.n > 1 && taskParams.n <= quote.max_outputs),
       inputImageIds: orderedInputImages.map((i) => i.id),
       maskTargetImageId,
       maskImageId,

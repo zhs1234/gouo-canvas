@@ -57,6 +57,7 @@ export interface GouoUsageLog {
 
 
 export interface GouoImageModel {
+  billing_mode?: 'ratio' | 'tiered_expr' | 'per_request'
   id: string
   name: string
   price_cny: number
@@ -98,7 +99,7 @@ function checkRateLimit(response: Response) {
 
 export async function getImageModels(): Promise<GouoImageModel[]> {
   const data = await backendRequest<unknown>('/api/gouo/models')
-  if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny <= 0 || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1)) {
+  if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny < 0 || (entry.billing_mode !== undefined && !['ratio', 'tiered_expr', 'per_request'].includes(entry.billing_mode)) || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1)) {
     throw new Error('图片模型目录格式无效')
   }
   cachedImageModels = data as GouoImageModel[]
@@ -123,7 +124,7 @@ export function isLowModerationAllowed() {
   return cachedStatus?.gouo_allow_low_moderation === true
 }
 
-// 与服务端的参数校验一致：图片按张计价，尺寸、画质和参考图张数不能超出后台为模型限定的范围
+// 与服务端的参数校验一致：尺寸、画质和参考图张数不能超出后台为模型限定的范围。
 export function getImageParamIssue(model: GouoImageModel, params: Pick<TaskParams, 'size' | 'quality' | 'moderation'>, inputCount: number) {
   if (params.size !== 'auto' && !model.sizes?.includes(getSizeTier(params.size)!)) return '此模型不支持该分辨率，请选择自动尺寸或已开放的分辨率'
   if (model.qualities?.length && (params.quality === 'auto' ? !model.qualities.includes('high') : !model.qualities.includes(params.quality))) {

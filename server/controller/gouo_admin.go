@@ -179,6 +179,7 @@ func UpdateGouoAdminModel(c *gin.Context) {
 
 type gouoAdminAgentModel struct {
 	model.GouoAgentModelConfig
+	BillingMode    string   `json:"billing_mode"`
 	InputPriceCNY  float64  `json:"input_price_cny"`
 	OutputPriceCNY float64  `json:"output_price_cny"`
 	Groups         []string `json:"groups"`
@@ -213,6 +214,7 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 	models := make([]*gouoAdminAgentModel, 0, len(byModel))
 	for _, item := range byModel {
 		sort.Strings(item.Groups)
+		item.BillingMode = model.GouoBillingMode(item.Model)
 		item.InputPriceCNY, item.OutputPriceCNY, item.Reason = gouoAgentPrice(item.Model)
 		switch {
 		case !item.Listed:

@@ -93,17 +93,24 @@ function useAgentModelColumns(
     },
     {
       id: 'price',
-      header: t('Price per million tokens'),
+      header: t('Pricing'),
       size: 200,
-      cell: ({ row }) =>
-        row.original.input_price_cny || row.original.output_price_cny ? (
-          <span className='text-sm'>
+      cell: ({ row }) => {
+        if (row.original.billing_mode === 'tiered_expr') {
+          return <span className='text-sm'>{t('Expression billing')}</span>
+        }
+        if (row.original.billing_mode === 'per_request') {
+          return <span className='text-sm'>{t('Per request')}</span>
+        }
+        return row.original.input_price_cny || row.original.output_price_cny ? (
+          <span className='text-sm' title={t('Price per million tokens')}>
             {t('Input')} {formatPrice(row.original.input_price_cny)} ·{' '}
             {t('Output')} {formatPrice(row.original.output_price_cny)}
           </span>
         ) : (
           '—'
-        ),
+        )
+      },
     },
     {
       id: 'capabilities',

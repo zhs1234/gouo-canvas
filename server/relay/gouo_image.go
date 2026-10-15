@@ -30,6 +30,8 @@ import (
 	"github.com/QuantumNous/new-api/setting/gouo_setting"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	_ "golang.org/x/image/webp"
 )
 
@@ -40,7 +42,6 @@ var gouoRequestIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_:-]{1,512}$`)
 
 // gouoImageState 是一次光构图片请求的账务状态，存在 gin 上下文里，跨渠道重试共用
 type gouoImageState struct {
-	entry    *model.GouoImageModel
 	charge   *model.GouoImageCharge
 	settled  bool
 	capture  *gouoImageCapture
@@ -81,7 +82,7 @@ func gouoError(message, code string, status int) *types.NewAPIError {
 	return types.NewErrorWithStatusCode(errors.New(message), types.ErrorCode(code), status, types.ErrOptionWithSkipRetry())
 }
 
-// CheckGouoRequest 在 New API 计费之前运行：光构图片模型按后台目录校验参数并预扣，其他模型只做光构客户端相关的限制
+// CheckGouoRequest 在原生计费前校验客户端能力并登记请求，金额由 New API 统一处理。
 func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
 	row, enabled, err := model.GetGouoImageModel(info.OriginModelName)
 	if err != nil {
@@ -191,7 +192,7 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 			index = 0
 		}
 		capture = &gouoImageCapture{taskID: taskID, index: index, prompt: request.Prompt, model: request.Model, operation: "generation",
-			params: map[string]any{"n": 1, "size": request.Size, "quality": request.Quality}}
+			params: map[string]any{"n": n, "size": request.Size, "quality": request.Quality}}
 		var format string
 		if len(request.OutputFormat) > 0 && common.Unmarshal(request.OutputFormat, &format) == nil {
 			capture.params["output_format"] = format
@@ -210,19 +211,20 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 		requestID = "auto:" + c.GetString(common.RequestIdKey)
 	}
 	charge := &model.GouoImageCharge{ID: model.GouoImageRequestID(info.UserId, requestID), UserID: info.UserId, TokenID: info.TokenId,
-		ModelName: entry.ID, PriceCNY: entry.PriceCNY, PriceVersion: entry.PriceVersion, Quota: entry.Quota}
-	if err := model.ReserveGouoQuota(charge); err != nil {
+		ModelName: entry.ID, PriceVersion: entry.PriceVersion}
+	if err := model.CreateGouoImageRequest(charge); err != nil {
 		if errors.Is(err, model.ErrGouoImageRequestExists) {
 			return gouoError(err.Error(), "image_request_exists", http.StatusConflict)
 		}
-		return gouoError(err.Error(), "insufficient_image_quota", http.StatusPaymentRequired)
+		logger.LogError(c, "保存图片请求失败: "+err.Error())
+		return gouoError("保存图片请求失败，请稍后重试", "image_request_save_failed", http.StatusInternalServerError)
 	}
 	c.Header("X-Gouo-Charge-Id", charge.ID)
-	c.Set(helper.GouoImageContextKey, &gouoImageState{entry: entry, charge: charge, capture: capture})
+	c.Set(helper.GouoImageContextKey, &gouoImageState{charge: charge, capture: capture})
 	return nil
 }
 
-// 图片按次计价，尺寸、画质和参考图张数直接影响上游成本，按后台为模型限定的范围校验；审核强度按运营方设置
+// 尺寸、画质、参考图和审核强度按运营方为客户端开放的能力校验。
 func checkGouoImageParams(entry *model.GouoImageModel, size, quality, moderation string, inputs int) string {
 	// 很多上游不支持任意分辨率，只放行后台为模型开放的档位；没有开放档位时只能用自动尺寸
 	if size = strings.ToLower(strings.TrimSpace(size)); size != "" && size != "auto" {
@@ -276,23 +278,22 @@ func beginGouoAttempt(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 }
 
 // finishGouoImage 在上游成功返回后运行：校验图片、保存恢复结果、结算，再把响应回传给客户端。
-// 返回 true 表示这是光构图片请求，调用方不再走 New API 的结算
+// 成功时返回 false，让调用方继续 New API 的原生结算。
 func finishGouoImage(c *gin.Context, info *relaycommon.RelayInfo) (bool, *types.NewAPIError) {
 	value, ok := c.Get(helper.GouoImageContextKey)
 	if !ok {
 		return false, nil
 	}
 	state := value.(*gouoImageState)
-	data := state.buffer.body.Bytes()
-	var response dto.ImageResponse
-	if err := common.Unmarshal(data, &response); err != nil || !validGouoImages(response.Data) {
+	data, images, err := normalizeGouoImageResponse(state.buffer.body.Bytes())
+	if err != nil {
 		return true, types.NewErrorWithStatusCode(errors.New("上游未返回有效图片数据"), types.ErrorCode("invalid_image_response"), http.StatusBadGateway)
 	}
 	// 只有带客户端请求 ID 的结果能被取回，其余保存只会占用缓存
 	if c.GetHeader("X-Gouo-Request-Id") != "" {
 		if err := model.SaveGouoImageResult(state.charge.ID, data); err != nil {
 			logger.LogError(c, "图片恢复结果保存失败: "+err.Error())
-			return true, gouoError("图片结果保存失败，预扣积分已自动退回，可直接重试", "image_result_persist_failed", http.StatusInternalServerError)
+			return true, gouoError("图片结果保存失败，请在使用记录核对本次请求后再重试", "image_result_persist_failed", http.StatusInternalServerError)
 		}
 	}
 	// 先提交账务再回传图片：浏览器断开不能把已经成功的生成误退
@@ -300,31 +301,55 @@ func finishGouoImage(c *gin.Context, info *relaycommon.RelayInfo) (bool, *types.
 		return true, gouoError(err.Error(), "image_billing_unconfirmed", http.StatusInternalServerError)
 	}
 	state.settled = true
-	other := model.NewLogOther()
-	other.SetPublic("billing_unit", "successful_request")
-	other.SetPublic("price_cny", state.entry.PriceCNY)
-	other.SetPublic("gouo_charge_id", state.charge.ID)
-	other.SetAdmin("price_version", state.entry.PriceVersion)
-	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
-		ChannelId: info.ChannelId, ModelName: state.entry.ID, TokenName: c.GetString("token_name"), Quota: state.charge.Quota,
-		TokenId: info.TokenId, Group: info.UsingGroup, Other: other, UseTimeSeconds: int(common.GetTimestamp() - info.StartTime.Unix()),
-		Content: []*common.Message{common.NewMessage("光构图片按次计费 {{price}} 元", map[string]any{"price": state.entry.PriceCNY})},
-	})
 	if state.capture != nil {
-		recordGouoGeneration(c, state.capture, response.Data)
+		recordGouoGeneration(c, state.capture, images)
 	}
 	c.Writer = state.original
 	for key, values := range state.buffer.header {
 		c.Writer.Header()[key] = values
 	}
+	c.Writer.Header().Del("Content-Length")
 	c.Writer.WriteHeader(state.buffer.Status())
 	if _, err := c.Writer.Write(data); err != nil {
 		logger.LogWarn(c, "图片响应回传失败，结果可通过请求 ID 取回: "+err.Error())
 	}
-	return true, nil
+	return false, nil
 }
 
-// EndGouoImage 在 Relay 结束时运行：恢复响应写入器，没有结算的预扣全部退回（含上游结果未知的情况，这类费用由平台承担）
+// 与 New API 的图片计量一致：对象算一张，拆开的 URL/base64 取数量较多的一组，纯提示词不算图片。
+func normalizeGouoImageResponse(data []byte) ([]byte, []dto.ImageData, error) {
+	payload := gjson.GetBytes(data, "data")
+	var items []dto.ImageData
+	if payload.IsObject() {
+		var item dto.ImageData
+		if err := common.Unmarshal([]byte(payload.Raw), &item); err != nil {
+			return nil, nil, err
+		}
+		items = []dto.ImageData{item}
+	} else if err := common.Unmarshal([]byte(payload.Raw), &items); err != nil {
+		return nil, nil, err
+	}
+	var encoded, urls []dto.ImageData
+	for _, item := range items {
+		if strings.TrimSpace(item.B64Json) != "" {
+			encoded = append(encoded, item)
+		}
+		if strings.TrimSpace(item.Url) != "" {
+			urls = append(urls, item)
+		}
+	}
+	items = encoded
+	if len(urls) > len(encoded) {
+		items = urls
+	}
+	if !validGouoImages(items) {
+		return nil, nil, errors.New("上游未返回有效图片数据")
+	}
+	normalized, err := sjson.SetBytes(data, "data", items)
+	return normalized, items, err
+}
+
+// EndGouoImage 只更新请求状态并恢复写入器；新请求的退款由原生 BillingSession 处理。
 func EndGouoImage(c *gin.Context, apiErr *types.NewAPIError) *types.NewAPIError {
 	value, ok := c.Get(helper.GouoImageContextKey)
 	if !ok {
@@ -337,11 +362,11 @@ func EndGouoImage(c *gin.Context, apiErr *types.NewAPIError) *types.NewAPIError 
 	if state.settled {
 		return apiErr
 	}
-	if _, err := model.FinishGouoImageCharge(state.charge.ID, model.GouoChargeRefunded, "生成失败，退回预扣积分"); err != nil {
-		logger.LogError(c, "图片预扣退款失败: "+err.Error())
+	if _, err := model.FinishGouoImageCharge(state.charge.ID, model.GouoChargeRefunded, "生成失败或连接中断，费用以使用日志为准"); err != nil {
+		logger.LogError(c, "更新图片请求状态失败: "+err.Error())
 	}
 	if apiErr == nil {
-		return gouoError("生成结果未返回，预扣积分已自动退回，可直接重试", "image_result_missing", http.StatusBadGateway)
+		return gouoError("生成结果未返回，请在使用记录核对扣费或退款后再重试", "image_result_missing", http.StatusBadGateway)
 	}
 	return apiErr
 }

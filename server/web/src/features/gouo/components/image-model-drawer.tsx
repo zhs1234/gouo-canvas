@@ -18,6 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -31,6 +32,7 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 import { saveGouoImageModel } from '../api'
 import {
   GOUO_QUALITIES,
+  GOUO_MODEL_PRICING_SECTION,
   GOUO_QUALITY_LABELS,
   GOUO_QUERY_KEYS,
   GOUO_SIZE_TIERS,
@@ -102,17 +104,14 @@ export function ImageModelDrawer(props: ImageModelDrawerProps) {
               control={control}
               name='enabled'
               label={t('Enable in the client')}
-              description={t(
-                'Charged per successful request; generation and editing cost the same and group ratios do not apply'
-              )}
             />
-            <DrawerInputField
-              control={control}
-              name='price_cny'
-              type='number'
-              step='0.01'
-              label={t('Price per request (CNY)')}
-            />
+            <Link
+              to='/system-settings/billing/$section'
+              params={{ section: GOUO_MODEL_PRICING_SECTION }}
+              className='text-primary text-sm underline-offset-4 hover:underline'
+            >
+              {t('Edit model pricing')}
+            </Link>
             <DrawerInputField
               control={control}
               name='max_outputs'

@@ -17,7 +17,6 @@ vi.mock('./canvasImage', () => ({ validateMaskMatchesImage: vi.fn(async () => 'p
 
 import { submitImageTask } from './imageTasks'
 import { validateMaskMatchesImage } from './canvasImage'
-import { requestUserCenter } from './userGuidance'
 
 beforeEach(() => {
   fixtures.quote.mockReset()
@@ -42,15 +41,12 @@ describe('统一图片任务入口', () => {
     expect(fixtures.saved[0]).toMatchObject({ gouoPriceVersion: 'quote-b' })
   })
 
-  it('余额不足时不建任务，直接打开兑换页', async () => {
-    fixtures.quote.mockResolvedValue({ id: 'gpt-image-2', price_cny: 0.1, price_version: 'v1' })
+  it('原生计费不按旧单价预估余额，并保存多图请求方式', async () => {
+    fixtures.quote.mockResolvedValue({ id: 'gpt-image-2', price_cny: 0, price_version: 'v1', billing_mode: 'tiered_expr', max_outputs: 2 })
     fixtures.user.mockResolvedValue({ balance_cny: 0.15 })
-    await expect(submitImageTask({ prompt: '海报', params: { n: 2 }, source: { kind: 'canvas' } })).rejects.toThrow('余额不足')
-    expect(fixtures.saved).toHaveLength(0)
-    expect(fixtures.execute).not.toHaveBeenCalled()
-    expect(requestUserCenter).toHaveBeenCalledWith('topup')
-    fixtures.user.mockRejectedValue(new Error('网络错误'))
     await submitImageTask({ prompt: '海报', params: { n: 2 }, source: { kind: 'canvas' } })
+    expect(fixtures.saved[0]).toMatchObject({ nativeImageBatch: true, params: { n: 2 } })
+    expect(fixtures.user).not.toHaveBeenCalled()
     expect(fixtures.execute).toHaveBeenCalledTimes(1)
   })
 

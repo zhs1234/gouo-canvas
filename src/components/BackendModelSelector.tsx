@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { getImageModels, getImageParamIssue, getMaxTaskImages, resolveBackendModel, type GouoImageModel } from '../lib/gouoBackend'
 import { useStore } from '../store'
 import ModelSelect from './ModelSelect'
-import { formatPoints } from '../lib/accountUsage'
 
 export default function BackendModelSelector({ onReady, compact = false, showEstimate = !compact }: { onReady: (ready: boolean) => void; compact?: boolean; showEstimate?: boolean }) {
   const settings = useStore((s) => s.settings)
@@ -70,7 +69,7 @@ export default function BackendModelSelector({ onReady, compact = false, showEst
       </label>
       {reason
         ? (!compact || !loading) && <span role="status" className="text-amber-600 dark:text-amber-400">{reason}</span>
-        : showEstimate && selected && <span className="text-gray-400">预计 {formatPoints(selected.price_cny * params.n)}（{params.n} 张 · {formatPoints(selected.price_cny)}/张）· 按成功张数计费{!compact && ' · 服务端确认失败退款，中断请核对账务'}</span>}
+        : showEstimate && selected && <span className="text-gray-400">{selected.billing_mode === 'tiered_expr' ? '按表达式计费' : '按模型定价计费'} · 实际费用以使用记录为准</span>}
       {(!compact || (!loading && Boolean(reason))) && <button type="button" disabled={loading} onClick={() => window.dispatchEvent(new Event('gouo-models-refresh'))} className="rounded px-1.5 py-1 text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:text-blue-400">{compact ? '重试' : '刷新模型'}</button>}
     </div>
   )

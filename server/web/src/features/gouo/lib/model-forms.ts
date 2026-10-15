@@ -34,15 +34,11 @@ function displayTextFields(t: TFunction) {
   }
 }
 
-// 与服务端校验一致：单价 (0, 10000] 元、单次 1–10 张、遮罩需要参考图、参考图 0–16 张
+// 价格统一在 New API 模型定价中管理，这里只校验客户端能力。
 export function getImageModelSchema(t: TFunction) {
   return z
     .object({
       enabled: z.boolean(),
-      price_cny: z.coerce
-        .number()
-        .gt(0, t('Price must be greater than 0'))
-        .max(10000, t('Price must be at most {{max}} CNY', { max: 10000 })),
       reference: z.boolean(),
       mask: z.boolean(),
       max_outputs: z.coerce
@@ -86,8 +82,6 @@ export function imageModelToFormValues(
 ): ImageModelFormValues {
   return {
     enabled: row.enabled,
-    // 渠道上新出现、还没配置过的模型没有价格，表单给一个可直接修改的默认值
-    price_cny: row.price_cny > 0 ? row.price_cny : 0.1,
     reference: row.reference,
     mask: row.mask,
     max_outputs: Math.max(1, row.max_outputs),

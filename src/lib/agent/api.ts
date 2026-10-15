@@ -28,20 +28,21 @@ export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPr
 // SSE 的分片可能切在中文字符、CRLF 或 tool arguments 中间，统一按完整事件消费。
 export async function consumeChatStream(
   body: ReadableStream<Uint8Array>,
-  onUpdate: (content: string, calls: AgentToolCall[]) => void,
+  onUpdate: (content: string, calls: AgentToolCall[], reasoning?: string) => void,
   signal: AbortSignal,
-): Promise<{ content: string; calls: AgentToolCall[] }> {
+): Promise<{ content: string; calls: AgentToolCall[]; reasoning?: string }> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let content = ''
+  let reasoning = ''
   let finished = false
   const calls: AgentToolCall[] = []
   const slots = new Map<number, AgentToolCall>()
   const cancel = () => { void reader.cancel().catch(() => {}) }
   signal.addEventListener('abort', cancel, { once: true })
   const consume = (event: string) => {
-    const data = event.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
+    const data = event.trimStart().startsWith('{') ? event : event.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
     if (!data || finished) return
     if (data.trim() === '[DONE]') { finished = true; return }
     const payload = JSON.parse(data)
@@ -50,19 +51,23 @@ export async function consumeChatStream(
     if (!choice) return
     if (choice.finish_reason === 'length') throw new Error('回复达到模型长度上限，已保留内容，请手动继续')
     if (choice.finish_reason === 'content_filter') throw new Error('模型未能完成这次回复，请调整描述后重试')
-    const delta = choice.delta || {}
+    const delta = choice.delta || choice.message || {}
+    const thought = delta.reasoning_content ?? delta.reasoning
+    if (typeof thought === 'string') reasoning += thought
+    if (reasoning.length > 200_000) throw new Error('Agent 思考过程超过长度上限')
     if (typeof delta.content === 'string') content += delta.content
     if (content.length > 200_000) throw new Error('Agent 回复超过长度上限')
     if (Array.isArray(delta.tool_calls)) {
-      for (const fragment of delta.tool_calls) {
-        if (!Number.isInteger(fragment.index) || fragment.index < 0 || fragment.index > 7) throw new Error('Agent 工具调用数量或格式无效')
-        let current = slots.get(fragment.index)
+      for (const [idx, fragment] of delta.tool_calls.entries()) {
+        const index = choice.message ? idx : fragment.index
+        if (!Number.isInteger(index) || index < 0 || index > 7) throw new Error('Agent 工具调用数量或格式无效')
+        let current = slots.get(index)
         // 旧版 Claude 转换让同一回复的多个调用共用 index，同一 index 出现新 ID 视为下一个调用
         if (!current || (typeof fragment.id === 'string' && fragment.id && current.id && current.id !== fragment.id)) {
           if (calls.length >= 8) throw new Error('Agent 工具调用数量或格式无效')
           current = { id: '', name: '', arguments: '', status: 'pending' as const }
           calls.push(current)
-          slots.set(fragment.index, current)
+          slots.set(index, current)
         }
         // ID 和工具名是同一次调用的元数据；兼容渠道可能在每帧重复返回。
         if (typeof fragment.id === 'string' && fragment.id) current.id = fragment.id
@@ -76,9 +81,9 @@ export async function consumeChatStream(
         if (current.arguments.length > 100_000) throw new Error('Agent 工具参数超过长度上限（100000）')
       }
     }
-    onUpdate(content, calls.map((call) => ({ ...call })))
+    onUpdate(content, calls.map((call) => ({ ...call })), reasoning || undefined)
     // 终态已包含完整回复；部分兼容渠道随后仍保持连接，不必等待 [DONE]。
-    if (choice.finish_reason) finished = true
+    if (choice.finish_reason || choice.message) finished = true
   }
   try {
     while (!finished) {
@@ -103,7 +108,7 @@ export async function consumeChatStream(
     const result = calls
     if (result.some((call) => !call.id || !call.name || !call.arguments)) throw new Error('Agent 工具调用不完整，已停止执行')
     if (new Set(result.map((call) => call.id)).size !== result.length) throw new Error('Agent 返回重复的工具调用标识')
-    return { content, calls: result }
+    return { content, calls: result, ...(reasoning ? { reasoning } : {}) }
   } finally {
     signal.removeEventListener('abort', cancel)
     await reader.cancel().catch(() => {})
@@ -116,7 +121,7 @@ export async function streamAgentCompletion(input: {
   messages: ChatMessage[]
   tools: AgentToolDefinition[]
   signal: AbortSignal
-  onUpdate: (content: string, calls: AgentToolCall[]) => void
+  onUpdate: (content: string, calls: AgentToolCall[], reasoning?: string) => void
 }) {
   const settings = await createBackendSettings()
   input.signal.throwIfAborted()
@@ -124,7 +129,7 @@ export async function streamAgentCompletion(input: {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
-    body: JSON.stringify({ model: input.model, messages: input.messages, tools: input.tools, stream: true, parallel_tool_calls: false }),
+    body: JSON.stringify({ model: input.model, messages: input.messages, tools: input.tools, stream: true, stream_options: { include_usage: true }, parallel_tool_calls: false }),
     signal: input.signal,
   })
   if (!response.ok) {

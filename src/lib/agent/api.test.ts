@@ -16,6 +16,23 @@ function event(delta: unknown, finish: string | null = null) {
 }
 
 describe('Agent SSE', () => {
+  it('keeps native reasoning separate from the visible reply', async () => {
+    const updates: Array<string | undefined> = []
+    const frames = event({ reasoning_content: '先分析' }) + event({ reasoning_content: '布局' }) + event({ content: '这是方案' }, 'stop')
+    const result = await consumeChatStream(stream(frames, 1), (_content, _calls, reasoning) => updates.push(reasoning), new AbortController().signal)
+    expect(result).toMatchObject({ content: '这是方案', reasoning: '先分析布局' })
+    expect(updates).toContain('先分析布局')
+  })
+
+  it('accepts a native provider returning a complete JSON response instead of SSE', async () => {
+    const payload = JSON.stringify({ choices: [{ message: { content: '完整回复', reasoning_content: '思考' }, finish_reason: 'stop' }] })
+    await expect(consumeChatStream(stream(payload), () => {}, new AbortController().signal)).resolves.toMatchObject({ content: '完整回复', reasoning: '思考' })
+  })
+
+  it('accepts tool calls without stream indexes in complete native JSON replies', async () => {
+    const payload = JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: 'call', type: 'function', function: { name: 'get_canvas', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] })
+    await expect(consumeChatStream(stream(payload), () => {}, new AbortController().signal)).resolves.toMatchObject({ calls: [{ id: 'call', name: 'get_canvas', arguments: '{}' }] })
+  })
   it('assembles split UTF-8 text, CRLF and function arguments', async () => {
     const content = event({ content: '你好，' }) + event({ content: '光构' })
       + event({ tool_calls: [{ index: 0, id: 'call_1', function: { name: 'get_canvas', arguments: '{' } }] })

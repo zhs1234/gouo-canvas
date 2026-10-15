@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
@@ -49,5 +50,26 @@ func TestValidGouoImages(t *testing.T) {
 		{{RevisedPrompt: "only prompt"}},
 	} {
 		assert.False(t, validGouoImages(bad), "%+v", bad)
+	}
+}
+
+func TestNormalizeGouoNativeImageResponse(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))))
+	encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+	for _, data := range []any{
+		map[string]any{"b64_json": encoded},
+		[]map[string]any{{"url": "https://example.com/image.png"}, {"b64_json": encoded}, {"revised_prompt": "only description"}},
+	} {
+		payload, err := common.Marshal(map[string]any{"data": data, "usage": map[string]any{"input_tokens": 200}})
+		require.NoError(t, err)
+		normalized, images, err := normalizeGouoImageResponse(payload)
+		require.NoError(t, err)
+		require.Len(t, images, 1)
+		assert.Equal(t, encoded, images[0].B64Json)
+		var response dto.ImageResponse
+		require.NoError(t, common.Unmarshal(normalized, &response))
+		require.Len(t, response.Data, 1)
+		assert.Contains(t, string(normalized), `"input_tokens":200`)
 	}
 }

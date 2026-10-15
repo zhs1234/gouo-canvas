@@ -4,20 +4,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"math"
 	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"gorm.io/gorm"
 )
 
-// GouoImageModelConfig 是后台为光构客户端开放的图片模型。图片按次计价，不走 New API 的模型定价，
-// 由光构账本（gouo_billing.go）预扣和结算
+// GouoImageModelConfig 只管理客户端可见性与能力；PriceCNY 保留旧数据，实际价格由 New API 管理。
 type GouoImageModelConfig struct {
 	Model      string  `json:"model" gorm:"type:varchar(191);primaryKey"`
 	Enabled    bool    `json:"enabled"`
@@ -39,15 +38,27 @@ func (GouoImageModelConfig) TableName() string {
 	return "gouo_image_models"
 }
 
+// GouoBillingMode 区分原生表达式、旧按次价格和 token 倍率，客户端据此展示计费单位。
+func GouoBillingMode(id string) string {
+	if billing_setting.GetBillingMode(id) == billing_setting.BillingModeTieredExpr {
+		return billing_setting.BillingModeTieredExpr
+	}
+	if _, fixed := ratio_setting.GetModelPrice(id, false); fixed {
+		return "per_request"
+	}
+	return billing_setting.BillingModeRatio
+}
+
 // GouoImageModel 是客户端看到的图片模型目录项
 type GouoImageModel struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	PriceCNY   float64 `json:"price_cny"`
-	Reference  bool    `json:"reference"`
-	Mask       bool    `json:"mask"`
-	MaxOutputs int     `json:"max_outputs"`
-	Quota      int     `json:"quota"`
+	BillingMode string  `json:"billing_mode"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	PriceCNY    float64 `json:"price_cny"`
+	Reference   bool    `json:"reference"`
+	Mask        bool    `json:"mask"`
+	MaxOutputs  int     `json:"max_outputs"`
+	Quota       int     `json:"quota"`
 	// 后台限定的分辨率档位、画质和参考图张数，参与价格版本；档位为空表示只能用自动尺寸，画质和张数不限时省略
 	Sizes        []string `json:"sizes,omitempty"`
 	Qualities    []string `json:"qualities,omitempty"`
@@ -100,9 +111,6 @@ func (m *GouoImageModelConfig) Validate() error {
 	if utf8.RuneCountInString(m.Name) > 40 || utf8.RuneCountInString(m.Description) > 100 {
 		return gouoTextLengthError()
 	}
-	if math.IsNaN(m.PriceCNY) || math.IsInf(m.PriceCNY, 0) || m.PriceCNY <= 0 || m.PriceCNY > 10000 {
-		return common.NewMessage("Price per request must be greater than 0 and at most {{max}} CNY", map[string]any{"max": 10000})
-	}
 	if m.MaxOutputs < 1 || m.MaxOutputs > 10 {
 		return common.NewMessage("Max outputs per request must be an integer from {{min}} to {{max}}", map[string]any{"min": 1, "max": 10})
 	}
@@ -125,22 +133,17 @@ func (m *GouoImageModelConfig) Validate() error {
 	return nil
 }
 
-// Entry 换算成客户端目录项，额度按支付汇率从人民币单价换算并向上取整
+// Entry 不再生成独立的按张价格，版本包含 New API 生效定价和客户端能力。
 func (m *GouoImageModelConfig) Entry() (*GouoImageModel, error) {
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
-	rate := operation_setting.USDExchangeRate
-	if rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) || common.QuotaPerUnit <= 0 {
-		return nil, common.NewMessage("Image billing exchange rate is invalid")
-	}
-	quota, err := common.QuotaFromFloatStrict(math.Ceil(m.PriceCNY / rate * common.QuotaPerUnit))
-	if err != nil || quota < 1 {
-		return nil, common.NewMessage("Image billing quota is out of range")
-	}
-	entry := &GouoImageModel{ID: m.Model, Name: m.Model, PriceCNY: m.PriceCNY, Reference: m.Reference, Mask: m.Mask,
-		MaxOutputs: m.MaxOutputs, Quota: quota, Sizes: gouoSplitList(m.Sizes, true), Qualities: gouoSplitList(m.Qualities, false), MaxInputs: m.MaxInputs}
-	data, err := common.Marshal(entry)
+	entry := &GouoImageModel{ID: m.Model, Name: m.Model, BillingMode: GouoBillingMode(m.Model), Reference: m.Reference, Mask: m.Mask,
+		MaxOutputs: m.MaxOutputs, Sizes: gouoSplitList(m.Sizes, true), Qualities: gouoSplitList(m.Qualities, false), MaxInputs: m.MaxInputs}
+	expression, _ := billing_setting.GetBillingExpr(m.Model)
+	price, _ := ratio_setting.GetModelPrice(m.Model, false)
+	ratio, _, _ := ratio_setting.GetModelRatio(m.Model)
+	data, err := common.Marshal([]any{entry, expression, price, ratio, ratio_setting.GetCompletionRatio(m.Model)})
 	if err != nil {
 		return nil, err
 	}

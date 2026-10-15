@@ -26,7 +26,7 @@ export function getActionableErrorMessage(message: string, billedRequest = false
   if (normalized.includes('提示词包含不允许的内容')) return `${normalized}\n下一步：修改提示词中不合适的描述后重新生成；这次请求已被拦下，没有扣费。`
   if (/安全系统|safety|sexual|violence|content policy|内容审核/i.test(normalized)) return `${normalized}\n下一步：删除可能涉及敏感内容的描述，明确人物为成年人且穿着完整，再重新生成。`
   if (/无效的令牌|token.+(invalid|expired)|unauthorized|HTTP\s*401/i.test(normalized)) return `${normalized}\n下一步：重新登录以刷新生成令牌；提示词和参考图草稿会保留。`
-  if (billedRequest) return `${normalized}\n下一步：没有返回图片的请求会自动退回积分，可在使用记录的积分明细中查看；点击任务上的“重试”会新建付费请求，多张图片分别计费。`
+  if (billedRequest) return `${normalized}\n下一步：请在使用记录核对实际扣费或退款；网络中断、本地保存失败不代表已退款。点击任务上的“重试”会新建付费请求，按当前模型定价和实际用量结算。`
   if (/network|fetch|连接|超时|timeout|ECONN|Failed to fetch/i.test(normalized)) return `${normalized}\n下一步：检查网络连接，稍后点击任务上的“重试”；不要重复快速提交。`
   if (/too large|文件过大|不能超过 \d+\s*MB|payload/i.test(normalized)) return `${normalized}\n下一步：压缩参考图或改用 JPEG/WebP 后重新上传。`
   if (/格式|decode|解码|unsupported.*image/i.test(normalized)) return `${normalized}\n下一步：将图片转换成 PNG、JPEG 或 WebP，再重新上传。`

@@ -68,6 +68,8 @@ export interface TaskRecord {
   apiModel?: string
   gouoPriceVersion?: string
   gouoPriceCNY?: number
+  /** 原生多图在一次请求内提交；旧任务缺省时按原来的单图请求恢复。 */
+  nativeImageBatch?: boolean
   /** API 返回的实际生效参数，用于标记与请求值不一致的情况 */
   actualParams?: Partial<TaskParams>
   /** 输出图片对应的实际生效参数，key 为 outputImages 中的图片 id */
@@ -158,7 +160,7 @@ export interface ImageResponseItem {
 }
 
 export interface ImageApiResponse {
-  data: ImageResponseItem[]
+  data: ImageResponseItem[] | ImageResponseItem
   size?: string
   quality?: string
   output_format?: string

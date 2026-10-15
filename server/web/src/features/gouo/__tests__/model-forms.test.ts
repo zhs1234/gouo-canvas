@@ -45,7 +45,7 @@ describe('image model form', () => {
   test('gives a model that only exists on a channel a valid editable default', () => {
     const values = imageModelToFormValues(channelOnlyModel)
 
-    expect(values.price_cny).toBeGreaterThan(0)
+    expect(values).not.toHaveProperty('price_cny')
     expect(values.max_outputs).toBe(1)
     expect(getImageModelSchema(t).safeParse(values).success).toBe(true)
   })
@@ -63,13 +63,11 @@ describe('image model form', () => {
     expect(result.error?.issues[0]?.path).toEqual(['mask'])
   })
 
-  test('rejects prices and counts the server would reject', () => {
+  test('rejects counts and display names the server would reject', () => {
     const schema = getImageModelSchema(t)
     const base = imageModelToFormValues(channelOnlyModel)
 
     for (const patch of [
-      { price_cny: 0 },
-      { price_cny: 10001 },
       { max_outputs: 11 },
       { max_inputs: 17 },
       { name: 'x'.repeat(41) },

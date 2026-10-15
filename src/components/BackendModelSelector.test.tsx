@@ -27,14 +27,15 @@ beforeEach(() => {
   mocks.state = { settings: { model: 'image-b' }, params: { n: 1, size: 'auto' }, inputImages: [], maskDraft: null }
 })
 
-it.each([[1, '10'], [2, '20'], [10, '100']])('allows %s total images with a single-image model and estimates the total', (n, total) => {
+it.each([1, 2, 10])('allows %s total images and leaves billing to the native model price', (n) => {
   mocks.state.params.n = n
   const onReady = vi.fn()
   const markup = renderToStaticMarkup(<BackendModelSelector compact showEstimate onReady={onReady} />)
   mocks.effects[1]()
   expect(onReady).toHaveBeenCalledWith(true)
-  expect(markup).toContain(`预计 ${total} 积分`)
-  expect(markup).toContain('按成功张数计费')
+  expect(markup).toContain('按模型定价计费')
+  expect(markup).toContain('实际费用以使用记录为准')
+  expect(markup).not.toContain('按成功张数计费')
   expect(markup).not.toContain('最多支持 1 张')
 })
 

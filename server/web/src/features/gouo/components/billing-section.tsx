@@ -72,14 +72,17 @@ function useChargeColumns(): ColumnDef<GouoImageCharge>[] {
       id: 'price',
       header: t('Price'),
       size: 150,
-      cell: ({ row }) => (
-        <div className='flex flex-col text-sm'>
-          <span>¥{row.original.price_cny}</span>
-          <span className='text-muted-foreground text-xs'>
-            {formatQuota(row.original.quota)}
-          </span>
-        </div>
-      ),
+      cell: ({ row }) =>
+        row.original.quota === 0 && row.original.price_cny === 0 ? (
+          t('Usage Logs')
+        ) : (
+          <div className='flex flex-col text-sm'>
+            <span>¥{row.original.price_cny}</span>
+            <span className='text-muted-foreground text-xs'>
+              {formatQuota(row.original.quota)}
+            </span>
+          </div>
+        ),
     },
     {
       id: 'status',
@@ -88,6 +91,23 @@ function useChargeColumns(): ColumnDef<GouoImageCharge>[] {
       meta: { mobileBadge: true },
       size: 130,
       cell: ({ row }) => {
+        if (row.original.quota === 0 && row.original.price_cny === 0) {
+          const labels = {
+            reserved: 'Pending',
+            dispatched: 'Running',
+            settled: 'Completed',
+            refunded: 'Failed',
+          }
+          return (
+            <StatusBadge
+              label={t(labels[row.original.status])}
+              variant={
+                row.original.status === 'refunded' ? 'warning' : 'neutral'
+              }
+              copyable={false}
+            />
+          )
+        }
         const config = GOUO_CHARGE_STATUSES[row.original.status]
         return config ? (
           <StatusBadge

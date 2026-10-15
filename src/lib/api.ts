@@ -40,7 +40,7 @@ export async function callImageApi(opts: CallApiOptions): Promise<CallApiResult>
 // 多张图拆成并发单图请求，各自带序号，服务端按序号分别结算和保存
 async function callImages(opts: CallApiOptions, relay: Relay): Promise<CallApiResult> {
   const n = opts.params.n > 0 ? opts.params.n : 1
-  if (n === 1) return callImagesSingle(opts, relay)
+  if (n === 1 || opts.nativeImageBatch === true) return callImagesSingle(opts, relay)
 
   const results = await Promise.allSettled(Array.from({ length: n }, (_, requestIndex) => callImagesSingle({
     ...opts,
@@ -76,12 +76,16 @@ async function callImages(opts: CallApiOptions, relay: Relay): Promise<CallApiRe
 }
 
 async function parseImagesResponse(payload: ImageApiResponse, mime: string, signal?: AbortSignal): Promise<CallApiResult> {
-  const data = payload.data
+  const items = Array.isArray(payload.data) ? payload.data : payload.data && typeof payload.data === 'object' ? [payload.data] : []
+  const encoded = items.filter((item) => typeof item.b64_json === 'string' && item.b64_json.trim())
+  const urls = items.filter((item) => isHttpUrl(item.url) || isDataUrl(item.url))
+  const data = encoded.length >= urls.length ? encoded : urls
+  mime = MIME_MAP[payload.output_format as keyof typeof MIME_MAP] || mime
   const images: string[] = []
-  const rawImageUrls = Array.isArray(data) ? data.map((item) => item.url).filter(isHttpUrl) : []
+  const rawImageUrls = urls.map((item) => item.url).filter(isHttpUrl)
   const revisedPrompts: Array<string | undefined> = []
   try {
-    for (const item of Array.isArray(data) ? data : []) {
+    for (const item of data) {
       const revisedPrompt = typeof item.revised_prompt === 'string' ? item.revised_prompt : undefined
       if (item.b64_json) {
         images.push(normalizeBase64Image(item.b64_json, mime))
@@ -157,7 +161,7 @@ async function recoverImageResult(opts: CallApiOptions, signal: AbortSignal): Pr
         await sleep(2_000, signal)
         continue
       }
-      if (result.status === 'refunded') throw new Error('生成失败，预扣积分已自动退回，可直接重试')
+      if (result.status === 'refunded') throw new Error('生成失败或连接中断，请在使用记录核对扣费或退款后再重试')
       throw new Error(`原图片请求暂不可恢复：${result.reason === 'result_expired' ? '保存期限已过' : '服务端未保存可恢复结果'}；未重新生成`)
     }
     throw new Error('等待原图片请求结果超时；未重新生成，请稍后在作品中恢复结果')

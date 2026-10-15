@@ -19,15 +19,16 @@ export function getLogContent(log: GouoUsageLog) {
 
 export function getUsageDisplay(log: GouoUsageLog, rate?: number) {
   const refund = log.metadata?.billing_status === 'refunded'
-  const image = log.metadata?.billing_unit === 'successful_request' || log.metadata?.billing_unit === 'refunded_request'
+  const legacyImage = log.metadata?.billing_unit === 'successful_request' || log.metadata?.billing_unit === 'refunded_request'
+  const image = legacyImage || typeof log.metadata?.image_count === 'number' || (typeof log.metadata?.request_path === 'string' && /^\/v1\/images\/(generations|edits)(\?|$)/.test(log.metadata.request_path))
   const price = log.metadata?.price_cny
-  const amount = image && typeof price === 'number' && Number.isFinite(price) && price >= 0
+  const amount = legacyImage && typeof price === 'number' && Number.isFinite(price) && price >= 0
     ? price
     : typeof log.quota === 'number' && Number.isFinite(log.quota) && typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? log.quota * rate : null
   const delta = amount === null ? null : refund || log.type === 1 ? Math.abs(amount) : log.type === 2 ? -Math.abs(amount) : amount
   return {
     label: refund ? '图片退款' : log.type === 1 ? '积分充值' : log.type === 2 ? image ? '图片生成' : '模型消费' : log.type === 3 ? '积分调整' : '账户记录',
-    unit: image ? refund ? '次退款请求' : '次成功请求' : '积分折合',
+    unit: legacyImage ? refund ? '次退款请求' : '次成功请求' : image ? '按模型用量结算' : '积分折合',
     delta,
     amountText: delta === null ? '积分不可用' : `${delta > 0 ? '+' : delta < 0 ? '-' : ''}${formatPoints(Math.abs(delta))}`,
   }

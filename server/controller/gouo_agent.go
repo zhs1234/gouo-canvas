@@ -23,20 +23,27 @@ type gouoAgentModel struct {
 	CapabilitySource string `json:"capability_source"`
 	Default          bool   `json:"default,omitempty"`
 	Description      string `json:"description,omitempty"`
+	BillingMode      string `json:"billing_mode"`
 	// 每百万 token 的人民币价格，客户端换算成积分展示；实际扣费还会乘以用户分组倍率
 	InputPriceCNY   float64 `json:"input_price_cny"`
 	OutputPriceCNY  float64 `json:"output_price_cny"`
 	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
 }
 
-// gouoAgentPrice 按 New API 的模型倍率换算每百万 token 的人民币价格；
-// 按次计费和表达式计费的模型无法按 token 估价，客户端不展示，返回原因
+// gouoAgentPrice 只为旧倍率定价换算单价；表达式沿用 New API 的预扣和结算，不伪造固定 token 价格。
 func gouoAgentPrice(id string) (float64, float64, string) {
-	if _, fixed := ratio_setting.GetModelPrice(id, false); fixed {
-		return 0, 0, "Per-request priced models cannot be used by Agent; switch to token pricing in model pricing"
-	}
 	if billing_setting.GetBillingMode(id) == billing_setting.BillingModeTieredExpr {
-		return 0, 0, "Expression-priced models cannot be used by Agent; switch to token pricing in model pricing"
+		expression, ok := billing_setting.GetBillingExpr(id)
+		if !ok || strings.TrimSpace(expression) == "" {
+			return 0, 0, "No price is set in model pricing yet"
+		}
+		if err := billing_setting.SmokeTestExpr(expression); err != nil {
+			return 0, 0, "Expression error"
+		}
+		return 0, 0, ""
+	}
+	if _, fixed := ratio_setting.GetModelPrice(id, false); fixed {
+		return 0, 0, ""
 	}
 	ratio, ok, _ := ratio_setting.GetModelRatio(id)
 	if !ok {
@@ -78,7 +85,7 @@ func GetGouoAgentModels(c *gin.Context) {
 			name = row.Model
 		}
 		data = append(data, &gouoAgentModel{ID: row.Model, Name: name, ToolCalls: true, Vision: row.Vision, CapabilitySource: "gouo_catalog",
-			Description: row.Description, InputPriceCNY: input, OutputPriceCNY: output, MaxOutputTokens: row.MaxTokens})
+			Description: row.Description, BillingMode: model.GouoBillingMode(row.Model), InputPriceCNY: input, OutputPriceCNY: output, MaxOutputTokens: row.MaxTokens})
 	}
 	// 后台指定的默认模型可用时标出它，否则标出目录第一个
 	if len(data) > 0 {

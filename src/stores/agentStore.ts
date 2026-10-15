@@ -26,6 +26,7 @@ export function normalizeAgentConversation(value: unknown): AgentConversation | 
   if (item.schemaVersion !== 1 || typeof item.id !== 'string' || !item.id || typeof item.title !== 'string' || typeof item.modelId !== 'string' || !Array.isArray(item.messages) || !Array.isArray(item.referenceImageIds)) return
   if (!item.messages.every((msg) => msg && typeof msg.id === 'string' && ['user', 'assistant', 'tool'].includes(msg.role) && typeof msg.content === 'string' && (!msg.referenceImageIds || (Array.isArray(msg.referenceImageIds) && msg.referenceImageIds.every((id) => typeof id === 'string'))) && (!msg.taskIds || (Array.isArray(msg.taskIds) && msg.taskIds.every((id) => typeof id === 'string'))) && (!msg.toolCalls || (Array.isArray(msg.toolCalls) && msg.toolCalls.every((call) => call && typeof call.id === 'string' && typeof call.name === 'string' && typeof call.arguments === 'string' && ['pending', 'running', 'done', 'error'].includes(call.status) && (call.result === undefined || typeof call.result === 'string')))))) return
   if (!item.referenceImageIds.every((id) => typeof id === 'string') || !Number.isSafeInteger(item.revision) || !Number.isFinite(item.createdAt) || !Number.isFinite(item.updatedAt)) return
+  if (!item.messages.every((msg) => msg.reasoning === undefined || typeof msg.reasoning === 'string')) return
   return {
     ...item as AgentConversation,
     messages: item.status === 'running' ? item.messages.map((msg) => ({ ...msg, toolCalls: msg.toolCalls?.map((call) => call.status === 'running' || call.status === 'pending' ? { ...call, status: 'error' } : call) })) : item.messages,
@@ -103,7 +104,7 @@ export async function buildAgentMessages(conversation: AgentConversation, model:
       for (const call of msg.toolCalls || []) callExecutions.set(call.id, call.execution)
       const calls = msg.toolCalls?.filter((call) => call.execution !== 'not_started' && completedCallIds.has(call.id))
       if (!msg.content && !calls?.length) continue
-      result.push({ role: 'assistant', content: msg.content || null, ...(calls?.length ? { tool_calls: calls.map((call) => ({ id: call.id, type: 'function' as const, function: { name: call.name, arguments: call.arguments } })) } : {}) })
+      result.push({ role: 'assistant', content: msg.content || null, ...(msg.reasoning ? { reasoning_content: msg.reasoning } : {}), ...(calls?.length ? { tool_calls: calls.map((call) => ({ id: call.id, type: 'function' as const, function: { name: call.name, arguments: call.arguments } })) } : {}) })
       continue
     }
     const refs = msg.referenceImageIds || []
@@ -123,8 +124,8 @@ export async function buildAgentMessages(conversation: AgentConversation, model:
   return result
 }
 
-function updateAssistant(id: string, messageId: string, content: string, calls: AgentToolCall[]) {
-  updateConversation(id, (conversation) => ({ messages: conversation.messages.map((msg) => msg.id === messageId ? { ...msg, content, toolCalls: calls.map((call) => ({ ...call, execution: call.execution ?? 'not_started' })) } : msg) }))
+function updateAssistant(id: string, messageId: string, content: string, calls: AgentToolCall[], reasoning?: string) {
+  updateConversation(id, (conversation) => ({ messages: conversation.messages.map((msg) => msg.id === messageId ? { ...msg, content, ...(reasoning !== undefined ? { reasoning } : {}), toolCalls: calls.map((call) => ({ ...call, execution: call.execution ?? 'not_started' })) } : msg) }))
 }
 
 async function runConversation(id: string, controller: AbortController) {
@@ -140,8 +141,8 @@ async function runConversation(id: string, controller: AbortController) {
       const messages = await buildAgentMessages(conversation, model, useAgentStore.getState().systemPrompt)
       const messageId = crypto.randomUUID()
       updateConversation(id, (current) => ({ messages: [...current.messages, { id: messageId, role: 'assistant', content: '', createdAt: Date.now() }] }))
-      const completion = await streamAgentCompletion({ model: model.id, messages, tools: agentToolDefinitions, signal: controller.signal, onUpdate: (content, calls) => updateAssistant(id, messageId, content, calls) })
-      updateAssistant(id, messageId, completion.content, completion.calls)
+      const completion = await streamAgentCompletion({ model: model.id, messages, tools: agentToolDefinitions, signal: controller.signal, onUpdate: (content, calls, reasoning) => updateAssistant(id, messageId, content, calls, reasoning) })
+      updateAssistant(id, messageId, completion.content, completion.calls, completion.reasoning)
       if (!completion.calls.length) {
         if (!completion.content.trim()) throw new Error('模型没有返回可用内容，请检查模型配置后重试')
         updateConversation(id, () => ({ status: 'completed', error: undefined }))

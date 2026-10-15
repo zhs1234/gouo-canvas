@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,17 +98,18 @@ func TestGouoImageChargeSettleAndRecover(t *testing.T) {
 }
 
 func TestGouoImageModelEntry(t *testing.T) {
-	rate := operation_setting.USDExchangeRate
-	t.Cleanup(func() { operation_setting.USDExchangeRate = rate })
-	operation_setting.USDExchangeRate = 7
+	prices, err := common.Marshal(ratio_setting.GetModelPriceCopy())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(prices))) })
 
 	row := &GouoImageModelConfig{Model: "gpt-image-2", Enabled: true, PriceCNY: 0.7, MaxOutputs: 1, Sizes: "1k, 2K", Qualities: "High"}
 	entry, err := row.Entry()
 	require.NoError(t, err)
-	assert.Equal(t, 50000, entry.Quota)
+	assert.Zero(t, entry.Quota)
+	assert.Zero(t, entry.PriceCNY)
 	assert.Equal(t, []string{"1K", "2K"}, entry.Sizes)
 	assert.Equal(t, []string{"high"}, entry.Qualities)
-	// 改名不影响价格版本，改价会变
+	// 改名和旧按张价格不影响版本，New API 原生定价变化才更新版本。
 	version := entry.PriceVersion
 	row.Name = "新名字"
 	renamed, err := row.Entry()
@@ -117,11 +118,14 @@ func TestGouoImageModelEntry(t *testing.T) {
 	row.PriceCNY = 0.8
 	repriced, err := row.Entry()
 	require.NoError(t, err)
+	assert.Equal(t, version, repriced.PriceVersion)
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"gpt-image-2":0.02}`))
+	repriced, err = row.Entry()
+	require.NoError(t, err)
 	assert.NotEqual(t, version, repriced.PriceVersion)
 
 	for _, bad := range []GouoImageModelConfig{
 		{Model: "a*", PriceCNY: 1, MaxOutputs: 1},
-		{Model: "a", PriceCNY: 0, MaxOutputs: 1},
 		{Model: "a", PriceCNY: 1, MaxOutputs: 11},
 		{Model: "a", PriceCNY: 1, MaxOutputs: 1, Mask: true},
 		{Model: "a", PriceCNY: 1, MaxOutputs: 1, Sizes: "8K"},
@@ -221,6 +225,19 @@ func TestGouoImageChargeDatabaseMatrix(t *testing.T) {
 			require.NoError(t, db.Where("status = ?", GouoChargeReserved).First(&reserved).Error)
 			_, err = FinishGouoImageCharge(reserved.ID, GouoChargeRefunded, "测试")
 			require.NoError(t, err)
+			require.NoError(t, db.First(&loaded, user.Id).Error)
+			assert.Equal(t, 100, loaded.Quota)
+			assert.Equal(t, 100, loaded.UsedQuota)
+			// 新请求只登记状态，不重复扣费、退款或累计使用量；旧预扣仍按原流程恢复。
+			for _, status := range []string{GouoChargeSettled, GouoChargeRefunded} {
+				native := &GouoImageCharge{ID: GouoImageRequestID(user.Id, "native-"+status), UserID: user.Id, TokenID: token.Id}
+				require.NoError(t, CreateGouoImageRequest(native))
+				duplicate := *native
+				assert.ErrorIs(t, CreateGouoImageRequest(&duplicate), ErrGouoImageRequestExists)
+				require.NoError(t, DispatchGouoImageCharge(native.ID, 1))
+				_, err := FinishGouoImageCharge(native.ID, status, "native billing")
+				require.NoError(t, err)
+			}
 			require.NoError(t, db.First(&loaded, user.Id).Error)
 			assert.Equal(t, 100, loaded.Quota)
 			assert.Equal(t, 100, loaded.UsedQuota)

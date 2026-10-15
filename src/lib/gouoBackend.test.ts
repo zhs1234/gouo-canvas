@@ -15,6 +15,13 @@ afterEach(() => {
 })
 
 describe('gouoBackend', () => {
+  it('accepts a native-priced image model without a separate per-image charge', async () => {
+    const model = { id: 'native', name: '原生模型', billing_mode: 'tiered_expr', price_cny: 0, price_version: 'native-version', reference: true, mask: false, max_outputs: 1, quota: 0 }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ success: true, data: [model] })))
+    const { getImageModels, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
+    await expect(getImageModels()).resolves.toEqual([model])
+  })
   it('uses the backend default model unless the user picked a model that is still available', async () => {
     const { resolveBackendModel } = await import('./gouoBackend')
     const model = (id: string, isDefault = false) => ({ id, name: id, price_cny: 0.1, price_version: id, reference: true, mask: true, max_outputs: 1, quota: 1, ...(isDefault ? { default: true } : {}) })

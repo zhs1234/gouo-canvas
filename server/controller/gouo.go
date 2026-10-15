@@ -68,7 +68,7 @@ func GetGouoModels(c *gin.Context) {
 		idx := slices.IndexFunc(data, func(entry *model.GouoImageModel) bool { return entry.ID == gouo_setting.Get().DefaultImageModel })
 		data[max(idx, 0)].Default = true
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "billing_unit": "successful_request", "currency": "CNY"})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "billing_unit": "native", "currency": "CNY"})
 }
 
 func GetGouoImageResult(c *gin.Context) {

@@ -47,6 +47,14 @@ beforeEach(async () => {
 })
 
 describe('Agent durable runtime', () => {
+  it('preserves native reasoning when the assistant history is sent on the next turn', async () => {
+    const messages = await buildAgentMessages({ ...base, messages: [
+      { id: 'user', role: 'user', content: '设计海报', createdAt: 1 },
+      { id: 'assistant', role: 'assistant', content: '方案', reasoning: '构图分析', createdAt: 2 },
+    ] }, useAgentStore.getState().models[0])
+    expect(messages).toContainEqual({ role: 'assistant', content: '方案', reasoning_content: '构图分析' })
+    expect(normalizeAgentConversation({ ...base, messages: [{ id: 'bad', role: 'assistant', content: '正文', reasoning: {}, createdAt: 1 }] })).toBeUndefined()
+  })
   it('acknowledges a terminal image submission without another model request', async () => {
     mocks.stream.mockResolvedValueOnce({ content: '', calls: [{ id: 'finish-call', name: 'create_image_task', arguments: '{"prompt":"海报","finishAfterSubmit":true}', status: 'pending' }] }).mockResolvedValue({ content: '不应再请求模型', calls: [] })
     mocks.tool.mockResolvedValueOnce({ result: '{"taskId":"poster","status":"running"}', taskIds: ['poster'], finishAfterSubmit: true })

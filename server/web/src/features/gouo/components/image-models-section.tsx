@@ -17,7 +17,7 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
+import { getRouteApi, Link } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -36,7 +36,11 @@ import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { listGouoImageModels } from '../api'
-import { GOUO_QUALITY_LABELS, GOUO_QUERY_KEYS } from '../constants'
+import {
+  GOUO_MODEL_PRICING_SECTION,
+  GOUO_QUALITY_LABELS,
+  GOUO_QUERY_KEYS,
+} from '../constants'
 import type { GouoImageModel } from '../types'
 import { ImageModelDrawer } from './image-model-drawer'
 
@@ -99,11 +103,18 @@ function useImageModelColumns(
       },
     },
     {
-      accessorKey: 'price_cny',
-      header: t('Price per request'),
+      id: 'pricing',
+      header: t('Pricing'),
       size: 130,
-      cell: ({ row }) =>
-        row.original.price_cny > 0 ? `¥${row.original.price_cny}` : '—',
+      cell: () => (
+        <Link
+          to='/system-settings/billing/$section'
+          params={{ section: GOUO_MODEL_PRICING_SECTION }}
+          className='text-primary text-sm hover:underline'
+        >
+          {t('Edit model pricing')}
+        </Link>
+      ),
     },
     {
       id: 'capabilities',

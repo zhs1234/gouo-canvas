@@ -20,6 +20,10 @@ describe('account usage display', () => {
     expect(toPoints(0.07)).toBe(7)
   })
 
+  it('shows native image usage with its actual quota rather than a legacy per-image price', () => {
+    expect(getUsageDisplay({ created_at: 1, type: 2, quota: 4500, metadata: { billing_mode: 'tiered_expr', billing_unit: 'token', price_cny: 99, request_path: '/v1/images/edits' } }, 7 / 500000)).toMatchObject({ label: '图片生成', amountText: '-6.3 积分', unit: '按模型用量结算' })
+  })
+
   it('hides legacy log text written in dollars or raw quota', () => {
     for (const content of ['兑换码 #3 充值 ＄2.000000 额度', '新用户注册赠送 500000 点额度', '在线充值成功，充值积分: 684932，支付金额：10.00 CNY']) expect(getLogContent({ created_at: 1, type: 1, content })).toBe('')
     expect(getLogContent({ created_at: 1, type: 1, content: '兑换码 #3 充值 1000 积分' })).toBe('兑换码 #3 充值 1000 积分')

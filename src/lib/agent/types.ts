@@ -9,6 +9,7 @@ export interface AgentModel {
   default?: boolean
   // 后台填写的一句话说明
   description?: string
+  billing_mode?: 'ratio' | 'tiered_expr' | 'per_request'
   input_price_cny?: number
   output_price_cny?: number
 }
@@ -29,6 +30,7 @@ export interface AgentMessage {
   id: string
   role: 'user' | 'assistant' | 'tool'
   content: string
+  reasoning?: string
   createdAt: number
   referenceImageIds?: string[]
   toolCalls?: AgentToolCall[]
@@ -61,6 +63,7 @@ export interface ChatMessage {
   content: string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> | null
   tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>
   tool_call_id?: string
+  reasoning_content?: string
 }
 
 export interface AgentToolDefinition {

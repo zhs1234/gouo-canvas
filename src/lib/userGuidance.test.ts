@@ -28,11 +28,12 @@ describe('userGuidance', () => {
     expect(isBalanceError('network timeout')).toBe(false)
   })
 
-  it('explains automatic refunds for interrupted or locally failed paid requests', () => {
+  it('asks users to verify native billing for interrupted or locally failed requests', () => {
     for (const message of ['Failed to fetch', '请求中断', '生成结果未返回', '生成结果已返回，但本地处理或保存失败：QuotaExceededError']) {
       const guidance = getActionableErrorMessage(message, true)
-      expect(guidance).toContain('自动退回积分')
-      expect(guidance).toContain('新建付费请求，多张图片分别计费')
+      expect(guidance).toContain('核对实际扣费或退款')
+      expect(guidance).toContain('新建付费请求')
+      expect(guidance).toContain('不代表已退款')
       expect(guidance).not.toContain('稍后点击任务上的“重试”')
     }
     expect(getActionableErrorMessage('图片添加失败：Failed to fetch')).not.toContain('付费请求')

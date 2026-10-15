@@ -155,4 +155,6 @@
   .agent-composer-note { font-size: 10px; }
   .agent-embedded { height: 100%; }
 }
+.agent-message-reasoning { margin: 10px 0; padding: 10px 14px; border-left: 2px solid var(--ws-line); color: var(--ws-text-2); font-size: 13px; }
+.agent-message-reasoning summary { cursor: pointer; padding: 4px 0; }
 @media (prefers-reduced-motion: reduce) { .agent-workspace *, .agent-workspace *::before, .agent-workspace *::after { animation: none !important; scroll-behavior: auto !important; } }
