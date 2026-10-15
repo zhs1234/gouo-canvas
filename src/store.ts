@@ -1906,7 +1906,10 @@ export async function importData(file: File, options: ImportOptions = { importCo
       // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
       // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过
       const importedId = (id: string) => `imported-${id}`
-      const freshTasks = data.tasks.filter((task) => !existingIds.has(task.id) && !existingIds.has(importedId(task.id)))
+      // 本地已有 imported-x 而备份里的 x 不在本地时，它是之前导入 x 生成的，不是本地原有的同 ID 任务
+      const backupIds = new Set(data.tasks.map((task) => task.id))
+      const remapped = data.tasks.filter((task) => !existingIds.has(task.id) || (task.id.startsWith('imported-') && backupIds.has(task.id.slice(9)) && !existingIds.has(task.id.slice(9))))
+      const freshTasks = remapped.filter((task) => !existingIds.has(importedId(task.id)))
       const importedTasks = freshTasks.map((task): TaskRecord => ({
         ...task,
         id: importedId(task.id),
@@ -1922,7 +1925,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
       const canvasIds = new Map((data.canvasProjects ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
       const conversationIds = new Map((data.agentConversations ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
       // 之前导入过的任务已存为 imported-<id>，重复导入的文档也要指向它
-      const taskIds = new Map(data.tasks.filter((task) => !existingIds.has(task.id)).map((task) => [task.id, importedId(task.id)]))
+      const taskIds = new Map(remapped.map((task) => [task.id, importedId(task.id)]))
       const remapDocument = <T,>(doc: T): T => JSON.parse(JSON.stringify(doc, (key, value) => {
         if (key === 'taskId') return taskIds.get(value) ?? value
         if (key === 'taskIds' && Array.isArray(value)) return value.map((id) => taskIds.get(id) ?? id)

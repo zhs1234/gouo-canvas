@@ -933,6 +933,17 @@ describe('data import', () => {
     vi.unstubAllGlobals()
   })
 
+  it('keeps document references on the right task when a backup already contains imported IDs', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [{ id: 'msg', role: 'assistant' as const, content: '', taskIds: ['x', 'imported-x'], createdAt: 1 }], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1 }
+    const backup = () => importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'x' }), task({ id: 'imported-x' })], agentConversations: [conversation] })
+    expect(await importData(backup(), { importTasks: true })).toBe(true)
+    expect(await importData(backup(), { importTasks: true })).toBe(true)
+    expect((await getAllTasks()).map((item) => item.id).sort()).toEqual(['imported-imported-x', 'imported-x'])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations?.[0].messages[0]).toMatchObject({ taskIds: ['imported-x', 'imported-imported-x'] })
+    vi.unstubAllGlobals()
+  })
+
   it('does not change UI data or configuration when the import transaction fails', async () => {
     const db = await import('./lib/db')
     vi.mocked(db.importTaskData).mockRejectedValueOnce(new DOMException('storage full', 'QuotaExceededError'))
