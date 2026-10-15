@@ -86,6 +86,34 @@ func TestPurgeGouoTrashAfterRetention(t *testing.T) {
 	require.EqualValues(t, 4, docs)
 }
 
+func TestPurgeGouoTrashRemovesOrphanAssetsWithoutTrash(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	oldDir := config.GouoAssetDir
+	config.GouoAssetDir = t.TempDir()
+	t.Cleanup(func() { config.GouoAssetDir = oldDir })
+	now := time.Now()
+	old := now.Add(-GouoTrashRetention() - time.Hour).UnixMilli()
+	for _, id := range []string{"orphan", "in-task", "in-document", "fresh"} {
+		at := old
+		if id == "fresh" {
+			at = now.Add(-time.Hour).UnixMilli()
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(config.GouoAssetDir, id+".png"), []byte(id), 0o600))
+		require.NoError(t, DB.Create(&GouoAsset{ID: id, UserID: 1, SHA256: id, StoragePath: id + ".png", MimeType: "image/png", FileSize: 1, CreatedAt: at, UpdatedAt: at}).Error)
+	}
+	require.NoError(t, DB.Create(&GouoTask{ID: "task", UserID: 1, ClientTaskID: "task", Status: "done", Params: datatypes.JSON(`{}`), ResultMeta: datatypes.JSON(`{}`)}).Error)
+	require.NoError(t, DB.Create(&GouoTaskAsset{TaskID: "task", AssetID: "in-task", Role: "output"}).Error)
+	require.NoError(t, DB.Create(&GouoDocument{ID: "doc", UserID: 1, Kind: "canvases", ClientID: "doc", Document: datatypes.JSON(`{}`), AssetIDs: datatypes.NewJSONSlice([]string{"in-document"})}).Error)
+
+	// 这个账号回收站里什么都没有，没人引用的旧图片也要清掉，否则一直占用云端空间
+	require.NoError(t, PurgeGouoTrash(now))
+	var assets []string
+	require.NoError(t, DB.Model(&GouoAsset{}).Order("id").Pluck("id", &assets).Error)
+	require.Equal(t, []string{"fresh", "in-document", "in-task"}, assets)
+	_, err := os.Stat(filepath.Join(config.GouoAssetDir, "orphan.png"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
 func TestPurgeGouoTrashKeepsReuploadedAsset(t *testing.T) {
 	setupGouoCloudTestDB(t)
 	oldDir := config.GouoAssetDir

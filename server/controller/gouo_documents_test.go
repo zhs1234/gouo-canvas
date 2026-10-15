@@ -87,6 +87,13 @@ func TestGouoDocumentAPIValidationConflictAndAssets(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, request("PUT", "/canvases/project", 1, input).Code)
 	}
 	require.True(t, validateGouoDocument(map[string]any{"prompt": "如何保护 api_key？"}, 0))
+	// 聊天文字和工具参数里提到 data:image/ 不能让整份文档永远存不上；整个值就是内嵌图片才拒绝
+	require.True(t, validateGouoDocument(map[string]any{"messages": []any{
+		map[string]any{"role": "user", "content": "CSS 里怎么写 background: url(data:image/png;base64,...)？"},
+		map[string]any{"role": "assistant", "toolCalls": []any{map[string]any{"arguments": `{"src":"data:image/png;base64,AAAA"}`}}},
+	}}, 0))
+	require.False(t, validateGouoDocument(map[string]any{"image": "  DATA:image/png;base64,a"}, 0))
+	require.False(t, validateGouoDocument(map[string]any{"image": "blob:https://example.test/1"}, 0))
 	// MySQL 比较不区分大小写，大写 ID 会通过归属检查，但清理时按原样比较，图片会被当作未引用删掉
 	upper := strings.ToUpper(assetID)
 	input["document"] = map[string]any{"schemaVersion": 1, "nodes": []any{}}

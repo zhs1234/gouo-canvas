@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Chip, Divider, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material';
 import { API } from 'utils/api';
 import { showError, showSuccess } from 'utils/common';
+import ConfirmDialog from 'ui-component/confirm-dialog';
 
 const EMPTY = {
   GouoNotice: '',
@@ -30,6 +31,7 @@ export default function GouoSettings() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirmShorten, setConfirmShorten] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +59,8 @@ export default function GouoSettings() {
   }, [load]);
 
   const changed = Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== saved[key]));
+  // 缩短保留期会在下一次清理时彻底删除超期内容，无法恢复，保存前要确认
+  const shortensTrash = 'GouoTrashRetentionDays' in changed && Number(values.GouoTrashRetentionDays) < Number(saved.GouoTrashRetentionDays);
   const save = async () => {
     setSaving(true);
     try {
@@ -277,11 +281,33 @@ export default function GouoSettings() {
           </Stack>
         )}
         <Box>
-          <Button variant="contained" disabled={loading || saving || !Object.keys(changed).length} onClick={() => void save()}>
+          <Button
+            variant="contained"
+            disabled={loading || saving || !Object.keys(changed).length}
+            onClick={() => (shortensTrash ? setConfirmShorten(true) : void save())}
+          >
             {saving ? '保存中…' : '保存'}
           </Button>
         </Box>
       </Stack>
+      <ConfirmDialog
+        open={confirmShorten}
+        onClose={() => setConfirmShorten(false)}
+        title="缩短回收站保留天数"
+        content={`保留天数将从 ${saved.GouoTrashRetentionDays} 天改为 ${values.GouoTrashRetentionDays} 天。下一次清理（每小时一次）时，回收站里已超过新保留期的作品、画布、会话和收藏夹，以及已注销账号的云端数据会被彻底删除，无法恢复。`}
+        action={
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => {
+              setConfirmShorten(false);
+              void save();
+            }}
+          >
+            确认缩短并保存
+          </Button>
+        }
+      />
     </Box>
   );
 }

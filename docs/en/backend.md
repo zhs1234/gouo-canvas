@@ -108,7 +108,7 @@ The user list shows balances and usage in points. **增减积分** (Adjust point
 
 ![Creating redemption codes](../images/screenshots/panel-redemption.webp)
 
-When creating codes, enter points in **按积分填写** (Enter in points); the quota is calculated automatically and rounded up so the credited balance is never below the entered points, and the quota field shows the approximate points. Up to 100 codes can be created at once; creating several downloads a text file. Redeemed points are credited immediately and logged as "兑换码 #ID 充值 N 积分" (code #ID added N points).
+Redemption codes can add points to any account, so only root can list, create, edit or delete them; the 兑换 (Redemption) menu is hidden from other admins. When creating codes, enter points in **按积分填写** (Enter in points); the quota is calculated automatically and rounded up so the credited balance is never below the entered points, and the quota field shows the approximate points. Up to 100 codes can be created at once; creating several downloads a text file. Redeemed points are credited immediately and logged as "兑换码 #ID 充值 N 积分" (code #ID added N points).
 
 ### 3.5 Image billing
 
@@ -199,7 +199,7 @@ Successful images are written to the library by the server when they are generat
 
 The storage quota and the 25 MiB per-file limit apply to user uploads such as references and masks. Paid generated images saved by the server are not limited by the quota (up to 64 MB each), so used storage can exceed the quota. Image results are also cached in `GOUO_ASSET_DIR/image-results` for 24 hours (4 GB total, 256 MB per result) so an interrupted request can recover its original result; include it in capacity and backup planning.
 
-Deleted artworks, canvases, conversations, and collections go to the recycle bin, for 3 days by default (1–30 days, configurable in Gouo settings). They can be restored during that time and still count toward storage. After that, a cleanup job that runs hourly on the master node permanently deletes the records and any images no longer referenced. Cloud data of deleted accounts is removed on the same schedule. After shortening the retention, items already past the new period are deleted at the next cleanup.
+Deleted artworks, canvases, conversations, and collections go to the recycle bin, for 3 days by default (1–30 days, configurable in Gouo settings). They can be restored during that time and still count toward storage. After that, a cleanup job that runs hourly on the master node permanently deletes the records and any images no longer referenced. Cloud data of deleted accounts is removed on the same schedule. Images no longer referenced by any artwork or document (removed from a canvas or conversation, or uploaded but never used) are also cleaned up once they are older than the retention period, so they stop taking up storage. After shortening the retention, items already past the new period are deleted at the next cleanup; the panel asks for confirmation before saving.
 
 Local-file storage is suitable for one backend instance. Multiple instances must mount the same shared filesystem or database records can point to files visible only on another instance. Gouo-specific object storage is not yet implemented.
 

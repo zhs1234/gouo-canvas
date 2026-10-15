@@ -251,8 +251,9 @@ func SetApiRouter(router *gin.Engine) {
 			tokenAdminRoute.GET("/admin/search", controller.GetTokensListByAdmin)
 			tokenAdminRoute.PUT("/admin", controller.UpdateTokenByAdmin)
 		}
+		// 兑换码可以直接给任意账号加余额，只允许 root 管理；普通管理员也不能给自己或 root 改余额
 		redemptionRoute := apiRouter.Group("/redemption")
-		redemptionRoute.Use(middleware.AdminAuth())
+		redemptionRoute.Use(middleware.RootAuth())
 		{
 			redemptionRoute.GET("/", controller.GetRedemptionsList)
 			redemptionRoute.GET("/:id", controller.GetRedemption)

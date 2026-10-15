@@ -489,6 +489,12 @@ export function useIsAdmin() {
   return user.role >= 10;
 }
 
+export function useIsRoot() {
+  const { user } = useSelector((state) => state.account);
+  if (!user) return false;
+  return user.role >= 100;
+}
+
 export function useIsReliable() {
   const { user } = useSelector((state) => state.account);
   if (!user) return false;

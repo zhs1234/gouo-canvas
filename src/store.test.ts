@@ -326,7 +326,10 @@ describe('product model task snapshots', () => {
       useStore.setState({ tasks: [running] })
       const { executeTask } = await import('./store')
       const execution = executeTask(running.id)
+      // 后端最长 15 分钟，请求还会自己超时并恢复结果：10 分钟时不能判为失败，否则用户重试会重复扣费
       await vi.advanceTimersByTimeAsync(600_000)
+      expect(useStore.getState().tasks[0].status).toBe('running')
+      await vi.advanceTimersByTimeAsync(1_380_000)
       expect(useStore.getState().tasks[0].status).toBe('error')
       // 请求自身的超时恢复随后取回了已扣费的结果
       finish({ images: ['data:image/png;base64,late-result'] })
@@ -408,7 +411,7 @@ describe('product model task snapshots', () => {
       const running = task({ status: 'running', gouoPriceVersion: 'quote-a', requestId: 'original-request', createdAt: Date.now() })
       useStore.setState({ tasks: [running] })
       const original = executeTask(running.id)
-      await vi.advanceTimersByTimeAsync(600_000)
+      await vi.advanceTimersByTimeAsync(1_980_000)
       expect(useStore.getState().tasks[0].status).toBe('error')
       const recovery = executeTask(running.id, true)
       if (outcome === 'failure') failOld(new Error('old request aborted'))

@@ -286,8 +286,16 @@ func (p *OpenAIProvider) GetRequestTextBody(relayMode int, ModelName string, req
 		return nil, common.ErrorWrapper(err, "custom_parameter_error", http.StatusInternalServerError)
 	}
 
+	// 光构图片请求的尺寸、画质、审核强度是按解析后的请求核对的；原始请求体里大小写不同或重复的键会在合并时
+	// 覆盖核对过的值（例如 1K 的价格出 4K 的图），所以不透传原始请求体，渠道配置的额外参数照常生效
+	gouoImage := false
+	if p.Context != nil {
+		_, gouoImage = p.Context.Get("gouo_image_model")
+	}
+	allowExtraBody := p.Channel.AllowExtraBody && !gouoImage
+
 	// 检查是否需要合并额外字段（来自渠道配置的额外参数或用户请求中的extra_body）
-	needMerge := customParams != nil || p.Channel.AllowExtraBody
+	needMerge := customParams != nil || allowExtraBody
 
 	if needMerge {
 		// 将请求体转换为map，以便添加额外参数
@@ -303,7 +311,7 @@ func (p *OpenAIProvider) GetRequestTextBody(relayMode int, ModelName string, req
 		}
 
 		// 如果允许额外字段透传，从原始请求中获取额外字段
-		if p.Channel.AllowExtraBody {
+		if allowExtraBody {
 			requestMap = p.mergeExtraBodyFromRawRequest(requestMap)
 		}
 

@@ -1,6 +1,7 @@
 package base
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -128,6 +129,9 @@ func (p *BaseProvider) SetUsage(usage *types.Usage) {
 
 func (p *BaseProvider) SetContext(c *gin.Context) {
 	p.Context = c
+	if ctx, ok := c.Get(config.GinGouoUpstreamContextKey); ok && p.Requester != nil {
+		p.Requester.Context = ctx.(context.Context)
+	}
 }
 
 func (p *BaseProvider) SetOriginalModel(ModelName string) {
