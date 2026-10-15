@@ -14,7 +14,7 @@ import {
   normalizeBase64Image,
   pickActualParams,
 } from './imageApiShared'
-import { createBackendSettings, isInvalidBackendTokenError } from './gouoBackend'
+import { backendFetch, createBackendSettings, isInvalidBackendTokenError } from './gouoBackend'
 
 export type { CallApiOptions, CallApiResult } from './imageApiShared'
 
@@ -127,15 +127,15 @@ function isNetworkError(err: unknown): boolean {
 }
 
 // 按原请求编号读取服务端保存的结果，只读不重新生成
-async function recoverImageResult(opts: CallApiOptions, relay: Relay, signal: AbortSignal): Promise<CallApiResult> {
+async function recoverImageResult(opts: CallApiOptions, signal: AbortSignal): Promise<CallApiResult> {
   const startedAt = Date.now()
-  const url = `${relay.baseUrl.replace(/\/v1\/?$/, '')}/api/gouo/image-results?client_request_id=${encodeURIComponent(opts.requestId!)}`
+  const path = `/api/gouo/image-results?client_request_id=${encodeURIComponent(opts.requestId!)}`
   const mime = MIME_MAP[opts.params.output_format] || 'image/png'
   try {
     while (!signal.aborted) {
       let payload: { success?: boolean; data?: { status?: string; recoverable?: boolean; result?: ImageApiResponse; reason?: string } }
       try {
-        const response = await fetch(url, { method: 'GET', credentials: 'include', cache: 'no-store', signal })
+        const response = await backendFetch(path, { method: 'GET', signal })
         if ((response.status === 404 && Date.now() - startedAt < 10_000) || response.status === 408 || response.status === 429 || response.status >= 500) {
           await sleep(2_000, signal)
           continue
@@ -192,7 +192,7 @@ async function callImagesSingle(opts: CallApiOptions, relay: Relay): Promise<Cal
   try {
     if (opts.recoverOnly) {
       if (!opts.requestId) throw new Error('缺少平台原请求编号，不能恢复结果')
-      return await recoverImageResult(opts, relay, controller.signal)
+      return await recoverImageResult(opts, controller.signal)
     }
 
     if (inputImageDataUrls.length) {
@@ -254,7 +254,7 @@ async function callImagesSingle(opts: CallApiOptions, relay: Relay): Promise<Cal
       opts.signal?.addEventListener('abort', stop, { once: true })
       const recoveryTimer = setTimeout(stop, REQUEST_TIMEOUT_MS)
       try {
-        return await recoverImageResult(opts, relay, recovery.signal)
+        return await recoverImageResult(opts, recovery.signal)
       } finally {
         clearTimeout(recoveryTimer)
         opts.signal?.removeEventListener('abort', stop)

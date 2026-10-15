@@ -111,8 +111,9 @@ const models = [
 
 // 后端令牌、模型目录和账号信息都返回同一份模型目录；账号信息里没有余额时由服务端判断
 async function mockBackend() {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => new Response(JSON.stringify({ success: true, data: String(url).includes('/token/') ? 'user-token' : models }), { status: 200 }))
-  const { createBackendSettings } = await import('./lib/gouoBackend')
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => new Response(JSON.stringify({ success: true, data: String(url).includes('/api/gouo/token') ? 'user-token' : models }), { status: 200 }))
+  const { createBackendSettings, setBackendSessionForTests } = await import('./lib/gouoBackend')
+  setBackendSessionForTests()
   await createBackendSettings(true)
 }
 

@@ -1,4 +1,4 @@
-import { createBackendSettings } from '../gouoBackend'
+import { backendFetch, createBackendSettings } from '../gouoBackend'
 import type { AgentModel, AgentToolCall, AgentToolDefinition, ChatMessage } from './types'
 
 // 每条用户消息最多工具轮数、单条消息需确认的图片张数，由后台“光构设置”下发；读取目录前按后台默认值
@@ -10,13 +10,7 @@ export function getAgentLimits() {
 
 // 目录同时带回运营方在后台填写的附加提示词和 Agent 限制
 export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string }> {
-  const settings = await createBackendSettings()
-  const base = settings.baseUrl.replace(/\/v1\/?$/, '')
-  const response = await fetch(`${base}/api/gouo/agent/models`, {
-    credentials: 'include',
-    cache: 'no-store',
-    headers: { 'X-Gouo-Token': settings.apiKey },
-  })
+  const response = await backendFetch('/api/gouo/agent/models')
   const payload = await response.json()
   if (!response.ok || payload.success !== true) throw new Error(payload.message || `加载 Agent 模型失败（HTTP ${response.status}）`)
   if (!Array.isArray(payload.data) || payload.data.some((entry: unknown) => {

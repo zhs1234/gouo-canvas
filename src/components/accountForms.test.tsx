@@ -8,7 +8,7 @@ import AccountSection from './userCenter/AccountSection'
 const state = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0, effects: [] as Array<() => unknown> }))
 const api = vi.hoisted(() => ({
   getCurrentUser: vi.fn(), getBackendStatus: vi.fn(), sendEmailVerification: vi.fn(),
-  sendPasswordReset: vi.fn(), updatePassword: vi.fn(), createBackendSettings: vi.fn(), bindEmail: vi.fn(),
+  sendPasswordReset: vi.fn(), updatePassword: vi.fn(), createBackendSettings: vi.fn(), bindEmail: vi.fn(), startEmailBind: vi.fn(), resendEmailBind: vi.fn(),
   showToast: vi.fn(), setSettings: vi.fn(), getCloudStorage: vi.fn(),
 }))
 vi.mock('react', async (load) => ({
@@ -137,7 +137,7 @@ describe('account email and password forms', () => {
   })
 
   it('shows a closed notice instead of the form when the operator disables registration or password login', async () => {
-    api.getBackendStatus.mockResolvedValue({ email_service: true, register_enabled: false, password_login: false })
+    api.getBackendStatus.mockResolvedValue({ email_service: true, register_enabled: false, password_login_enabled: false })
     const draw = () => BackendAuthGate({ children: null })
     render(draw)
     await flush()
@@ -155,33 +155,45 @@ describe('account email and password forms', () => {
     expect(button(tree, '登录并进入').props.disabled).toBe(true)
   })
 
-  it('locks binding and resend together and clears verification when the recipient changes', async () => {
+  it('verifies the password before sending codes, locks binding and resend together and restarts when the recipient changes', async () => {
     api.getCurrentUser.mockResolvedValue({ id: 1, username: 'creator' })
     const draw = () => AccountSection({ user: { id: 1, username: 'creator' }, status: accountStatus, onUserChanged: async () => {} })
     render(draw)
     await flush()
     fire(field(render(draw), 'placeholder', '邮箱地址'), 'onChange', 'first@example.invalid')
-    fire(field(render(draw), 'placeholder', '邮箱验证码'), 'onChange', '123456')
-    let finish!: () => void
-    api.sendEmailVerification.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve }))
+    // 没填当前密码不能发送；发送前验证码框不可用
+    expect(button(render(draw), '发送验证码').props.disabled).toBe(true)
+    expect(field(render(draw), 'placeholder', '邮箱验证码').props.disabled).toBe(true)
+    fire(field(render(draw), 'placeholder', '当前登录密码（用于验证身份）'), 'onChange', 'password123')
+    let finish!: (flow: unknown) => void
+    api.startEmailBind.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
     fire(button(render(draw), '发送验证码'), 'onClick')
     let tree = render(draw)
+    expect(api.startEmailBind).toHaveBeenCalledWith('first@example.invalid', 'password123')
     expect(field(tree, 'placeholder', '邮箱地址').props.disabled).toBe(true)
     expect(button(tree, '绑定邮箱').props.disabled).toBe(true)
-    finish()
+    finish({ flow_token: 'flow-1', old_email_required: true })
     await flush()
     tree = render(draw)
-    fire(field(tree, 'placeholder', '邮箱地址'), 'onChange', 'second@example.invalid')
-    expect(field(render(draw), 'placeholder', '邮箱验证码').props.value).toBe('')
-    fire(field(render(draw), 'placeholder', '邮箱验证码'), 'onChange', '654321')
-    api.bindEmail.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve }))
+    // 已绑定旧邮箱时还要填原邮箱验证码；重新发送沿用这次验证，不再要密码
+    expect(field(tree, 'placeholder', '原邮箱验证码')).toBeTruthy()
+    expect(button(tree, '重新发送').props.disabled).toBe(false)
+    fire(field(tree, 'placeholder', '新邮箱验证码'), 'onChange', '123456')
+    fire(field(render(draw), 'placeholder', '原邮箱验证码'), 'onChange', '654321')
+    api.bindEmail.mockImplementation(() => new Promise<void>((resolve) => { finish = () => resolve() }))
     const form = elements(render(draw)).find((element) => element.type === 'form' && text(element).includes('绑定邮箱'))!
     const pending = fire(form, 'onSubmit')
     tree = render(draw)
+    expect(api.bindEmail).toHaveBeenCalledWith('flow-1', '123456', '654321')
     expect(field(tree, 'placeholder', '邮箱地址').props.disabled).toBe(true)
-    expect(button(tree, '发送验证码').props.disabled).toBe(true)
-    finish()
+    expect(button(tree, '重新发送').props.disabled).toBe(true)
+    finish(undefined)
     await pending
+    // 换收件邮箱要重新验证身份
+    fire(field(render(draw), 'placeholder', '邮箱地址'), 'onChange', 'second@example.invalid')
+    tree = render(draw)
+    expect(field(tree, 'placeholder', '当前登录密码（用于验证身份）')).toBeTruthy()
+    expect(field(tree, 'placeholder', '邮箱验证码').props.value).toBe('')
   })
 
   it('keeps successful password change separate from token refresh failure and retries only the token', async () => {

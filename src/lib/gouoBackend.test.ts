@@ -32,25 +32,34 @@ describe('gouoBackend', () => {
     expect(resolveBackendModel([], 'gpt-image-2', false)).toBeUndefined()
   })
 
-  it('sends the loaded account on cloud requests and reloads when the session switched accounts', async () => {
-    vi.doMock('./storageScope', () => ({ getLoadedStorageUserId: () => '7' }))
+  it('refreshes the session once, sends the bearer token on cloud requests and reloads when another page switched accounts', async () => {
+    let loadedUser = '7'
+    vi.doMock('./storageScope', () => ({ getLoadedStorageUserId: () => loadedUser }))
     const reload = vi.fn()
     vi.stubGlobal('window', { location: { reload } })
+    const session = (id: number, expires: number) => jsonResponse({ success: true, data: { access_token: `access-${id}`, access_expires_at: expires, user: { id } } })
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(session(7, Date.now() / 1000 + 30))
       .mockResolvedValueOnce(jsonResponse({ success: true, data: { used_bytes: 0 } }))
+      .mockResolvedValueOnce(session(7, Date.now() / 1000 + 3600))
       .mockResolvedValueOnce(jsonResponse({ success: true, data: { id: 'asset' } }))
       .mockResolvedValueOnce(new Response('png', { status: 200 }))
-      .mockResolvedValueOnce(jsonResponse({ success: false, message: '账号已切换', data: { code: 'account_mismatch' } }, 409))
     vi.stubGlobal('fetch', fetchMock)
-    const { getCloudStorage, uploadCloudAsset, fetchCloudAssetContent, GouoConflictError } = await import('./gouoBackend')
+    const { getCloudStorage, uploadCloudAsset, fetchCloudAssetContent } = await import('./gouoBackend')
     await getCloudStorage()
+    // 第一次拿到的 access token 不到一分钟就过期，下次请求前先换新
     await uploadCloudAsset(new Blob(['abc'], { type: 'image/png' }), 'image-1', 'abc')
     await fetchCloudAssetContent({ id: 'asset', sha256: '', mime_type: 'image/png', file_size: 0, content_url: '/api/gouo/assets/asset/content' })
-    for (const call of fetchMock.mock.calls) expect(call[1].headers).toMatchObject({ 'X-Gouo-User': '7' })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/user/auth/refresh', '/api/gouo/storage', '/api/user/auth/refresh', '/api/gouo/assets', '/api/gouo/assets/asset/content'])
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST', credentials: 'include' })
+    expect(fetchMock.mock.calls[1][1].headers).toMatchObject({ Authorization: 'Bearer access-7' })
+    expect(fetchMock.mock.calls[4][1].headers).toMatchObject({ Authorization: 'Bearer access-7' })
 
+    // 服务端判定 access token 失效时换新一次；换来的是另一个账号说明其他页面切换了账号
+    loadedUser = '8'
+    fetchMock.mockResolvedValueOnce(jsonResponse({ success: false, message: 'expired' }, 401)).mockResolvedValueOnce(session(7, Date.now() / 1000 + 3600))
     const error = await getCloudStorage().catch((err) => err)
-    expect(error).not.toBeInstanceOf(GouoConflictError)
-    expect(error.message).toBe('账号已切换')
+    expect(error.message).toContain('其他页面切换')
     expect(reload).toHaveBeenCalledOnce()
   })
 
@@ -89,20 +98,26 @@ describe('gouoBackend', () => {
     }
   })
 
-  it('uses the One Hub session login endpoint with credentials', async () => {
+  it('logs in through New API, keeps the access token for later requests and translates server messages', async () => {
     vi.stubEnv('VITE_GOUO_BACKEND_URL', 'https://api.gouo.example/')
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      success: true,
-      data: { id: 7, username: 'creator' },
-    }))
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { access_token: 'access-7', access_expires_at: Date.now() / 1000 + 900, user: { id: 7, username: 'creator' } } }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: 'relay-key' }))
+      .mockResolvedValueOnce(jsonResponse({ success: false, message: 'Username or password is incorrect, or user has been banned', message_key: 'Username or password is incorrect, or user has been banned' }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { require_verification: true, flow_token: 'flow' } }))
     vi.stubGlobal('fetch', fetchMock)
-    const { login } = await import('./gouoBackend')
+    const { login, getPlaygroundToken } = await import('./gouoBackend')
 
-    await expect(login('creator', 'password123')).resolves.toMatchObject({ id: 7 })
+    await expect(login('creator', 'password123', 'turnstile+token')).resolves.toMatchObject({ id: 7 })
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.gouo.example/api/user/login',
+      'https://api.gouo.example/api/user/login?turnstile=turnstile%2Btoken',
       expect.objectContaining({ method: 'POST', cache: 'no-store', credentials: 'include' }),
     )
+    await expect(getPlaygroundToken()).resolves.toBe('relay-key')
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.gouo.example/api/gouo/token')
+    expect(fetchMock.mock.calls[1][1].headers).toMatchObject({ Authorization: 'Bearer access-7' })
+    await expect(login('creator', 'wrong')).rejects.toThrow('用户名或密码错误，或用户已被封禁')
+    await expect(login('creator', 'password123')).rejects.toThrow('二次验证')
   })
 
   it('accepts successful register responses that contain no data field', async () => {
@@ -128,7 +143,8 @@ describe('gouoBackend', () => {
   it('updates the display name and logs out through the session API', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ success: true, message: '' })))
     vi.stubGlobal('fetch', fetchMock)
-    const { logout, updateCurrentUser } = await import('./gouoBackend')
+    const { logout, updateCurrentUser, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
 
     await expect(updateCurrentUser('光构创作者')).resolves.toBeUndefined()
     await expect(logout()).resolves.toBeUndefined()
@@ -139,8 +155,8 @@ describe('gouoBackend', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/user/logout',
-      expect.objectContaining({ method: 'GET', cache: 'no-store', credentials: 'include' }),
+      '/api/user/auth/logout',
+      expect.objectContaining({ method: 'POST', cache: 'no-store', credentials: 'include' }),
     )
   })
 
@@ -149,13 +165,17 @@ describe('gouoBackend', () => {
       .mockResolvedValueOnce(jsonResponse({ success: true, data: 5000 }))
       .mockResolvedValueOnce(jsonResponse({
         success: true,
-        data: { data: [{ created_at: 100, type: 2, quota: 120 }], page: 1, size: 10, total_count: 1 },
+        data: { items: [{ created_at: 100, type: 2, quota: 120, use_time: 3, request_id: 'req', other: '{"billing_unit":"successful_request","price_cny":0.1}' }], page: 1, page_size: 20, total: 1 },
       }))
     vi.stubGlobal('fetch', fetchMock)
-    const { getUsageLogs, redeemCode } = await import('./gouoBackend')
+    const { getUsageLogs, redeemCode, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
 
     await expect(redeemCode('GOUO-CODE')).resolves.toBe(5000)
-    await expect(getUsageLogs()).resolves.toMatchObject({ total_count: 1 })
+    await expect(getUsageLogs()).resolves.toEqual({
+      total_count: 1,
+      data: [{ created_at: 100, type: 2, quota: 120, request_time: 3000, content: undefined, model_name: undefined, metadata: { billing_unit: 'successful_request', price_cny: 0.1, request_id: 'req' } }],
+    })
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       '/api/user/topup',
@@ -163,7 +183,7 @@ describe('gouoBackend', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/log/self?page=1&size=20&order=-created_at',
+      '/api/log/self?p=1&page_size=20',
       expect.objectContaining({ credentials: 'include' }),
     )
   })
@@ -171,7 +191,8 @@ describe('gouoBackend', () => {
   it('refreshes backend authentication without replacing the selected model', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true, data: 'user-token' }))
     vi.stubGlobal('fetch', fetchMock)
-    const { createBackendSettings } = await import('./gouoBackend')
+    const { createBackendSettings, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
 
     await expect(createBackendSettings()).resolves.toEqual({ baseUrl: '/v1', apiKey: 'user-token' })
     expect(await createBackendSettings()).not.toHaveProperty('model')
@@ -179,8 +200,9 @@ describe('gouoBackend', () => {
 
   it('validates model capabilities, availability and the displayed quote while allowing batches of single-image requests', async () => {
     const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: false, mask: false, max_outputs: 1, quota: 100 }
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(jsonResponse({ success: true, data: url.includes('/token/') ? 'user-token' : [model] }))))
-    const { getImageModelQuote, GouoPriceChangedError } = await import('./gouoBackend')
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ success: true, data: [model] }))))
+    const { getImageModelQuote, GouoPriceChangedError, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
     await expect(getImageModelQuote('image-b', 0, false, 2, 'version-b')).resolves.toEqual(model)
     await expect(getImageModelQuote('image-b', 0, false, 10, 'version-b')).resolves.toEqual(model)
     await expect(getImageModelQuote('image-b', 1, false, 1, 'version-b')).rejects.toThrow('不支持当前编辑')
@@ -194,22 +216,44 @@ describe('gouoBackend', () => {
 
   it.each([0, -1, 1.5])('rejects a catalog that cannot support one image per request with max_outputs %s', async (maxOutputs) => {
     const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: true, mask: true, max_outputs: maxOutputs, quota: 100 }
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(jsonResponse({ success: true, data: url.includes('/token/') ? 'user-token' : [model] }))))
-    const { getImageModelQuote } = await import('./gouoBackend')
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ success: true, data: [model] }))))
+    const { getImageModelQuote, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
     await expect(getImageModelQuote('image-b', 0, false, 2, 'version-b')).rejects.toThrow('图片模型目录格式无效')
   })
 
-  it('refreshes an expired catalog token once without selecting a different model', async () => {
-    const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: false, mask: false, max_outputs: 2, quota: 100 }
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ success: true, data: 'old-token' }))
-      .mockResolvedValueOnce(jsonResponse({ success: false, message: '图片令牌无效，请重新登录' }, 401))
-      .mockResolvedValueOnce(jsonResponse({ success: true, data: 'new-token' }))
-      .mockResolvedValueOnce(jsonResponse({ success: true, data: [model] }))
+  it('treats a missing refresh session as signed out', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: false, message: 'refresh token invalid' }, 401))
     vi.stubGlobal('fetch', fetchMock)
     const { getImageModels } = await import('./gouoBackend')
-    await expect(getImageModels()).resolves.toEqual([model])
-    expect(fetchMock.mock.calls[3][1].headers).toMatchObject({ 'X-Gouo-Token': 'new-token' })
+    await expect(getImageModels()).rejects.toThrow('未登录')
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/user/auth/refresh'])
+  })
+
+  it('proves the current password before changing it or binding an email, and keeps the rotated session', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { proof_token: 'proof-1' } }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { access_token: 'rotated', access_expires_at: Date.now() / 1000 + 900 } }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { proof_token: 'proof-2' } }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { flow_token: 'flow', old_email_required: false } }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: { notification_warning: false } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { updatePassword, startEmailBind, bindEmail, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
+
+    await updatePassword('old-password', 'new-password')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/verify')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ method: 'password', scope: 'account.password.change', password: 'old-password' })
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'PUT', headers: { 'X-Security-Proof': 'proof-1' } })
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ password: 'new-password', original_password: 'old-password' })
+
+    await expect(startEmailBind('a@example.invalid', 'new-password')).resolves.toEqual({ flow_token: 'flow', old_email_required: false })
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ method: 'password', scope: 'account.binding.bind', password: 'new-password', context: { provider: 'email', email: 'a@example.invalid' } })
+    // 改密码后用轮换得到的新 access token
+    expect(fetchMock.mock.calls[2][1].headers).toMatchObject({ Authorization: 'Bearer rotated' })
+    expect(fetchMock.mock.calls[3][1].headers).toMatchObject({ 'X-Security-Proof': 'proof-2' })
+    await bindEmail('flow', '123456')
+    expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({ flow_token: 'flow', new_code: '123456', old_code: '' })
   })
 
   it('surfaces backend business errors', async () => {
@@ -217,7 +261,8 @@ describe('gouoBackend', () => {
       success: false,
       message: '额度不足',
     })))
-    const { getPlaygroundToken } = await import('./gouoBackend')
+    const { getPlaygroundToken, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
 
     await expect(getPlaygroundToken()).rejects.toThrow('额度不足')
   })
@@ -237,7 +282,8 @@ describe('gouoBackend', () => {
       data: { id: 'asset-1', sha256: 'abc', mime_type: 'image/png', file_size: 3, content_url: '/api/gouo/assets/asset-1/content' },
     }))
     vi.stubGlobal('fetch', fetchMock)
-    const { uploadCloudAsset } = await import('./gouoBackend')
+    const { uploadCloudAsset, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
 
     await expect(uploadCloudAsset(new Blob(['abc'], { type: 'image/png' }), 'image-1', 'abc')).resolves.toMatchObject({ id: 'asset-1' })
     const init = fetchMock.mock.calls[0][1] as RequestInit

@@ -45,7 +45,6 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState(resetParams.get('email') ?? '')
   const [verificationCode, setVerificationCode] = useState('')
   const [resetToken, setResetToken] = useState(resetParams.get('token') ?? '')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [emailService, setEmailService] = useState(false)
   const [emailVerification, setEmailVerification] = useState(false)
   const [backendStatusLoaded, setBackendStatusLoaded] = useState(false)
@@ -103,7 +102,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
         setTurnstileSiteKey(status.turnstile_site_key ?? '')
         // 旧版后端不返回这两项，按开放处理
         setRegisterEnabled(status.register_enabled !== false)
-        setPasswordLogin(status.password_login !== false)
+        setPasswordLogin(status.password_login_enabled !== false)
         setBackendStatusLoaded(true)
       })
       .catch((err) => { if (active) setStatusError(err instanceof Error ? err.message : String(err)) })
@@ -118,28 +117,34 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
     setSubmitting(true)
     try {
       if (mode === 'reset') {
-        if (password !== confirmPassword) throw new Error('两次输入的新密码不一致')
-        await resetPassword(email.trim(), resetToken.trim(), password)
+        // 服务端重置为随机密码并返回，用户登录后在用户中心改成自己的密码
+        const newPassword = await resetPassword(email.trim(), resetToken.trim())
         setMode('login')
         setPassword('')
-        setConfirmPassword('')
         setResetToken('')
         window.history.replaceState(null, '', window.location.pathname)
-        setError('密码已重置，请使用新密码登录')
+        setError(`密码已重置为 ${newPassword}，请用它登录后在用户中心修改密码`)
         return
       }
+      if (turnstileEnabled && !turnstileToken) throw new Error('请先完成安全验证')
       if (mode === 'register') {
-        if (turnstileEnabled && !turnstileToken) throw new Error('请先完成安全验证')
         await register({ username, password, email, verificationCode, turnstileToken })
+        // 安全验证的凭证只能用一次，开启时注册后需重新验证再登录
+        if (turnstileEnabled) {
+          setMode('login')
+          setError('注册成功，请完成安全验证后登录')
+          return
+        }
       }
-      const currentUser = await login(username.trim(), password)
+      const currentUser = await login(username.trim(), password, turnstileToken)
       const initializedUser = await initializeUser(currentUser)
       if (initializedUser) setUser(initializedUser)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
     } finally {
       setSubmitting(false)
-      if (mode === 'register') { setTurnstileToken(''); setTurnstileReset((value) => value + 1) }
+      setTurnstileToken('')
+      setTurnstileReset((value) => value + 1)
     }
   }
 
@@ -237,7 +242,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
               <h2 className="text-xl font-semibold tracking-[-0.02em]">{intro.panel}</h2>
               {mode === 'login' && !passwordLogin && <div role="alert" className="mt-4 rounded-xl border border-amber-500/25 bg-amber-50/70 px-4 py-3 text-sm leading-5 text-amber-800">运营方暂时关闭了账号密码登录，请稍后再试或联系运营方。</div>}
               <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-                {turnstileEnabled && mode !== 'login' && <TurnstileChallenge key={mode} siteKey={turnstileSiteKey} resetKey={turnstileReset} onToken={setTurnstileToken} />}
+                {turnstileEnabled && <TurnstileChallenge key={mode} siteKey={turnstileSiteKey} resetKey={turnstileReset} onToken={setTurnstileToken} />}
                 {mode !== 'reset' ? (
                   <label className={LABEL_CLASS}>
                     用户名
@@ -255,14 +260,10 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
                     </div>
                   </>
                 )}
-                <label className={LABEL_CLASS}>
-                  {mode === 'reset' ? '新密码' : '密码'}
-                  <input className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} type="password" minLength={mode === 'login' ? undefined : 8} maxLength={mode === 'login' ? undefined : 20} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
-                </label>
-                {mode === 'reset' && (
+                {mode !== 'reset' && (
                   <label className={LABEL_CLASS}>
-                    确认新密码
-                    <input className={INPUT_CLASS} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type="password" minLength={8} maxLength={20} autoComplete="new-password" required />
+                    密码
+                    <input className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} type="password" minLength={mode === 'login' ? undefined : 8} maxLength={mode === 'login' ? undefined : 20} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required />
                   </label>
                 )}
                 {mode === 'register' && emailVerification && (
@@ -287,7 +288,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
 
                 {error && <div role="alert" className="rounded-xl border border-red-500/20 bg-red-50/70 px-4 py-3 text-sm leading-5 text-red-700">{error}</div>}
 
-                <button type="submit" disabled={submitting || sendingVerification || (mode === 'register' && turnstileEnabled && !turnstileToken) || (mode === 'login' && !passwordLogin)} className="min-h-12 w-full rounded-[13px] bg-[#101012] text-[13px] font-bold text-white shadow-[0_14px_30px_rgb(27_24_28/0.16)] transition hover:-translate-y-px hover:bg-black disabled:cursor-wait disabled:bg-[#6f6f73] disabled:shadow-none">
+                <button type="submit" disabled={submitting || sendingVerification || (mode !== 'reset' && turnstileEnabled && !turnstileToken) || (mode === 'login' && !passwordLogin)} className="min-h-12 w-full rounded-[13px] bg-[#101012] text-[13px] font-bold text-white shadow-[0_14px_30px_rgb(27_24_28/0.16)] transition hover:-translate-y-px hover:bg-black disabled:cursor-wait disabled:bg-[#6f6f73] disabled:shadow-none">
                   {submitting ? '请稍候…' : mode === 'login' ? '登录并进入' : mode === 'register' ? '注册并进入' : '确认重置密码'}
                 </button>
               </form>

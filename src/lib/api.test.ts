@@ -15,7 +15,8 @@ describe('callImageApi', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'invalid token' } }), { status: 401 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'new-token' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 }))
-    const { createBackendSettings } = await import('./gouoBackend')
+    const { createBackendSettings, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
     await createBackendSettings(true)
     await callImageApi({ model: 'image-selected', prompt: '图片', params: { ...DEFAULT_PARAMS }, inputImageDataUrls: [], gouoPriceVersion: 'price-snapshot' })
     for (const idx of [1, 3]) {
@@ -31,7 +32,8 @@ describe('callImageApi', () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'product-token' }), { status: 200 }))
       .mockImplementation((_url, init) => new Promise<Response>((resolve) => requests.push({ init: init!, resolve })))
-    const { createBackendSettings } = await import('./gouoBackend')
+    const { createBackendSettings, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
     await createBackendSettings(true)
     const pending = callImageApi({
       model: 'gpt-image-2',
@@ -60,7 +62,8 @@ describe('callImageApi', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'product-token' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: '生成失败' } }), { status: 400 }))
-    const { createBackendSettings } = await import('./gouoBackend')
+    const { createBackendSettings, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
     await createBackendSettings(true)
     const result = await callImageApi({
       model: 'gpt-image-2',
@@ -97,7 +100,8 @@ describe('callImageApi', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'invalid token' } }), { status: 401 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'new-token' }), { status: 200 }))
       .mockImplementation(async () => new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 }))
-    const { createBackendSettings } = await import('./gouoBackend')
+    const { createBackendSettings, setBackendSessionForTests } = await import('./gouoBackend')
+    setBackendSessionForTests()
     await createBackendSettings(true)
     const result = await callImageApi({
       model: 'gpt-image-2',

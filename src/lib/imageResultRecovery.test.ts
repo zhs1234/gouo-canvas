@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS } from '../types'
 import { callImageApi, type CallApiOptions } from './api'
-import { createBackendSettings } from './gouoBackend'
+import { createBackendSettings, setBackendSessionForTests } from './gouoBackend'
 
 const options: CallApiOptions = {
   model: 'gpt-image-2',
@@ -12,6 +12,7 @@ const recovered = { success: true, data: { status: 'settled', recoverable: true,
 describe('product image result recovery', () => {
   beforeEach(async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'product-token' })))
+    setBackendSessionForTests()
     await createBackendSettings(true)
     vi.mocked(fetch).mockClear()
   })
@@ -74,12 +75,13 @@ describe('product image result recovery', () => {
     expect(fetchMock.mock.calls[2][0]).toBe('/api/gouo/image-results?client_request_id=original-task%3A1')
   })
 
-  it('does not refresh a token or resubmit when recovery requires login', async () => {
+  it('does not resubmit when recovery requires login after the session cannot be refreshed', async () => {
     const fetchMock = vi.mocked(fetch)
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: false, message: 'invalid token' }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: false, message: 'refresh token invalid' }), { status: 401 }))
     await expect(callImageApi(options)).rejects.toMatchObject({ imageResultRecovery: true, message: expect.stringContaining('重新登录') })
-    expect(fetchMock.mock.calls.map(([, init]) => init?.method)).toEqual(['POST', 'GET'])
+    expect(fetchMock.mock.calls.map(([url, init]) => `${init?.method} ${url}`)).toEqual(['POST /v1/images/generations', 'GET /api/gouo/image-results?client_request_id=original-task', 'POST /api/user/auth/refresh'])
   })
 
   it('does not resubmit a batch when one child needs authentication and another entered recovery', async () => {

@@ -1,12 +1,24 @@
 import type { TaskParams } from '../types'
+import { SERVER_MESSAGES } from './serverMessages'
 import { getLoadedStorageUserId } from './storageScope'
 import { getSizeTier, type SizeTier } from './size'
 
 interface BackendEnvelope<T> {
   success: boolean
   message?: string
+  // New API 的提示是英文 message_key，按语言包换成中文
+  message_key?: string
+  message_params?: Record<string, unknown>
   code?: string
   data?: T
+}
+
+interface AuthBundle {
+  access_token: string
+  access_expires_at: number
+  user: GouoUser
+  // 账号开启了两步验证等登录验证时，登录接口返回待验证的流程而不是会话
+  require_verification?: boolean
 }
 
 export interface GouoUser {
@@ -85,15 +97,7 @@ function checkRateLimit(response: Response) {
 }
 
 export async function getImageModels(): Promise<GouoImageModel[]> {
-  if (!backendToken) await createBackendSettings()
-  let data: unknown
-  try {
-    data = await backendRequest<unknown>('/api/gouo/models', { headers: { 'X-Gouo-Token': backendToken } })
-  } catch (err) {
-    if (!isInvalidBackendTokenError(err)) throw err
-    await createBackendSettings(true)
-    data = await backendRequest<unknown>('/api/gouo/models', { headers: { 'X-Gouo-Token': backendToken } })
-  }
+  const data = await backendRequest<unknown>('/api/gouo/models')
   if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny <= 0 || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1)) {
     throw new Error('图片模型目录格式无效')
   }
@@ -157,8 +161,6 @@ export async function getImageModelQuote(id: string, inputCount: number, hasMask
 
 interface GouoUsageLogPage {
   data: GouoUsageLog[]
-  page: number
-  size: number
   total_count: number
 }
 
@@ -172,7 +174,10 @@ interface GouoBackendStatus {
   gouo_support_contact?: string
   gouo_notice?: string
   register_enabled?: boolean
-  password_login?: boolean
+  password_login_enabled?: boolean
+  password_login_encryption_enabled?: boolean
+  quota_per_unit?: number
+  usd_exchange_rate?: number
   gouo_canvas_enabled?: boolean
   gouo_agent_enabled?: boolean
   gouo_max_images?: number
@@ -257,10 +262,40 @@ function apiUrl(path: string): string {
   return `${configuredBaseUrl}${normalizedPath}`
 }
 
-// 告诉后端本页面加载的是哪个账号的本地数据；会话已在其他页面切换账号时，后端会拒绝请求。
-function accountHeaders(): Record<string, string> {
-  const userId = getLoadedStorageUserId()
-  return userId ? { 'X-Gouo-User': userId } : {}
+// 登录会话：access token 只放内存（约 15 分钟有效），快过期时用 HttpOnly 的刷新 cookie 换新。
+// 刷新 cookie 各标签页共用，其他页面换了账号时这里会拿到另一个账号，刷新页面切到对应的本地空间
+let accessToken = ''
+let accessExpiresAt = 0
+let refreshing: Promise<void> | null = null
+
+function acceptAuth(bundle: AuthBundle) {
+  if (bundle.require_verification) throw new Error('此账号开启了登录二次验证，光构客户端暂不支持，请先在后台面板关闭后再登录')
+  accessToken = bundle.access_token
+  accessExpiresAt = bundle.access_expires_at
+  const loaded = getLoadedStorageUserId()
+  if (loaded && loaded !== String(bundle.user.id)) {
+    window.location.reload()
+    throw new Error('当前登录账号已在其他页面切换，请刷新页面')
+  }
+}
+
+// 测试用：直接放入一个有效会话，免去刷新请求
+export function setBackendSessionForTests() {
+  accessToken = 'test-access-token'
+  accessExpiresAt = Date.now() / 1000 + 3600
+}
+
+function ensureAccessToken(): Promise<void> {
+  if (accessToken && accessExpiresAt * 1000 - Date.now() > 60_000) return Promise.resolve()
+  refreshing ??= (async () => {
+    const response = await fetch(apiUrl('/api/user/auth/refresh'), { method: 'POST', cache: 'no-store', credentials: 'include' })
+    if (response.status === 401) {
+      accessToken = ''
+      throw new Error('未登录或登录已过期，请重新登录')
+    }
+    acceptAuth(await parseEnvelope<AuthBundle>(response, true))
+  })().finally(() => { refreshing = null })
+  return refreshing
 }
 
 function requestInit(init?: RequestInit): RequestInit {
@@ -269,11 +304,32 @@ function requestInit(init?: RequestInit): RequestInit {
     cache: 'no-store',
     credentials: 'include',
     headers: {
-      ...accountHeaders(),
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(typeof init?.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },
   }
+}
+
+// 需要登录的请求先确保 access token 有效；服务端判定失效（如被其他设备撤销）时换新一次再重试
+export async function backendFetch(path: string, init?: RequestInit, auth = true): Promise<Response> {
+  try {
+    if (auth) await ensureAccessToken()
+    const response = await fetch(apiUrl(path), requestInit(init))
+    if (!auth || response.status !== 401) return response
+    accessToken = ''
+    await ensureAccessToken()
+    return await fetch(apiUrl(path), requestInit(init))
+  } catch (error) {
+    if (error instanceof TypeError) throw new Error('无法连接光构服务，请检查后端地址或稍后重试')
+    throw error
+  }
+}
+
+function serverMessage(payload: BackendEnvelope<unknown>) {
+  const template = payload.message_key ? SERVER_MESSAGES[payload.message_key] : undefined
+  if (!template) return payload.message
+  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(payload.message_params?.[name] ?? ''))
 }
 
 async function parseEnvelope<T>(response: Response, requireData: boolean): Promise<T> {
@@ -285,49 +341,36 @@ async function parseEnvelope<T>(response: Response, requireData: boolean): Promi
     throw new Error(`服务返回了无法识别的响应（HTTP ${response.status}）`)
   }
 
-  if (response.status === 409 && (payload.data as { code?: string } | undefined)?.code === 'account_mismatch') {
-    // 刷新后登录检查会切换到当前账号的本地空间
-    backendToken = ''
-    window.location.reload()
-    throw new Error(payload.message || '当前登录账号已切换，请刷新页面')
-  }
-  if (response.status === 409) throw new GouoConflictError(payload.message || '云端版本冲突', payload.data)
-  if (payload.code === 'asset_not_owned') throw new GouoAssetMissingError(payload.message || '云端图片已不存在')
+  const message = serverMessage(payload)
+  if (response.status === 409) throw new GouoConflictError(message || '云端版本冲突', payload.data)
+  if (payload.code === 'asset_not_owned') throw new GouoAssetMissingError(message || '云端图片已不存在')
   if (!response.ok || !payload.success || (requireData && payload.data === undefined)) {
-    throw new Error(payload.message || `请求失败（HTTP ${response.status}）`)
+    throw new Error(message || `请求失败（HTTP ${response.status}）`)
   }
   return payload.data as T
 }
 
-export async function backendRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  try {
-    const response = await fetch(apiUrl(path), requestInit(init))
-    return await parseEnvelope<T>(response, true)
-  } catch (error) {
-    if (error instanceof TypeError) throw new Error('无法连接光构服务，请检查后端地址或稍后重试')
-    throw error
-  }
+export async function backendRequest<T>(path: string, init?: RequestInit, auth = true): Promise<T> {
+  return parseEnvelope<T>(await backendFetch(path, init, auth), true)
 }
 
-async function backendAction(path: string, body?: Record<string, unknown>, method = body ? 'POST' : 'GET'): Promise<void> {
-  try {
-    const response = await fetch(apiUrl(path), requestInit({
-      method,
-      body: body ? JSON.stringify(body) : undefined,
-    }))
-    await parseEnvelope<void>(response, false)
-  } catch (error) {
-    if (error instanceof TypeError) throw new Error('无法连接光构服务，请检查后端地址或稍后重试')
-    throw error
-  }
+async function backendAction(path: string, body?: Record<string, unknown>, method = body ? 'POST' : 'GET', auth = true, headers?: Record<string, string>): Promise<void> {
+  const response = await backendFetch(path, { method, body: body ? JSON.stringify(body) : undefined, headers }, auth)
+  await parseEnvelope<void>(response, false)
 }
 
-export function getCurrentUser(): Promise<GouoUser> {
-  return backendRequest<GouoUser>('/api/user/self')
+// 余额和消费按支付汇率从额度换算成人民币，与服务端图片定价使用同一汇率
+export async function getCurrentUser(): Promise<GouoUser> {
+  const [user] = await Promise.all([backendRequest<GouoUser>('/api/user/self'), refreshBackendStatus()])
+  const perUnit = cachedStatus?.quota_per_unit
+  const usdRate = cachedStatus?.usd_exchange_rate
+  if (!perUnit || !usdRate || !(perUnit > 0) || !(usdRate > 0)) return user
+  const rate = usdRate / perUnit
+  return { ...user, quota_cny_rate: rate, balance_cny: (user.quota ?? 0) * rate, used_cny: (user.used_quota ?? 0) * rate }
 }
 
 export function getBackendStatus(): Promise<GouoBackendStatus> {
-  return backendRequest<GouoBackendStatus>('/api/status')
+  return backendRequest<GouoBackendStatus>('/api/status', undefined, false)
 }
 
 // 后台下发的客户端设置。各处共用一次请求；切回页面时最多每分钟刷新一次，管理员修改后用户无需刷新页面
@@ -384,20 +427,33 @@ export function getMaxTaskImages() {
   return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 10 ? n : 10
 }
 
-export function login(username: string, password: string): Promise<GouoUser> {
-  return backendRequest<GouoUser>('/api/user/login', {
+export async function login(username: string, password: string, turnstileToken?: string): Promise<GouoUser> {
+  if (cachedStatus?.password_login_encryption_enabled) throw new Error('后台开启了登录密码加密，光构客户端暂不支持，请联系管理员')
+  const bundle = await backendRequest<AuthBundle>(`/api/user/login${turnstileToken ? `?turnstile=${encodeURIComponent(turnstileToken)}` : ''}`, {
     method: 'POST',
     body: JSON.stringify({ username, password }),
-  })
+  }, false)
+  acceptAuth(bundle)
+  return bundle.user
 }
 
-export function logout(): Promise<void> {
+export async function logout(): Promise<void> {
   backendToken = ''
-  return backendAction('/api/user/logout')
+  try {
+    await backendAction('/api/user/auth/logout', {}, 'POST', false)
+  } finally {
+    accessToken = ''
+  }
 }
 
 export async function updateCurrentUser(displayName: string): Promise<void> {
   await backendAction('/api/user/self', { display_name: displayName.trim() }, 'PUT')
+}
+
+// 改密码、换邮箱等敏感操作要先用当前密码换一次性证明
+async function verifyPassword(password: string, scope: string, context?: Record<string, unknown>): Promise<string> {
+  const proof = await backendRequest<{ proof_token: string }>('/api/verify', { method: 'POST', body: JSON.stringify({ method: 'password', scope, password, context }) })
+  return proof.proof_token
 }
 
 export function redeemCode(key: string): Promise<number> {
@@ -407,13 +463,36 @@ export function redeemCode(key: string): Promise<number> {
   })
 }
 
-export function getUsageLogs(page = 1, size = 20, filters?: { model?: string; type?: number; start?: number; end?: number }): Promise<GouoUsageLogPage> {
-  const params = new URLSearchParams({ page: String(page), size: String(size), order: '-created_at' })
+interface NewApiLog {
+  created_at: number
+  type: number
+  content?: string
+  model_name?: string
+  quota?: number
+  use_time?: number
+  request_id?: string
+  other?: string
+}
+
+// New API 的日志把计费明细放在 other（JSON 字符串），耗时单位是秒；转换成客户端原有的字段
+export async function getUsageLogs(page = 1, size = 20, filters?: { model?: string; type?: number; start?: number; end?: number }): Promise<GouoUsageLogPage> {
+  const params = new URLSearchParams({ p: String(page), page_size: String(size) })
   if (filters?.model) params.set('model_name', filters.model)
-  if (filters?.type) params.set('log_type', String(filters.type))
+  if (filters?.type) params.set('type', String(filters.type))
   if (filters?.start) params.set('start_timestamp', String(filters.start))
   if (filters?.end) params.set('end_timestamp', String(filters.end))
-  return backendRequest<GouoUsageLogPage>(`/api/log/self?${params}`)
+  const result = await backendRequest<{ items: NewApiLog[] | null; total: number }>(`/api/log/self?${params}`)
+  const data = (result.items ?? []).map((log): GouoUsageLog => {
+    let metadata: Record<string, unknown> = {}
+    try {
+      metadata = log.other ? JSON.parse(log.other) as Record<string, unknown> : {}
+    } catch {
+      metadata = {}
+    }
+    return { created_at: log.created_at, type: log.type, content: log.content, model_name: log.model_name, quota: log.quota,
+      request_time: log.use_time ? log.use_time * 1000 : undefined, metadata: { ...metadata, request_id: metadata.gouo_charge_id ?? log.request_id } }
+  })
+  return { data, total_count: result.total }
 }
 
 export async function register(input: RegisterInput): Promise<void> {
@@ -422,11 +501,11 @@ export async function register(input: RegisterInput): Promise<void> {
     password: input.password,
     email: input.email?.trim() || '',
     verification_code: input.verificationCode?.trim() || '',
-  })
+  }, 'POST', false)
 }
 
 export function getPlaygroundToken(): Promise<string> {
-  return backendRequest<string>('/api/token/playground')
+  return backendRequest<string>('/api/gouo/token')
 }
 
 export async function createBackendSettings(forceRefresh = false) {
@@ -449,8 +528,7 @@ export async function uploadCloudAsset(file: Blob, clientImageId: string, sha256
   form.append('file', file, `${clientImageId}.${file.type.split('/')[1] || 'png'}`)
   form.append('client_image_id', clientImageId)
   form.append('sha256', sha256)
-  const response = await fetch(apiUrl('/api/gouo/assets'), { method: 'POST', credentials: 'include', headers: accountHeaders(), body: form })
-  return parseEnvelope<GouoCloudAsset>(response, true)
+  return backendRequest<GouoCloudAsset>('/api/gouo/assets', { method: 'POST', body: form })
 }
 
 export function putCloudTask(clientTaskId: string, task: Record<string, unknown>): Promise<GouoCloudTask> {
@@ -495,7 +573,7 @@ export function hideCloudCollection(id: string): Promise<void> {
 
 export async function fetchCloudAssetContent(asset: GouoCloudAsset): Promise<Blob> {
   // 素材内容按哈希寻址，允许浏览器缓存，换设备浏览作品时不会重复下载。
-  const response = await fetch(apiUrl(asset.content_url), { credentials: 'include', headers: accountHeaders() })
+  const response = await backendFetch(asset.content_url, { cache: 'default' }, true)
   checkRateLimit(response)
   if (response.status === 409) await parseEnvelope<void>(response, false)
   if (!response.ok) throw new Error(`下载云端图片失败（HTTP ${response.status}）`)
@@ -506,24 +584,49 @@ export function setCloudTaskHidden(id: string, hidden: boolean): Promise<void> {
   return backendAction(`/api/gouo/tasks/${encodeURIComponent(id)}/${hidden ? 'hide' : 'restore'}`, {})
 }
 
-export function updatePassword(currentPassword: string, newPassword: string): Promise<void> {
-  return backendAction('/api/user/password', { current_password: currentPassword, new_password: newPassword }, 'PUT')
+// 改密码会轮换当前会话，用返回的新 access token 继续
+export async function updatePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const proof = await verifyPassword(currentPassword, 'account.password.change')
+  const bundle = await backendRequest<Omit<AuthBundle, 'user'>>('/api/user/self', {
+    method: 'PUT',
+    body: JSON.stringify({ password: newPassword, original_password: currentPassword }),
+    headers: { 'X-Security-Proof': proof },
+  })
+  accessToken = bundle.access_token
+  accessExpiresAt = bundle.access_expires_at
 }
 
 export function sendEmailVerification(email: string, turnstileToken?: string): Promise<void> {
-  return backendAction(`/api/verification?email=${encodeURIComponent(email)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ''}`)
+  return backendAction(`/api/verification?email=${encodeURIComponent(email)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ''}`, undefined, 'GET', false)
 }
 
-export function bindEmail(email: string, code: string): Promise<void> {
-  return backendAction(`/api/oauth/email/bind?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`)
+export interface EmailBindFlow {
+  flow_token: string
+  // 已绑定旧邮箱时，旧邮箱也会收到验证码
+  old_email_required: boolean
+}
+
+// 绑定或更换邮箱：先用当前密码验证身份，再向新邮箱（和旧邮箱）发送验证码
+export async function startEmailBind(email: string, password: string): Promise<EmailBindFlow> {
+  const proof = await verifyPassword(password, 'account.binding.bind', { provider: 'email', email })
+  return backendRequest<EmailBindFlow>('/api/oauth/email/bind/start', { method: 'POST', body: JSON.stringify({ email }), headers: { 'X-Security-Proof': proof } })
+}
+
+export function resendEmailBind(flowToken: string): Promise<Partial<EmailBindFlow>> {
+  return backendRequest<Partial<EmailBindFlow>>('/api/oauth/email/bind/resend', { method: 'POST', body: JSON.stringify({ flow_token: flowToken }) })
+}
+
+export function bindEmail(flowToken: string, newCode: string, oldCode = ''): Promise<void> {
+  return backendAction('/api/oauth/email/bind', { flow_token: flowToken, new_code: newCode, old_code: oldCode })
 }
 
 export function sendPasswordReset(email: string, turnstileToken?: string): Promise<void> {
-  return backendAction(`/api/reset_password?email=${encodeURIComponent(email)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ''}`)
+  return backendAction(`/api/reset_password?email=${encodeURIComponent(email)}${turnstileToken ? `&turnstile=${encodeURIComponent(turnstileToken)}` : ''}`, undefined, 'GET', false)
 }
 
-export function resetPassword(email: string, token: string, newPassword: string): Promise<void> {
-  return backendAction('/api/user/reset', { email, token, new_password: newPassword })
+// 服务端重置为随机密码并返回，用户登录后再自行修改
+export function resetPassword(email: string, token: string): Promise<string> {
+  return backendRequest<string>('/api/user/reset', { method: 'POST', body: JSON.stringify({ email, token }) }, false)
 }
 
 // 本地记录的云端图片已被服务端清除（如回收站过期），需要重新上传

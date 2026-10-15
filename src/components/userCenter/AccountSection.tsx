@@ -1,9 +1,8 @@
 import { type FormEvent, useState } from 'react'
-import type { GouoUser } from '../../lib/gouoBackend'
-import { bindEmail, createBackendSettings, logout, sendEmailVerification, updateCurrentUser, updatePassword } from '../../lib/gouoBackend'
+import type { EmailBindFlow, GouoUser } from '../../lib/gouoBackend'
+import { bindEmail, createBackendSettings, logout, resendEmailBind, startEmailBind, updateCurrentUser, updatePassword } from '../../lib/gouoBackend'
 import { deactivateUserStorage } from '../../lib/storageScope'
 import { useStore } from '../../store'
-import TurnstileChallenge from '../TurnstileChallenge'
 import type { UserCenterServiceStatus } from '../UserCenterModal'
 
 const INPUT_CLASS = 'w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04]'
@@ -21,11 +20,13 @@ export default function AccountSection({ user, status, onUserChanged }: { user: 
   const [refreshingToken, setRefreshingToken] = useState(false)
   const [bindEmailValue, setBindEmailValue] = useState('')
   const [emailCode, setEmailCode] = useState('')
+  // 发送验证码前要用当前密码验证身份；已绑定旧邮箱时旧邮箱也会收到验证码
+  const [bindPassword, setBindPassword] = useState('')
+  const [bindFlow, setBindFlow] = useState<EmailBindFlow | null>(null)
+  const [oldEmailCode, setOldEmailCode] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [bindingEmail, setBindingEmail] = useState(false)
   const [emailError, setEmailError] = useState('')
-  const [turnstileToken, setTurnstileToken] = useState('')
-  const [turnstileReset, setTurnstileReset] = useState(0)
   const [signingOut, setSigningOut] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const statusReady = !status.loading && !status.error
@@ -84,15 +85,13 @@ export default function AccountSection({ user, status, onUserChanged }: { user: 
     setEmailError('')
     try {
       if (!statusReady) throw new Error('请先成功加载账号服务配置')
-      if (status.turnstileEnabled && !turnstileToken) throw new Error('请先完成安全验证')
-      await sendEmailVerification(bindEmailValue.trim(), turnstileToken)
+      setBindFlow(bindFlow ? { ...bindFlow, ...await resendEmailBind(bindFlow.flow_token) } : await startEmailBind(bindEmailValue.trim(), bindPassword))
+      setBindPassword('')
       useStore.getState().showToast('验证码已发送，请检查邮箱', 'success')
     } catch (err) {
       setEmailError(err instanceof Error ? err.message : String(err))
     } finally {
       setSendingEmail(false)
-      setTurnstileToken('')
-      setTurnstileReset((value) => value + 1)
     }
   }
 
@@ -101,9 +100,12 @@ export default function AccountSection({ user, status, onUserChanged }: { user: 
     setBindingEmail(true)
     setEmailError('')
     try {
-      await bindEmail(bindEmailValue.trim(), emailCode.trim())
+      if (!bindFlow) throw new Error('请先发送验证码')
+      await bindEmail(bindFlow.flow_token, emailCode.trim(), oldEmailCode.trim())
       await onUserChanged()
       setEmailCode('')
+      setOldEmailCode('')
+      setBindFlow(null)
       useStore.getState().showToast('邮箱已绑定', 'success')
     } catch (err) {
       setEmailError(err instanceof Error ? err.message : String(err))
@@ -160,13 +162,14 @@ export default function AccountSection({ user, status, onUserChanged }: { user: 
           <p className="mt-1 text-xs text-gray-400">{user.email ? `当前邮箱：${user.email}` : status.loading ? '正在读取邮件服务配置…' : status.error ? '邮件服务状态暂不可用。' : status.emailService ? '绑定后可使用邮箱找回密码。' : '管理员尚未配置邮件服务。'}</p>
           {status.error && <div role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">账号服务配置读取失败：{status.error} <button type="button" onClick={status.reload} disabled={status.loading} className="underline">重新加载</button></div>}
           <div className="mt-4 space-y-3">
-            {statusReady && status.turnstileEnabled && <TurnstileChallenge siteKey={status.turnstileSiteKey} resetKey={turnstileReset} onToken={setTurnstileToken} />}
-            <input value={bindEmailValue} onChange={(event) => { setBindEmailValue(event.target.value); setEmailCode('') }} type="email" autoComplete="email" placeholder="邮箱地址" disabled={!status.emailService || sendingEmail || bindingEmail} required className={INPUT_CLASS} />
+            <input value={bindEmailValue} onChange={(event) => { setBindEmailValue(event.target.value); setEmailCode(''); setOldEmailCode(''); setBindFlow(null) }} type="email" autoComplete="email" placeholder="邮箱地址" disabled={!status.emailService || sendingEmail || bindingEmail} required className={INPUT_CLASS} />
+            {!bindFlow && <input value={bindPassword} onChange={(event) => setBindPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="当前登录密码（用于验证身份）" disabled={!status.emailService || sendingEmail} className={INPUT_CLASS} />}
             <div className="flex gap-2">
-              <input value={emailCode} onChange={(event) => setEmailCode(event.target.value)} inputMode="numeric" placeholder="邮箱验证码" disabled={!status.emailService} required className={`min-w-0 flex-1 ${INPUT_CLASS}`} />
-              <button type="button" onClick={() => void handleSendEmail()} disabled={!status.emailService || !statusReady || sendingEmail || bindingEmail || !bindEmailValue.trim() || (status.turnstileEnabled && !turnstileToken)} className="rounded-xl border border-blue-200 px-3 text-xs font-medium text-blue-600 disabled:opacity-40 dark:border-blue-500/30 dark:text-blue-300">{sendingEmail ? '发送中…' : '发送验证码'}</button>
+              <input value={emailCode} onChange={(event) => setEmailCode(event.target.value)} inputMode="numeric" placeholder={bindFlow?.old_email_required ? '新邮箱验证码' : '邮箱验证码'} disabled={!status.emailService || !bindFlow} required className={`min-w-0 flex-1 ${INPUT_CLASS}`} />
+              <button type="button" onClick={() => void handleSendEmail()} disabled={!status.emailService || !statusReady || sendingEmail || bindingEmail || !bindEmailValue.trim() || (!bindFlow && !bindPassword)} className="rounded-xl border border-blue-200 px-3 text-xs font-medium text-blue-600 disabled:opacity-40 dark:border-blue-500/30 dark:text-blue-300">{sendingEmail ? '发送中…' : bindFlow ? '重新发送' : '发送验证码'}</button>
             </div>
-            <button type="submit" disabled={!status.emailService || sendingEmail || bindingEmail || !emailCode.trim()} className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{bindingEmail ? '绑定中…' : user.email ? '更换邮箱' : '绑定邮箱'}</button>
+            {bindFlow?.old_email_required && <input value={oldEmailCode} onChange={(event) => setOldEmailCode(event.target.value)} inputMode="numeric" placeholder="原邮箱验证码" required className={INPUT_CLASS} />}
+            <button type="submit" disabled={!status.emailService || sendingEmail || bindingEmail || !bindFlow || !emailCode.trim()} className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{bindingEmail ? '绑定中…' : user.email ? '更换邮箱' : '绑定邮箱'}</button>
           </div>
           {emailError && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{emailError}</p>}
         </form>

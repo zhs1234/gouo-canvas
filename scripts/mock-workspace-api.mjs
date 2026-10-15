@@ -6,21 +6,29 @@ import { fileURLToPath } from 'node:url'
 // 只监听本机，所有结果来自仓库图片，不转发任何请求，不产生真实费用。
 const host = '127.0.0.1'
 const token = 'sk-MOCK-only-local'
+// 模拟 New API 的登录会话：access token 放在 Authorization 头，刷新 cookie 只发往 /api/user/auth
+const accessToken = 'MOCK-access-token'
+let sessionActive = false
 const priceVersion = 'MOCK-price-v1'
 const image = await readFile(fileURLToPath(new URL('../public/inspiration/case380.webp', import.meta.url)))
 const imageData = `data:image/webp;base64,${image.toString('base64')}`
 const imageRequests = new Map()
 const stats = { chatRequests: 0, imageSubmissions: 0, imageReplays: 0 }
 const imageModels = [{ id: 'gpt-image-2', name: 'MOCK 图片模型（本地免费）', price_cny: 0.01, price_version: priceVersion, reference: true, mask: true, max_outputs: 4, quota: 5000, sizes: ['1K', '2K', '4K'] }]
-const user = { id: 2147480901, username: 'MOCK-local', display_name: '本地验收 · MOCK', quota: 4999500000, used_quota: 0, request_count: 0, balance_cny: 9999, used_cny: 0, quota_cny_rate: 0.000002, image_price_cny: 0.01 }
+// 余额由客户端按状态接口里的 quota_per_unit 和 usd_exchange_rate 换算：额度 × 1 / 500000 = 人民币
+const user = { id: 2147480901, username: 'MOCK-local', display_name: '本地验收 · MOCK', quota: 4999500000, used_quota: 0, request_count: 0 }
 let password = 'MOCK-password-123'
 const logs = []
 const redeemedCodes = new Set()
 
 function page(items, params) {
-  const page = Math.max(1, Math.floor(Number(params.get('page')) || 1))
-  const size = Math.max(1, Math.min(100, Math.floor(Number(params.get('size')) || 20)))
-  return { data: items.slice((page - 1) * size, page * size), total_count: items.length, page, size }
+  const page = Math.max(1, Math.floor(Number(params.get('p')) || 1))
+  const size = Math.max(1, Math.min(100, Math.floor(Number(params.get('page_size')) || 20)))
+  return { items: items.slice((page - 1) * size, page * size), total: items.length, page, page_size: size }
+}
+
+function session() {
+  return { access_token: accessToken, token_type: 'Bearer', access_expires_at: Math.floor(Date.now() / 1000) + 900, user }
 }
 
 function json(res, status, value) {
@@ -119,29 +127,41 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${host}`)
     const path = url.pathname
-    if (req.method === 'GET' && path === '/api/status') { ok(res, { email_service: false, email_verification: false, turnstile_check: false, gouo_cloud_library: false, gouo_redemption_help: '仅本地模拟：兑换码 MOCK-TOPUP-10 可兑换一次测试额度 ¥10；重启模拟服务后重置。', mock: true }); return }
+    if (req.method === 'GET' && path === '/api/status') { ok(res, { email_service: false, email_verification: false, turnstile_check: false, quota_per_unit: 500000, usd_exchange_rate: 1, password_login_enabled: true, gouo_cloud_library: false, gouo_redemption_help: '仅本地模拟：兑换码 MOCK-TOPUP-10 可兑换一次测试额度 ¥10；重启模拟服务后重置。', mock: true }); return }
     if (req.method === 'POST' && path === '/api/user/login') {
       const payload = await body(req)
-      if (payload.username !== user.username || payload.password !== password) { json(res, 401, { success: false, message: 'MOCK 账号或密码错误' }); return }
-      res.setHeader('Set-Cookie', 'gouo_mock_session=active; HttpOnly; SameSite=Strict; Path=/')
-      ok(res, user)
+      if (payload.username !== user.username || payload.password !== password) { json(res, 200, { success: false, message: 'MOCK 账号或密码错误' }); return }
+      sessionActive = true
+      res.setHeader('Set-Cookie', 'gouo_mock_refresh=active; HttpOnly; SameSite=Strict; Path=/api/user/auth')
+      ok(res, session())
       return
     }
+    if (req.method === 'POST' && path === '/api/user/auth/refresh') {
+      if (!sessionActive || !/(?:^|;\s*)gouo_mock_refresh=active(?:;|$)/.test(req.headers.cookie || '')) { json(res, 401, { success: false, message: 'MOCK 未登录' }); return }
+      ok(res, session())
+      return
+    }
+    if (req.method === 'POST' && path === '/api/user/auth/logout') { sessionActive = false; res.setHeader('Set-Cookie', 'gouo_mock_refresh=; HttpOnly; SameSite=Strict; Path=/api/user/auth; Max-Age=0'); ok(res, null); return }
     if (req.method === 'POST' && path === '/api/user/register') { json(res, 400, { success: false, message: '此 MOCK 仅支持预置测试账号 MOCK-local，初始密码 MOCK-password-123；注册请使用隔离的真实后端验收' }); return }
-    if (path.startsWith('/api/') && /(?:^|;\s*)gouo_mock_session=logged-out(?:;|$)/.test(req.headers.cookie || '')) { json(res, 401, { success: false, message: 'MOCK 已退出登录' }); return }
+    if (path.startsWith('/api/') && (!sessionActive || req.headers.authorization !== `Bearer ${accessToken}`)) { json(res, 401, { success: false, message: 'MOCK 未登录或登录已过期' }); return }
     if (req.method === 'GET' && path === '/api/user/self') { ok(res, user); return }
+    if (req.method === 'POST' && path === '/api/verify') {
+      const payload = await body(req)
+      if (payload.method !== 'password' || payload.password !== password) throw new Error('当前密码不正确')
+      ok(res, { proof_token: `MOCK-proof:${payload.scope}`, method: 'password', scope: payload.scope })
+      return
+    }
     if (req.method === 'PUT' && path === '/api/user/self') {
       const payload = await body(req)
+      if (payload.password) {
+        if (req.headers['x-security-proof'] !== 'MOCK-proof:account.password.change') { json(res, 403, { success: false, message: '需要先验证当前密码' }); return }
+        if (typeof payload.password !== 'string' || payload.password.length < 8 || payload.password.length > 20) throw new Error('新密码必须为 8–20 个字符')
+        password = payload.password
+        ok(res, session())
+        return
+      }
       if (typeof payload.display_name !== 'string' || !payload.display_name.trim() || [...payload.display_name].length > 50) throw new Error('显示名称必须为 1–50 个字符')
       user.display_name = payload.display_name.trim()
-      ok(res, null)
-      return
-    }
-    if (req.method === 'PUT' && path === '/api/user/password') {
-      const payload = await body(req)
-      if (payload.current_password !== password) throw new Error('当前密码不正确')
-      if (typeof payload.new_password !== 'string' || payload.new_password.length < 8 || payload.new_password.length > 20) throw new Error('新密码必须为 8–20 个字符')
-      password = payload.new_password
       ok(res, null)
       return
     }
@@ -152,19 +172,17 @@ const server = http.createServer(async (req, res) => {
       redeemedCodes.add(payload.key)
       const quota = 5000000
       user.quota += quota
-      user.balance_cny = user.quota * user.quota_cny_rate
       logs.unshift({ created_at: Math.floor(Date.now() / 1000), type: 1, content: 'MOCK 测试兑换码，非真实充值', quota, model_name: '' })
       ok(res, quota)
       return
     }
-    if (req.method === 'GET' && path === '/api/user/logout') { res.setHeader('Set-Cookie', 'gouo_mock_session=logged-out; HttpOnly; SameSite=Strict; Path=/'); ok(res, null); return }
     if (req.method === 'GET' && path === '/api/log/self') {
       const query = url.searchParams
-      const filtered = logs.filter((log) => (!query.get('model_name') || log.model_name === query.get('model_name')) && (!query.get('log_type') || log.type === Number(query.get('log_type'))) && (!query.get('start_timestamp') || log.created_at >= Number(query.get('start_timestamp'))) && (!query.get('end_timestamp') || log.created_at <= Number(query.get('end_timestamp'))))
+      const filtered = logs.filter((log) => (!query.get('model_name') || log.model_name === query.get('model_name')) && (!query.get('type') || log.type === Number(query.get('type'))) && (!query.get('start_timestamp') || log.created_at >= Number(query.get('start_timestamp'))) && (!query.get('end_timestamp') || log.created_at <= Number(query.get('end_timestamp'))))
       ok(res, page(filtered, query))
       return
     }
-    if (req.method === 'GET' && path === '/api/token/playground') { ok(res, token); return }
+    if (req.method === 'GET' && path === '/api/gouo/token') { ok(res, token); return }
     if (req.method === 'GET' && path === '/api/gouo/models') { ok(res, imageModels); return }
     if (req.method === 'GET' && path === '/api/gouo/agent/models') { ok(res, [{ id: 'MOCK-agent', name: 'MOCK 创作助手（本地免费）', tool_calls: true, vision: true }]); return }
     if (req.method === 'GET' && path === '/api/gouo/storage') { ok(res, { enabled: false, used_bytes: 0, quota_bytes: 0, remaining_bytes: 0, asset_count: 0 }); return }
@@ -188,12 +206,10 @@ const server = http.createServer(async (req, res) => {
       const result = { created, data: Array.from({ length: count }, () => ({ b64_json: data, revised_prompt: source ? `MOCK 回显首张参考图，已接收 ${references.length} 张参考图${payload.files.some(([key]) => key === 'mask') ? '及遮罩' : ''}，未执行真实图片编辑：${payload.prompt || ''}` : `MOCK 本地图片：${payload.prompt || ''}` })), output_format: source?.type.split('/')[1] || 'webp' }
       if (requestId) imageRequests.set(requestId, result)
       stats.imageSubmissions += 1
-      logs.unshift({ created_at: created, type: 2, content: 'MOCK 图片请求，非真实扣费', model_name: payload.model, quota: 5000, request_time: 1, metadata: { billing_unit: 'successful_request', price_cny: 0.01, image_count: count } })
+      logs.unshift({ created_at: created, type: 2, content: 'MOCK 图片请求，非真实扣费', model_name: payload.model, quota: 5000, use_time: 1, other: JSON.stringify({ billing_unit: 'successful_request', price_cny: 0.01 }) })
       user.quota -= 5000
       user.used_quota += 5000
       user.request_count += 1
-      user.balance_cny = user.quota * user.quota_cny_rate
-      user.used_cny = user.used_quota * user.quota_cny_rate
       await new Promise((resolve) => setTimeout(resolve, 500))
       json(res, 200, result)
       return
@@ -216,11 +232,16 @@ console.log(`MOCK workspace API listening at ${address}; no upstream requests or
 if (selfTest) {
   try {
     const requestApi = async (path, method = 'GET', value, headers = {}) => {
-      const res = await fetch(`${address}${path}`, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: value === undefined ? undefined : JSON.stringify(value) })
+      const res = await fetch(`${address}${path}`, { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, ...headers }, body: value === undefined ? undefined : JSON.stringify(value) })
       return { status: res.status, value: await res.json(), cookie: res.headers.get('set-cookie') }
     }
-    const response = await fetch(`${address}/api/user/self`).then((res) => res.json())
-    assert.equal(response.data.id, 2147480901)
+    assert.equal((await requestApi('/api/user/self')).status, 401)
+    const login = await requestApi('/api/user/login', 'POST', { username: user.username, password })
+    assert.equal(login.value.data.user.id, 2147480901)
+    assert.match(login.cookie, /HttpOnly.*Path=\/api\/user\/auth/)
+    const refreshCookie = { Cookie: login.cookie.split(';')[0] }
+    assert.equal((await requestApi('/api/user/auth/refresh', 'POST', undefined, refreshCookie)).value.data.access_token, accessToken)
+    assert.equal((await requestApi('/api/user/self')).value.data.id, 2147480901)
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Gouo-Price-Version': priceVersion, 'X-Gouo-Request-Id': 'self-test-idempotency' }
     const request = { method: 'POST', headers, body: JSON.stringify({ model: 'gpt-image-2', prompt: '测试图片' }) }
     const first = await fetch(`${address}/v1/images/generations`, request).then((res) => res.json())
@@ -228,28 +249,29 @@ if (selfTest) {
     assert.deepEqual(first, second)
     assert.equal(stats.imageSubmissions, 1)
     assert.equal(stats.imageReplays, 1)
-    assert.equal((await requestApi('/api/log/self?model_name=other-model')).value.data.total_count, 0)
-    assert.equal((await requestApi('/api/log/self?model_name=gpt-image')).value.data.total_count, 0)
-    assert.equal((await requestApi('/api/log/self?model_name=gpt-image-2&log_type=2')).value.data.total_count, 1)
-    assert.equal((await requestApi('/api/log/self?start_timestamp=9999999999')).value.data.total_count, 0)
-    assert.equal((await requestApi('/api/log/self?end_timestamp=1')).value.data.total_count, 0)
+    assert.equal((await requestApi('/api/log/self?model_name=other-model')).value.data.total, 0)
+    assert.equal((await requestApi('/api/log/self?model_name=gpt-image')).value.data.total, 0)
+    assert.equal((await requestApi('/api/log/self?model_name=gpt-image-2&type=2')).value.data.total, 1)
+    assert.equal((await requestApi('/api/log/self?start_timestamp=9999999999')).value.data.total, 0)
+    assert.equal((await requestApi('/api/log/self?end_timestamp=1')).value.data.total, 0)
     assert.equal((await requestApi('/api/user/self', 'PUT', { display_name: 'MOCK 修改后的资料' })).value.success, true)
     assert.equal((await requestApi('/api/user/self')).value.data.display_name, 'MOCK 修改后的资料')
     assert.equal((await requestApi('/api/user/self', 'PUT', { display_name: '' })).status, 400)
     assert.equal((await requestApi('/api/user/topup', 'POST', { key: 'invalid' })).status, 400)
     assert.equal((await requestApi('/api/user/topup', 'POST', { key: 'MOCK-TOPUP-10' })).value.data, 5000000)
     assert.equal((await requestApi('/api/user/topup', 'POST', { key: 'MOCK-TOPUP-10' })).status, 400)
-    assert.equal((await requestApi('/api/log/self?page=2&size=1')).value.data.data[0].type, 2)
-    assert.equal((await requestApi('/api/log/self?log_type=1')).value.data.total_count, 1)
-    assert.equal((await requestApi('/api/user/self')).value.data.balance_cny, 10008.99)
-    assert.equal((await requestApi('/api/user/password', 'PUT', { current_password: 'wrong', new_password: 'MOCK-new-password' })).status, 400)
-    assert.equal((await requestApi('/api/user/password', 'PUT', { current_password: password, new_password: 'MOCK-new-password' })).value.success, true)
-    const logout = await requestApi('/api/user/logout')
-    assert.match(logout.cookie, /HttpOnly/)
-    const cookie = { Cookie: logout.cookie.split(';')[0] }
-    assert.equal((await requestApi('/api/user/self', 'GET', undefined, cookie)).status, 401)
-    assert.equal((await requestApi('/api/user/login', 'POST', { username: user.username, password: 'MOCK-password-123' }, cookie)).status, 401)
-    assert.equal((await requestApi('/api/user/login', 'POST', { username: user.username, password }, cookie)).value.success, true)
+    assert.equal((await requestApi('/api/log/self?p=2&page_size=1')).value.data.items[0].type, 2)
+    assert.equal((await requestApi('/api/log/self?type=1')).value.data.total, 1)
+    assert.equal((await requestApi('/api/user/self')).value.data.quota, 5004495000)
+    assert.equal((await requestApi('/api/verify', 'POST', { method: 'password', scope: 'account.password.change', password: 'wrong' })).status, 400)
+    assert.equal((await requestApi('/api/user/self', 'PUT', { password: 'MOCK-new-password' })).status, 403)
+    const proof = (await requestApi('/api/verify', 'POST', { method: 'password', scope: 'account.password.change', password })).value.data.proof_token
+    assert.equal((await requestApi('/api/user/self', 'PUT', { password: 'MOCK-new-password', original_password: password }, { 'X-Security-Proof': proof })).value.success, true)
+    assert.equal((await requestApi('/api/user/auth/logout', 'POST')).value.success, true)
+    assert.equal((await requestApi('/api/user/self')).status, 401)
+    assert.equal((await requestApi('/api/user/auth/refresh', 'POST', undefined, refreshCookie)).status, 401)
+    assert.equal((await requestApi('/api/user/login', 'POST', { username: user.username, password: 'MOCK-password-123' })).value.success, false)
+    assert.equal((await requestApi('/api/user/login', 'POST', { username: user.username, password })).value.success, true)
     const form = new FormData()
     form.set('model', 'gpt-image-2')
     form.set('prompt', '验证参考图文件传输')

@@ -40,6 +40,8 @@ func addGouoStatus(data gin.H) {
 	data["gouo_allow_low_moderation"] = s.AllowLowModeration
 	data["gouo_trash_retention_days"] = s.TrashRetentionDays
 	data["gouo_max_upload_bytes"] = s.AssetMaxFileBytes
+	// 客户端据此决定是否显示邮箱绑定和找回密码
+	data["email_service"] = common.SMTPServer != ""
 }
 
 // GetGouoModels 返回当前用户分组可用的图片模型目录，按后台顺序排列；默认模型不可用时用第一个
