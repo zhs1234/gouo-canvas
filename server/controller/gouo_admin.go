@@ -120,8 +120,21 @@ func ListGouoAdminModels(c *gin.Context) {
 		}
 		byModel[row.Model] = item
 	}
+	agents, err := model.ListGouoAgentModels()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// 已上架为 Agent 的文本模型不列在图片模型里，与 Agent 列表排除已启用的图片模型对称
+	listedAgents := map[string]bool{}
+	for _, agent := range agents {
+		listedAgents[agent.Model] = agent.Listed
+	}
 	for _, ability := range model.GetAllEnableAbilities() {
 		item := byModel[ability.Model]
+		if item == nil && listedAgents[ability.Model] {
+			continue
+		}
 		if item == nil {
 			item = &gouoAdminModel{GouoImageModelConfig: model.GouoImageModelConfig{Model: ability.Model, MaxOutputs: 1}, Sizes: []string{}, Qualities: []string{}, Groups: []string{}}
 			byModel[ability.Model] = item

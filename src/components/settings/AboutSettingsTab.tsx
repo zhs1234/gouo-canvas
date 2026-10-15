@@ -40,6 +40,7 @@ export default function AboutSettingsTab() {
       </div>
       <p className="mt-4 max-w-[420px] text-center text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
         本站基于开源项目 {BRAND.source.name}（MIT）修改，原作者 @{BRAND.source.author}。
+        服务端基于 <a href={BRAND.backend.repositoryUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600 dark:hover:text-gray-300">{BRAND.backend.name}</a>（AGPLv3）修改，修改后的完整源代码见项目 GitHub。
       </p>
     </div>
   )

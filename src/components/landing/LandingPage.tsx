@@ -628,6 +628,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
             <ul className="mt-4 grid gap-3 text-sm">
               <li><a href={BRAND.repositoryUrl} target="_blank" rel="noreferrer" className="text-[#2b2b2e] hover:text-[#8a8a8d]">源代码</a></li>
               <li><a href={BRAND.source.repositoryUrl} target="_blank" rel="noreferrer" className="text-[#2b2b2e] hover:text-[#8a8a8d]">基于 {BRAND.source.name}</a></li>
+              <li><a href={BRAND.backend.repositoryUrl} target="_blank" rel="noreferrer" className="text-[#2b2b2e] hover:text-[#8a8a8d]">服务端基于 {BRAND.backend.name}</a></li>
               <li><a href="./third-party-notices.txt" target="_blank" rel="noreferrer" className="text-[#2b2b2e] hover:text-[#8a8a8d]">第三方声明</a></li>
             </ul>
           </div>

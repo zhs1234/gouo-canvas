@@ -20,6 +20,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { AuthenticatedLayout } from '@/components/layout'
 import { resolveAuthentication } from '@/lib/auth-session'
+import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute('/_authenticated')({
@@ -37,6 +38,11 @@ export const Route = createFileRoute('/_authenticated')({
         to: '/sign-in',
         search: { redirect: location.href },
       })
+    }
+
+    // 光构：普通用户在光构客户端里使用，后台面板只给管理员
+    if (auth.user.role < ROLE.ADMIN) {
+      throw redirect({ to: '/admin-only' })
     }
   },
   component: AuthenticatedLayout,

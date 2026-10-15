@@ -12,4 +12,9 @@ export const BRAND = {
     repositoryUrl: 'https://github.com/CookSleep/gpt_image_playground',
     licenseUrl: 'https://github.com/CookSleep/gpt_image_playground/blob/main/LICENSE',
   },
+  // 服务端基于 New API 修改（AGPLv3）：通过网络使用服务的用户也必须能拿到服务端源码，源码就在 repositoryUrl 的 server/ 目录
+  backend: {
+    name: 'New API',
+    repositoryUrl: 'https://github.com/QuantumNous/new-api',
+  },
 } as const

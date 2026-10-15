@@ -32,6 +32,7 @@ import {
   ServerCog,
   Settings,
   ShieldCheck,
+  Sparkles,
   Ticket,
   User,
   Users,
@@ -151,6 +152,18 @@ export function useSidebarData(): SidebarData {
             title: t('Redemption Codes'),
             url: '/redemption-codes',
             icon: Ticket,
+          },
+          {
+            // 光构：客户端设置、图片与 Agent 模型、云端存储和图片账本
+            title: t('Gouo'),
+            url: '/gouo/settings',
+            activeUrls: [
+              '/gouo/image-models',
+              '/gouo/agent-models',
+              '/gouo/storage',
+              '/gouo/billing',
+            ],
+            icon: Sparkles,
           },
           {
             title: t('Subscriptions'),
