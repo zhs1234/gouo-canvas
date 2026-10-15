@@ -26,7 +26,7 @@ it('preserves the browser host and origin through the backend development proxy'
     await once(proxy.httpServer, 'listening')
     const proxyAddress = proxy.httpServer.address()
     const origin = `http://127.0.0.1:${proxyAddress.port}`
-    for (const path of ['/api/user/login', '/v1/chat/completions', '/panel']) {
+    for (const path of ['/api/user/login', '/v1/chat/completions', '/pg/chat/completions']) {
       const response = await fetch(`${origin}${path}`, { method: 'POST', headers: { Origin: origin } })
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ host: `127.0.0.1:${proxyAddress.port}`, origin })

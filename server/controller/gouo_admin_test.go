@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -119,10 +120,10 @@ func TestGouoAdminAPIs(t *testing.T) {
 			invalid := callGouoAdmin(t, UpdateGouoAdminSettings, 10, http.MethodPut, "/", `{"max_images_per_task":30}`, nil)
 			assert.False(t, invalid.Success)
 			assert.Equal(t, "Images per task must be an integer from {{min}} to {{max}}", invalid.MessageKey)
-			notice := gouo_setting.Get().Notice
+			contact := gouo_setting.Get().SupportContact
 			require.True(t, callGouoAdmin(t, UpdateGouoAdminSettings, 10, http.MethodPut, "/", `{"max_images_per_task":3}`, nil).Success)
 			assert.Equal(t, 3, gouo_setting.Get().MaxImagesPerTask)
-			assert.Equal(t, notice, gouo_setting.Get().Notice)
+			assert.Equal(t, contact, gouo_setting.Get().SupportContact)
 			var saved model.Option
 			require.NoError(t, db.Where(&model.Option{Key: "gouo_setting.max_images_per_task"}).First(&saved).Error)
 			assert.Equal(t, "3", saved.Value)
@@ -186,4 +187,52 @@ func TestGouoAgentExpressionPricing(t *testing.T) {
 	_, _, reason := gouoAgentPrice("gouo-expr-test")
 	assert.Empty(t, reason)
 	assert.Equal(t, "per_request", model.GouoBillingMode("gouo-expr-test"))
+}
+
+// 客户端目录来自 New API 原生模型：图片模型由原生端点识别，Agent 模型是带 tools 标签的已定价文本模型，模型管理里停用的不出现
+func TestGouoCatalogFromNativeModels(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
+	previousDB := model.DB
+	model.DB = db
+	prices, err := common.Marshal(ratio_setting.GetModelRatioCopy())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		model.DB = previousDB
+		model.InvalidatePricingCache()
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(string(prices)))
+		require.NoError(t, sqlDB.Close())
+	})
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"gpt-chat":1,"plain-chat":1,"hidden-chat":1}`))
+	require.NoError(t, db.Create(&model.Channel{Id: 1, Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Name: "c"}).Error)
+	for _, name := range []string{"gpt-image-2", "gpt-chat", "plain-chat", "hidden-chat", "unpriced-chat"} {
+		require.NoError(t, db.Create(&model.Ability{Group: "default", Model: name, ChannelId: 1, Enabled: true}).Error)
+	}
+	for _, meta := range []model.Model{
+		{ModelName: "gpt-image-2", Tags: "edit,mask", Status: 1},
+		{ModelName: "gpt-chat", Tags: "tools,vision", Description: "对话", Status: 1},
+		{ModelName: "hidden-chat", Tags: "tools", Status: 2},
+		{ModelName: "unpriced-chat", Tags: "tools", Status: 1},
+	} {
+		require.NoError(t, db.Create(&meta).Error)
+	}
+	model.InvalidatePricingCache()
+
+	images, agents := gouoCatalog(nil)
+	require.Len(t, images, 1)
+	assert.Equal(t, "gpt-image-2", images[0].ID)
+	assert.True(t, images[0].Mask)
+	require.Len(t, agents, 1)
+	assert.Equal(t, "gpt-chat", agents[0].ID)
+	assert.True(t, agents[0].Vision)
+	assert.Equal(t, "对话", agents[0].Description)
+
+	// 只保留当前用户分组可用的模型
+	images, agents = gouoCatalog([]string{"gpt-chat"})
+	assert.Empty(t, images)
+	assert.Len(t, agents, 1)
 }

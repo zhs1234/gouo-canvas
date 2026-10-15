@@ -3,8 +3,6 @@ package controller
 import (
 	"net/http"
 	"regexp"
-	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -93,162 +91,10 @@ func UpdateGouoAdminSettings(c *gin.Context) {
 	common.ApiSuccess(c, gouo_setting.Get())
 }
 
-type gouoAdminModel struct {
-	model.GouoImageModelConfig
-	Sizes     []string `json:"sizes"`
-	Qualities []string `json:"qualities"`
-	// 有启用中的渠道支持此模型的分组，即客户端可能看到这个模型的分组
-	Groups []string `json:"groups"`
-	// 已启用但当前配置无法使用时的原因
-	Error string `json:"error,omitempty"`
-}
-
-// ListGouoAdminModels 列出已配置的图片模型和渠道上的全部模型，便于在一处看到哪些模型会出现在客户端
+// ListGouoAdminModels 列出 New API 原生模型里会出现在客户端的图片模型和 Agent 模型，供设置默认模型
 func ListGouoAdminModels(c *gin.Context) {
-	rows, err := model.ListGouoImageModels()
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	byModel := map[string]*gouoAdminModel{}
-	for _, row := range rows {
-		item := &gouoAdminModel{GouoImageModelConfig: *row, Sizes: []string{}, Qualities: []string{}, Groups: []string{}}
-		if entry, err := row.Entry(); err == nil {
-			item.Sizes, item.Qualities = append(item.Sizes, entry.Sizes...), append(item.Qualities, entry.Qualities...)
-		} else if row.Enabled {
-			item.Error = err.Error()
-		}
-		byModel[row.Model] = item
-	}
-	agents, err := model.ListGouoAgentModels()
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	// 已上架为 Agent 的文本模型不列在图片模型里，与 Agent 列表排除已启用的图片模型对称
-	listedAgents := map[string]bool{}
-	for _, agent := range agents {
-		listedAgents[agent.Model] = agent.Listed
-	}
-	for _, ability := range model.GetAllEnableAbilities() {
-		item := byModel[ability.Model]
-		if item == nil && listedAgents[ability.Model] {
-			continue
-		}
-		if item == nil {
-			item = &gouoAdminModel{GouoImageModelConfig: model.GouoImageModelConfig{Model: ability.Model, MaxOutputs: 1}, Sizes: []string{}, Qualities: []string{}, Groups: []string{}}
-			byModel[ability.Model] = item
-		}
-		if !slices.Contains(item.Groups, ability.Group) {
-			item.Groups = append(item.Groups, ability.Group)
-		}
-	}
-	models := make([]*gouoAdminModel, 0, len(byModel))
-	for _, item := range byModel {
-		sort.Strings(item.Groups)
-		models = append(models, item)
-	}
-	// 已启用的按客户端顺序排在前面，其余按名称
-	sort.Slice(models, func(i, j int) bool {
-		if models[i].Enabled != models[j].Enabled {
-			return models[i].Enabled
-		}
-		if models[i].Enabled && models[i].Sort != models[j].Sort {
-			return models[i].Sort < models[j].Sort
-		}
-		return models[i].Model < models[j].Model
-	})
-	common.ApiSuccess(c, gin.H{"default_model": gouo_setting.Get().DefaultImageModel, "models": models})
-}
-
-func UpdateGouoAdminModel(c *gin.Context) {
-	var input gouoAdminModel
-	if err := common.UnmarshalBodyReusable(c, &input); err != nil {
-		common.ApiErrorT(c, "Invalid parameters")
-		return
-	}
-	row := input.GouoImageModelConfig
-	row.Model, row.Name, row.Description = strings.TrimSpace(row.Model), strings.TrimSpace(row.Name), strings.TrimSpace(row.Description)
-	row.Sizes, row.Qualities = strings.Join(input.Sizes, ","), strings.Join(input.Qualities, ",")
-	if err := model.SaveGouoImageModel(&row); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	common.ApiSuccess(c, nil)
-}
-
-type gouoAdminAgentModel struct {
-	model.GouoAgentModelConfig
-	BillingMode    string   `json:"billing_mode"`
-	InputPriceCNY  float64  `json:"input_price_cny"`
-	OutputPriceCNY float64  `json:"output_price_cny"`
-	Groups         []string `json:"groups"`
-	// 客户端看不到它的第一个原因（message_key），空表示可见
-	Reason string `json:"reason"`
-}
-
-// ListGouoAdminAgentModels 列出已上架的和渠道上的全部文本模型（已启用为图片模型的除外），以及客户端能否看到
-func ListGouoAdminAgentModels(c *gin.Context) {
-	rows, err := model.ListGouoAgentModels()
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	byModel := map[string]*gouoAdminAgentModel{}
-	for _, row := range rows {
-		byModel[row.Model] = &gouoAdminAgentModel{GouoAgentModelConfig: *row, Groups: []string{}}
-	}
-	for _, ability := range model.GetAllEnableAbilities() {
-		if model.IsGouoImageModel(ability.Model) {
-			continue
-		}
-		item := byModel[ability.Model]
-		if item == nil {
-			item = &gouoAdminAgentModel{GouoAgentModelConfig: model.GouoAgentModelConfig{Model: ability.Model}, Groups: []string{}}
-			byModel[ability.Model] = item
-		}
-		if !slices.Contains(item.Groups, ability.Group) {
-			item.Groups = append(item.Groups, ability.Group)
-		}
-	}
-	models := make([]*gouoAdminAgentModel, 0, len(byModel))
-	for _, item := range byModel {
-		sort.Strings(item.Groups)
-		item.BillingMode = model.GouoBillingMode(item.Model)
-		item.InputPriceCNY, item.OutputPriceCNY, item.Reason = gouoAgentPrice(item.Model)
-		switch {
-		case !item.Listed:
-			item.Reason = "Not listed"
-		case len(item.Groups) == 0:
-			item.Reason = "No enabled channel supports this model"
-		}
-		models = append(models, item)
-	}
-	sort.Slice(models, func(i, j int) bool {
-		if models[i].Listed != models[j].Listed {
-			return models[i].Listed
-		}
-		if models[i].Listed && models[i].Sort != models[j].Sort {
-			return models[i].Sort < models[j].Sort
-		}
-		return models[i].Model < models[j].Model
-	})
-	common.ApiSuccess(c, gin.H{"default_model": gouo_setting.Get().AgentDefaultModel, "models": models})
-}
-
-// UpdateGouoAdminAgentModel 上架、下架或编辑一个 Agent 文本模型；价格在 New API 的模型定价里设置
-func UpdateGouoAdminAgentModel(c *gin.Context) {
-	var row model.GouoAgentModelConfig
-	if err := common.UnmarshalBodyReusable(c, &row); err != nil {
-		common.ApiErrorT(c, "Invalid parameters")
-		return
-	}
-	row.Model, row.Name, row.Description = strings.TrimSpace(row.Model), strings.TrimSpace(row.Name), strings.TrimSpace(row.Description)
-	if err := model.SaveGouoAgentModel(&row); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	common.ApiSuccess(c, nil)
+	images, agents := gouoCatalog(nil)
+	common.ApiSuccess(c, gin.H{"image_models": images, "agent_models": agents})
 }
 
 func GetGouoAdminStorage(c *gin.Context) {

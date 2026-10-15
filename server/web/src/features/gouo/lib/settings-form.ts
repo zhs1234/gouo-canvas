@@ -38,7 +38,6 @@ export function getGouoSettingsSchema(t: TFunction) {
     max: 1024,
   })
   return z.object({
-    notice: textAtMost(t, 200),
     redemption_help: textAtMost(t, 2000),
     support_contact: textAtMost(t, 2000),
     default_image_model: z.string(),
@@ -68,7 +67,6 @@ export function settingsToFormValues(
   settings: GouoSettings
 ): GouoSettingsFormValues {
   return {
-    notice: settings.notice,
     redemption_help: settings.redemption_help,
     support_contact: settings.support_contact,
     default_image_model: settings.default_image_model,
@@ -93,7 +91,6 @@ export function formValuesToSettings(
   values: GouoSettingsFormValues
 ): GouoSettings {
   return {
-    notice: values.notice.trim(),
     redemption_help: values.redemption_help.trim(),
     support_contact: values.support_contact.trim(),
     default_image_model: values.default_image_model,

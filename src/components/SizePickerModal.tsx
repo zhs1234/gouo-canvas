@@ -20,8 +20,6 @@ interface Props {
   currentSize: string
   onSelect: (size: string) => void
   onClose: () => void
-  // 后台为所选模型开放的分辨率档位，为空时只能用自动尺寸
-  tiers: SizeTier[]
 }
 
 type Mode = 'auto' | 'ratio' | 'resolution'
@@ -44,8 +42,7 @@ function findPresetForSize(size: string) {
   return null
 }
 
-export default function SizePickerModal({ currentSize, onSelect, onClose, tiers: allowedTiers }: Props) {
-  const tiers = TIERS.filter((tier) => allowedTiers.includes(tier))
+export default function SizePickerModal({ currentSize, onSelect, onClose }: Props) {
   usePreventBackgroundScroll(true)
 
   const modalRef = useRef<HTMLDivElement>(null)
@@ -74,13 +71,13 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, tiers:
   const currentPreset = findPresetForSize(currentSize)
   const currentParsedSize = parseSize(currentSize)
   const [mode, setMode] = useState<Mode>(() => {
-    if (!currentSize || currentSize === 'auto' || !tiers.length) return 'auto'
+    if (!currentSize || currentSize === 'auto') return 'auto'
     if (currentPreset) return 'ratio'
     return 'resolution'
   })
 
   // Ratio mode state
-  const [tier, setTier] = useState<SizeTier>(currentPreset && tiers.includes(currentPreset.tier) ? currentPreset.tier : tiers[0] ?? '1K')
+  const [tier, setTier] = useState<SizeTier>(currentPreset?.tier ?? '1K')
   const [ratio, setRatio] = useState(currentPreset?.ratio ?? '1:1')
   const [customRatio, setCustomRatio] = useState('16:9')
 
@@ -136,9 +133,8 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, tiers:
     }
     return false
   }, [mode, ratio, customRatioClamped, customW, customH, previewSize])
-  // 自定义宽高也要落在开放的档位里，否则上游可能不支持
-  const previewTier = previewSize && previewSize !== 'auto' ? getSizeTier(previewSize) : null
-  const tierBlocked = Boolean(previewSize && previewSize !== 'auto' && !(previewTier && tiers.includes(previewTier)))
+  // 自定义宽高最大到 4K
+  const tierBlocked = Boolean(previewSize && previewSize !== 'auto' && !getSizeTier(previewSize))
 
   const showHint = () => setHintVisible(true)
   const hideHint = () => {
@@ -207,7 +203,6 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, tiers:
             >
               自动
             </button>
-            {tiers.length > 0 && <>
             <button
               onClick={() => setMode('ratio')}
               className={`flex-1 rounded-lg py-1.5 text-sm font-medium transition ${mode === 'ratio' ? 'bg-white text-gray-800 shadow-sm dark:bg-gray-700 dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
@@ -220,7 +215,6 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, tiers:
             >
               自定义宽高
             </button>
-            </>}
           </div>
 
           <div className="h-[380px] max-h-[55vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-white/10 pr-1 -mr-1 pb-2">
@@ -238,7 +232,6 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, tiers:
                     <br />
                     由模型自己决定生成尺寸
                   </p>
-                  {!tiers.length && <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">当前模型只支持自动尺寸</p>}
                 </div>
               </div>
             )}
@@ -248,7 +241,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, tiers:
                 <section>
                   <div className="mb-2 text-xs font-medium text-gray-400 dark:text-gray-500">基准分辨率</div>
                   <div className="grid grid-cols-3 gap-2">
-                    {tiers.map((item) => (
+                    {TIERS.map((item) => (
                       <button key={item} className={buttonClass(tier === item)} onClick={() => setTier(item)}>
                         {item}
                       </button>
@@ -356,7 +349,7 @@ export default function SizePickerModal({ currentSize, onSelect, onClose, tiers:
               <span className="font-mono text-lg font-semibold text-gray-800 dark:text-gray-100">
                 {previewSize || '尺寸无效'}
               </span>
-              {tierBlocked && <span className="text-xs text-red-500">{previewTier ? `当前模型未开放 ${previewTier} 分辨率` : '超出 4K 分辨率'}</span>}
+              {tierBlocked && <span className="text-xs text-red-500">超出 4K 分辨率</span>}
               {isClamped && (
                 <div
                   className="relative flex items-center"

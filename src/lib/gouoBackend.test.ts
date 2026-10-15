@@ -221,14 +221,6 @@ describe('gouoBackend', () => {
     await expect(getImageModelQuote('image-b', 0, false, 1, 'old-price')).rejects.toBeInstanceOf(GouoPriceChangedError)
   })
 
-  it.each([0, -1, 1.5])('rejects a catalog that cannot support one image per request with max_outputs %s', async (maxOutputs) => {
-    const model = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: true, mask: true, max_outputs: maxOutputs, quota: 100 }
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ success: true, data: [model] }))))
-    const { getImageModelQuote, setBackendSessionForTests } = await import('./gouoBackend')
-    setBackendSessionForTests()
-    await expect(getImageModelQuote('image-b', 0, false, 2, 'version-b')).rejects.toThrow('图片模型目录格式无效')
-  })
-
   it('treats a missing refresh session as signed out', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: false, message: 'refresh token invalid' }, 401))
     vi.stubGlobal('fetch', fetchMock)
@@ -299,27 +291,9 @@ describe('gouoBackend', () => {
     expect((init.body as FormData).get('client_image_id')).toBe('image-1')
   })
 
-  it('checks image params against the limits the backend sets for the model', async () => {
+  it('rejects low moderation unless the operator allows it', async () => {
     const { getImageParamIssue } = await import('./gouoBackend')
-    const base = { id: 'image-a', name: 'A', price_cny: 0.1, price_version: 'v', reference: true, mask: false, max_outputs: 1, quota: 1 }
-    const params = { size: '1024x1024', quality: 'medium' as const, moderation: 'auto' as const }
-    // 开放全部档位、画质和张数不限时都放行；没有开放档位时只能用自动尺寸
-    const open = { ...base, sizes: ['1K', '2K', '4K'] as const }
-    expect(getImageParamIssue({ ...open, sizes: [...open.sizes] }, { ...params, size: '3840x2160', quality: 'high' }, 16)).toBe('')
-    expect(getImageParamIssue(base, params, 0)).toContain('不支持该分辨率')
-    expect(getImageParamIssue(base, { ...params, size: 'auto' }, 0)).toBe('')
-    const limited = { ...base, sizes: ['1K' as const], qualities: ['low', 'medium'], max_inputs: 2 }
-    expect(getImageParamIssue(limited, params, 2)).toBe('')
-    expect(getImageParamIssue(limited, { ...params, size: 'auto' }, 0)).toBe('')
-    expect(getImageParamIssue(limited, { ...params, size: '2048x2048' }, 0)).toContain('不支持该分辨率')
-    // 只开放 2K 时，1K 档位的尺寸也不放行
-    expect(getImageParamIssue({ ...base, sizes: ['2K' as const] }, params, 0)).toContain('不支持该分辨率')
-    expect(getImageParamIssue({ ...base, sizes: ['2K' as const] }, { ...params, size: '2048x2048' }, 0)).toBe('')
-    expect(getImageParamIssue(limited, { ...params, quality: 'high' }, 0)).toContain('不开放所选画质')
-    // 自动画质可能被上游选成高画质，只开放部分画质时不放行
-    expect(getImageParamIssue(limited, { ...params, quality: 'auto' }, 0)).toContain('不开放自动画质')
-    expect(getImageParamIssue(limited, params, 3)).toContain('最多使用 2 张参考图')
-    // 后台未开放宽松审核
-    expect(getImageParamIssue(base, { ...params, size: 'auto', moderation: 'low' }, 0)).toBe('运营方未开放宽松审核')
+    expect(getImageParamIssue({ moderation: 'auto' })).toBe('')
+    expect(getImageParamIssue({ moderation: 'low' })).toBe('运营方未开放宽松审核')
   })
 })

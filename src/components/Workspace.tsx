@@ -203,7 +203,9 @@ export default function Workspace() {
   const [projects, setProjects] = useState<CanvasProject[]>([])
   const [conversations, setConversations] = useState<AgentConversation[]>([])
   const [banner, setBanner] = useState(true)
-  const notice = useBackendStatus()?.gouo_notice?.trim() || ''
+  // 创作页公告取 New API 控制台最新一条公告的第一行
+  const latestAnnouncement = useBackendStatus()?.announcements?.[0]?.content
+  const notice = typeof latestAnnouncement === 'string' ? latestAnnouncement.trim().split('\n')[0].trim() : ''
   // 后台公告被关闭后记住内容，公告更新时再显示；默认介绍只在本次打开期间关闭
   const [dismissedNotice, setDismissedNotice] = useState(() => {
     try {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -31,7 +32,6 @@ func addGouoStatus(data gin.H) {
 	data["gouo_cloud_library"] = s.CloudLibraryEnabled
 	data["gouo_redemption_help"] = s.RedemptionHelp
 	data["gouo_support_contact"] = s.SupportContact
-	data["gouo_notice"] = s.Notice
 	data["gouo_canvas_enabled"] = s.CanvasEnabled
 	data["gouo_agent_enabled"] = s.AgentEnabled
 	data["gouo_max_images"] = s.MaxImagesPerTask
@@ -42,28 +42,44 @@ func addGouoStatus(data gin.H) {
 	data["email_service"] = common.SMTPServer != ""
 }
 
-// GetGouoModels 返回当前用户分组可用的图片模型目录，按后台顺序排列；默认模型不可用时用第一个
+// gouoCatalog 用 New API 原生模型资料生成光构图片目录和 Agent 目录，按模型名排序：
+// 图片模型是 New API 识别为图片生成的模型，Agent 模型是带 tools 标签的文本模型；available 非 nil 时只保留其中的模型
+func gouoCatalog(available []string) ([]*model.GouoImageModel, []*gouoAgentModel) {
+	pricing := slices.Clone(model.GetPricing())
+	slices.SortFunc(pricing, func(a, b model.Pricing) int { return strings.Compare(a.ModelName, b.ModelName) })
+	images, agents := make([]*model.GouoImageModel, 0), make([]*gouoAgentModel, 0)
+	for _, p := range pricing {
+		if available != nil && !slices.Contains(available, p.ModelName) {
+			continue
+		}
+		if model.IsGouoImagePricing(p) {
+			if entry, err := model.GouoImageModelEntry(p); err == nil {
+				images = append(images, entry)
+			}
+			continue
+		}
+		tags := model.GouoModelTags(p.Tags)
+		if !slices.Contains(tags, model.GouoTagTools) {
+			continue
+		}
+		input, output, reason := gouoAgentPrice(p.ModelName)
+		if reason != "" {
+			continue
+		}
+		agents = append(agents, &gouoAgentModel{ID: p.ModelName, Vision: slices.Contains(tags, model.GouoTagVision),
+			Description: p.Description, BillingMode: model.GouoBillingMode(p.ModelName), InputPriceCNY: input, OutputPriceCNY: output})
+	}
+	return images, agents
+}
+
+// GetGouoModels 返回当前用户分组可用的图片模型目录；后台默认模型不可用时标出第一个
 func GetGouoModels(c *gin.Context) {
 	group, err := model.GetUserGroup(c.GetInt("id"), false)
 	if err != nil {
 		gouoFail(c, http.StatusInternalServerError, "group_unavailable", "读取账号分组失败")
 		return
 	}
-	rows, err := model.ListGouoImageModels()
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "models_unavailable", "读取模型目录失败")
-		return
-	}
-	available := model.GetGroupEnabledModels(group)
-	data := make([]*model.GouoImageModel, 0)
-	for _, row := range rows {
-		if !row.Enabled || !slices.Contains(available, row.Model) {
-			continue
-		}
-		if entry, err := row.Entry(); err == nil {
-			data = append(data, entry)
-		}
-	}
+	data, _ := gouoCatalog(model.GetGroupEnabledModels(group))
 	if len(data) > 0 {
 		idx := slices.IndexFunc(data, func(entry *model.GouoImageModel) bool { return entry.ID == gouo_setting.Get().DefaultImageModel })
 		data[max(idx, 0)].Default = true

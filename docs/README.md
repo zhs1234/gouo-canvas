@@ -32,9 +32,9 @@ Project documentation is maintained in matching Simplified Chinese and English t
 
 ## Documentation scope / 文档边界
 
-Files under [`server/docs/`](../server/docs/) come from the upstream One Hub backend and are kept for upstream reference. Gouo-specific setup, deployment, routes, storage, and pricing are documented here.
+Files under [`server/docs/`](../server/docs/) come from the upstream New API backend and are kept for upstream reference. Gouo-specific setup, deployment, routes, storage, and pricing are documented here.
 
-[`server/docs/`](../server/docs/) 下的文件来自上游 One Hub，仅作为上游参考保留。光构专用的配置、部署、路由、存储和计费说明以本目录为准。
+[`server/docs/`](../server/docs/) 下的文件来自上游 New API，仅作为上游参考保留。光构专用的配置、部署、路由、存储和计费说明以本目录为准。
 
 Release history is maintained in the bilingual [CHANGELOG](../CHANGELOG.md).
 

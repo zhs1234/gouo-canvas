@@ -34,8 +34,7 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 
 import {
   getGouoSettings,
-  listGouoAgentModels,
-  listGouoImageModels,
+  listGouoModels,
   updateGouoSettings,
 } from '../api'
 import { GOUO_QUERY_KEYS, SUCCESS_MESSAGES } from '../constants'
@@ -94,14 +93,6 @@ function GouoSettingsForm(props: {
         <SettingsSection title={t('Client content')}>
           <SettingsTextField
             control={control}
-            name='notice'
-            label={t('Creation page announcement')}
-            description={t(
-              'Shown as a single-line banner; leave empty to hide'
-            )}
-          />
-          <SettingsTextField
-            control={control}
             name='support_contact'
             label={t('Support contact')}
             multiline
@@ -120,7 +111,7 @@ function GouoSettingsForm(props: {
             label={t('Default image model')}
             options={props.imageModels}
             description={t(
-              'Used when the user has not picked a model or the picked one is no longer available'
+              'Image models come from Models; add the edit tag for reference images and mask for mask edits'
             )}
           />
           <SettingsSwitchField
@@ -160,6 +151,9 @@ function GouoSettingsForm(props: {
             name='agent_default_model'
             label={t('Default Agent model')}
             options={props.agentModels}
+            description={t(
+              'Agent models are priced text models tagged tools in Models; add vision to let them read images'
+            )}
           />
           <SettingsTextField
             control={control}
@@ -220,43 +214,40 @@ export function GouoSettingsSection() {
     queryKey: GOUO_QUERY_KEYS.settings,
     queryFn: async () => requireServerSuccess(await getGouoSettings()),
   })
-  const imageModels = useQuery({
-    queryKey: GOUO_QUERY_KEYS.imageModels,
-    queryFn: async () => requireServerSuccess(await listGouoImageModels()),
+  const models = useQuery({
+    queryKey: GOUO_QUERY_KEYS.models,
+    queryFn: async () => requireServerSuccess(await listGouoModels()),
   })
-  const agentModels = useQuery({
-    queryKey: GOUO_QUERY_KEYS.agentModels,
-    queryFn: async () => requireServerSuccess(await listGouoAgentModels()),
-  })
-  // 默认模型只能从客户端可见的模型里选
+  // 默认模型只能从会出现在客户端的原生模型里选
   const imageOptions = useMemo(
     () =>
-      (imageModels.data?.data?.models ?? [])
-        .filter((row) => row.enabled)
-        .map((row) => ({ value: row.model, label: row.name || row.model })),
-    [imageModels.data]
+      (models.data?.data?.image_models ?? []).map((row) => ({
+        value: row.id,
+        label: row.id,
+      })),
+    [models.data]
   )
   const agentOptions = useMemo(
     () =>
-      (agentModels.data?.data?.models ?? [])
-        .filter((row) => row.listed)
-        .map((row) => ({ value: row.model, label: row.name || row.model })),
-    [agentModels.data]
+      (models.data?.data?.agent_models ?? []).map((row) => ({
+        value: row.id,
+        label: row.id,
+      })),
+    [models.data]
   )
 
-  if (settings.isError || imageModels.isError || agentModels.isError) {
+  if (settings.isError || models.isError) {
     return (
       <ErrorState
         title={t('Failed to load')}
         onRetry={() => {
           void settings.refetch()
-          void imageModels.refetch()
-          void agentModels.refetch()
+          void models.refetch()
         }}
       />
     )
   }
-  if (!settings.data?.data || !imageModels.data || !agentModels.data) {
+  if (!settings.data?.data || !models.data) {
     return <LoadingState message={t('Loading settings...')} />
   }
   return (

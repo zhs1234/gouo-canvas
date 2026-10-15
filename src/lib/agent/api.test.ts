@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { consumeChatStream } from './api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setBackendSessionForTests } from '../gouoBackend'
+import { consumeChatStream, streamAgentCompletion } from './api'
 
 function stream(text: string, size = 7) {
   const bytes = new TextEncoder().encode(text)
@@ -152,5 +153,22 @@ describe('Agent SSE', () => {
     })
     await expect(consumeChatStream(body, () => controller.abort(), controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
     expect(cancelled).toBe(true)
+  })
+})
+
+describe('Agent request', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('sends the conversation to the native playground with the login session instead of a platform token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(stream(event({ content: '好' }, 'stop'))))
+    vi.stubGlobal('fetch', fetchMock)
+    setBackendSessionForTests()
+
+    await expect(streamAgentCompletion({ model: 'gpt-agent', messages: [], tools: [], signal: new AbortController().signal, onUpdate: () => {} }))
+      .resolves.toMatchObject({ content: '好' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/pg/chat/completions')
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer test-access-token', 'X-Gouo-Agent': '1' })
   })
 })

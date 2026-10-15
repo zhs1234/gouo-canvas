@@ -2,7 +2,7 @@
 
 [English](../en/project-overview.md) · [文档中心](../README.md)
 
-光构是一套带账号、积分结算和云端作品库的 AI 图片工作台，提供生成图片、无限画布和 Agent 三种创作方式。用户在 React 前端完成提示词输入、参考图和遮罩编辑、画布排版和作品整理；基于 One Hub 的 Go 后端负责认证、渠道选择、上游请求和数据归属。图片模型由配置的上游服务提供，仓库本身不包含模型训练或推理服务。
+光构是一套带账号、积分结算和云端作品库的 AI 图片工作台，提供生成图片、无限画布和 Agent 三种创作方式。用户在 React 前端完成提示词输入、参考图和遮罩编辑、画布排版和作品整理；基于 New API 的 Go 后端负责认证、渠道选择、上游请求和数据归属。图片模型由配置的上游服务提供，仓库本身不包含模型训练或推理服务。
 
 本文面向项目维护者和新接手的开发者，说明产品范围、代码分工、主要数据流及部署边界。依据为 2026-10-13 的源码（包含积分制、后台控制客户端第一批和删除新手引导等改动），并在本地演示环境中实际运行核对；线上配置和真实上游的运行效果未在本次梳理中验证。
 
@@ -18,11 +18,11 @@
 | Agent | 对话式创作，调用图片生成和画布读写工具，模型由后台配置 | [agent](../../src/components/agent)、[lib/agent](../../src/lib/agent) |
 | 用户中心 | 积分余额、图片计费、兑换码、使用记录和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | 云端作品库 | 任务及关联图片同步、空间用量、账号隔离 | [serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo_cloud.go](../../server/controller/gouo_cloud.go) |
-| 管理后台 | 仅限管理员登录；用户、渠道、兑换码、日志等 One Hub 管理能力，以及光构设置、光构模型、图片账务和光构存储 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
+| 管理后台 | 仅限管理员登录；用户、渠道、兑换码、日志等 New API 管理能力，以及光构设置、图片账务和光构存储 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
 
 ![创作页](../images/screenshots/client-create.webp)
 
-前端还提供灵感库、深色主题和 PWA 安装。PWA 缓存页面与静态资源，并跳过 `/api`、`/v1` 和 `/panel`；它不提供离线图片生成。实现见 [main.tsx](../../src/main.tsx) 和 [sw.js](../../public/sw.js)。
+前端还提供灵感库、深色主题和 PWA 安装。PWA 缓存页面与静态资源，并跳过 `/api`、`/v1` 和 `/pg`；它不提供离线图片生成。实现见 [main.tsx](../../src/main.tsx) 和 [sw.js](../../public/sw.js)。
 
 ## 身份与数据
 
@@ -39,10 +39,10 @@
 | 单元 | 技术栈 | 依赖与产物 |
 | --- | --- | --- |
 | 公开前端 | React 19、TypeScript、Vite 6、Zustand、Tailwind CSS 3 | 根目录 npm 和 `package-lock.json`，输出 `dist/` |
-| 产品后端 | Go 1.25、Gin、GORM，基于 One Hub | `server/go.mod` 和 `go.sum`，编译为 Go 程序 |
-| 管理后台 | React 18、Vite 7、MUI 5、Redux | `server/web` 使用 Yarn 1.22.22 和 `yarn.lock`，输出 `server/web/build/` |
+| 产品后端 | Go 1.26、Gin、GORM，基于 New API | `server/go.mod` 和 `go.sum`，编译为 Go 程序 |
+| 管理后台 | React 19、Rsbuild、TanStack Router/Query、Tailwind CSS 4 | `server/web` 使用 Bun 和 `bun.lock`，输出 `server/web/dist/` |
 
-[server/main.go](../../server/main.go) 使用 `go:embed` 嵌入管理后台，因此首次构建或运行后端前，需要先生成 `server/web/build/`。根目录前端和管理后台是两个应用，不能用一次根目录 `npm ci` 替代全部安装。
+[server/main.go](../../server/main.go) 使用 `go:embed` 嵌入管理后台，因此首次构建或运行后端前，需要先生成 `server/web/dist/`。根目录前端和管理后台是两个应用，不能用一次根目录 `npm ci` 替代全部安装。
 
 | 目录或文件 | 职责 | 常见修改入口 |
 | --- | --- | --- |
@@ -66,11 +66,11 @@
 
 `main.tsx` 用 `BackendAuthGate` 包住工作台。产品模式先请求 `GET /api/user/self`，未登录时显示登录页。登录成功后激活当前用户的本地存储作用域；若作用域改变，刷新页面后再加载该账号的数据。
 
-随后前端从 `GET /api/token/playground` 获取用户中继令牌。后端按用户查找或创建 `sys_playground` 令牌，并校验已有令牌的有效性；图片请求使用该令牌，账号与云库请求使用 Cookie 会话。`UnlimitedQuota` 表示令牌自身没有独立额度上限，图片调用仍需要检查用户余额。
+随后前端从 `GET /api/gouo/token` 获取用户中继令牌。后端按用户查找或创建 `sys_playground` 令牌，；图片请求使用该令牌，账号与云库请求使用 Cookie 会话。`UnlimitedQuota` 表示令牌自身没有独立额度上限，图片调用仍需要检查用户余额。
 
 跨标签页的账号切换会触发存储作用域检查。云同步也会再次确认登录用户与本地作用域一致。服务端 `/api/gouo` 路由使用 `UserAuth`，模型查询包含 `user_id` 条件；管理接口使用 `AdminAuth`。本地隔离和服务端资源归属校验共同保护账号数据。
 
-依据：[BackendAuthGate.tsx](../../src/components/BackendAuthGate.tsx)、[storageScope.ts](../../src/lib/storageScope.ts)、[token.go](../../server/controller/token.go)、[api-router.go](../../server/router/api-router.go)、[gouo_cloud.go](../../server/model/gouo_cloud.go)。
+依据：[BackendAuthGate.tsx](../../src/components/BackendAuthGate.tsx)、[storageScope.ts](../../src/lib/storageScope.ts)、[gouo.go](../../server/controller/gouo.go)、[gouo-router.go](../../server/router/gouo-router.go)、[gouo_cloud.go](../../server/model/gouo_cloud.go)。
 
 ### 图片生成和编辑
 
@@ -95,13 +95,11 @@
 
 ### 计费和失败处理
 
-`/v1/images/generations`、`/v1/images/edits` 和 `/v1/images/variations` 按公开模型定价，每次成功 HTTP 请求收费。模型配置复用 `Price` 表，目录 `/api/gouo/models` 结合实际令牌权限和可用渠道返回售价、能力、输出上限和版本。额度公式为 `ceil(人民币价格 / PaymentUSDRate × QuotaPerUnit)`；无有效价格的模型禁止调用，不回退通用计费。前端模型选择按账号记忆，任务固定模型与报价。
+`/v1/images/generations` 和 `/v1/images/edits` 使用 New API 自身的模型定价（按次价格、模型倍率或阶梯表达式），用户组倍率等规则照常生效；`/v1/images/variations` 未实现。光构图片模型只能走图片接口，其他入口调用会被拒绝。目录 `/api/gouo/models` 返回当前账号分组可用的已启用模型、计费方式、能力、输出上限和价格版本；版本由生效定价和能力配置计算，变化时客户端需要重新确认。前端模型选择按账号记忆，任务固定模型与报价。
 
-图片中继通过事务条件更新原子预扣用户和令牌额度，不跳过高余额账号。整个 HTTP 请求的渠道重试共用一份预扣，后端失败退款、成功结算，日志记录公开模型、单价快照、计费单位、版本和实际额度；用户组倍率和渠道模型映射不改变售价。价格或能力变化会要求客户端重新确认。
+光构产品客户端把多张拆成单图请求，每张成功的图片单独收费。图片请求在预扣时写入持久账本并按请求编号去重，没有向用户返回图片的请求自动退款，超过 20 分钟仍未结算的由主节点定时退款。浏览器超时、下载图片失败或本地保存失败，不必然说明上游调用失败或后端应退款。重试会要求确认新请求费用。
 
-光构产品客户端把多张拆成单图请求，每张成功的图片单独收费；直接调用 API 时，单个请求在模型数量上限内要求多张图只收费一次。旧 `GOUO_IMAGE_PRICE_CNY` 只用于首次迁移默认模型，迁移的输出上限为 1 张，其他模型需要管理员启用并定价。纯前端兼容模式同样可能拆成多个分别收费的请求。浏览器超时、下载图片失败或本地保存失败，不必然说明上游调用失败或后端应退款。持久账本支持中断后核对：未发送的预扣超过 20 分钟自动退款，已发送但结果未知的请求由管理员核对渠道记录后处理。用户可在使用记录查看请求状态；重试会要求确认新请求费用。
-
-依据：[relay/main.go](../../server/relay/main.go)、[quota.go](../../server/relay/relay_util/quota.go)、[openaiCompatibleImageApi.ts](../../src/lib/openaiCompatibleImageApi.ts)。价格、付款配置与生产验证见[后端说明](./backend.md)。
+依据：[relay/gouo_image.go](../../server/relay/gouo_image.go)、[model/gouo_billing.go](../../server/model/gouo_billing.go)、[api.ts](../../src/lib/api.ts)。价格、付款配置与生产验证见[后端说明](./backend.md)。
 
 ### 云端作品库
 
@@ -111,23 +109,23 @@
 
 | 默认限制 | 数值 | 配置 |
 | --- | --- | --- |
-| 每用户资产空间 | 2 GiB | `GOUO_ASSET_USER_QUOTA_BYTES`，或后台“光构设置” |
-| 单文件大小 | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES`，或后台“光构设置” |
+| 每用户资产空间 | 2 GiB | 后台“光构设置” |
+| 单文件大小 | 25 MiB | 后台“光构设置” |
 | 单任务关联资产数 | 32 | `GOUO_ASSET_MAX_TASK_FILES` |
 
 前端补交逻辑也限制为 32 个关联资产（参考图、遮罩和输出图）；只增加后端限额不会自动扩大前端范围。空间配额只约束用户上传，服务端保存的已付费生成图不受配额限制。管理员可为用户设置单独空间额度。
 
 删除云端作品、画布、会话或收藏夹会进入回收站，默认保留 3 天（后台可改为 1–30 天），期间可恢复并继续占用空间；之后由主节点每小时的清理任务彻底删除记录和不再被引用的图片。尚未导入账号的本机作品只存在于原浏览器，清理浏览器数据或换设备会丢失。
 
-依据：[db.ts](../../src/lib/db.ts)、[serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo-trash.go](../../server/model/gouo-trash.go)、[controller/gouo_cloud.go](../../server/controller/gouo_cloud.go)、[model/gouo_cloud.go](../../server/model/gouo_cloud.go)。
+依据：[db.ts](../../src/lib/db.ts)、[serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo_trash.go](../../server/model/gouo_trash.go)、[controller/gouo_cloud.go](../../server/controller/gouo_cloud.go)、[model/gouo_cloud.go](../../server/model/gouo_cloud.go)。
 
 ## 运行和部署
 
-本地完整产品需要公开前端、Go 后端，以及编译后嵌入后端的管理后台。文档要求 Node.js 22 和 Go 1.25；根前端用 npm，管理后台用 Yarn。SQLite 是未配置 `SQL_DSN` 时的默认数据库，Redis 可在本地省略。Windows 使用当前 SQLite 驱动还需要支持 CGO 的 C 编译器。
+本地完整产品需要公开前端、Go 后端，以及编译后嵌入后端的管理后台。文档要求 Node.js 22、Bun 和 Go 1.26；根前端用 npm，管理后台用 Bun。SQLite 是未配置 `SQL_DSN` 时的默认数据库（纯 Go 驱动，不需要 CGO），Redis 可在本地省略。
 
-开发访问前端 `http://127.0.0.1:5173`，后端默认监听 3000。Vite 根据 `VITE_GOUO_BACKEND_DEV_TARGET` 代理 `/api`、`/v1` 和 `/panel`；完整产品示例将目标设为 `http://127.0.0.1:3000`。空数据库会创建 `root` / `123456`，必须及时改密码。
+开发访问前端 `http://127.0.0.1:5173`，后端默认监听 3000。Vite 根据 `VITE_GOUO_BACKEND_DEV_TARGET` 代理 `/api`、`/v1` 和 `/pg`；完整产品示例将目标设为 `http://127.0.0.1:3000`。空数据库会创建 `root` / `123456`，必须及时改密码。
 
-当前产品部署入口是根目录 `Dockerfile` 与 [deploy/docker-compose.yml](../../deploy/docker-compose.yml)。Compose 启动 Nginx 前端、Go 后端、MySQL 8.4 和 Redis 7.4；公开端口默认 8080，后端管理端口只绑定宿主机 `127.0.0.1:3000`。生产 Nginx 代理 `/api/` 和 `/v1/`，没有把 `/panel` 代理到公开端口；管理后台需要经受控入口访问。
+当前产品部署入口是根目录 `Dockerfile` 与 [deploy/docker-compose.yml](../../deploy/docker-compose.yml)。Compose 启动 Nginx 前端、Go 后端、MySQL 8.4 和 Redis 7.4；公开端口默认 8080，后端管理端口只绑定宿主机 `127.0.0.1:3000`。生产 Nginx 只代理 `/api/`、`/v1/` 和 `/pg/`，管理后台（后端根路径）不在公开端口上，需要经受控入口访问。
 
 数据库保存账号、额度、渠道与作品关系，`backend-data` 保存后端数据和资产。备份恢复必须同时覆盖数据库、资产文件和相关签名密钥。多个后端实例还需要共享数据库、协调层和资产文件系统；光构专用云库目前使用文件目录，不能因为上游有对象存储模块就认为本产品云库已经接入对象存储。
 
@@ -137,25 +135,7 @@
 
 ## 验证状态和后续工作
 
-2026-10-13 在 Linux 工作区完成以下检查，使用隔离的 SQLite 数据库和本地模拟上游，不代表生产服务或真实上游计费已经通过回归。更早的 2026-10-05 检查（Windows 与 Docker Linux/CGO 环境）见下表后半部分。
-
-| 检查 | 结果 |
-| --- | --- |
-| 根前端 `npm run build`、`npx tsc --noEmit` | 通过（2026-10-13） |
-| 根前端 `npm test` | 47 个测试文件、485 项测试通过（2026-10-13） |
-| 后端 `go vet`，`go test ./controller/ ./model/ ./common/` | 通过（2026-10-13） |
-| 浏览器端到端：注册登录、生成、遮罩编辑、画布生成、Agent 工具调用、兑换积分、使用记录，以及后台光构设置、光构模型、图片账务、光构存储、用户积分调整和兑换码 | 通过（2026-10-13，本文档截图即取自该环境） |
-| 根前端 `npm ci` | 通过（2026-10-05） |
-| 管理后台 Yarn 锁定安装和构建 | 通过，已生成嵌入所需文件 |
-| Go 1.25.14 与后端 `go mod download`、`go mod verify` | 完成，模块校验通过 |
-| Docker Linux/CGO 后端编译及 model/controller/relay/relay_util 包测试 | 通过 |
-| 隔离 SQLite/Redis 与模拟上游 HTTP 验收 | 模型目录、不同价格、映射、失败退款、内部重试、报价变更、有限令牌与并发余额检查通过 |
-| 桌面和 390px 手机界面 | 模型选择、账号选择记忆、数量/编辑能力限制、模拟生成和参考图编辑通过；后台价格加载、校验及保存通过 |
-| 真实收费上游、MySQL/PostgreSQL、生产迁移、跨设备同步、支付和 CSV 文件下载端到端 | 未验证 |
-
-根目录 npm 安装报告 17 项依赖漏洞，其中 12 项为 high。这是安装时的审计结果，不等于已证明存在可利用的线上漏洞；本次未执行自动修复或升级。前端构建还提示旧 Browserslist 数据和混合导入，管理后台提示 peer dependency、Tailwind 内容配置和较大分包，这些警告未阻止本次构建。
-
-上线前应在目标数据库验证迁移和备份恢复，再用真实上游与独立账号回归生成、计费、同步和回收站，最后核对发布工作流与依赖审计。在线支付需要单独验证配置、回调、重复通知和对账；源码中存在上游支付能力不代表可以直接对外开放收款。
+当前 `migrate/new-api` 分支把后端从 One Hub 换成了 New API，旧版的验证记录已不适用。新后端还需要在目标数据库验证迁移和备份恢复，再用真实上游与独立账号回归生成、计费、同步和回收站。在线支付需要单独验证配置、回调、重复通知和对账；源码中存在上游支付能力不代表可以直接对外开放收款。
 
 ## 文档阅读顺序
 
@@ -165,4 +145,4 @@
 4. [测试与本地模拟 API](./testing.md)：定位兼容和异常场景。
 5. [部署总览](./deployment/index.md)：选择部署方式并完成上线检查。
 
-前端来源为 GPT Image Playground，使用 MIT License；后端来源为 One Hub，保留 Apache-2.0 声明。上游通用说明在 `server/docs/`，光构产品接入与部署以根目录 `docs/` 为准。来源和许可见 [README.zh-CN.md](../../README.zh-CN.md)。
+前端来源为 GPT Image Playground，使用 MIT License；后端来源为 New API，按 AGPL-3.0 发布并保留原始声明。上游通用说明在 `server/docs/`，光构产品接入与部署以根目录 `docs/` 为准。来源和许可见 [README.zh-CN.md](../../README.zh-CN.md)。

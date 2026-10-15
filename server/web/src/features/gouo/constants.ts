@@ -18,25 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 */
 import type { StatusBadgeProps } from '@/components/status-badge'
 
-import type { GouoChargeStatus, GouoQuality, GouoSizeTier } from './types'
-
-export const GOUO_SIZE_TIERS = [
-  '1K',
-  '2K',
-  '4K',
-] as const satisfies readonly GouoSizeTier[]
-export const GOUO_QUALITIES = [
-  'low',
-  'medium',
-  'high',
-] as const satisfies readonly GouoQuality[]
-
-// labelKey 是 i18n 键，组件里用 t(labelKey) 显示
-export const GOUO_QUALITY_LABELS: Record<GouoQuality, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-}
+import type { GouoChargeStatus } from './types'
 
 export const GOUO_CHARGE_STATUSES: Record<
   GouoChargeStatus,
@@ -48,13 +30,9 @@ export const GOUO_CHARGE_STATUSES: Record<
   refunded: { labelKey: 'Refunded', variant: 'neutral' },
 }
 
-// Agent 价格在 New API 的「系统设置 → 计费 → 模型定价」里修改
-export const GOUO_MODEL_PRICING_SECTION = 'model-pricing'
-
 export const GOUO_QUERY_KEYS = {
   settings: ['gouo', 'settings'] as const,
-  imageModels: ['gouo', 'image-models'] as const,
-  agentModels: ['gouo', 'agent-models'] as const,
+  models: ['gouo', 'models'] as const,
   storage: ['gouo', 'storage'] as const,
   storageUsers: (page: number, pageSize: number) =>
     ['gouo', 'storage-users', page, pageSize] as const,

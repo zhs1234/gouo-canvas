@@ -2,8 +2,6 @@ type AgentRunStatus = 'idle' | 'running' | 'completed' | 'stopped' | 'error' | '
 
 export interface AgentModel {
   id: string
-  name: string
-  tool_calls: boolean
   vision: boolean
   // 后台“光构设置”指定的默认 Agent 模型
   default?: boolean

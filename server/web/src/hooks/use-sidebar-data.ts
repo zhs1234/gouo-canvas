@@ -154,12 +154,10 @@ export function useSidebarData(): SidebarData {
             icon: Ticket,
           },
           {
-            // 光构：客户端设置、图片与 Agent 模型、云端存储和图片账本
+            // 光构：客户端设置、云端存储和图片账本；模型在原生模型管理里配置
             title: t('Gouo'),
             url: '/gouo/settings',
             activeUrls: [
-              '/gouo/image-models',
-              '/gouo/agent-models',
               '/gouo/storage',
               '/gouo/billing',
             ],

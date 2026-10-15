@@ -34,7 +34,7 @@ Low-cost checks commonly used in this repository:
 ```powershell
 Set-Location server
 go test ./controller -run '^$'
-go test ./relay/relay_util -run '^TestGouoImage'
+go test ./relay ./model -run Gouo
 ```
 
 The first compiles the `controller` package without running tests, catching route and type compilation failures. The second verifies Gouo fixed image-quota calculation. For other backend packages, follow `server/AGENTS.md` and run the relevant package tests, expanding scope when risk warrants it.
@@ -48,7 +48,7 @@ The first compiles the `controller` package without running tests, catching rout
 Select all relevant cases for a change:
 
 - Registration, sign-in, sign-out, and reauthentication.
-- Generation, reference edit, variation, and masked edit.
+- Generation, reference edit, and masked edit.
 - Successful charge, failure refund, and insufficient balance.
 - Multiple images, partial failure, retry, and task-setting reuse.
 - Search, filters, collections, batch download, and data import/export.

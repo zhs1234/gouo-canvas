@@ -7,7 +7,7 @@
 手动部署包含三个独立产物：
 
 1. 根目录 React 前端，构建到 `dist/`，由 Nginx 提供。
-2. `server/web` 的 One Hub 管理端，构建到 `server/web/build/`，随后嵌入 Go 后端。
+2. `server/web` 的 New API 管理后台，构建到 `server/web/dist/`，随后嵌入 Go 后端。
 3. `server/` Go 后端二进制，由 systemd 运行在 3000 端口，并由主机防火墙限制公网访问。
 
 必须先构建管理端，再构建 Go 后端，否则后端会嵌入旧的管理页面。
@@ -18,9 +18,8 @@
 
 - Git。
 - Node.js 22 和 npm。
-- Corepack 与 Yarn 1.22.22，用于 `server/web`。
-- Go 1.25。
-- GCC 和 C 标准库开发包。后端包含 SQLite 驱动，即使生产使用 MySQL，构建时仍需要 CGO 工具链。
+- Bun，用于 `server/web`。
+- Go 1.26。
 - MySQL 8。
 - Redis 7。
 - Nginx。
@@ -34,7 +33,7 @@ node --version
 npm --version
 corepack --version
 go version
-gcc --version
+bun --version
 mysql --version
 redis-server --version
 nginx -v
@@ -144,18 +143,13 @@ SQL_DSN=gouo:替换为数据库强密码@tcp(127.0.0.1:3306)/gouo?charset=utf8mb
 REDIS_CONN_STRING=redis://127.0.0.1:6379
 
 SESSION_SECRET=替换为第一段随机值
-USER_TOKEN_SECRET=替换为第二段不同的随机值
 # 通过 HTTPS 访问时必须为 true，登录 Cookie 才不会在 http:// 请求中明文发送。
 SESSION_COOKIE_SECURE=true
+# 与上一项同时设置：对外访问的完整 https origin。
+SESSION_COOKIE_TRUSTED_URL=https://你的域名
 
-# 首次迁移时启用的默认模型；之后在后台“光构模型”管理。
-GOUO_IMAGE_MODEL=gpt-image-2
 
-GOUO_IMAGE_PRICE_CNY=0.10
-GOUO_CLOUD_LIBRARY_ENABLED=true
 GOUO_ASSET_DIR=/var/lib/gouo/assets
-GOUO_ASSET_USER_QUOTA_BYTES=2147483648
-GOUO_ASSET_MAX_FILE_BYTES=26214400
 GOUO_ASSET_MAX_TASK_FILES=32
 LOG_DIR=/var/lib/gouo/logs
 ```
@@ -169,11 +163,11 @@ sudo chmod 640 /etc/gouo/gouo.env
 
 注意事项：
 
-- `SESSION_SECRET` 和 `USER_TOKEN_SECRET` 必须不同并长期固定。
+- `SESSION_SECRET` 必须长期固定。
 - 环境文件不能提交到 Git。
 - `GOUO_ASSET_DIR` 必须是绝对路径、可写、在备份范围内。
 - 单机本地文件模式只运行一个后端实例。多实例必须使用共享文件系统，不能给每台机器单独的资产目录。
-- `GOUO_IMAGE_PRICE_CNY` 仅是默认模型首次迁移售价；后续在后台按模型启用和定价，不代表上游成本。
+- 图片模型价格在 New API 的模型定价中设置，设置后自动出现在客户端；售价不代表上游成本。
 
 ## 7. 构建光构公开前端
 
@@ -188,7 +182,7 @@ npm ci
 VITE_GOUO_BACKEND_URL=
 ```
 
-同域部署必须让 `VITE_GOUO_BACKEND_URL` 保持为空，浏览器会直接请求当前域名的 `/api` 和 `/v1`。模型名必须与管理后台渠道配置一致。
+同域部署必须让 `VITE_GOUO_BACKEND_URL` 保持为空，浏览器会直接请求当前域名的 `/api`、`/v1` 和 `/pg`。模型名必须与管理后台渠道配置一致。
 
 构建并发布静态文件：
 
@@ -203,28 +197,27 @@ sudo find /var/www/gouo -type f -exec chmod 644 {} +
 
 发布前先确认 `npm run build` 成功。不要手动编辑 `dist/`；所有前端变化都应从源码重新构建。
 
-## 8. 构建 One Hub 管理端
+## 8. 构建 New API 管理后台
 
 ```bash
 cd /opt/gouo/src/server/web
-corepack enable
-corepack yarn install --frozen-lockfile
-corepack yarn build
-test -f build/index.html
+bun install --frozen-lockfile
+bun run build
+test -f dist/index.html
 ```
 
-这一阶段生成 `/opt/gouo/src/server/web/build`。管理端构建失败时不要继续构建 Go 后端，否则可能嵌入旧页面或缺少页面。
+这一阶段生成 `/opt/gouo/src/server/web/dist`。管理端构建失败时不要继续构建 Go 后端，否则可能嵌入旧页面或缺少页面。
 
 ## 9. 构建 Go 后端
 
 ```bash
 cd /opt/gouo/src/server
-CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
 sudo install -o root -g root -m 0755 /tmp/gouo-server /opt/gouo/bin/gouo-server
 test -x /opt/gouo/bin/gouo-server
 ```
 
-Go 构建会把上一步的 `server/web/build` 嵌入二进制。以后只要管理端发生变化，就必须重新执行第 8、9 步。
+Go 构建会把上一步的 `server/web/dist` 嵌入二进制。以后只要管理端发生变化，就必须重新执行第 8、9 步。
 
 ## 10. 创建 systemd 服务
 
@@ -313,6 +306,19 @@ server {
         proxy_send_timeout 960s;
     }
 
+    location /pg/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 960s;
+        proxy_send_timeout 960s;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
@@ -328,7 +334,7 @@ sudo systemctl reload nginx
 curl -fsS -H 'Host: 你的域名' http://127.0.0.1/api/status
 ```
 
-这里故意没有把 `/panel` 转发到公网域名。管理端继续通过后端本机端口和 SSH 隧道访问，减少管理入口暴露面。
+公网域名只转发 `/api`、`/v1` 和 `/pg`，管理后台（后端根路径）不对公网开放，继续通过后端本机端口和 SSH 隧道访问，减少管理入口暴露面。
 
 ## 12. 配置 HTTPS
 
@@ -363,7 +369,7 @@ ssh -L 3000:127.0.0.1:3000 你的服务器用户@服务器地址
 然后打开：
 
 ```text
-http://127.0.0.1:3000/panel
+http://127.0.0.1:3000
 ```
 
 首次登录后立即修改 `root` 默认密码 `123456`，再按照[统一配置顺序](./index.md#部署后的统一配置顺序)配置渠道、模型、价格和用户策略。
@@ -460,10 +466,10 @@ git pull --ff-only
 npm ci
 npm run build
 cd server/web
-corepack yarn install --frozen-lockfile
-corepack yarn build
+bun install --frozen-lockfile
+bun run build
 cd ..
-CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
 ```
 
 先停止后端，原子替换二进制和前端目录，再启动：
@@ -534,7 +540,7 @@ sudo journalctl -u gouo -n 200 --no-pager
 - [ ] Nginx 只公开 80/443，HTTPS 和重定向正常。
 - [ ] `/api/status` 通过域名和后端本机地址都能访问。
 - [ ] 管理端只能通过受控入口访问，默认密码已修改。
-- [ ] 渠道、模型映射、生成、编辑、变体和计费测试通过。
+- [ ] 渠道、模型映射、生成、编辑和计费测试通过。
 - [ ] 云端作品能够跨浏览器恢复，管理端可以查看输出图。
 - [ ] 数据库和资产目录已完成成套备份与恢复演练。
 - [ ] 已完成[生产上线检查清单](./checklist.md)。

@@ -34,7 +34,7 @@ npm run preview
 ```powershell
 Set-Location server
 go test ./controller -run '^$'
-go test ./relay/relay_util -run '^TestGouoImage'
+go test ./relay ./model -run Gouo
 ```
 
 第一条只编译 `controller` 包而不运行测试，适合发现路由或类型编译问题；第二条验证光构固定图片额度计算。涉及其他后端包时，应按 `server/AGENTS.md` 运行对应包测试，必要时再运行更大范围测试。
@@ -48,7 +48,7 @@ go test ./relay/relay_util -run '^TestGouoImage'
 功能改动至少选择相关项验证：
 
 - 注册、登录、退出和重新登录。
-- 文生图、参考图编辑、变体和遮罩编辑。
+- 文生图、参考图编辑和遮罩编辑。
 - 成功扣费、失败退款和余额不足。
 - 多图、部分失败、重试和参数复用。
 - 搜索、筛选、收藏夹、批量下载和数据导入导出。

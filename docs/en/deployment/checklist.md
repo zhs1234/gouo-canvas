@@ -16,11 +16,10 @@ Follow either [Docker Compose](./docker.md) or [manual Linux deployment](./manua
 
 ## 2. Secrets and environment
 
-- [ ] Generate different high-entropy values of at least 32 random bytes for `SESSION_SECRET` and `USER_TOKEN_SECRET`.
+- [ ] Generate a high-entropy value of at least 32 random bytes for `SESSION_SECRET`.
 - [ ] Keep the real environment file in a restricted server directory; do not commit it or include backend secrets in frontend build variables.
 - [ ] Confirm that all upstream API keys exist only in backend channel configuration.
 - [ ] If a real key was used during testing, inspect usage and rotate it when appropriate.
-- [ ] Preserve `USER_TOKEN_SECRET`; changing it invalidates existing user relay tokens.
 
 PowerShell secret generation:
 
@@ -50,8 +49,8 @@ PowerShell secret generation:
 ## 5. Providers and billing
 
 - [ ] Configure a working OpenAI-compatible channel and the deployment's image-model mapping.
-- [ ] Test generations, edits, and variations separately.
-- [ ] Enable and price each Gouo model with capabilities and output limits in the admin UI, then verify upstream cost; `GOUO_IMAGE_PRICE_CNY` seeds first migration only.
+- [ ] Test generations and edits separately.
+- [ ] Price image models in New API's model pricing, tag them `edit`/`mask` in Models as the upstream supports, then verify upstream cost.
 - [ ] Verify successful charge, failure refund, and insufficient-balance rejection.
 - [ ] Set per-user concurrency, request-rate, and spending limits to prevent abuse and surprise bills.
 

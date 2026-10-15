@@ -138,7 +138,7 @@ describe('product model task snapshots', () => {
     await submitTask()
     useStore.getState().setSettings({ model: 'image-b', gouoPriceVersion: 'quote-b' })
     const { callImageApi } = await import('./lib/api')
-    expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
+    expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a' })
     expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
   })
@@ -223,14 +223,14 @@ describe('product model task snapshots', () => {
 
   it('retries the original task model rather than the current picker model', async () => {
     useStore.getState().setSettings({ model: 'image-b', gouoPriceVersion: 'quote-b' })
-    await retryTask(task({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1, status: 'error' }))
+    await retryTask(task({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', status: 'error' }))
     const { callImageApi } = await import('./lib/api')
     expect(callImageApi).not.toHaveBeenCalled()
     expect(useStore.getState().tasks).toEqual([])
     const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
     expect(confirmation).toMatchObject({ title: '确认付费重试', message: expect.stringContaining('实际用量和账号分组倍率结算') })
     await confirmation?.action?.()
-    expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
+    expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a' })
     expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
   })
 
@@ -241,7 +241,7 @@ describe('product model task snapshots', () => {
   })
 
   it('rechecks the quote after the user confirms a retry', async () => {
-    await retryTask(task({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1, status: 'error' }))
+    await retryTask(task({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', status: 'error' }))
     const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ success: true, data: [{ ...models[0], price_cny: 0.5, price_version: 'changed' }] })))
     await confirmation?.action?.()
@@ -277,7 +277,7 @@ describe('product model task snapshots', () => {
 
   it.each([undefined, 'quote-b'])('confirms the whole batch retry cost with quote %s', async (gouoPriceVersion) => {
     const original = task({
-      apiModel: 'image-b', gouoPriceVersion, gouoPriceCNY: 0.3,
+      apiModel: 'image-b', gouoPriceVersion,
       params: { ...DEFAULT_PARAMS, n: 2 }, outputImages: ['previous-success'],
       outputErrors: [{ requestIndex: 1, error: '失败' }],
     })

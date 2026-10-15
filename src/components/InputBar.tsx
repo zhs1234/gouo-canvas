@@ -4,12 +4,11 @@ import { useStore, submitTask, addImageFromFile, createInputImageFromFile, delet
 import { DEFAULT_PARAMS } from '../types'
 import { getChangedParams, normalizeTaskParams } from '../lib/paramCompatibility'
 import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, getPromptMentionParts, getSelectedImageMentionLabel, getSelectedTextMentionLabel, imageMentionMatches, insertImageMentionAtVisibleRange, isCursorInSelectedImageMention, stripImageMentionMarkers } from '../lib/promptImageMentions'
-import { getSizeTier, normalizeImageSize } from '../lib/size'
+import { normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getMaxTaskImages } from '../lib/gouoBackend'
 import { useBackendStatus } from '../hooks/useBackendStatus'
-import { useImageModels } from '../hooks/useImageModels'
 import BackendModelSelector from './BackendModelSelector'
 import { getActionableErrorMessage } from '../lib/userGuidance'
 import { useHintTooltip } from '../hooks/useHintTooltip'
@@ -445,23 +444,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
     syncMentionTagSelection(el)
     setPrompt(getContentEditablePlainText(el))
   }, [setPrompt])
-  // 按后台为所选模型限定的画质、尺寸档位和参考图张数；宽松审核由后台决定是否开放
-  const imageModels = useImageModels()
+  // 宽松审核由后台决定是否开放
   const backendStatus = useBackendStatus()
-  const backendModel = imageModels.find((model) => model.id === settings.model)
-  const maxInputImages = backendModel?.max_inputs || API_MAX_IMAGES
-
-  // 所选模型不开放当前画质时，自动换成开放的最高画质，免得用户卡在提示上
-  useEffect(() => {
-    const allowed = backendModel?.qualities
-    if (!allowed?.length || allowed.includes(params.quality === 'auto' ? 'high' : params.quality)) return
-    const next = (['high', 'medium', 'low'] as const).find((quality) => allowed.includes(quality))
-    if (next) setParams({ quality: next })
-  }, [backendModel, params.quality, setParams])
-  // 所选模型没有开放当前分辨率时回到自动尺寸
-  useEffect(() => {
-    if (backendModel && params.size !== 'auto' && !backendModel.sizes?.includes(getSizeTier(params.size)!)) setParams({ size: 'auto' })
-  }, [backendModel, params.size, setParams])
+  const maxInputImages = API_MAX_IMAGES
   const moderationDisabled = !backendStatus?.gouo_allow_low_moderation
   const transparentOutputAvailable = true
   const showTransparentOutputControl = transparentOutputAvailable && params.output_format === 'png'
@@ -474,13 +459,12 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const nLimitHintText = `本次最多生成 ${outputImageLimit} 张图片`
   const displaySize = normalizeImageSize(params.size) || DEFAULT_PARAMS.size
 
-  // 自动画质可能由上游选成高画质，只有开放高画质时才提供
   const qualityOptions = [
     { label: 'auto', value: 'auto' },
     { label: 'low', value: 'low' },
     { label: 'medium', value: 'medium' },
     { label: 'high', value: 'high' },
-  ].filter((option) => !backendModel?.qualities?.length || backendModel.qualities.includes(option.value === 'auto' ? 'high' : option.value))
+  ]
   const atImageLimit = inputImages.length >= maxInputImages
   const uploadImageTooltipText = atImageLimit ? `参考图数量已达上限（${maxInputImages} 张），无法继续添加` : '上传图片'
   const transparentOutputHint = useHintTooltip()
@@ -1568,7 +1552,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
             currentSize={params.size}
             onSelect={(size) => setParams({ size })}
             onClose={() => setShowSizePicker(false)}
-            tiers={backendModel?.sizes ?? []}
           />
         </Suspense>
       )}

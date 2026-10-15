@@ -24,9 +24,7 @@ import { SectionPageLayout } from '@/components/layout'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SettingsPageProvider } from '@/features/system-settings/components/settings-page-context'
 
-import { AgentModelsSection } from './components/agent-models-section'
 import { BillingSection } from './components/billing-section'
-import { ImageModelsSection } from './components/image-models-section'
 import { GouoSettingsSection } from './components/settings-section'
 import { StorageSection } from './components/storage-section'
 import {
@@ -40,8 +38,6 @@ const route = getRouteApi('/_authenticated/gouo/$section')
 
 const SECTION_CONTENT: Record<GouoSectionId, () => React.ReactNode> = {
   settings: () => <GouoSettingsSection />,
-  'image-models': () => <ImageModelsSection />,
-  'agent-models': () => <AgentModelsSection />,
   storage: () => <StorageSection />,
   billing: () => <BillingSection />,
 }

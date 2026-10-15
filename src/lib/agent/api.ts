@@ -1,4 +1,4 @@
-import { backendFetch, createBackendSettings } from '../gouoBackend'
+import { backendFetch } from '../gouoBackend'
 import type { AgentModel, AgentToolCall, AgentToolDefinition, ChatMessage } from './types'
 
 // 每条用户消息最多工具轮数、单条消息需确认的图片张数，由后台“光构设置”下发；读取目录前按后台默认值
@@ -16,13 +16,13 @@ export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPr
   if (!Array.isArray(payload.data) || payload.data.some((entry: unknown) => {
     if (!entry || typeof entry !== 'object') return true
     const model = entry as Record<string, unknown>
-    return typeof model.id !== 'string' || typeof model.name !== 'string' || typeof model.tool_calls !== 'boolean' || typeof model.vision !== 'boolean'
+    return typeof model.id !== 'string' || typeof model.vision !== 'boolean'
   })) throw new Error('Agent 模型目录格式无效')
   agentLimits = {
     maxRounds: Number.isInteger(payload.max_rounds) && payload.max_rounds >= 1 ? payload.max_rounds : agentLimits.maxRounds,
     confirmImages: Number.isInteger(payload.confirm_images) && payload.confirm_images >= 1 ? payload.confirm_images : agentLimits.confirmImages,
   }
-  return { models: payload.data.filter((model: AgentModel) => model.tool_calls), systemPrompt: typeof payload.system_prompt === 'string' ? payload.system_prompt.trim() : '' }
+  return { models: payload.data as AgentModel[], systemPrompt: typeof payload.system_prompt === 'string' ? payload.system_prompt.trim() : '' }
 }
 
 // SSE 的分片可能切在中文字符、CRLF 或 tool arguments 中间，统一按完整事件消费。
@@ -123,12 +123,11 @@ export async function streamAgentCompletion(input: {
   signal: AbortSignal
   onUpdate: (content: string, calls: AgentToolCall[], reasoning?: string) => void
 }) {
-  const settings = await createBackendSettings()
   input.signal.throwIfAborted()
-  const response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+  // 走 New API 原生 Playground，用登录会话鉴权；X-Gouo-Agent 让服务端套用光构的 Agent 开关和回复上限
+  const response = await backendFetch('/pg/chat/completions', {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+    headers: { 'X-Gouo-Agent': '1' },
     body: JSON.stringify({ model: input.model, messages: input.messages, tools: input.tools, stream: true, stream_options: { include_usage: true }, parallel_tool_calls: false }),
     signal: input.signal,
   })

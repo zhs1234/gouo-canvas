@@ -3,7 +3,6 @@ import type { TaskRecord } from '../types'
 import { useStore, ensureImageThumbnailCached, subscribeImageThumbnail, retryTask } from '../store'
 import { formatImageRatio } from '../lib/size'
 import { getParamDisplay, ActualValueBadge } from '../lib/paramDisplay'
-import { useImageModels } from '../hooks/useImageModels'
 import { TransparentBgIcon } from './icons'
 import ViewportTooltip from './ViewportTooltip'
 
@@ -76,7 +75,7 @@ export default function TaskCard({
   const toggleTaskSelection = useStore((s) => s.toggleTaskSelection)
   const settings = useStore((s) => s.settings)
   // 显示后台填写的模型名；模型已下架或目录未加载时退回模型 ID
-  const modelName = useImageModels().find((model) => model.id === task.apiModel)?.name || task.apiModel
+  const modelName = task.apiModel
   const openFavoritePicker = useStore((s) => s.openFavoritePicker)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const swipeResetTimerRef = useRef<number | null>(null)

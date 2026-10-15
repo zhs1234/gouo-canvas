@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   currentScope: true,
   maxRounds: 8,
-  catalog: { models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }], systemPrompt: '' } as { models: { id: string; name: string; tool_calls: boolean; vision: boolean; default?: boolean }[]; systemPrompt: string },
+  catalog: { models: [{ id: 'model', vision: true }], systemPrompt: '' } as { models: { id: string; vision: boolean; default?: boolean }[]; systemPrompt: string },
   tasks: [] as TaskRecord[],
   storedTasks: [] as TaskRecord[],
   onTasks: undefined as ((state: { tasks: TaskRecord[] }, previous: { tasks: TaskRecord[] }) => void) | undefined,
@@ -43,7 +43,7 @@ beforeEach(async () => {
   mocks.put.mockResolvedValue(undefined)
   base.revision += 100
   markAgentPersisted(base)
-  useAgentStore.setState({ conversations: [structuredClone(base)], models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }], hydrated: true })
+  useAgentStore.setState({ conversations: [structuredClone(base)], models: [{ id: 'model', vision: true }], hydrated: true })
 })
 
 describe('Agent durable runtime', () => {
@@ -430,7 +430,7 @@ describe('Agent durable runtime', () => {
     const messages = await buildAgentMessages({ ...base, messages: [
       { id: 'user', role: 'user', content: '画海报', createdAt: 1 },
       { id: 'reply', role: 'assistant', content: '开始', createdAt: 2, toolCalls: [{ id: 'pending', name: 'create_image_task', arguments: '{}', status: 'running' }] },
-    ] }, { id: 'model', name: '测试', tool_calls: true, vision: true })
+    ] }, { id: 'model', vision: true })
     expect(messages[messages.length - 1]).toEqual({ role: 'assistant', content: '开始' })
   })
 
@@ -445,7 +445,7 @@ describe('Agent durable runtime', () => {
 describe('后台配置的 Agent 默认模型与附加提示词', () => {
   it('新对话使用后台标出的默认模型，并把运营方提示词附在内置规则之后', async () => {
     const original = mocks.catalog
-    mocks.catalog = { models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }, { id: 'preferred', name: '默认', tool_calls: true, vision: false, default: true }], systemPrompt: '回答控制在三句话内' }
+    mocks.catalog = { models: [{ id: 'model', vision: true }, { id: 'preferred', vision: false, default: true }], systemPrompt: '回答控制在三句话内' }
     try {
       await useAgentStore.getState().loadModels()
       const conversation = await useAgentStore.getState().createConversation()

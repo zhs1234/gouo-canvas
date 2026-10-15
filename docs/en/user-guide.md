@@ -24,7 +24,7 @@ Opening Gouo Canvas while signed out shows the product home page. Use **免费�
 - When the operator pauses password sign-in, the sign-in page shows a notice and the sign-in button is disabled.
 - With email delivery enabled, users can bind an email address in the user center and reset a forgotten password from **忘记密码** (Forgot password) on the sign-in page. Without email delivery that link is hidden; contact the operator for account recovery.
 
-The backend keeps the session in a cookie. Changing `SESSION_SECRET` invalidates existing sessions; changing `USER_TOKEN_SECRET` invalidates existing generation tokens. If the UI reports an invalid token, sign out and sign in again.
+The backend keeps the session in a cookie. Changing `SESSION_SECRET` invalidates existing sessions. If the UI reports an invalid token, sign out and sign in again.
 
 ## 2. The creation workspace
 

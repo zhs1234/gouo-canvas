@@ -7,7 +7,7 @@ This path runs Node.js, Go, MySQL, Redis, Nginx, and systemd directly on a Linux
 The deployment has three build outputs:
 
 1. The root React frontend builds to `dist/` and is served by Nginx.
-2. The One Hub admin frontend in `server/web` builds to `server/web/build/`.
+2. The New API admin frontend in `server/web` builds to `server/web/dist/`.
 3. The Go backend in `server/` embeds that admin build and runs on port 3000 under systemd.
 
 Always build the admin frontend before the Go binary, or the binary can embed an old or missing admin UI.
@@ -18,9 +18,8 @@ Install:
 
 - Git
 - Node.js 22 and npm
-- Corepack and Yarn 1.22.22 for `server/web` only
-- Go 1.25
-- GCC and C development libraries; the SQLite driver requires a CGO toolchain even if production uses MySQL
+- Bun for `server/web` only
+- Go 1.26
 - MySQL 8
 - Redis 7
 - Nginx
@@ -32,9 +31,8 @@ Verify:
 git --version
 node --version
 npm --version
-corepack --version
+bun --version
 go version
-gcc --version
 mysql --version
 redis-server --version
 nginx -v
@@ -142,18 +140,13 @@ SQL_DSN=gouo:replace-with-the-database-password@tcp(127.0.0.1:3306)/gouo?charset
 REDIS_CONN_STRING=redis://127.0.0.1:6379
 
 SESSION_SECRET=replace-with-the-first-random-value
-USER_TOKEN_SECRET=replace-with-the-second-different-random-value
 # Must be true when users reach the site over HTTPS, so the login cookie is never sent on http:// requests.
 SESSION_COOKIE_SECURE=true
+# Set together with the previous line: the full public https origin.
+SESSION_COOKIE_TRUSTED_URL=https://your-domain.example
 
-# Model enabled by the first migration; manage models in the admin panel afterwards.
-GOUO_IMAGE_MODEL=gpt-image-2
 
-GOUO_IMAGE_PRICE_CNY=0.10
-GOUO_CLOUD_LIBRARY_ENABLED=true
 GOUO_ASSET_DIR=/var/lib/gouo/assets
-GOUO_ASSET_USER_QUOTA_BYTES=2147483648
-GOUO_ASSET_MAX_FILE_BYTES=26214400
 GOUO_ASSET_MAX_TASK_FILES=32
 LOG_DIR=/var/lib/gouo/logs
 ```
@@ -167,11 +160,11 @@ sudo chmod 640 /etc/gouo/gouo.env
 
 Requirements:
 
-- `SESSION_SECRET` and `USER_TOKEN_SECRET` are different and stable.
+- `SESSION_SECRET` is stable.
 - The environment file never enters Git.
 - `GOUO_ASSET_DIR` is absolute, writable, and included in backup.
 - Local-file assets support one backend instance. Multiple instances require a shared filesystem.
-- `GOUO_IMAGE_PRICE_CNY` seeds the default model only on first migration. Enable and price later models in the admin UI; it does not represent upstream cost.
+- Price image models in New API's model pricing; they appear in the client automatically. Selling prices do not represent upstream cost.
 
 ## 7. Build the public frontend
 
@@ -186,7 +179,7 @@ Create a production-only `.env.production.local`:
 VITE_GOUO_BACKEND_URL=
 ```
 
-Leave `VITE_GOUO_BACKEND_URL` empty for same-origin production so the browser requests `/api` and `/v1` on the current domain. The model must match backend channel configuration.
+Leave `VITE_GOUO_BACKEND_URL` empty for same-origin production so the browser requests `/api`, `/v1`, and `/pg` on the current domain. The model must match backend channel configuration.
 
 Build and publish:
 
@@ -201,23 +194,22 @@ sudo find /var/www/gouo -type f -exec chmod 644 {} +
 
 Do not publish after a failed build, and never edit `dist/` directly.
 
-## 8. Build the One Hub admin frontend
+## 8. Build the New API admin frontend
 
 ```bash
 cd /opt/gouo/src/server/web
-corepack enable
-corepack yarn install --frozen-lockfile
-corepack yarn build
-test -f build/index.html
+bun install --frozen-lockfile
+bun run build
+test -f dist/index.html
 ```
 
-Stop here if `server/web/build/index.html` is missing. Continuing could embed an old or absent admin UI.
+Stop here if `server/web/dist/index.html` is missing. Continuing could embed an old or absent admin UI.
 
 ## 9. Build the Go backend
 
 ```bash
 cd /opt/gouo/src/server
-CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
 sudo install -o root -g root -m 0755 /tmp/gouo-server /opt/gouo/bin/gouo-server
 test -x /opt/gouo/bin/gouo-server
 ```
@@ -311,6 +303,19 @@ server {
         proxy_send_timeout 960s;
     }
 
+    location /pg/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 960s;
+        proxy_send_timeout 960s;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
@@ -326,7 +331,7 @@ sudo systemctl reload nginx
 curl -fsS -H 'Host: your-domain.example' http://127.0.0.1/api/status
 ```
 
-The public Nginx configuration deliberately does not proxy `/panel`. Reach the admin panel through backend loopback and an SSH tunnel.
+The public Nginx configuration proxies only `/api`, `/v1`, and `/pg`; the admin panel (backend root) is not exposed. Reach it through backend loopback and an SSH tunnel.
 
 ## 12. Add HTTPS
 
@@ -363,7 +368,7 @@ ssh -L 3000:127.0.0.1:3000 your-user@your-server
 Then open:
 
 ```text
-http://127.0.0.1:3000/panel
+http://127.0.0.1:3000
 ```
 
 Immediately change the `root` password from `123456`, then follow the [post-start configuration order](./index.md#configuration-order-after-first-start).
@@ -458,10 +463,10 @@ git pull --ff-only
 npm ci
 npm run build
 cd server/web
-corepack yarn install --frozen-lockfile
-corepack yarn build
+bun install --frozen-lockfile
+bun run build
 cd ..
-CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /tmp/gouo-server .
 ```
 
 Stop the backend, replace binary and static files, then restart:
@@ -532,7 +537,7 @@ Also inspect user quota, the 25 MiB file limit, and task/asset database records.
 - [ ] Nginx exposes only 80/443; HTTPS and redirect work.
 - [ ] `/api/status` works through both domain and backend loopback.
 - [ ] Admin UI is available only through a controlled path and bootstrap password is changed.
-- [ ] Provider, model mapping, generation, edit, variation, and billing tests pass.
+- [ ] Provider, model mapping, generation, edit, and billing tests pass.
 - [ ] Cloud artwork restores in another browser and administrators can inspect outputs.
 - [ ] A paired database-and-assets backup and restore drill has succeeded.
 - [ ] The [production checklist](./checklist.md) is complete.

@@ -30,7 +30,6 @@ import type { GouoSettings } from '../types'
 const t = ((key: string) => key) as TFunction
 
 const settings: GouoSettings = {
-  notice: '新模型上线',
   redemption_help: '',
   support_contact: '',
   default_image_model: 'gpt-image-2',
@@ -60,13 +59,13 @@ describe('gouo settings form', () => {
   test('trims text fields before saving', () => {
     const values = {
       ...settingsToFormValues(settings),
-      notice: '  公告  ',
+      support_contact: '  客服微信  ',
       agent_system_prompt: '\n提示\n',
     }
 
     const saved = formValuesToSettings(values)
 
-    expect(saved.notice).toBe('公告')
+    expect(saved.support_contact).toBe('客服微信')
     expect(saved.agent_system_prompt).toBe('提示')
   })
 
@@ -80,7 +79,7 @@ describe('gouo settings form', () => {
       { trash_retention_days: 31 },
       { asset_max_file_mb: 101 },
       { asset_user_quota_gb: 0 },
-      { notice: 'x'.repeat(201) },
+      { support_contact: 'x'.repeat(2001) },
     ]) {
       expect(
         schema.safeParse({ ...base, ...patch }).success,

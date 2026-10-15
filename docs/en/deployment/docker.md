@@ -5,7 +5,7 @@
 This guide applies only to `deploy/docker-compose.yml`. It runs four services on one server:
 
 - `web`: the public Gouo frontend and internal Nginx, container port 80.
-- `backend`: the Gouo/One Hub Go service and admin panel, container port 3000.
+- `backend`: the Gouo/New API Go service and admin panel, container port 3000.
 - `db`: MySQL 8.4.
 - `redis`: Redis 7.4 with AOF enabled.
 
@@ -66,32 +66,25 @@ BACKEND_ADMIN_PORT=3000
 
 # Must be true when users reach the site over HTTPS, so the login cookie is never sent on http:// requests.
 SESSION_COOKIE_SECURE=true
+# Set together with the previous line: the full public https origin.
+SESSION_COOKIE_TRUSTED_URL=https://your-domain.example
 
-GOUO_IMAGE_MODEL=gpt-image-2
-GOUO_IMAGE_PRICE_CNY=0.10
-GOUO_CLOUD_LIBRARY_ENABLED=true
 GOUO_ASSET_DIR=/data/gouo-assets
-GOUO_ASSET_USER_QUOTA_BYTES=2147483648
-GOUO_ASSET_MAX_FILE_BYTES=26214400
 GOUO_ASSET_MAX_TASK_FILES=32
 
 MYSQL_PASSWORD=replace-with-a-strong-database-password
 MYSQL_ROOT_PASSWORD=replace-with-another-strong-password
 SESSION_SECRET=replace-with-the-first-random-value
-USER_TOKEN_SECRET=replace-with-the-second-random-value
 ```
 
 | Variable | Recommended value | Important behavior |
 | --- | --- | --- |
 | `PUBLIC_PORT` | `127.0.0.1:8080` behind a host proxy; `8080` only for temporary private-network testing | Plain `8080` listens on every interface |
 | `BACKEND_ADMIN_PORT` | `3000` | Compose binds it to `127.0.0.1`; do not expose it publicly |
-| `SESSION_COOKIE_SECURE` | `true` when the site is served over HTTPS | With `false`, the first request a user makes over `http://` (old bookmark, typed address) carries the login cookie in clear text before the redirect; keep `false` only for private-network HTTP testing |
-| `GOUO_IMAGE_MODEL` | Model enabled by the first migration | Backend migration runs once; later choices and prices use the model catalog |
-| `GOUO_IMAGE_PRICE_CNY` | Default model's initial migration price | Change later prices in the single-model editor; restarting preserves saved prices; validate cost and output limits |
+| `SESSION_COOKIE_SECURE` | `true` when the site is served over HTTPS, together with `SESSION_COOKIE_TRUSTED_URL` | With `false`, the first request a user makes over `http://` (old bookmark, typed address) carries the login cookie in clear text before the redirect; keep `false` only for private-network HTTP testing |
 | `GOUO_ASSET_DIR` | `/data/gouo-assets` | `/data` is backed by `backend-data`; do not move it outside the mounted path |
 | `MYSQL_PASSWORD` | Strong application-database password | Prefer long alphanumeric text that does not create DSN parsing ambiguity |
 | `SESSION_SECRET` | First random value | Changing it invalidates all login sessions |
-| `USER_TOKEN_SECRET` | Second, different random value | Changing it invalidates user relay tokens |
 
 Check for placeholders without printing every secret:
 
@@ -158,7 +151,7 @@ ssh -L 3000:127.0.0.1:3000 your-user@your-server
 Keep the SSH session open and visit:
 
 ```text
-http://127.0.0.1:3000/panel
+http://127.0.0.1:3000
 ```
 
 An empty database creates `root` with password `123456`. Change it immediately, then follow the [post-start configuration order](./index.md#configuration-order-after-first-start). Never change the Compose backend mapping to `0.0.0.0:3000:3000` for convenience.
@@ -347,15 +340,15 @@ Confirm that `SESSION_SECRET` is fixed and identical across all backend instance
 ### Generation succeeds but cloud synchronization fails
 
 ```bash
-docker compose exec backend sh -c 'echo "$GOUO_CLOUD_LIBRARY_ENABLED"; echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
+docker compose exec backend sh -c 'echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
 docker compose logs --tail=200 backend
 ```
 
-Also check the user's quota and the 25 MiB single-file limit.
+Also confirm in the admin Gouo settings that the cloud library is enabled, and check the user's quota and the per-file upload limit (25 MiB by default).
 
 ### The domain opens but `/api` returns 404
 
-Proxy the entire public origin to `127.0.0.1:8080`, not only the static home page. Internal Nginx handles `/api` and `/v1`.
+Proxy the entire public origin to `127.0.0.1:8080`, not only the static home page. Internal Nginx handles `/api`, `/v1`, and `/pg`.
 
 ### `docker compose down` was run accidentally
 

@@ -6,10 +6,10 @@
 
 - Node.js 22
 - npm (the repository has `package-lock.json`; do not use yarn or pnpm for the root frontend)
-- Go 1.25 when running `server/`
+- Go 1.26 when running `server/`
 - Git
 
-The frontend uses React 19, Vite 6, TypeScript, Zustand, and Tailwind CSS. The backend in `server/` is derived from One Hub and uses Go, Gin, and GORM. It has its own upstream conventions and dependencies.
+The frontend uses React 19, Vite 6, TypeScript, Zustand, and Tailwind CSS. The backend in `server/` is derived from New API and uses Go, Gin, and GORM. It has its own upstream conventions and dependencies.
 
 ## 2. Run locally
 
@@ -20,8 +20,6 @@ Local development can omit `SQL_DSN` to use SQLite. Redis is also optional local
 ```powershell
 Set-Location server
 $env:SESSION_SECRET = '<at-least-32-random-characters>'
-$env:USER_TOKEN_SECRET = '<a-different-at-least-32-character-secret>'
-$env:GOUO_IMAGE_PRICE_CNY = '0.10'
 go run .
 ```
 
@@ -44,16 +42,16 @@ VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:3000
 ```
 
-Open `http://127.0.0.1:5173`. Vite proxies same-origin `/api`, `/v1`, and `/panel` requests to the backend, avoiding cross-origin login-cookie setup.
+Open `http://127.0.0.1:5173`. Vite proxies same-origin `/api`, `/v1`, and `/pg` requests to the backend, avoiding cross-origin login-cookie setup.
 
 ### 2.3 Configure an image channel
 
-Sign into `http://127.0.0.1:3000/panel` as an administrator, then:
+Sign into `http://127.0.0.1:3000` as an administrator, then:
 
 1. Add an OpenAI or compatible image channel.
 2. Store the upstream API key only in the backend channel.
-3. Configure image channels and mappings, enable models with prices in points, capabilities, and output limits under 光构 → 光构模型 (Gouo models), and choose the default image model under 光构 → 光构设置 (Gouo settings). The client does not hard-code a model.
-4. Validate generations, edits, and variations routes.
+3. Configure image channels and mappings, price them in New API's model pricing, add the `edit`/`mask` tags in Models as needed, and choose the default image model under 光构 → 光构设置 (Gouo settings). The client does not hard-code a model.
+4. Validate the generations and edits routes.
 5. Use a regular account at `http://127.0.0.1:5173` to test login, generation, billing, and synchronization end to end.
 
 ## 3. Environment variables
@@ -61,7 +59,7 @@ Sign into `http://127.0.0.1:3000/panel` as an administrator, then:
 | Variable | Read by | Description |
 | --- | --- | --- |
 | `VITE_GOUO_BACKEND_URL` | Frontend build/dev | Backend base URL; empty for same-origin use |
-| `VITE_GOUO_BACKEND_DEV_TARGET` | Vite dev server | Local proxy target for `/api`, `/v1`, and `/panel` |
+| `VITE_GOUO_BACKEND_DEV_TARGET` | Vite dev server | Local proxy target for `/api`, `/v1`, and `/pg` |
 
 ## 4. Repository layout
 
@@ -77,7 +75,7 @@ Sign into `http://127.0.0.1:3000/panel` as an administrator, then:
 ├─ scripts/             local helpers and mock API
 ├─ deploy/              full-stack Compose, Nginx, and env examples
 ├─ docs/                bilingual Gouo documentation
-├─ server/              One Hub-derived backend and admin frontend
+├─ server/              New API-derived backend and admin frontend
 ├─ Dockerfile           production public-frontend image
 └─ vite.config.ts       Vite and local proxy configuration
 ```
@@ -119,5 +117,5 @@ For Markdown-only changes, still validate links and commands. If documentation a
 - Documented variables, ports, and paths match code and Compose configuration.
 - Chinese and English documents were updated together.
 - `dist/` was not edited manually.
-- The root uses npm. Only the upstream `server/web` admin project continues to use Yarn according to its own instructions.
+- The root uses npm; the `server/web` admin project uses Bun according to its own instructions.
 - Build and relevant tests pass.

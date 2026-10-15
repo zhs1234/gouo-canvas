@@ -20,10 +20,8 @@ import { api } from '@/lib/api'
 
 import type {
   ApiResponse,
-  GouoAgentModel,
+  GouoCatalog,
   GouoImageCharge,
-  GouoImageModel,
-  GouoModelList,
   GouoSettings,
   GouoStorageOverview,
   GouoStorageUser,
@@ -45,40 +43,9 @@ export async function updateGouoSettings(
   return res.data
 }
 
-export async function listGouoImageModels(): Promise<
-  ApiResponse<GouoModelList<GouoImageModel>>
-> {
+// 默认模型的候选：New API 原生模型里会出现在客户端的图片模型和 Agent 模型
+export async function listGouoModels(): Promise<ApiResponse<GouoCatalog>> {
   const res = await api.get(`${BASE}/models`)
-  return res.data
-}
-
-export async function saveGouoImageModel(
-  data: Omit<GouoImageModel, 'groups' | 'error' | 'updated_at' | 'price_cny'>
-): Promise<ApiResponse> {
-  const res = await api.put(`${BASE}/models`, data)
-  return res.data
-}
-
-export async function listGouoAgentModels(): Promise<
-  ApiResponse<GouoModelList<GouoAgentModel>>
-> {
-  const res = await api.get(`${BASE}/agent-models`)
-  return res.data
-}
-
-export async function saveGouoAgentModel(
-  data: Pick<
-    GouoAgentModel,
-    | 'model'
-    | 'listed'
-    | 'vision'
-    | 'sort'
-    | 'name'
-    | 'description'
-    | 'max_tokens'
-  >
-): Promise<ApiResponse> {
-  const res = await api.put(`${BASE}/agent-models`, data)
   return res.data
 }
 

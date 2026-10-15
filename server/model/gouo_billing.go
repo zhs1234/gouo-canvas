@@ -23,7 +23,7 @@ const (
 )
 
 // gouoTables 是光构新增的表，随 New API 的表一起迁移
-var gouoTables = []any{&GouoImageModelConfig{}, &GouoImageCharge{}, &GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}, &GouoDocument{}, &GouoAgentModelConfig{}}
+var gouoTables = []any{&GouoImageCharge{}, &GouoTask{}, &GouoAsset{}, &GouoTaskAsset{}, &GouoFavoriteCollection{}, &GouoFavoriteItem{}, &GouoStorageQuota{}, &GouoDocument{}}
 
 var ErrGouoChargeState = errors.New("请求账务状态已变化，请刷新后核对")
 var ErrGouoImageRequestExists = errors.New("此图片请求已受理，请查询原任务；结果未知时请勿重新派发")
@@ -257,7 +257,7 @@ func RecoverGouoImageCharges() error {
 	return CleanupGouoImageResults()
 }
 
-// RunGouoJobs 每分钟同步已启用的图片模型并退回超时预扣，每小时清理过期的回收站；
+// RunGouoJobs 每分钟退回超时预扣，每小时清理过期的回收站；
 // 结算和清理都带条件或行锁，多实例同时运行也只会处理一次
 func RunGouoJobs() {
 	var lastPurge time.Time
@@ -267,9 +267,6 @@ func RunGouoJobs() {
 			if err := PurgeGouoTrash(lastPurge); err != nil {
 				common.SysError("清理云端回收站失败: " + err.Error())
 			}
-		}
-		if err := RefreshGouoImageModelIDs(); err != nil {
-			common.SysError("gouo image model refresh failed: " + err.Error())
 		}
 		if err := RecoverGouoImageCharges(); err != nil {
 			common.SysError("gouo image recovery failed: " + err.Error())

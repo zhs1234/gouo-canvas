@@ -14,7 +14,7 @@ const image = await readFile(fileURLToPath(new URL('../public/inspiration/case38
 const imageData = `data:image/webp;base64,${image.toString('base64')}`
 const imageRequests = new Map()
 const stats = { chatRequests: 0, imageSubmissions: 0, imageReplays: 0 }
-const imageModels = [{ id: 'gpt-image-2', name: 'MOCK 图片模型（本地免费）', price_cny: 0.01, price_version: priceVersion, reference: true, mask: true, max_outputs: 4, quota: 5000, sizes: ['1K', '2K', '4K'] }]
+const imageModels = [{ id: 'gpt-image-2', description: 'MOCK 图片模型（本地免费）', price_version: priceVersion, reference: true, mask: true }]
 // 余额由客户端按状态接口里的 quota_per_unit 和 usd_exchange_rate 换算：额度 × 1 / 500000 = 人民币
 const user = { id: 2147480901, username: 'MOCK-local', display_name: '本地验收 · MOCK', quota: 4999500000, used_quota: 0, request_count: 0 }
 let password = 'MOCK-password-123'
@@ -143,7 +143,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && path === '/api/user/auth/logout') { sessionActive = false; res.setHeader('Set-Cookie', 'gouo_mock_refresh=; HttpOnly; SameSite=Strict; Path=/api/user/auth; Max-Age=0'); ok(res, null); return }
     if (req.method === 'POST' && path === '/api/user/register') { json(res, 400, { success: false, message: '此 MOCK 仅支持预置测试账号 MOCK-local，初始密码 MOCK-password-123；注册请使用隔离的真实后端验收' }); return }
-    if (path.startsWith('/api/') && (!sessionActive || req.headers.authorization !== `Bearer ${accessToken}`)) { json(res, 401, { success: false, message: 'MOCK 未登录或登录已过期' }); return }
+    if ((path.startsWith('/api/') || path.startsWith('/pg/')) && (!sessionActive || req.headers.authorization !== `Bearer ${accessToken}`)) { json(res, 401, { success: false, message: 'MOCK 未登录或登录已过期' }); return }
     if (req.method === 'GET' && path === '/api/user/self') { ok(res, user); return }
     if (req.method === 'POST' && path === '/api/verify') {
       const payload = await body(req)
@@ -184,11 +184,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && path === '/api/gouo/token') { ok(res, token); return }
     if (req.method === 'GET' && path === '/api/gouo/models') { ok(res, imageModels); return }
-    if (req.method === 'GET' && path === '/api/gouo/agent/models') { ok(res, [{ id: 'MOCK-agent', name: 'MOCK 创作助手（本地免费）', tool_calls: true, vision: true }]); return }
+    if (req.method === 'GET' && path === '/api/gouo/agent/models') { ok(res, [{ id: 'MOCK-agent', description: 'MOCK 创作助手（本地免费）', vision: true }]); return }
     if (req.method === 'GET' && path === '/api/gouo/storage') { ok(res, { enabled: false, used_bytes: 0, quota_bytes: 0, remaining_bytes: 0, asset_count: 0 }); return }
     if (req.method === 'GET' && path === '/mock/metrics') { ok(res, { ...stats, mock: true, upstreamRequests: 0 }); return }
     if (path.startsWith('/v1/') && req.headers.authorization !== `Bearer ${token}`) { json(res, 401, { error: { message: 'MOCK 只接受本地测试令牌' } }); return }
-    if (req.method === 'POST' && path === '/v1/chat/completions') { await chat(res, await body(req)); return }
+    if (req.method === 'POST' && path === '/pg/chat/completions') { await chat(res, await body(req)); return }
     if (req.method === 'POST' && ['/v1/images/generations', '/v1/images/edits'].includes(path)) {
       const payload = await body(req)
       if (payload.model !== 'gpt-image-2') { json(res, 400, { error: { message: 'MOCK 图片模型不存在' } }); return }
@@ -243,6 +243,7 @@ if (selfTest) {
     assert.equal((await requestApi('/api/user/auth/refresh', 'POST', undefined, refreshCookie)).value.data.access_token, accessToken)
     assert.equal((await requestApi('/api/user/self')).value.data.id, 2147480901)
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Gouo-Price-Version': priceVersion, 'X-Gouo-Request-Id': 'self-test-idempotency' }
+    const chatHeaders = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'X-Gouo-Agent': '1' }
     const request = { method: 'POST', headers, body: JSON.stringify({ model: 'gpt-image-2', prompt: '测试图片' }) }
     const first = await fetch(`${address}/v1/images/generations`, request).then((res) => res.json())
     const second = await fetch(`${address}/v1/images/generations`, request).then((res) => res.json())
@@ -280,21 +281,21 @@ if (selfTest) {
     assert.equal(edit.data[0].b64_json, imageData)
     assert.match(edit.data[0].revised_prompt, /已接收 1 张参考图.*未执行真实图片编辑/)
     assert.equal((await requestApi('/v1/images/edits', 'POST', { model: 'gpt-image-2' }, { ...headers, 'X-Gouo-Request-Id': 'self-test-missing-reference' })).status, 400)
-    const chatText = await fetch(`${address}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content: '生成一张图片' }] }) }).then((res) => res.text())
+    const chatText = await fetch(`${address}/pg/chat/completions`, { method: 'POST', headers: chatHeaders, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content: '生成一张图片' }] }) }).then((res) => res.text())
     assert.match(chatText, /create_image_task/)
     assert.match(chatText, /\[DONE\]/)
-    const planning = await fetch(`${address}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content: '你好，帮我构思一组雨后城市海报。先讨论，不生成图片。' }] }) }).then((res) => res.text())
+    const planning = await fetch(`${address}/pg/chat/completions`, { method: 'POST', headers: chatHeaders, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content: '你好，帮我构思一组雨后城市海报。先讨论，不生成图片。' }] }) }).then((res) => res.text())
     assert.doesNotMatch(planning, /create_image_task/)
     for (const content of ['不要生图', '不需要生成图片', '别画一张图']) {
-      const reply = await fetch(`${address}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content }] }) }).then((res) => res.text())
+      const reply = await fetch(`${address}/pg/chat/completions`, { method: 'POST', headers: chatHeaders, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content }] }) }).then((res) => res.text())
       assert.doesNotMatch(reply, /create_image_task/)
     }
-    const failure = await fetch(`${address}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content: '生成图片' }, { role: 'tool', content: JSON.stringify({ error: '模型已下架' }) }] }) }).then((res) => res.text())
+    const failure = await fetch(`${address}/pg/chat/completions`, { method: 'POST', headers: chatHeaders, body: JSON.stringify({ model: 'MOCK-agent', messages: [{ role: 'user', content: '生成图片' }, { role: 'tool', content: JSON.stringify({ error: '模型已下架' }) }] }) }).then((res) => res.text())
     assert.match(failure, /工具执行失败/)
     assert.doesNotMatch(failure, /图片任务已提交/)
     const messages = [{ role: 'user', content: '整理画布' }, { role: 'tool', content: JSON.stringify({ revision: 5, nodes: Array.from({ length: 51 }, (_, index) => ({ id: `node-${index}` })) }) }]
     for (const count of [50, 1]) {
-      const reply = await fetch(`${address}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model: 'MOCK-agent', messages }) }).then((res) => res.text())
+      const reply = await fetch(`${address}/pg/chat/completions`, { method: 'POST', headers: chatHeaders, body: JSON.stringify({ model: 'MOCK-agent', messages }) }).then((res) => res.text())
       const chunk = reply.split('\n').find((line) => line.startsWith('data: ') && line.includes('apply_canvas_operations'))
       const args = JSON.parse(JSON.parse(chunk.slice(6)).choices[0].delta.tool_calls[0].function.arguments)
       assert.equal(args.operations.length, count)
@@ -303,7 +304,7 @@ if (selfTest) {
       messages.push({ role: 'tool', content: JSON.stringify({ revision: args.expectedRevision + 1 }) })
     }
     const resumed = [{ role: 'user', content: '整理画布' }, { role: 'tool', content: JSON.stringify({ revision: 20, nodes: Array.from({ length: 351 }, (_, index) => ({ id: `node-${index}`, position: index < 350 ? { x: index % 3 * 380, y: Math.floor(index / 3) * 360 } : { x: -1, y: -1 } })) }) }]
-    const resumedReply = await fetch(`${address}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ model: 'MOCK-agent', messages: resumed }) }).then((res) => res.text())
+    const resumedReply = await fetch(`${address}/pg/chat/completions`, { method: 'POST', headers: chatHeaders, body: JSON.stringify({ model: 'MOCK-agent', messages: resumed }) }).then((res) => res.text())
     const resumedChunk = resumedReply.split('\n').find((line) => line.startsWith('data: ') && line.includes('apply_canvas_operations'))
     const resumedArgs = JSON.parse(JSON.parse(resumedChunk.slice(6)).choices[0].delta.tool_calls[0].function.arguments)
     assert.deepEqual(resumedArgs.operations.map((operation) => operation.id), ['node-350'])

@@ -9,7 +9,7 @@ import AgentWorkspace, { ToolCall } from './AgentWorkspace'
 
 const mocks = vi.hoisted(() => ({
   conversations: [] as AgentConversation[],
-  models: [{ id: 'available', name: '可用模型', tool_calls: true, vision: false }] as AgentModel[],
+  models: [{ id: 'available', vision: false }] as AgentModel[],
   tasks: [] as TaskRecord[],
   configure: vi.fn(),
   setDetailTaskId: vi.fn(),
@@ -56,7 +56,7 @@ it('shows an obsolete model as unselected and lets the sole available model actu
   mocks.modelProps!.onChange('available')
   expect(mocks.configure).toHaveBeenCalledWith('conversation', { modelId: 'available' })
   markup = render()
-  expect(markup).toContain('<option value="available" selected="">可用模型</option>')
+  expect(markup).toContain('<option value="available" selected="">available</option>')
   expect(markup).not.toMatch(/aria-label="发送" disabled=""/)
   expect(mocks.tool).not.toHaveBeenCalled()
 })
@@ -69,7 +69,7 @@ it('labels expression pricing without claiming the Agent model is free or has a 
     expect(markup).not.toContain('>免费</span>')
     expect(markup).not.toContain('/ 百万 token')
   } finally {
-    mocks.models[0] = { id: 'available', name: '可用模型', tool_calls: true, vision: false }
+    mocks.models[0] = { id: 'available', vision: false }
   }
 })
 

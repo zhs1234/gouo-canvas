@@ -6,10 +6,10 @@
 
 - Node.js 22
 - npm（仓库包含 `package-lock.json`，不要使用 yarn 或 pnpm）
-- Go 1.25（需要运行 `server/` 时）
+- Go 1.26（需要运行 `server/` 时）
 - Git
 
-前端由 React 19、Vite 6、TypeScript、Zustand 和 Tailwind CSS 构成。后端位于 `server/`，基于 One Hub，使用 Go、Gin 和 GORM；它有独立的上游工程规范和依赖。
+前端由 React 19、Vite 6、TypeScript、Zustand 和 Tailwind CSS 构成。后端位于 `server/`，基于 New API，使用 Go、Gin 和 GORM；它有独立的上游工程规范和依赖。
 
 ## 2. 本地启动
 
@@ -20,8 +20,6 @@
 ```powershell
 Set-Location server
 $env:SESSION_SECRET = '<至少 32 位的随机值>'
-$env:USER_TOKEN_SECRET = '<另一段至少 32 位的随机值>'
-$env:GOUO_IMAGE_PRICE_CNY = '0.10'
 go run .
 ```
 
@@ -44,16 +42,16 @@ VITE_GOUO_BACKEND_URL=
 VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:3000
 ```
 
-访问 `http://127.0.0.1:5173`。开发服务器会把同域 `/api`、`/v1` 和 `/panel` 请求代理到后端；浏览器无需处理跨域登录 Cookie。
+访问 `http://127.0.0.1:5173`。开发服务器会把同域 `/api`、`/v1` 和 `/pg` 请求代理到后端；浏览器无需处理跨域登录 Cookie。
 
 ### 2.3 配置图片渠道
 
-使用管理员账号打开 `http://127.0.0.1:3000/panel`，然后：
+使用管理员账号打开 `http://127.0.0.1:3000`，然后：
 
 1. 在渠道管理中添加 OpenAI 或兼容服务商。
 2. 只在后端渠道里填写上游 API Key。
-3. 配置图片渠道与映射，在“光构 → 光构模型”启用模型并设置积分售价、能力和数量上限，在“光构 → 光构设置”选择默认图片模型。客户端不预设模型。
-4. 分别验证 generations、edits 和 variations 图片路由。
+3. 配置图片渠道与映射，在 New API 模型定价里设置价格、按需在“模型管理”加 `edit`/`mask` 标签，在“光构 → 光构设置”选择默认图片模型。客户端不预设模型。
+4. 分别验证 generations 和 edits 图片路由。
 5. 再使用普通账号从 `http://127.0.0.1:5173` 完整验证登录、生成、计费和同步。
 
 ## 3. 环境变量
@@ -61,7 +59,7 @@ VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:3000
 | 变量 | 读取阶段 | 说明 |
 | --- | --- | --- |
 | `VITE_GOUO_BACKEND_URL` | 前端构建/开发 | 跨域后端地址；同域时留空 |
-| `VITE_GOUO_BACKEND_DEV_TARGET` | Vite 开发服务器 | 本地 `/api`、`/v1` 和 `/panel` 代理目标 |
+| `VITE_GOUO_BACKEND_DEV_TARGET` | Vite 开发服务器 | 本地 `/api`、`/v1` 和 `/pg` 代理目标 |
 
 ## 4. 仓库结构
 
@@ -77,7 +75,7 @@ VITE_GOUO_BACKEND_DEV_TARGET=http://127.0.0.1:3000
 ├─ scripts/             本地辅助脚本和模拟 API
 ├─ deploy/              全栈 Compose、Nginx 和生产环境示例
 ├─ docs/                光构中英文文档
-├─ server/              One Hub 派生后端及其管理端
+├─ server/              New API 派生后端及其管理端
 ├─ Dockerfile           光构公开前端生产镜像
 └─ vite.config.ts       Vite 和本地代理配置
 ```
@@ -119,5 +117,5 @@ npm test
 - 文档中的变量、端口和路径与代码/Compose 一致。
 - 中英文文档同步更新。
 - 没有手动修改 `dist/`。
-- 前端使用 npm；只有 `server/web` 的上游管理端继续按照其工程使用 Yarn。
+- 前端使用 npm；`server/web` 的管理后台按其工程使用 Bun。
 - 构建和相关测试通过。

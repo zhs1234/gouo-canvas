@@ -47,8 +47,6 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	ctx.Request = req
 	ctx.Set("group", "default")
-	// 光构只保存请求状态，不能再让原生表达式模型跳过预扣。
-	ctx.Set(GouoImageContextKey, struct{}{})
 
 	info := &relaycommon.RelayInfo{
 		OriginModelName: "tiered-test-model",

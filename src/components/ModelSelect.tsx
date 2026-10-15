@@ -3,7 +3,7 @@ import { ChevronDownIcon } from './icons'
 interface ModelSelectProps {
   label: string
   value: string
-  models: { id: string; name: string; description?: string }[]
+  models: { id: string; description?: string }[]
   disabled?: boolean
   compact?: boolean
   placeholder?: string
@@ -25,7 +25,7 @@ export default function ModelSelect({ label, value, models, disabled = false, co
           : 'max-w-[260px] rounded-lg border border-gray-200 bg-white px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-400 dark:border-white/10 dark:bg-gray-800'}
       >
         {!selected && <option value="">{placeholder}</option>}
-        {models.map((model) => <option key={model.id} value={model.id} title={model.description}>{model.description ? `${model.name} · ${model.description}` : model.name}</option>)}
+        {models.map((model) => <option key={model.id} value={model.id} title={model.description}>{model.description ? `${model.id} · ${model.description}` : model.id}</option>)}
       </select>
       {compact && <ChevronDownIcon aria-hidden="true" className={`pointer-events-none absolute right-2 h-3.5 w-3.5${disabled ? ' opacity-50' : ''}`} />}
     </span>

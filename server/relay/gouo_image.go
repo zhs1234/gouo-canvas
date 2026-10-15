@@ -23,7 +23,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
-	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
@@ -37,6 +36,9 @@ import (
 
 // 光构客户端使用的平台令牌名称，按客户端规则额外校验
 const GouoPlaygroundTokenName = "sys_playground"
+
+// gouoImageContextKey 标记需要去重和保存恢复结果的图片请求
+const gouoImageContextKey = "gouo_image"
 
 var gouoRequestIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_:-]{1,512}$`)
 
@@ -84,43 +86,29 @@ func gouoError(message, code string, status int) *types.NewAPIError {
 
 // CheckGouoRequest 在原生计费前校验客户端能力并登记请求，金额由 New API 统一处理。
 func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
-	row, enabled, err := model.GetGouoImageModel(info.OriginModelName)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
-	}
+	// 光构规则只约束光构客户端：图片请求用平台令牌，Agent 走原生 Playground 并带 X-Gouo-Agent；其他调用按 New API 原生行为处理
 	playground := c.GetString("token_name") == GouoPlaygroundTokenName
 	isImage := info.RelayMode == relayconstant.RelayModeImagesGenerations || info.RelayMode == relayconstant.RelayModeImagesEdits
-	if !enabled {
-		if !playground || isImage {
-			return nil
-		}
-		// 光构客户端只有 Agent 走文本接口，后台关闭 Agent 后不能再用平台令牌直接调用
-		if !gouo_setting.Get().AgentEnabled {
+	if !isImage {
+		gouoAgent := playground || (c.Request.URL.Path == "/pg/chat/completions" && c.GetHeader("X-Gouo-Agent") != "")
+		if gouoAgent && !gouo_setting.Get().AgentEnabled {
 			return gouoError("运营方已关闭 Agent", "agent_disabled", http.StatusForbidden)
-		}
-		// 后台为模型设置了单次回复上限时，客户端请求一律按上限截断
-		agent, err := model.GetGouoAgentModel(info.OriginModelName)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
-		}
-		if request, ok := info.Request.(*dto.GeneralOpenAIRequest); ok && agent != nil && agent.MaxTokens > 0 {
-			limit := uint(agent.MaxTokens)
-			if request.MaxCompletionTokens == nil || *request.MaxCompletionTokens == 0 || *request.MaxCompletionTokens > limit {
-				request.MaxCompletionTokens = &limit
-			}
-			if request.MaxTokens != nil && *request.MaxTokens > limit {
-				request.MaxTokens = &limit
-			}
 		}
 		return nil
 	}
-	request, ok := info.Request.(*dto.ImageRequest)
-	if !isImage || !ok {
-		return gouoError("此模型只能通过图片生成接口调用", "image_model_endpoint", http.StatusBadRequest)
+	if !playground {
+		return nil
 	}
-	entry, err := row.Entry()
+	entry, err := model.FindGouoImageModel(info.OriginModelName)
 	if err != nil {
-		return gouoError(err.Error(), "image_model_unavailable", http.StatusBadRequest)
+		return types.NewError(err, types.ErrorCodeQueryDataError, types.ErrOptionWithSkipRetry())
+	}
+	if entry == nil {
+		return gouoError("此模型不是可用的图片模型，请重新选择", "image_model_unavailable", http.StatusBadRequest)
+	}
+	request, ok := info.Request.(*dto.ImageRequest)
+	if !ok {
+		return gouoError("图片请求格式无效", "invalid_image_request", http.StatusBadRequest)
 	}
 	if request.Stream != nil && *request.Stream {
 		return gouoError("此模型不支持流式输出", "image_stream_unsupported", http.StatusBadRequest)
@@ -135,7 +123,7 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 	if !edit && (len(request.Image) > 0 || len(request.Images) > 0 || len(request.Mask) > 0) {
 		return gouoError("参考图请通过图片编辑接口提交", "image_reference_requires_edit", http.StatusBadRequest)
 	}
-	inputs, mask := 0, false
+	mask := false
 	moderation := ""
 	if form != nil {
 		// 表单字段重复时，校验用的是第一个值，转发给上游的却是全部值（上游常取最后一个），可绕过输出数量等检查
@@ -153,7 +141,7 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 		if len(form.File["mask"]) > 1 {
 			return gouoError("请求参数重复", "duplicate_form_field", http.StatusBadRequest)
 		}
-		inputs, mask = len(form.File["image"])+len(form.File["image[]"]), len(form.File["mask"]) > 0
+		mask = len(form.File["mask"]) > 0
 		moderation = c.Request.PostForm.Get("moderation")
 	} else if len(request.Moderation) > 0 {
 		_ = common.Unmarshal(request.Moderation, &moderation)
@@ -162,24 +150,23 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 		return gouoError("图片请求 ID 无效", "invalid_image_request_id", http.StatusBadRequest)
 	}
 	n, err := request.ImageCount(false)
-	if err != nil || n < 1 || n > entry.MaxOutputs {
-		return gouoError("单次输出数量超过模型限制", "image_output_limit", http.StatusBadRequest)
+	// 光构客户端把多张拆成单图请求
+	if err != nil || n != 1 {
+		return gouoError("单次请求只能生成 1 张图片", "image_output_limit", http.StatusBadRequest)
 	}
-	// 光构客户端把一个作品拆成多次请求，按作品内序号核对后台设置的每次最多张数；普通 API 用户只受模型上限约束
-	if limit := gouo_setting.Get().MaxImagesPerTask; playground {
-		index, _ := strconv.Atoi(c.GetHeader("X-Gouo-Request-Index"))
-		if n > limit || index >= limit {
-			return gouoError(fmt.Sprintf("一次最多生成 %d 张", limit), "image_task_limit", http.StatusBadRequest)
-		}
+	// 光构客户端把一个作品拆成多次请求，按作品内序号核对后台设置的每次最多张数
+	limit := gouo_setting.Get().MaxImagesPerTask
+	if index, _ := strconv.Atoi(c.GetHeader("X-Gouo-Request-Index")); n > limit || index >= limit {
+		return gouoError(fmt.Sprintf("一次最多生成 %d 张", limit), "image_task_limit", http.StatusBadRequest)
 	}
 	if (edit && !entry.Reference) || (mask && !entry.Mask) {
 		return gouoError("此模型不支持当前编辑操作，请重新选择", "image_capability_unavailable", http.StatusBadRequest)
 	}
-	if message := checkGouoImageParams(entry, request.Size, request.Quality, moderation, inputs); message != "" {
+	if message := checkGouoImageParams(request.Size, moderation); message != "" {
 		return gouoError(message, "image_param_unavailable", http.StatusBadRequest)
 	}
-	// 光构客户端必须确认目录价格；普通 API 用户可省略版本，仍使用请求开始时的价格
-	if version := c.GetHeader("X-Gouo-Price-Version"); (playground || version != "") && version != entry.PriceVersion {
+	// 光构客户端必须确认目录价格
+	if version := c.GetHeader("X-Gouo-Price-Version"); version != entry.PriceVersion {
 		return gouoError("模型价格或能力已更新，请刷新模型列表并重新确认提交", "image_price_changed", http.StatusConflict)
 	}
 	var capture *gouoImageCapture
@@ -220,47 +207,29 @@ func CheckGouoRequest(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 		return gouoError("保存图片请求失败，请稍后重试", "image_request_save_failed", http.StatusInternalServerError)
 	}
 	c.Header("X-Gouo-Charge-Id", charge.ID)
-	c.Set(helper.GouoImageContextKey, &gouoImageState{charge: charge, capture: capture})
+	c.Set(gouoImageContextKey, &gouoImageState{charge: charge, capture: capture})
 	return nil
 }
 
-// 尺寸、画质、参考图和审核强度按运营方为客户端开放的能力校验。
-func checkGouoImageParams(entry *model.GouoImageModel, size, quality, moderation string, inputs int) string {
-	// 很多上游不支持任意分辨率，只放行后台为模型开放的档位；没有开放档位时只能用自动尺寸
+// 尺寸和审核强度按客户端可选范围校验：尺寸最大到 4K，宽松审核需运营方开放
+func checkGouoImageParams(size, moderation string) string {
 	if size = strings.ToLower(strings.TrimSpace(size)); size != "" && size != "auto" {
 		width, height, ok := strings.Cut(size, "x")
 		w, errW := strconv.Atoi(width)
 		h, errH := strconv.Atoi(height)
-		if !ok || errW != nil || errH != nil || w <= 0 || h <= 0 || w > 100000 || h > 100000 {
+		if !ok || errW != nil || errH != nil || w <= 0 || h <= 0 || model.GouoSizeTier(w, h) == "" {
 			return "图片尺寸无效"
-		}
-		if !slices.Contains(entry.Sizes, model.GouoSizeTier(w, h)) {
-			return "此模型不支持该分辨率，请选择自动尺寸或已开放的分辨率"
-		}
-	}
-	if len(entry.Qualities) > 0 {
-		quality = strings.ToLower(strings.TrimSpace(quality))
-		// 自动画质可能由上游选成高画质，只有开放高画质时才允许
-		if quality == "" || quality == "auto" {
-			if !slices.Contains(entry.Qualities, "high") {
-				return "此模型不开放自动画质，请选择具体画质"
-			}
-		} else if !slices.Contains(entry.Qualities, quality) {
-			return "此模型不开放所选画质，请重新选择"
 		}
 	}
 	if !gouo_setting.Get().AllowLowModeration && strings.EqualFold(strings.TrimSpace(moderation), "low") {
 		return "运营方未开放宽松审核"
-	}
-	if entry.MaxInputs > 0 && inputs > entry.MaxInputs {
-		return fmt.Sprintf("此模型最多使用 %d 张参考图", entry.MaxInputs)
 	}
 	return ""
 }
 
 // beginGouoAttempt 在每次向上游派发前运行：记录渠道，并把响应改写到缓冲区，上一次失败尝试写出的内容丢弃
 func beginGouoAttempt(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
-	value, ok := c.Get(helper.GouoImageContextKey)
+	value, ok := c.Get(gouoImageContextKey)
 	if !ok {
 		return nil
 	}
@@ -280,7 +249,7 @@ func beginGouoAttempt(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPI
 // finishGouoImage 在上游成功返回后运行：校验图片、保存恢复结果、结算，再把响应回传给客户端。
 // 成功时返回 false，让调用方继续 New API 的原生结算。
 func finishGouoImage(c *gin.Context, info *relaycommon.RelayInfo) (bool, *types.NewAPIError) {
-	value, ok := c.Get(helper.GouoImageContextKey)
+	value, ok := c.Get(gouoImageContextKey)
 	if !ok {
 		return false, nil
 	}
@@ -351,7 +320,7 @@ func normalizeGouoImageResponse(data []byte) ([]byte, []dto.ImageData, error) {
 
 // EndGouoImage 只更新请求状态并恢复写入器；新请求的退款由原生 BillingSession 处理。
 func EndGouoImage(c *gin.Context, apiErr *types.NewAPIError) *types.NewAPIError {
-	value, ok := c.Get(helper.GouoImageContextKey)
+	value, ok := c.Get(gouoImageContextKey)
 	if !ok {
 		return apiErr
 	}

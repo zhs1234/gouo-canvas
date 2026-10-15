@@ -2,7 +2,6 @@
 package gouo_setting
 
 import (
-	"strings"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
@@ -10,7 +9,6 @@ import (
 )
 
 type GouoSetting struct {
-	Notice              string `json:"notice"`
 	RedemptionHelp      string `json:"redemption_help"`
 	SupportContact      string `json:"support_contact"`
 	DefaultImageModel   string `json:"default_image_model"`
@@ -57,13 +55,10 @@ func Get() *GouoSetting {
 
 // Validate 在保存前校验整份设置；错误是 New API 的 message_key，后台界面按语言包翻译
 func (s *GouoSetting) Validate() error {
-	s.Notice = strings.Join(strings.Fields(s.Notice), " ")
 	between := func(key string, min, max int) error {
 		return common.NewMessage(key, map[string]any{"min": min, "max": max})
 	}
 	switch {
-	case utf8.RuneCountInString(s.Notice) > 200:
-		return common.NewMessage("Announcement must be at most {{max}} characters", map[string]any{"max": 200})
 	case utf8.RuneCountInString(s.RedemptionHelp) > 2000 || utf8.RuneCountInString(s.SupportContact) > 2000:
 		return common.NewMessage("Redemption help and support contact must each be at most {{max}} characters", map[string]any{"max": 2000})
 	case len(s.DefaultImageModel) > 100 || len(s.AgentDefaultModel) > 100:

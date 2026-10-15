@@ -16,18 +16,14 @@ import (
 )
 
 type gouoAgentModel struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	ToolCalls        bool   `json:"tool_calls"`
-	Vision           bool   `json:"vision"`
-	CapabilitySource string `json:"capability_source"`
-	Default          bool   `json:"default,omitempty"`
-	Description      string `json:"description,omitempty"`
-	BillingMode      string `json:"billing_mode"`
+	ID          string `json:"id"`
+	Vision      bool   `json:"vision"`
+	Default     bool   `json:"default,omitempty"`
+	Description string `json:"description,omitempty"`
+	BillingMode string `json:"billing_mode"`
 	// 每百万 token 的人民币价格，客户端换算成积分展示；实际扣费还会乘以用户分组倍率
-	InputPriceCNY   float64 `json:"input_price_cny"`
-	OutputPriceCNY  float64 `json:"output_price_cny"`
-	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
+	InputPriceCNY  float64 `json:"input_price_cny"`
+	OutputPriceCNY float64 `json:"output_price_cny"`
 }
 
 // gouoAgentPrice 只为旧倍率定价换算单价；表达式沿用 New API 的预扣和结算，不伪造固定 token 价格。
@@ -65,28 +61,7 @@ func GetGouoAgentModels(c *gin.Context) {
 		gouoFail(c, http.StatusInternalServerError, "group_unavailable", "读取账号分组失败")
 		return
 	}
-	rows, err := model.ListGouoAgentModels()
-	if err != nil {
-		gouoFail(c, http.StatusInternalServerError, "models_unavailable", "读取模型目录失败")
-		return
-	}
-	available := model.GetGroupEnabledModels(group)
-	data := make([]*gouoAgentModel, 0)
-	for _, row := range rows {
-		if !row.Listed || !slices.Contains(available, row.Model) {
-			continue
-		}
-		input, output, reason := gouoAgentPrice(row.Model)
-		if reason != "" {
-			continue
-		}
-		name := row.Name
-		if name == "" {
-			name = row.Model
-		}
-		data = append(data, &gouoAgentModel{ID: row.Model, Name: name, ToolCalls: true, Vision: row.Vision, CapabilitySource: "gouo_catalog",
-			Description: row.Description, BillingMode: model.GouoBillingMode(row.Model), InputPriceCNY: input, OutputPriceCNY: output, MaxOutputTokens: row.MaxTokens})
-	}
+	_, data := gouoCatalog(model.GetGroupEnabledModels(group))
 	// 后台指定的默认模型可用时标出它，否则标出目录第一个
 	if len(data) > 0 {
 		idx := slices.IndexFunc(data, func(entry *gouoAgentModel) bool { return entry.ID == strings.TrimSpace(s.AgentDefaultModel) })

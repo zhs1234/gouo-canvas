@@ -3,24 +3,6 @@ import { DEFAULT_PARAMS } from '../types'
 import { callImageApi } from './api'
 
 describe('callImageApi', () => {
-  it('submits and recovers native multi-image output under one original request ID', async () => {
-    const { createBackendSettings, setBackendSessionForTests } = await import('./gouoBackend')
-    setBackendSessionForTests()
-    const result = { data: [{ b64_json: 'Zmlyc3Q=' }, { b64_json: 'c2Vjb25k' }] }
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'native-token' })))
-      .mockResolvedValueOnce(new Response(JSON.stringify(result)))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: { status: 'settled', recoverable: true, result } })))
-    await createBackendSettings(true)
-    const options = { model: 'native', prompt: '图片', params: { ...DEFAULT_PARAMS, n: 2 }, inputImageDataUrls: [], nativeImageBatch: true, requestId: 'native-batch' }
-    await expect(callImageApi(options)).resolves.toMatchObject({ images: ['data:image/png;base64,Zmlyc3Q=', 'data:image/png;base64,c2Vjb25k'] })
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).n).toBe(2)
-    expect(fetchMock.mock.calls[1][1]?.headers).toMatchObject({ 'X-Gouo-Request-Id': 'native-batch' })
-    await expect(callImageApi({ ...options, recoverOnly: true })).resolves.toMatchObject({ images: ['data:image/png;base64,Zmlyc3Q=', 'data:image/png;base64,c2Vjb25k'] })
-    expect(String(fetchMock.mock.calls[2][0])).toContain('client_request_id=native-batch')
-    expect(fetchMock.mock.calls[2][1]?.method).toBe('GET')
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-  })
   it.each([
     { data: { b64_json: 'aW1hZ2U=' } },
     { data: [{ url: 'https://example.com/image.png' }, { b64_json: 'aW1hZ2U=' }, { revised_prompt: '描述' }] },

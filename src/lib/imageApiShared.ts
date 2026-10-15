@@ -24,7 +24,6 @@ export interface CallApiOptions {
   recoverOnly?: boolean
   signal?: AbortSignal
   gouoPriceVersion?: string
-  nativeImageBatch?: boolean
 }
 
 export interface CallApiResult {

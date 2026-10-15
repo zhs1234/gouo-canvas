@@ -102,37 +102,29 @@ func TestGouoImageModelEntry(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(string(prices))) })
 
-	row := &GouoImageModelConfig{Model: "gpt-image-2", Enabled: true, PriceCNY: 0.7, MaxOutputs: 1, Sizes: "1k, 2K", Qualities: "High"}
-	entry, err := row.Entry()
+	p := Pricing{ModelName: "gpt-image-2", Tags: " Edit ,mask", Description: "原生说明"}
+	entry, err := GouoImageModelEntry(p)
 	require.NoError(t, err)
-	assert.Zero(t, entry.Quota)
-	assert.Zero(t, entry.PriceCNY)
-	assert.Equal(t, []string{"1K", "2K"}, entry.Sizes)
-	assert.Equal(t, []string{"high"}, entry.Qualities)
-	// 改名和旧按张价格不影响版本，New API 原生定价变化才更新版本。
+	assert.True(t, entry.Reference)
+	assert.True(t, entry.Mask)
+	assert.Equal(t, "原生说明", entry.Description)
+	// 遮罩需要同时支持参考图
+	maskOnly, err := GouoImageModelEntry(Pricing{ModelName: "gpt-image-2", Tags: "mask"})
+	require.NoError(t, err)
+	assert.False(t, maskOnly.Reference)
+	assert.False(t, maskOnly.Mask)
+	// 改说明不影响版本；能力标签和 New API 原生定价变化才更新版本
 	version := entry.PriceVersion
-	row.Name = "新名字"
-	renamed, err := row.Entry()
+	p.Description = "新说明"
+	described, err := GouoImageModelEntry(p)
 	require.NoError(t, err)
-	assert.Equal(t, version, renamed.PriceVersion)
-	row.PriceCNY = 0.8
-	repriced, err := row.Entry()
-	require.NoError(t, err)
-	assert.Equal(t, version, repriced.PriceVersion)
+	assert.Equal(t, version, described.PriceVersion)
+	assert.NotEqual(t, version, maskOnly.PriceVersion)
 	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"gpt-image-2":0.02}`))
-	repriced, err = row.Entry()
+	repriced, err := GouoImageModelEntry(p)
 	require.NoError(t, err)
 	assert.NotEqual(t, version, repriced.PriceVersion)
 
-	for _, bad := range []GouoImageModelConfig{
-		{Model: "a*", PriceCNY: 1, MaxOutputs: 1},
-		{Model: "a", PriceCNY: 1, MaxOutputs: 11},
-		{Model: "a", PriceCNY: 1, MaxOutputs: 1, Mask: true},
-		{Model: "a", PriceCNY: 1, MaxOutputs: 1, Sizes: "8K"},
-		{Model: "a", PriceCNY: 1, MaxOutputs: 1, Qualities: "ultra"},
-	} {
-		assert.Error(t, bad.Validate(), bad)
-	}
 	assert.Equal(t, "1K", GouoSizeTier(1024, 1536))
 	assert.Equal(t, "2K", GouoSizeTier(1536, 1536))
 	assert.Equal(t, "", GouoSizeTier(4096, 4096))

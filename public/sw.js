@@ -30,8 +30,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/api/') ||
     url.pathname === '/v1' ||
     url.pathname.startsWith('/v1/') ||
-    url.pathname === '/panel' ||
-    url.pathname.startsWith('/panel/')
+    url.pathname.startsWith('/pg/')
   ) return
 
   if (request.mode === 'navigate') {

@@ -1252,7 +1252,6 @@ async function runTask(taskId: string, recoverOnly: boolean) {
       inputImageDataUrls: inputDataUrls,
       maskDataUrl,
       gouoPriceVersion: task.gouoPriceVersion,
-      nativeImageBatch: task.nativeImageBatch === true,
       requestId: task.requestId ?? task.id,
       taskId: task.id,
       ...(recoverOnly ? { recoverOnly: true } : {}),
@@ -1543,7 +1542,7 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
         title: '确认重试价格',
         message: `模型「${err.quote.id}」的定价或能力已更新。重试会新建 ${task.params.n} 张图片，按当前模型定价、实际用量和账号分组倍率结算。${task.outputImages.length > 0 && task.outputErrors?.length ? '本次会重新生成整组图片，包含已经成功的图片，不是仅补失败项。' : ''}原任务可能已扣费，请先在用户中心的使用记录核对。是否继续重试？`,
         confirmText: '按当前价格重试',
-        action: () => retryTask({ ...task, gouoPriceVersion: err.quote.price_version, gouoPriceCNY: err.quote.price_cny }, true),
+        action: () => retryTask({ ...task, gouoPriceVersion: err.quote.price_version }, true),
       })
       return
     }
@@ -1576,8 +1575,6 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
     params: taskParams,
     apiModel: model,
     gouoPriceVersion: quote.price_version,
-    gouoPriceCNY: quote.price_cny,
-    nativeImageBatch: Boolean(quote.billing_mode && taskParams.n > 1 && taskParams.n <= quote.max_outputs),
     inputImageIds: [...task.inputImageIds],
     maskTargetImageId: task.maskTargetImageId ?? null,
     maskImageId: task.maskImageId ?? null,

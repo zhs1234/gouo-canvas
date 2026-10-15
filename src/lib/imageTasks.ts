@@ -151,8 +151,6 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       params: taskParams,
       apiModel: model,
       gouoPriceVersion: quote.price_version,
-      gouoPriceCNY: quote.price_cny,
-      nativeImageBatch: Boolean(quote.billing_mode && taskParams.n > 1 && taskParams.n <= quote.max_outputs),
       inputImageIds: orderedInputImages.map((i) => i.id),
       maskTargetImageId,
       maskImageId,

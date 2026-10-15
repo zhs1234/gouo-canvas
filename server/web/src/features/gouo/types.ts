@@ -32,7 +32,6 @@ export type PageData<T> = {
 }
 
 export type GouoSettings = {
-  notice: string
   redemption_help: string
   support_contact: string
   default_image_model: string
@@ -50,49 +49,13 @@ export type GouoSettings = {
   trash_retention_days: number
 }
 
-export type GouoSizeTier = '1K' | '2K' | '4K'
-export type GouoQuality = 'low' | 'medium' | 'high'
-
-export type GouoImageModel = {
-  model: string
-  enabled: boolean
-  price_cny: number
-  reference: boolean
-  mask: boolean
-  max_outputs: number
-  sizes: GouoSizeTier[]
-  qualities: GouoQuality[]
-  max_inputs: number
-  sort: number
-  name: string
-  description: string
-  updated_at: number
-  // 有启用中的渠道支持此模型的分组
-  groups: string[]
-  // 已启用但配置无法使用时的原因（message_key）
-  error?: string
+export type GouoCatalogModel = {
+  id: string
 }
 
-export type GouoAgentModel = {
-  model: string
-  billing_mode?: 'ratio' | 'tiered_expr' | 'per_request'
-  listed: boolean
-  vision: boolean
-  sort: number
-  name: string
-  description: string
-  max_tokens: number
-  updated_at: number
-  input_price_cny: number
-  output_price_cny: number
-  groups: string[]
-  // 客户端看不到它的第一个原因（message_key），空表示可见
-  reason: string
-}
-
-export type GouoModelList<T> = {
-  default_model: string
-  models: T[]
+export type GouoCatalog = {
+  image_models: GouoCatalogModel[]
+  agent_models: GouoCatalogModel[]
 }
 
 export type GouoStorageOverview = {

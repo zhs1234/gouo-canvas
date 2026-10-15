@@ -2,7 +2,7 @@
 
 [简体中文](./README.zh-CN.md) · **English** · [Documentation](./docs/README.md)
 
-An AI creation app with three workspaces: image generation, an infinite canvas, and Agent. Built with React and a Go backend derived from One Hub. Accounts, points (1 CNY = 100 points), and cloud libraries are managed by the backend; platform API keys stay on the server. The admin panel is for administrators only and controls models, prices, announcements, and other client settings.
+An AI creation app with three workspaces: image generation, an infinite canvas, and Agent. Built with React and a Go backend derived from New API. Accounts, points (1 CNY = 100 points), and cloud libraries are managed by the backend; platform API keys stay on the server. The admin panel is for administrators only and controls models, prices, announcements, and other client settings.
 
 - **Generate images**: text-to-image generation, reference-image and masked editing, and library management.
 - **Canvas**: reuse Infinite Canvas's interface and interactions to organize images, text, and connections across projects.
@@ -21,19 +21,18 @@ Captured from a local demo environment in October 2026 with demo accounts and da
 | ![Creation page](./docs/images/screenshots/client-create.webp) | ![My works](./docs/images/screenshots/client-works.webp) |
 | **Canvas** | **Agent** |
 | ![Canvas](./docs/images/screenshots/client-canvas.webp) | ![Agent](./docs/images/screenshots/client-agent.webp) |
-| **User center** | **Admin: Gouo models** |
-| ![User center](./docs/images/screenshots/client-user-center.webp) | ![Gouo models](./docs/images/screenshots/panel-gouo-models.webp) |
+| **User center** | **Admin: Gouo settings** |
+| ![User center](./docs/images/screenshots/client-user-center.webp) | ![Gouo settings](./docs/images/screenshots/panel-gouo-settings.webp) |
 
 ## Run locally
 
-Requires Node.js 22, npm, Git, and Go 1.25. The commands below use PowerShell, starting at the repository root.
+Requires Node.js 22, npm, Git, and Go 1.26. The commands below use PowerShell, starting at the repository root.
 
 Start the backend (SQLite by default; Redis is optional locally):
 
 ```powershell
 Set-Location server
 $env:SESSION_SECRET = '<at-least-32-random-characters>'
-$env:USER_TOKEN_SECRET = '<a-different-at-least-32-character-secret>'
 go run .
 ```
 
@@ -45,17 +44,17 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. Vite proxies `/api`, `/v1`, and `/panel` to `VITE_GOUO_BACKEND_DEV_TARGET` (default: `http://127.0.0.1:3000`).
+Open `http://127.0.0.1:5173`. Vite proxies `/api`, `/v1`, and `/pg` to `VITE_GOUO_BACKEND_DEV_TARGET` (default: `http://127.0.0.1:3000`).
 
-An empty database creates `root` / `123456`. **Change this password immediately, before exposing the service.** In `http://127.0.0.1:3000/panel`, configure an image channel and its upstream API key, then enable the model and set its price in points under 光构 → 光构模型 (Gouo models). Generation needs a working channel and enough points.
+An empty database creates `root` / `123456`. **Change this password immediately, before exposing the service.** In `http://127.0.0.1:3000`, configure an image channel and its upstream API key, then price the model in New API's model pricing; image models appear in the client automatically (add the `edit` and `mask` tags in Models for reference and mask edits). Generation needs a working channel and enough points.
 
 See the [development guide](./docs/en/development.md) for full setup and frontend variables. Backend settings, cloud storage limits, and backups are in the [backend guide](./docs/en/backend.md); environment examples are in [`.env.example`](./.env.example) and [`deploy/.env.example`](./deploy/.env.example).
 
 ### Enable Agent models
 
-In the backend admin panel, configure a text model's pricing, available channel, and model information: include `"text"` in `output_modalities` and `"tools"` in `tags`. For vision input, also include `"image"` in `input_modalities`. The channel must actually support streaming tool calls, and the account group and token must allow access. Administrators maintain these capability flags; the server does not probe upstream capabilities.
+In the backend admin panel, price a text model, give it an available channel, and add the `tools` tag in Models; add `vision` for image input. The channel must actually support streaming tool calls, and the account group must allow access. Administrators maintain these tags; the server does not probe upstream capabilities.
 
-`GET /api/gouo/agent/models` publishes only eligible text models, separately from the image model catalog; the list stays empty until configured. Conversations use the existing `/v1/chat/completions` endpoint and platform text-usage billing. Image tool calls are billed separately at image prices.
+`GET /api/gouo/agent/models` publishes only eligible text models, separately from the image model catalog; the list stays empty until configured. Conversations use New API's native playground endpoint `/pg/chat/completions` with the login session and platform text-usage billing. Image tool calls are billed separately at image prices.
 
 ### Free local mock
 
@@ -93,12 +92,12 @@ npm test
 # Backend smoke checks, from server/
 Set-Location server
 go test ./controller -run '^$'
-go test ./relay/relay_util -run '^TestGouoImage'
+go test ./relay ./model -run Gouo
 ```
 
 ## Deploy
 
-Use one public origin: serve the frontend and proxy `/api` and `/v1` to the backend. Configure upstream keys only in the backend admin panel.
+Use one public origin: serve the frontend and proxy `/api`, `/v1`, and `/pg` to the backend. Configure upstream keys only in the backend admin panel.
 
 Choose [Docker Compose](./docs/en/deployment/docker.md) or [manual Linux deployment](./docs/en/deployment/manual.md). Read the [deployment overview](./docs/en/deployment/index.md) and complete the [production checklist](./docs/en/deployment/checklist.md) before opening registration or payments.
 
@@ -117,10 +116,10 @@ Before upgrading, back up browser work and the backend database and asset direct
 
 [User guide](./docs/en/user-guide.md) · [Testing and mock API](./docs/en/testing.md) · [Changelog](./CHANGELOG.md)
 
-`server/docs/` belongs to upstream One Hub; use the Gouo deployment guides linked above for this project.
+`server/docs/` belongs to upstream New API; use the Gouo deployment guides linked above for this project.
 
 ## License
 
-The frontend is derived from [GPT Image Playground](https://github.com/CookSleep/gpt_image_playground) under MIT. The backend is derived from [One Hub](https://github.com/MartialBE/one-hub) under Apache-2.0, with its original notices retained. See [LICENSE](./LICENSE) and the license files in `server/`.
+The frontend is derived from [GPT Image Playground](https://github.com/CookSleep/gpt_image_playground) under MIT. The backend is derived from [New API](https://github.com/QuantumNous/new-api) under AGPL-3.0, with its original notices retained. See [LICENSE](./LICENSE) and the license files in `server/`.
 
 The canvas reuses [Infinite Canvas](https://github.com/basketikun/infinite-canvas), pinned to upstream commit `dab19adc0847e32e39b7fc8ff90cb392561fb826`. Its MIT license is retained in [LICENSE.infinite-canvas](./src/lib/canvas/LICENSE.infinite-canvas); adaptations are recorded in [UPSTREAM.md](./src/lib/canvas/UPSTREAM.md). Distribution includes the [third-party notices](./public/third-party-notices.txt).

@@ -2,7 +2,7 @@
 
 [简体中文](../zh-CN/project-overview.md) · [Documentation index](../README.md)
 
-Gouo Canvas is an AI image workspace with accounts, points-based billing, and a cloud library, offering three ways to create: image generation, an infinite canvas, and an Agent. Users enter prompts, edit reference images and masks, lay out canvases, and organize artwork in the React frontend. The Go backend, derived from One Hub, handles authentication, channel selection, upstream requests, and data ownership. Configured upstream services provide image models; this repository does not contain model training or inference services.
+Gouo Canvas is an AI image workspace with accounts, points-based billing, and a cloud library, offering three ways to create: image generation, an infinite canvas, and an Agent. Users enter prompts, edit reference images and masks, lay out canvases, and organize artwork in the React frontend. The Go backend, derived from New API, handles authentication, channel selection, upstream requests, and data ownership. Configured upstream services provide image models; this repository does not contain model training or inference services.
 
 This document helps maintainers and new contributors understand the product scope, code ownership, main data flows, and deployment boundaries. It was checked against the source as of 2026-10-13 (including the points billing, the first batch of admin-controlled client settings, and the removal of onboarding guides) and verified by running a local demo environment. Live configuration and real upstream behavior were not verified during this review.
 
@@ -18,11 +18,11 @@ This document helps maintainers and new contributors understand the product scop
 | Agent | Conversational creation that calls image-generation and canvas tools; models configured in the admin panel | [agent](../../src/components/agent), [lib/agent](../../src/lib/agent) |
 | User center | Points balance, image billing, redemption codes, usage history, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | Cloud library | Server-saved artworks, storage usage, and account isolation | [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo_cloud.go](../../server/controller/gouo_cloud.go) |
-| Admin panel | Administrators only; One Hub user, channel, redemption-code, and log administration, plus Gouo settings, Gouo models, image billing, and Gouo storage | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
+| Admin panel | Administrators only; New API user, channel, redemption-code, and log administration, plus Gouo settings, image billing, and Gouo storage | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
 
 ![Creation page](../images/screenshots/client-create.webp)
 
-The frontend also includes an inspiration library, dark theme, and PWA installation. The service worker caches pages and static assets while bypassing `/api`, `/v1`, and `/panel`; it does not generate images offline. See [main.tsx](../../src/main.tsx) and [sw.js](../../public/sw.js).
+The frontend also includes an inspiration library, dark theme, and PWA installation. The service worker caches pages and static assets while bypassing `/api`, `/v1`, and `/pg`; it does not generate images offline. See [main.tsx](../../src/main.tsx) and [sw.js](../../public/sw.js).
 
 ## Identity and data
 
@@ -39,10 +39,10 @@ The repository contains three independent dependency and build units.
 | Unit | Stack | Dependencies and output |
 | --- | --- | --- |
 | Public frontend | React 19, TypeScript, Vite 6, Zustand, Tailwind CSS 3 | npm and root `package-lock.json`; outputs `dist/` |
-| Product backend | Go 1.25, Gin, GORM, derived from One Hub | `server/go.mod` and `go.sum`; compiles to a Go executable |
-| Admin frontend | React 18, Vite 7, MUI 5, Redux | Yarn 1.22.22 and `server/web/yarn.lock`; outputs `server/web/build/` |
+| Product backend | Go 1.26, Gin, GORM, derived from New API | `server/go.mod` and `go.sum`; compiles to a Go executable |
+| Admin frontend | React 19, Rsbuild, TanStack Router/Query, Tailwind CSS 4 | Bun and `server/web/bun.lock`; outputs `server/web/dist/` |
 
-[server/main.go](../../server/main.go) embeds the admin build with `go:embed`. Generate `server/web/build/` before building or running the backend for the first time. The public frontend and admin application are separate applications; a root `npm ci` does not install all repository dependencies.
+[server/main.go](../../server/main.go) embeds the admin build with `go:embed`. Generate `server/web/dist/` before building or running the backend for the first time. The public frontend and admin application are separate applications; a root `npm ci` does not install all repository dependencies.
 
 | Directory or file | Responsibility | Typical changes |
 | --- | --- | --- |
@@ -66,11 +66,11 @@ Follow the root [AGENTS.md](../../AGENTS.md) for frontend changes and [server/AG
 
 `main.tsx` wraps the workspace with `BackendAuthGate`. Product mode requests `GET /api/user/self` first and shows the login page if there is no session. Successful login activates the user's local storage scope. A scope change reloads the page before loading that account's data.
 
-The frontend then obtains a user relay token from `GET /api/token/playground`. The backend finds or creates the user's `sys_playground` token and validates an existing token. Image calls use this token; account and cloud requests use the Cookie session. `UnlimitedQuota` removes a separate token-level cap; image calls still check the user's balance.
+The frontend then obtains a user relay token from `GET /api/gouo/token`. The backend finds or creates the user's `sys_playground` token. Image calls use this token; account and cloud requests use the Cookie session. `UnlimitedQuota` removes a separate token-level cap; image calls still check the user's balance.
 
 Account changes in another tab trigger a storage-scope check. Synchronization also confirms that the signed-in user matches the loaded local scope. Server `/api/gouo` routes use `UserAuth`, and model queries include `user_id`; admin routes use `AdminAuth`. Local isolation works alongside server resource-ownership checks.
 
-Sources: [BackendAuthGate.tsx](../../src/components/BackendAuthGate.tsx), [storageScope.ts](../../src/lib/storageScope.ts), [token.go](../../server/controller/token.go), [api-router.go](../../server/router/api-router.go), [gouo_cloud.go](../../server/model/gouo_cloud.go).
+Sources: [BackendAuthGate.tsx](../../src/components/BackendAuthGate.tsx), [storageScope.ts](../../src/lib/storageScope.ts), [gouo.go](../../server/controller/gouo.go), [gouo-router.go](../../server/router/gouo-router.go), [gouo_cloud.go](../../server/model/gouo_cloud.go).
 
 ### Image generation and editing
 
@@ -95,13 +95,11 @@ Sources: [store.ts](../../src/store.ts), [api.ts](../../src/lib/api.ts), [gouoBa
 
 ### Billing and failures
 
-`/v1/images/generations`, `/v1/images/edits`, and `/v1/images/variations` use the public model's price per successful HTTP request. Configuration reuses `Price`; `/api/gouo/models` intersects actual token permissions and available channels to return prices, capabilities, limits, and versions. Quota is `ceil(CNY price / PaymentUSDRate × QuotaPerUnit)`. Models without valid pricing fail closed. Model choices are remembered per account, and tasks retain model and quote snapshots.
+`/v1/images/generations` and `/v1/images/edits` use New API's own model pricing (per-request price, model ratio, or tiered expression), with group ratios and other rules applied as usual; `/v1/images/variations` is not implemented. Gouo image models can be called only through the image routes; other entry points are rejected. `/api/gouo/models` returns enabled models available to the account's group with billing mode, capabilities, output limits, and a price version computed from the effective pricing and capability settings; a change requires renewed client confirmation. Model choices are remembered per account, and tasks retain model and quote snapshots.
 
-Image requests reserve user/token quota atomically through conditional transaction updates, including high-balance accounts. Channel retries share one reservation. Confirmed backend failures refund it and success settles it. Logs preserve the public model, price, billing unit, version, and charged quota. Group multipliers and upstream mappings do not alter selling prices. Changed prices or capabilities require renewed client confirmation.
+The Gouo product client splits multiple images into single-image requests and each successful image is charged separately. Image reservations are written to a durable ledger, deduplicated by request ID; requests that return no image are refunded automatically, and the primary node refunds anything still unsettled after 20 minutes. Browser timeouts, downloads, and local storage failures do not establish upstream failure. Retries require confirmation of the new request's price.
 
-The Gouo product client splits multiple images into single-image requests and each successful image is charged separately; for direct API calls, multiple outputs within the model limit cost one charge per HTTP request. Legacy `GOUO_IMAGE_PRICE_CNY` seeds the default model only once, with an output limit of 1; administrators explicitly enable and price other models. Frontend compatibility modes may also create separately charged requests. Browser timeouts, downloads, and local storage failures do not establish upstream failure. The durable ledger refunds unsent reservations older than 20 minutes; dispatched requests with unknown outcomes require administrator reconciliation against upstream records. Users can inspect request status in Usage, and retries require confirmation of the new request's price.
-
-Sources: [relay/main.go](../../server/relay/main.go), [quota.go](../../server/relay/relay_util/quota.go), [openaiCompatibleImageApi.ts](../../src/lib/openaiCompatibleImageApi.ts). See the [backend guide](./backend.md) for pricing, payment configuration, and production validation.
+Sources: [relay/gouo_image.go](../../server/relay/gouo_image.go), [model/gouo_billing.go](../../server/model/gouo_billing.go), [api.ts](../../src/lib/api.ts). See the [backend guide](./backend.md) for pricing, payment configuration, and production validation.
 
 ### Cloud library
 
@@ -111,23 +109,23 @@ The backend recalculates SHA-256 and deduplicates within each user. The database
 
 | Default limit | Value | Configuration |
 | --- | --- | --- |
-| Storage per user | 2 GiB | `GOUO_ASSET_USER_QUOTA_BYTES`, or Gouo settings in the admin panel |
-| Size per file | 25 MiB | `GOUO_ASSET_MAX_FILE_BYTES`, or Gouo settings in the admin panel |
+| Storage per user | 2 GiB | Gouo settings in the admin panel |
+| Size per file | 25 MiB | Gouo settings in the admin panel |
 | Asset links per task | 32 | `GOUO_ASSET_MAX_TASK_FILES` |
 
 The frontend also caps metadata submissions at 32 asset links (references, masks, and outputs). Raising only the backend limit does not expand the frontend. The quota applies to user uploads; paid generated images saved by the server are not limited by it. Administrators can override storage quota for individual users.
 
 Deleted cloud artworks, canvases, conversations, and collections go to the recycle bin for 3 days by default (1–30 days, configurable in the admin panel). They can be restored during that time and still count toward storage; after that, an hourly cleanup job on the master node permanently deletes the records and unreferenced images. Local work not yet imported into the account exists only in the original browser and is lost if browser data is cleared or the device changes.
 
-Sources: [db.ts](../../src/lib/db.ts), [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo-trash.go](../../server/model/gouo-trash.go), [controller/gouo_cloud.go](../../server/controller/gouo_cloud.go), [model/gouo_cloud.go](../../server/model/gouo_cloud.go).
+Sources: [db.ts](../../src/lib/db.ts), [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo_trash.go](../../server/model/gouo_trash.go), [controller/gouo_cloud.go](../../server/controller/gouo_cloud.go), [model/gouo_cloud.go](../../server/model/gouo_cloud.go).
 
 ## Development and deployment
 
-Local product development needs the public frontend, Go backend, and built admin application embedded in the backend. Documentation requires Node.js 22 and Go 1.25. Use npm at the root and Yarn for the admin application. SQLite is selected when `SQL_DSN` is absent; Redis is optional locally. On Windows, the current SQLite driver also requires a C compiler supporting CGO.
+Local product development needs the public frontend, Go backend, and built admin application embedded in the backend. Documentation requires Node.js 22, Bun, and Go 1.26. Use npm at the root and Bun for the admin application. SQLite is selected when `SQL_DSN` is absent (a pure-Go driver; no CGO needed); Redis is optional locally.
 
-The development frontend is at `http://127.0.0.1:5173`; the backend defaults to port 3000. Vite proxies `/api`, `/v1`, and `/panel` according to `VITE_GOUO_BACKEND_DEV_TARGET`, set to `http://127.0.0.1:3000` in the product example. An empty database creates `root` / `123456`; change the password promptly.
+The development frontend is at `http://127.0.0.1:5173`; the backend defaults to port 3000. Vite proxies `/api`, `/v1`, and `/pg` according to `VITE_GOUO_BACKEND_DEV_TARGET`, set to `http://127.0.0.1:3000` in the product example. An empty database creates `root` / `123456`; change the password promptly.
 
-The current product deployment entry points are the root `Dockerfile` and [deploy/docker-compose.yml](../../deploy/docker-compose.yml). Compose starts an Nginx frontend, Go backend, MySQL 8.4, and Redis 7.4. The public port defaults to 8080, and the backend admin port binds only to host `127.0.0.1:3000`. Production Nginx proxies `/api/` and `/v1/` but does not proxy `/panel` to the public port; use a controlled admin access path.
+The current product deployment entry points are the root `Dockerfile` and [deploy/docker-compose.yml](../../deploy/docker-compose.yml). Compose starts an Nginx frontend, Go backend, MySQL 8.4, and Redis 7.4. The public port defaults to 8080, and the backend admin port binds only to host `127.0.0.1:3000`. Production Nginx proxies only `/api/`, `/v1/`, and `/pg/`; the admin panel (backend root) is not on the public port, so use a controlled admin access path.
 
 The database holds accounts, balances, channels, and artwork relationships; `backend-data` holds backend data and assets. Backups and restores must cover the database, asset files, and relevant signing secrets together. Multiple backend instances need shared database, coordination, and asset storage. Gouo's cloud library currently uses a filesystem directory; upstream object-storage modules do not establish product cloud-library integration.
 
@@ -137,25 +135,7 @@ See the [development guide](./development.md), [Docker Compose deployment](./dep
 
 ## Verification and next steps
 
-These checks completed in a Linux workspace on 2026-10-13 using an isolated SQLite database and a local mock upstream; they do not establish production readiness or real upstream billing behavior. Earlier checks from 2026-10-05 (Windows workspace and Docker Linux/CGO) appear in the second half of the table.
-
-| Check | Result |
-| --- | --- |
-| Root `npm run build` and `npx tsc --noEmit` | Passed (2026-10-13) |
-| Root `npm test` | 47 test files and 485 tests passed (2026-10-13) |
-| Backend `go vet` and `go test ./controller/ ./model/ ./common/` | Passed (2026-10-13) |
-| Browser end-to-end: sign-up/sign-in, generation, mask editing, canvas generation, Agent tool calls, redeeming points, usage records, plus admin Gouo settings, Gouo models, image billing, Gouo storage, user point adjustment, and redemption codes | Passed (2026-10-13; the screenshots in these docs come from that environment) |
-| Root `npm ci` | Passed (2026-10-05) |
-| Admin Yarn installation with frozen lockfile and build | Passed; generated the files required for embedding |
-| Go 1.25.14, `go mod download`, and `go mod verify` | Completed; all modules verified |
-| Docker Linux/CGO backend compilation and model/controller/relay/relay_util package tests | Passed |
-| Isolated SQLite/Redis and mock-upstream HTTP checks | Catalog, model-specific prices, mappings, refunds, channel retries, quote changes, finite tokens, and concurrent balance checks passed |
-| Desktop and 390px mobile UI | Model choices, account choice retention, count/edit capability restrictions, mock generation and reference editing passed; admin price loading, validation, and saving passed |
-| Real paid upstream, MySQL/PostgreSQL, production migration, cross-device sync, payments, and CSV download end to end | Unverified |
-
-Root npm installation reported 17 dependency vulnerabilities, including 12 rated high. This is the installation audit result, not proof of an exploitable production vulnerability. No automatic fix or upgrade was applied. Public frontend builds also warned about old Browserslist data and mixed imports. Admin checks warned about peer dependencies, Tailwind content configuration, and large chunks; these warnings did not prevent the builds.
-
-Before production, verify migration and backup/restore on the target database, run real-upstream generation/billing/sync/recycle-bin regression with a separate account, then review publishing workflows and dependency findings. Online payments require separate configuration, callback, duplicate-notification, and reconciliation checks. Upstream payment code alone does not establish readiness to accept payments publicly.
+The `migrate/new-api` branch replaces the One Hub backend with New API, so the earlier verification records no longer apply. The new backend still needs migration and backup/restore checks on the target database, followed by regression of generation, billing, sync, and the recycle bin with a real upstream and separate accounts. Online payment needs separate validation of configuration, callbacks, duplicate notifications, and reconciliation; upstream payment code in the source does not mean payments can be opened to the public.
 
 ## Documentation reading order
 
@@ -165,4 +145,4 @@ Before production, verify migration and backup/restore on the target database, r
 4. [Testing and local mock API](./testing.md): compatibility and failure scenarios.
 5. [Deployment overview](./deployment/index.md): deployment choices and production checks.
 
-The frontend derives from GPT Image Playground under MIT License. The backend derives from One Hub and retains Apache-2.0 notices. Upstream general documentation lives in `server/docs/`; use root `docs/` for Gouo product integration and deployment. See [README.md](../../README.md) for attribution and licensing.
+The frontend derives from GPT Image Playground under MIT License. The backend derives from New API under AGPL-3.0 and retains its original notices. Upstream general documentation lives in `server/docs/`; use root `docs/` for Gouo product integration and deployment. See [README.md](../../README.md) for attribution and licensing.

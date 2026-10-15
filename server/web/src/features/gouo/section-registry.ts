@@ -23,8 +23,6 @@ import { createSectionRegistry } from '@/features/system-settings/utils/section-
  */
 const GOUO_SECTIONS = [
   { id: 'settings', titleKey: 'Gouo settings', build: () => null },
-  { id: 'image-models', titleKey: 'Image models', build: () => null },
-  { id: 'agent-models', titleKey: 'Agent models', build: () => null },
   { id: 'storage', titleKey: 'Cloud storage', build: () => null },
   { id: 'billing', titleKey: 'Image billing', build: () => null },
 ] as const

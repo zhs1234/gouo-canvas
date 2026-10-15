@@ -1,7 +1,6 @@
 import type { TaskParams } from '../types'
 import { SERVER_MESSAGES } from './serverMessages'
 import { getLoadedStorageUserId } from './storageScope'
-import { getSizeTier, type SizeTier } from './size'
 
 interface BackendEnvelope<T> {
   success: boolean
@@ -59,21 +58,13 @@ export interface GouoUsageLog {
 export interface GouoImageModel {
   billing_mode?: 'ratio' | 'tiered_expr' | 'per_request'
   id: string
-  name: string
-  price_cny: number
   price_version: string
   reference: boolean
   mask: boolean
-  max_outputs: number
-  quota: number
   // 后台设置的默认模型（未设置或不可用时为目录第一个）
   default?: boolean
-  // 后台填写的一句话说明；name 是后台设置的显示名称，未设置时为模型 ID
+  // New API 模型管理里填写的说明
   description?: string
-  // 后台开放的分辨率档位（缺省表示只能用自动尺寸）、可选画质和最多参考图张数（缺省表示不限）；服务端同样校验
-  sizes?: SizeTier[]
-  qualities?: string[]
-  max_inputs?: number
 }
 
 export class GouoPriceChangedError extends Error {
@@ -99,7 +90,7 @@ function checkRateLimit(response: Response) {
 
 export async function getImageModels(): Promise<GouoImageModel[]> {
   const data = await backendRequest<unknown>('/api/gouo/models')
-  if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny < 0 || (entry.billing_mode !== undefined && !['ratio', 'tiered_expr', 'per_request'].includes(entry.billing_mode)) || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1)) {
+  if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.price_version !== 'string' || (entry.billing_mode !== undefined && !['ratio', 'tiered_expr', 'per_request'].includes(entry.billing_mode)) || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean')) {
     throw new Error('图片模型目录格式无效')
   }
   cachedImageModels = data as GouoImageModel[]
@@ -124,15 +115,9 @@ export function isLowModerationAllowed() {
   return cachedStatus?.gouo_allow_low_moderation === true
 }
 
-// 与服务端的参数校验一致：尺寸、画质和参考图张数不能超出后台为模型限定的范围。
-export function getImageParamIssue(model: GouoImageModel, params: Pick<TaskParams, 'size' | 'quality' | 'moderation'>, inputCount: number) {
-  if (params.size !== 'auto' && !model.sizes?.includes(getSizeTier(params.size)!)) return '此模型不支持该分辨率，请选择自动尺寸或已开放的分辨率'
-  if (model.qualities?.length && (params.quality === 'auto' ? !model.qualities.includes('high') : !model.qualities.includes(params.quality))) {
-    return params.quality === 'auto' ? '此模型不开放自动画质，请选择具体画质' : '此模型不开放所选画质，请重新选择'
-  }
-  if (params.moderation === 'low' && !isLowModerationAllowed()) return '运营方未开放宽松审核'
-  if (model.max_inputs && inputCount > model.max_inputs) return `此模型最多使用 ${model.max_inputs} 张参考图`
-  return ''
+// 与服务端的参数校验一致：宽松审核需运营方开放
+export function getImageParamIssue(params: Pick<TaskParams, 'moderation'>) {
+  return params.moderation === 'low' && !isLowModerationAllowed() ? '运营方未开放宽松审核' : ''
 }
 
 // 用户没有手动选过模型、或选的模型已不在目录里时，使用后台标出的默认模型，管理员改默认模型后对这些用户生效
@@ -151,7 +136,7 @@ export async function getImageModelQuote(id: string, inputCount: number, hasMask
   }
   if ((inputCount > 0 && !model.reference) || (hasMask && !model.mask)) throw new Error('此模型不支持当前编辑操作，请重新选择模型')
   if (!Number.isInteger(n) || n < 1 || n > getMaxTaskImages()) throw new Error(`图片总数量必须为 1 到 ${getMaxTaskImages()} 的整数`)
-  const issue = params ? getImageParamIssue(model, params, inputCount) : ''
+  const issue = params ? getImageParamIssue(params) : ''
   if (issue) throw new Error(issue)
   if (!version || version !== model.price_version) {
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('gouo-models-refresh'))
@@ -173,7 +158,8 @@ interface GouoBackendStatus {
   gouo_cloud_library?: boolean
   gouo_redemption_help?: string
   gouo_support_contact?: string
-  gouo_notice?: string
+  // New API 控制台公告，服务端已按发布时间从新到旧排好
+  announcements?: { content?: unknown }[]
   register_enabled?: boolean
   password_login_enabled?: boolean
   password_login_encryption_enabled?: boolean
@@ -491,7 +477,7 @@ export async function getUsageLogs(page = 1, size = 20, filters?: { model?: stri
       metadata = {}
     }
     return { created_at: log.created_at, type: log.type, content: log.content, model_name: log.model_name, quota: log.quota,
-      request_time: log.use_time ? log.use_time * 1000 : undefined, metadata: { ...metadata, request_id: metadata.gouo_charge_id ?? log.request_id } }
+      request_time: log.use_time ? log.use_time * 1000 : undefined, metadata: { ...metadata, request_id: log.request_id } }
   })
   return { data, total_count: result.total }
 }

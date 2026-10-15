@@ -5,7 +5,7 @@
 本教程只适用于仓库提供的 `deploy/docker-compose.yml`。它会在一台服务器上启动四个服务：
 
 - `web`：光构公开前端和内部 Nginx，容器端口 80。
-- `backend`：光构 Go 后端和 One Hub 管理端，容器端口 3000。
+- `backend`：光构 Go 后端和 New API 管理后台，容器端口 3000。
 - `db`：MySQL 8.4。
 - `redis`：Redis 7.4，开启 AOF。
 
@@ -68,19 +68,15 @@ BACKEND_ADMIN_PORT=3000
 
 # 通过 HTTPS 访问时必须为 true，登录 Cookie 才不会在 http:// 请求中明文发送。
 SESSION_COOKIE_SECURE=true
+# 与上一项同时设置：对外访问的完整 https origin。
+SESSION_COOKIE_TRUSTED_URL=https://你的域名
 
-GOUO_IMAGE_MODEL=gpt-image-2
-GOUO_IMAGE_PRICE_CNY=0.10
-GOUO_CLOUD_LIBRARY_ENABLED=true
 GOUO_ASSET_DIR=/data/gouo-assets
-GOUO_ASSET_USER_QUOTA_BYTES=2147483648
-GOUO_ASSET_MAX_FILE_BYTES=26214400
 GOUO_ASSET_MAX_TASK_FILES=32
 
 MYSQL_PASSWORD=替换为数据库用户强密码
 MYSQL_ROOT_PASSWORD=替换为另一个数据库管理员强密码
 SESSION_SECRET=替换为第一段随机值
-USER_TOKEN_SECRET=替换为第二段随机值
 ```
 
 每项配置的作用：
@@ -89,13 +85,10 @@ USER_TOKEN_SECRET=替换为第二段随机值
 | --- | --- | --- |
 | `PUBLIC_PORT` | 有外层 HTTPS 代理时用 `127.0.0.1:8080`；临时局域网测试可用 `8080` | 使用 `8080` 会监听所有网卡，不应长期裸露在公网 |
 | `BACKEND_ADMIN_PORT` | 一般保持 `3000` | Compose 已固定绑定 `127.0.0.1`，不要改成公网地址 |
-| `SESSION_COOKIE_SECURE` | 通过 HTTPS 访问时填 `true` | 为 `false` 时，用户经 `http://` 打开（旧书签、手输网址）的第一次请求会在跳转前明文带上登录 Cookie；只有纯局域网 HTTP 测试才保持 `false` |
-| `GOUO_IMAGE_MODEL` | 首次迁移时启用的默认模型 | 后台迁移只执行一次，后续选择和定价由模型目录管理 |
-| `GOUO_IMAGE_PRICE_CNY` | 默认模型首次迁移的人民币售价 | 后续在后台单模型编辑中改价，重启不覆盖已保存价格；上线前核对成本和输出上限 |
+| `SESSION_COOKIE_SECURE` | 通过 HTTPS 访问时填 `true`，并同时填写 `SESSION_COOKIE_TRUSTED_URL` | 为 `false` 时，用户经 `http://` 打开（旧书签、手输网址）的第一次请求会在跳转前明文带上登录 Cookie；只有纯局域网 HTTP 测试才保持 `false` |
 | `GOUO_ASSET_DIR` | 保持 `/data/gouo-assets` | `/data` 已挂载 `backend-data`，不要改到未挂载目录 |
 | `MYSQL_PASSWORD` | 数据库业务账号密码 | 建议使用不含换行和 DSN 歧义字符的长随机值 |
 | `SESSION_SECRET` | 第一段至少 32 字节的随机值 | 更换后所有登录 Cookie 失效 |
-| `USER_TOKEN_SECRET` | 第二段不同的随机值 | 更换后现有用户中继令牌失效 |
 
 检查是否还有示例占位符：
 
@@ -164,7 +157,7 @@ ssh -L 3000:127.0.0.1:3000 你的服务器用户@服务器地址
 保持 SSH 会话打开，然后在本机浏览器访问：
 
 ```text
-http://127.0.0.1:3000/panel
+http://127.0.0.1:3000
 ```
 
 首次空数据库会创建管理员 `root`，默认密码是 `123456`。登录后第一件事必须是修改密码。完成后按照[部署入口页的统一配置顺序](./index.md#部署后的统一配置顺序)添加渠道并测试图片请求。
@@ -359,15 +352,15 @@ docker compose exec db sh -c 'mysqladmin ping -h localhost -uroot -p"$MYSQL_ROOT
 检查：
 
 ```bash
-docker compose exec backend sh -c 'echo "$GOUO_CLOUD_LIBRARY_ENABLED"; echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
+docker compose exec backend sh -c 'echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
 docker compose logs --tail=200 backend
 ```
 
-同时在管理端确认用户配额未满、单文件没有超过 25 MB。
+同时在管理端“光构设置”确认云端作品库已开放，并确认用户配额未满、单文件没有超过上传上限（默认 25 MB）。
 
 ### 域名能打开但 `/api` 返回 404
 
-外层代理必须把整个域名转发到 `127.0.0.1:8080`，不要只转发静态首页。Compose 内部 Nginx 会继续处理 `/api` 和 `/v1`。
+外层代理必须把整个域名转发到 `127.0.0.1:8080`，不要只转发静态首页。Compose 内部 Nginx 会继续处理 `/api`、`/v1` 和 `/pg`。
 
 ### 误执行了 `docker compose down`
 

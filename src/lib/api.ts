@@ -40,7 +40,7 @@ export async function callImageApi(opts: CallApiOptions): Promise<CallApiResult>
 // 多张图拆成并发单图请求，各自带序号，服务端按序号分别结算和保存
 async function callImages(opts: CallApiOptions, relay: Relay): Promise<CallApiResult> {
   const n = opts.params.n > 0 ? opts.params.n : 1
-  if (n === 1 || opts.nativeImageBatch === true) return callImagesSingle(opts, relay)
+  if (n === 1) return callImagesSingle(opts, relay)
 
   const results = await Promise.allSettled(Array.from({ length: n }, (_, requestIndex) => callImagesSingle({
     ...opts,
