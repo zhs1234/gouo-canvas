@@ -89,31 +89,38 @@ func gouoSplitList(value string, upper bool) []string {
 	return list
 }
 
+func gouoTextLengthError() error {
+	return common.NewMessage("Display name must be at most {{name}} characters and description at most {{description}} characters", map[string]any{"name": 40, "description": 100})
+}
+
 func (m *GouoImageModelConfig) Validate() error {
 	if strings.TrimSpace(m.Model) == "" || len(m.Model) > 100 || strings.ContainsAny(m.Model, "*#,") {
-		return errors.New("光构图片模型必须使用明确的公开模型 ID")
+		return common.NewMessage("Image models must use an explicit public model ID")
 	}
 	if utf8.RuneCountInString(m.Name) > 40 || utf8.RuneCountInString(m.Description) > 100 {
-		return errors.New("显示名称不能超过 40 个字，说明不能超过 100 个字")
+		return gouoTextLengthError()
 	}
 	if math.IsNaN(m.PriceCNY) || math.IsInf(m.PriceCNY, 0) || m.PriceCNY <= 0 || m.PriceCNY > 10000 {
-		return errors.New("光构单次价格必须大于 0 且不超过 10000 元")
+		return common.NewMessage("Price per request must be greater than 0 and at most {{max}} CNY", map[string]any{"max": 10000})
 	}
-	if m.MaxOutputs < 1 || m.MaxOutputs > 10 || (m.Mask && !m.Reference) {
-		return errors.New("光构单次输出上限必须在 1 到 10 之间；遮罩编辑需要支持参考图")
+	if m.MaxOutputs < 1 || m.MaxOutputs > 10 {
+		return common.NewMessage("Max outputs per request must be an integer from {{min}} to {{max}}", map[string]any{"min": 1, "max": 10})
+	}
+	if m.Mask && !m.Reference {
+		return common.NewMessage("Mask editing requires reference image support")
 	}
 	for _, tier := range gouoSplitList(m.Sizes, true) {
 		if !slices.Contains(GouoSizeTiers, tier) {
-			return errors.New("分辨率档位只能是 1K、2K、4K")
+			return common.NewMessage("Resolution tiers can only be 1K, 2K or 4K")
 		}
 	}
 	for _, quality := range gouoSplitList(m.Qualities, false) {
 		if !slices.Contains(gouoQualityValues, quality) {
-			return errors.New("画质只能是 low、medium、high")
+			return common.NewMessage("Quality can only be low, medium or high")
 		}
 	}
 	if m.MaxInputs < 0 || m.MaxInputs > 16 {
-		return errors.New("最多参考图张数必须在 0 到 16 之间，0 表示不限")
+		return common.NewMessage("Max reference images must be from {{min}} to {{max}}; 0 means unlimited", map[string]any{"min": 0, "max": 16})
 	}
 	return nil
 }
@@ -125,11 +132,11 @@ func (m *GouoImageModelConfig) Entry() (*GouoImageModel, error) {
 	}
 	rate := operation_setting.USDExchangeRate
 	if rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) || common.QuotaPerUnit <= 0 {
-		return nil, errors.New("图片计费汇率配置无效")
+		return nil, common.NewMessage("Image billing exchange rate is invalid")
 	}
 	quota, err := common.QuotaFromFloatStrict(math.Ceil(m.PriceCNY / rate * common.QuotaPerUnit))
 	if err != nil || quota < 1 {
-		return nil, errors.New("图片计费额度超出范围")
+		return nil, common.NewMessage("Image billing quota is out of range")
 	}
 	entry := &GouoImageModel{ID: m.Model, Name: m.Model, PriceCNY: m.PriceCNY, Reference: m.Reference, Mask: m.Mask,
 		MaxOutputs: m.MaxOutputs, Quota: quota, Sizes: gouoSplitList(m.Sizes, true), Qualities: gouoSplitList(m.Qualities, false), MaxInputs: m.MaxInputs}
@@ -194,7 +201,7 @@ func SaveGouoImageModel(row *GouoImageModelConfig) error {
 	if agent, err := GetGouoAgentModel(row.Model); err != nil {
 		return err
 	} else if agent != nil && row.Enabled {
-		return errors.New("该模型已作为 Agent 模型上架，请先在 Agent 模型里下架")
+		return common.NewMessage("This model is listed as an Agent model; unlist it there first")
 	}
 	if err := DB.Save(row).Error; err != nil {
 		return err

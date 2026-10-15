@@ -2,6 +2,8 @@ package model
 
 import (
 	"errors"
+
+	"github.com/QuantumNous/new-api/common"
 	"strings"
 	"unicode/utf8"
 
@@ -27,13 +29,13 @@ func (GouoAgentModelConfig) TableName() string {
 
 func (m *GouoAgentModelConfig) Validate() error {
 	if strings.TrimSpace(m.Model) == "" || len(m.Model) > 100 || strings.ContainsAny(m.Model, "*#,") {
-		return errors.New("模型 ID 无效")
+		return common.NewMessage("Invalid model ID")
 	}
 	if utf8.RuneCountInString(m.Name) > 40 || utf8.RuneCountInString(m.Description) > 100 {
-		return errors.New("显示名称不能超过 40 个字，说明不能超过 100 个字")
+		return gouoTextLengthError()
 	}
 	if m.MaxTokens < 0 || m.MaxTokens > 1000000 {
-		return errors.New("单次回复最多输出 token 必须在 0 到 100 万之间，0 表示不限")
+		return common.NewMessage("Max output tokens per reply must be from {{min}} to {{max}}; 0 means unlimited", map[string]any{"min": 0, "max": 1000000})
 	}
 	return nil
 }
@@ -62,7 +64,7 @@ func SaveGouoAgentModel(row *GouoAgentModelConfig) error {
 	if _, enabled, err := GetGouoImageModel(row.Model); err != nil {
 		return err
 	} else if enabled && row.Listed {
-		return errors.New("该模型已作为图片模型启用，请先在图片模型里下架")
+		return common.NewMessage("This model is enabled as an image model; disable it there first")
 	}
 	return DB.Save(row).Error
 }

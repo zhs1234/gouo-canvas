@@ -52,6 +52,8 @@ type GouoImageCharge struct {
 	CreatedAt      int64   `json:"created_at" gorm:"autoCreateTime;index:idx_gouo_charge_user_created,priority:2"`
 	UpdatedAt      int64   `json:"updated_at" gorm:"autoUpdateTime;index:idx_gouo_charge_status_updated,priority:2"`
 	Note           string  `json:"note" gorm:"type:text"`
+	// 后台列表展示用，不落库
+	Username string `json:"username" gorm:"-"`
 }
 
 // ReserveGouoQuota 扣款与预扣记录同事务提交，记录写入失败不能留下预扣
@@ -164,6 +166,57 @@ func FinishGouoImageCharge(id, status, note string) (*GouoImageCharge, error) {
 	}
 	RecordLog(charge.UserID, LogTypeRefund, common.NewMessage("图片预扣退款：{{note}}", map[string]any{"note": note}))
 	return &charge, nil
+}
+
+type GouoImageChargeFilter struct {
+	UserID int
+	ID     string
+	Status string
+	// 大于 0 时只返回权限低于该等级的账号的记录（含已删除账号）
+	BelowRole int
+}
+
+// ListGouoImageCharges 按创建时间倒序分页列出图片预扣账本，并带上用户名
+func ListGouoImageCharges(filter GouoImageChargeFilter, offset, limit int) ([]*GouoImageCharge, int64, error) {
+	query := DB.Model(&GouoImageCharge{})
+	if filter.UserID > 0 {
+		query = query.Where("user_id = ?", filter.UserID)
+	}
+	if filter.BelowRole > 0 {
+		query = query.Where("user_id IN (?)", DB.Unscoped().Model(&User{}).Select("id").Where("role < ?", filter.BelowRole))
+	}
+	if filter.ID != "" {
+		query = query.Where("id = ?", filter.ID)
+	}
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	rows := make([]*GouoImageCharge, 0)
+	if err := query.Order("created_at DESC, id DESC").Offset(offset).Limit(limit).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	ids := make([]int, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.UserID)
+	}
+	var users []User
+	if len(ids) > 0 {
+		if err := DB.Unscoped().Select("id", "username").Where("id IN ?", ids).Find(&users).Error; err != nil {
+			return nil, 0, err
+		}
+	}
+	names := map[int]string{}
+	for _, user := range users {
+		names[user.Id] = user.Username
+	}
+	for _, row := range rows {
+		row.Username = names[row.UserID]
+	}
+	return rows, total, nil
 }
 
 // RecoverGouoImageCharges 退回超时未结算的预扣，并清理过期的图片恢复结果

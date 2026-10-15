@@ -55,4 +55,5 @@ func setGouoRouter(apiRouter *gin.RouterGroup) {
 	handle(admin, "GET", "/storage/users/:id/tasks", controller.ListGouoAdminUserTasks)
 	handle(admin, "GET", "/storage/users/:id/assets/:assetId/content", controller.GetGouoAdminUserAssetContent)
 	handle(admin, "PUT", "/storage/users/:id/quota", controller.UpdateGouoAdminStorageQuota)
+	handle(admin, "GET", "/image-charges", controller.ListGouoAdminImageCharges)
 }

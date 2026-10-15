@@ -2,7 +2,6 @@
 package gouo_setting
 
 import (
-	"errors"
 	"strings"
 	"unicode/utf8"
 
@@ -56,30 +55,33 @@ func Get() *GouoSetting {
 	return &setting
 }
 
-// Validate 在保存前校验整份设置，后台和环境变量都走这里
+// Validate 在保存前校验整份设置；错误是 New API 的 message_key，后台界面按语言包翻译
 func (s *GouoSetting) Validate() error {
 	s.Notice = strings.Join(strings.Fields(s.Notice), " ")
+	between := func(key string, min, max int) error {
+		return common.NewMessage(key, map[string]any{"min": min, "max": max})
+	}
 	switch {
 	case utf8.RuneCountInString(s.Notice) > 200:
-		return errors.New("公告不能超过 200 个字符")
+		return common.NewMessage("Announcement must be at most {{max}} characters", map[string]any{"max": 200})
 	case utf8.RuneCountInString(s.RedemptionHelp) > 2000 || utf8.RuneCountInString(s.SupportContact) > 2000:
-		return errors.New("兑换码说明和客服信息不能超过 2000 个字符")
+		return common.NewMessage("Redemption help and support contact must each be at most {{max}} characters", map[string]any{"max": 2000})
 	case len(s.DefaultImageModel) > 100 || len(s.AgentDefaultModel) > 100:
-		return errors.New("模型名称无效")
+		return common.NewMessage("Invalid model name")
 	case utf8.RuneCountInString(s.AgentSystemPrompt) > 4000:
-		return errors.New("Agent 附加提示词不能超过 4000 个字符")
+		return common.NewMessage("Agent system prompt must be at most {{max}} characters", map[string]any{"max": 4000})
 	case s.MaxImagesPerTask < 1 || s.MaxImagesPerTask > 10:
-		return errors.New("一次最多生成张数必须是 1 到 10 的整数")
+		return between("Images per task must be an integer from {{min}} to {{max}}", 1, 10)
 	case s.AgentMaxRounds < 1 || s.AgentMaxRounds > 20:
-		return errors.New("Agent 每条消息最多工具轮数必须是 1 到 20 的整数")
+		return between("Agent tool rounds per message must be an integer from {{min}} to {{max}}", 1, 20)
 	case s.AgentConfirmImages < 1 || s.AgentConfirmImages > 10:
-		return errors.New("Agent 需确认的图片张数必须是 1 到 10 的整数")
+		return between("Agent image confirmation threshold must be an integer from {{min}} to {{max}}", 1, 10)
 	case s.TrashRetentionDays < 1 || s.TrashRetentionDays > 30:
-		return errors.New("回收站保留天数必须是 1 到 30 的整数")
+		return between("Trash retention must be from {{min}} to {{max}} days", 1, 30)
 	case s.AssetUserQuotaBytes < 1<<20 || s.AssetUserQuotaBytes > 1<<40:
-		return errors.New("默认用户空间必须在 1 MB 到 1 TB 之间")
+		return common.NewMessage("Default user storage must be between 1 MB and 1 TB")
 	case s.AssetMaxFileBytes < 1<<20 || s.AssetMaxFileBytes > 100<<20:
-		return errors.New("单文件上传上限必须在 1 MB 到 100 MB 之间")
+		return common.NewMessage("Upload size limit must be between 1 MB and 100 MB")
 	}
 	return nil
 }
