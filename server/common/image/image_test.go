@@ -8,6 +8,7 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,7 +45,17 @@ var (
 	}
 )
 
+// 这些用例会请求维基媒体上的样例图，干净环境里没有外网或图片变更时会失败。
+// 与 providers/openai 里按环境变量跳过的写法一致。
+func skipRemoteImages(t *testing.T) {
+	t.Helper()
+	if os.Getenv("GOUO_TEST_REMOTE_IMAGE") != "1" {
+		t.Skip("set GOUO_TEST_REMOTE_IMAGE=1 to fetch remote sample images")
+	}
+}
+
 func TestDecode(t *testing.T) {
+	skipRemoteImages(t)
 	// Bytes read: varies sometimes
 	// jpeg: 1063892
 	// png: 294462
@@ -90,6 +101,7 @@ func TestDecode(t *testing.T) {
 }
 
 func TestBase64(t *testing.T) {
+	skipRemoteImages(t)
 	// Bytes read:
 	// jpeg: 1063892
 	// png: 294462
@@ -143,6 +155,7 @@ func TestBase64(t *testing.T) {
 }
 
 func TestGetImageSize(t *testing.T) {
+	skipRemoteImages(t)
 	for i, c := range cases {
 		t.Run("Decode:"+strconv.Itoa(i), func(t *testing.T) {
 			width, height, err := img.GetImageSize(c.url)
@@ -154,6 +167,7 @@ func TestGetImageSize(t *testing.T) {
 }
 
 func TestGetImageSizeFromBase64(t *testing.T) {
+	skipRemoteImages(t)
 	for i, c := range cases {
 		t.Run("Decode:"+strconv.Itoa(i), func(t *testing.T) {
 			resp, err := http.Get(c.url)
@@ -171,6 +185,7 @@ func TestGetImageSizeFromBase64(t *testing.T) {
 }
 
 func TestGetImageFromUrl(t *testing.T) {
+	skipRemoteImages(t)
 	for i, c := range cases {
 		t.Run("Decode:"+strconv.Itoa(i), func(t *testing.T) {
 			resp, err := http.Get(c.url)

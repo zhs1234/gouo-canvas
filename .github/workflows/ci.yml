@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: 前端
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json 没有 engines。lockfile 里 vitest 4 要求 Node ^20 || ^22 || >=24，
+      # 与现有 Pages 工作流一致，取满足该约束的 Node 20，并用 package-lock.json 做 npm 缓存。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  admin:
+    name: 后台面板
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # server/web 只有 yarn.lock（packageManager 为 yarn@1.22.22），没有 package-lock.json。
+      # Vite 7 要求 Node ^20.19 || >=22.12，与 Dockerfile / Linux Release 一致使用 22.20.0。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: yarn
+          cache-dependency-path: server/web/yarn.lock
+
+      - name: 启用 yarn
+        working-directory: server/web
+        run: corepack enable && corepack prepare --activate
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+      - name: 安装依赖
+        working-directory: server/web
+        run: yarn install --frozen-lockfile
+
+      - name: 构建
+        working-directory: server/web
+        run: npm run build
+
+      # 后端 //go:embed web/build 在 go vet / go test 编译 main 时就要有这些文件
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admin-web-build
+          path: server/web/build
+          if-no-files-found: error
+          retention-days: 1
+
+  backend:
+    name: 后端
+    needs: admin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: admin-web-build
+          path: server/web/build
+
+      - name: 确认嵌入的前端产物
+        run: test -f server/web/build/index.html
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      # gorm.io/driver/sqlite 依赖 mattn/go-sqlite3，需要 cgo；ubuntu-latest 自带 gcc
+      - name: go vet
+        working-directory: server
+        run: go vet ./...
+
+      - name: go test
+        working-directory: server
+        run: go test ./...
