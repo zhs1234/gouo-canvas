@@ -6,7 +6,7 @@ import { useCanvasStore } from '../../stores/canvasStore'
 import { fileToDataUrl } from '../../lib/dataUrl'
 import { storeImageWithSize } from '../../lib/db'
 import { getMaxTaskImages, getMaxUploadBytes } from '../../lib/gouoBackend'
-import { executeAgentTool } from '../../lib/agent/tools'
+import { AGENT_CONTINUE_PROMPT, executeAgentTool } from '../../lib/agent/tools'
 import { formatPoints } from '../../lib/accountUsage'
 import { downloadImageIds, formatExportFileTime } from '../../lib/downloadImages'
 import type { AgentConversation, AgentToolCall } from '../../lib/agent/types'
@@ -309,7 +309,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
             </article>
           })}
           {conversation?.error && <div role="alert" className="agent-run-error">{conversation.error}</div>}
-          {!running && ['stopped', 'interrupted', 'error'].includes(conversation?.status || '') && <div className="agent-resume"><span>{conversation?.status === 'stopped' ? '已停止；已提交的图片任务继续生成。' : '内容已保留。'}已提交的任务请勿重复提交，尚未提交的步骤可继续完成。</span><button type="button" className="agent-text-button" disabled={!model} onClick={() => void send('请继续完成上一个请求。已提交的图片任务不要重复提交；明确尚未执行、尚未提交的步骤请继续完成。结果待核对的原请求不要重新提交。')}><RefreshIcon width={15} height={15} />继续对话</button></div>}
+          {!running && ['stopped', 'interrupted', 'error'].includes(conversation?.status || '') && <div className="agent-resume"><span>{conversation?.status === 'stopped' ? '已停止；已提交的图片任务继续生成。' : '内容已保留。'}已提交的任务请勿重复提交，尚未提交的步骤可继续完成。</span><button type="button" className="agent-text-button" disabled={!model} onClick={() => void send(AGENT_CONTINUE_PROMPT)}><RefreshIcon width={15} height={15} />继续对话</button></div>}
         </div>
       </div>
       <div className="agent-bottom-composer">{composer}</div>

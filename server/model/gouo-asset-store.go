@@ -71,24 +71,6 @@ func SaveGouoAssetBytes(userID int, data []byte, originalName string, enforceQuo
 	hash := hex.EncodeToString(sum[:])
 
 	defer lockGouoAssets(userID)()
-	existing, err := GetGouoAssetByHash(userID, hash)
-	if err != nil {
-		return nil, false, err
-	}
-	if existing == nil && enforceQuota {
-		used, _, err := GetGouoStorageUsage(userID)
-		if err != nil {
-			return nil, false, err
-		}
-		quota, err := GetGouoUserQuota(userID, config.GouoAssetUserQuotaBytes)
-		if err != nil {
-			return nil, false, err
-		}
-		if used+int64(len(data)) > quota {
-			return nil, false, ErrGouoStorageQuota
-		}
-	}
-
 	root, err := filepath.Abs(config.GouoAssetDir)
 	if err != nil {
 		return nil, false, err
@@ -116,6 +98,12 @@ func SaveGouoAssetBytes(userID int, data []byte, originalName string, enforceQuo
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
+		}
+		// 在锁住用户行之后检查空间：与作品、文档保存以及其他实例的上传互斥，并发上传不会一起超出配额
+		if enforceQuota {
+			if err := checkGouoStorageQuota(tx, userID, int64(len(data))); err != nil {
+				return err
+			}
 		}
 		relativePath := filepath.Join(strconv.Itoa(userID), hash[:2], hash+extension)
 		if err := writeGouoAssetFile(filepath.Join(root, relativePath), data); err != nil {

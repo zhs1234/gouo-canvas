@@ -10,6 +10,8 @@ import { getAgentRequestId, getAgentTaskResult } from './taskRecovery'
 import { formatPoints } from '../accountUsage'
 import { getAgentLimits } from './api'
 
+// “继续对话”按钮发出的消息，统计本轮已提交的图片张数时不算作新的一轮
+export const AGENT_CONTINUE_PROMPT = '请继续完成上一个请求。已提交的图片任务不要重复提交；明确尚未执行、尚未提交的步骤请继续完成。结果待核对的原请求不要重新提交。'
 
 const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference'] as const
 
@@ -184,8 +186,8 @@ export async function executeAgentTool(input: {
     if (values.output_format !== undefined && !['png', 'jpeg', 'webp'].includes(values.output_format as string)) throw new Error('图片格式无效')
     // 没有指定张数时按输入框选择的张数；运营方后来调低上限时按上限
     const defaultCount = Math.min(conversation.imageCount ?? 1, getMaxTaskImages())
-    // 从最近一条用户消息起累计已提交的张数
-    const start = conversation.messages.map((message) => message.role).lastIndexOf('user')
+    // 从最近一条用户消息起累计已提交的张数；“继续对话”自动发出的消息不算新的一轮，否则停止后继续会重新计数、不再确认
+    const start = conversation.messages.map((message) => message.role === 'user' && message.content !== AGENT_CONTINUE_PROMPT).lastIndexOf(true)
     const submitted = conversation.messages.slice(start + 1).flatMap((message) => message.toolCalls ?? [])
       .filter((call) => call.name === 'create_image_task' && call.status === 'done' && call.id !== input.callId)
       .reduce((sum, call) => {

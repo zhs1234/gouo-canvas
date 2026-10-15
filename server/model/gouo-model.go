@@ -40,6 +40,10 @@ var GouoSizeTiers = []string{"1K", "2K", "4K"}
 
 // GouoSizeTier 返回 WxH 尺寸所属的分辨率档位，超出 4K 或格式无效时返回空
 func GouoSizeTier(width, height int) string {
+	// 先限定边长：极大的宽高相乘会溢出成负数，被误判为最小档位
+	if width <= 0 || height <= 0 || width > 1<<16 || height > 1<<16 {
+		return ""
+	}
 	for _, tier := range GouoSizeTiers {
 		if width*height <= GouoSizeTierPixels[tier] {
 			return tier

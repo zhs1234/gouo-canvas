@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useStore, getCachedImage, ensureImageCached, reuseConfig, editOutputs, removeTask, retryTask } from '../store'
+import { useStore, getCachedImage, ensureImageCached, reuseConfig, editOutputs, removeTask, retryTask, executeTask } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { useTooltip } from '../hooks/useTooltip'
@@ -197,6 +197,8 @@ export default function DetailModal() {
     }
   }, [maskTargetSrc, maskSrc])
 
+  const [recovering, setRecovering] = useState(false)
+
   if (!task) return null
 
   const showReferenceSection = allInputImageIds.length > 0
@@ -358,6 +360,13 @@ export default function DetailModal() {
   const handleRetry = () => {
     retryTask(task)
     setDetailTaskId(null)
+  }
+  // 页面关闭或刷新时中断的请求可能已经在服务端生成并扣费；云端作品库关闭时没有同步可补回，只能按原请求编号取回
+  const handleRecover = () => {
+    setRecovering(true)
+    void executeTask(task.id, true)
+      .catch((err) => showToast(err instanceof Error ? err.message : '取回结果失败', 'error'))
+      .finally(() => setRecovering(false))
   }
 
   return (
@@ -658,6 +667,17 @@ export default function DetailModal() {
                       复制图片链接
                     </ViewportTooltip>
                   </div>
+                )}
+                {task.status === 'error' && task.gouoPriceVersion && !task.outputImages.length && (
+                  <button
+                    type="button"
+                    disabled={recovering}
+                    onClick={handleRecover}
+                    title="只取回原请求已生成的图片，不会重新生成或扣费"
+                    className="inline-flex items-center justify-center rounded-full border border-gray-200/80 bg-white/80 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-300 dark:hover:bg-white/[0.08]"
+                  >
+                    {recovering ? '正在取回…' : '取回结果'}
+                  </button>
                 )}
                 <div className="relative group">
                   <button

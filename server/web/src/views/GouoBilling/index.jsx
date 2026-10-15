@@ -23,6 +23,7 @@ export default function GouoBilling() {
       const params = new URLSearchParams({ page: String(page), size: '20' });
       Object.entries(query).forEach(([key, value]) => { if (value.trim()) params.set(key, value.trim()); });
       const response = await API.get(`/api/gouo/admin/image-charges?${params}`);
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       setRows(response.data.data.data || []);
       setTotal(response.data.data.total_count);
@@ -40,6 +41,7 @@ export default function GouoBilling() {
     setSaving(true);
     try {
       const response = await API.post(`/api/gouo/admin/image-charges/${encodeURIComponent(selected.id)}/resolve`, { status: action, note: note.trim() });
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess('账务处理完成，额度和日志已同步更新');
       setSelected(null);
@@ -54,7 +56,7 @@ export default function GouoBilling() {
   return (
     <Box sx={{ mt: 2 }}>
       <Typography variant="h3">光构图片账务</Typography>
-      <Alert severity="info" sx={{ my: 2 }}>未发送的中断请求约 20 分钟后自动退款。已发送但结果未知的请求需要核对渠道记录；确认失败才退款，确认成功才结算。处理会记录管理员及核对依据。</Alert>
+      <Alert severity="info" sx={{ my: 2 }}>没有向用户返回图片的请求会自动退款，超过 20 分钟仍未结算的（含旧版留下的待核对记录）由定时任务退回。手动结算或退款只用于处理旧记录，处理时会记录管理员及核对依据；记录可能已被自动退款，处理前请刷新确认状态。</Alert>
       <Stack component="form" onSubmit={(event) => { event.preventDefault(); setPage(1); setQuery({ ...draft }); }} direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
         <TextField select label="状态" value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })} sx={{ minWidth: 180 }}>
           <MenuItem value="">全部状态</MenuItem>

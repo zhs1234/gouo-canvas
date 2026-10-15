@@ -58,7 +58,7 @@ func TestGouoPlatformTokenFollowsAdminSettings(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 		c.Set("token_name", tokenName)
-		r := NewRelayImageGenerations(c)
+		r := NewRelayChat(c)
 		r.setOriginalModel("gpt-4o")
 		return prepareGouoImage(c, r)
 	}
@@ -66,6 +66,13 @@ func TestGouoPlatformTokenFollowsAdminSettings(t *testing.T) {
 	require.Nil(t, chat("api-user"))
 	config.GouoAgentEnabled = true
 	require.Nil(t, chat("sys_playground"))
+	// 平台令牌只能用对话接口，其他文本接口会绕过单次回复上限
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/completions", nil)
+	c.Set("token_name", "sys_playground")
+	other := NewRelayCompletions(c)
+	other.setOriginalModel("gpt-4o")
+	require.Equal(t, "platform_token_endpoint", prepareGouoImage(c, other).Code)
 }
 
 func TestGouoImagePromptSafetyCheck(t *testing.T) {
@@ -230,6 +237,8 @@ func TestGouoImageParamLimits(t *testing.T) {
 	require.Contains(t, checkGouoImageParams(onlyHigh, "1024x1024", "", "", 0), "不支持该分辨率")
 	require.Empty(t, checkGouoImageParams(onlyHigh, "2048x2048", "", "", 0))
 	require.Contains(t, checkGouoImageParams(open, "4096x4096", "", "", 0), "不支持该分辨率")
+	// 宽高相乘溢出成负数时不能被当成 1K 放行
+	require.NotEmpty(t, checkGouoImageParams(limited, "3037000500x3037000500", "low", "", 0))
 	// 没有开放任何档位时只能用自动尺寸
 	require.Contains(t, checkGouoImageParams(&model.GouoImageModel{}, "1024x1024", "", "", 0), "不支持该分辨率")
 	require.Empty(t, checkGouoImageParams(&model.GouoImageModel{}, "auto", "", "", 0))

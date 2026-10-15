@@ -347,11 +347,11 @@ Confirm that `SESSION_SECRET` is fixed and identical across all backend instance
 ### Generation succeeds but cloud synchronization fails
 
 ```bash
-docker compose exec backend sh -c 'echo "$GOUO_CLOUD_LIBRARY_ENABLED"; echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
+docker compose exec backend sh -c 'echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
 docker compose logs --tail=200 backend
 ```
 
-Also check the user's quota and the 25 MiB single-file limit.
+Then open Gouo settings (光构设置) in the admin panel and confirm that 开放云端作品库 (cloud library) is on: `GOUO_CLOUD_LIBRARY_ENABLED` is only the initial value, and once an administrator saves the setting in the panel, the panel value wins. Also check the user's quota and the per-file upload limit set in the panel (25 MB by default).
 
 ### The domain opens but `/api` returns 404
 

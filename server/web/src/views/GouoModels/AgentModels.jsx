@@ -41,6 +41,7 @@ export default function AgentModels() {
     setLoading(true);
     try {
       const response = await API.get('/api/gouo/admin/agent-models');
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       setRows(response.data.data.models || []);
       setDefaultModel(response.data.data.default_model || '');
@@ -58,6 +59,7 @@ export default function AgentModels() {
     setSaving(true);
     try {
       const response = await API.put('/api/gouo/admin/agent-models', body);
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess(message);
       setEditing(null);
@@ -72,6 +74,7 @@ export default function AgentModels() {
   const setDefault = async (model) => {
     try {
       const response = await API.put('/api/gouo/admin/settings', { GouoAgentDefaultModel: model });
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess(model ? `默认 Agent 模型已设为 ${model}` : '已清除默认 Agent 模型，客户端使用排在第一的模型');
       setDefaultModel(model);

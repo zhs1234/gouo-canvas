@@ -90,15 +90,6 @@ type GouoStorageQuota struct {
 	UpdatedAt  int64 `json:"updated_at" gorm:"autoUpdateTime:milli"`
 }
 
-func GetGouoAssetByHash(userID int, hash string) (*GouoAsset, error) {
-	var asset GouoAsset
-	err := DB.Where("user_id = ? AND sha256 = ?", userID, hash).First(&asset).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	return &asset, err
-}
-
 func GetGouoAsset(userID int, id string) (*GouoAsset, error) {
 	var asset GouoAsset
 	err := DB.Where("user_id = ? AND id = ?", userID, id).First(&asset).Error

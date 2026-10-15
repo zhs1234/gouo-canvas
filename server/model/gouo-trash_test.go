@@ -196,3 +196,29 @@ func TestSaveGouoAssetRestoresMissingFileOnDeduplicate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, buf.Bytes(), data)
 }
+
+func TestSaveGouoAssetChecksQuotaInsideTransaction(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	oldDir := config.GouoAssetDir
+	config.GouoAssetDir = t.TempDir()
+	t.Cleanup(func() { config.GouoAssetDir = oldDir })
+	png4 := func(size int) []byte {
+		var buf bytes.Buffer
+		require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, size, size))))
+		return buf.Bytes()
+	}
+	first, second := png4(4), png4(5)
+	require.NoError(t, SetGouoUserQuota(1, int64(len(first)+len(second)-1)))
+	_, _, err := SaveGouoAssetBytes(1, first, "a.png", true)
+	require.NoError(t, err)
+	// 第二张会超出配额：拒绝，也不留下记录
+	_, _, err = SaveGouoAssetBytes(1, second, "b.png", true)
+	require.ErrorIs(t, err, ErrGouoStorageQuota)
+	var count int64
+	require.NoError(t, DB.Model(&GouoAsset{}).Count(&count).Error)
+	require.EqualValues(t, 1, count)
+	// 重复上传已有的图片不新增空间，不受配额限制
+	_, deduplicated, err := SaveGouoAssetBytes(1, first, "a.png", true)
+	require.NoError(t, err)
+	require.True(t, deduplicated)
+}

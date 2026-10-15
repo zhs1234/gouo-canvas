@@ -1903,10 +1903,13 @@ export async function importData(file: File, options: ImportOptions = { importCo
     let skippedCount = 0
     if (options.importTasks && data.tasks) {
       const existingIds = new Set((await getAllTasks()).map((task) => task.id))
-      const importedTasks = data.tasks.filter((task) => !existingIds.has(task.id)).map((task): TaskRecord => ({
+      // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
+      // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过
+      const importedId = (id: string) => `imported-${id}`
+      const freshTasks = data.tasks.filter((task) => !existingIds.has(task.id) && !existingIds.has(importedId(task.id)))
+      const importedTasks = freshTasks.map((task): TaskRecord => ({
         ...task,
-        // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它。
-        id: crypto.randomUUID(),
+        id: importedId(task.id),
         params: { ...DEFAULT_PARAMS, ...task.params },
         cloudId: undefined,
         cloudHiddenAt: undefined,
@@ -1918,7 +1921,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
       // 导入文档使用新 ID，避免覆盖另一个设备尚未拉取的项目。
       const canvasIds = new Map((data.canvasProjects ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
       const conversationIds = new Map((data.agentConversations ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
-      const taskIds = new Map(data.tasks.filter((task) => !existingIds.has(task.id)).map((task, index) => [task.id, importedTasks[index].id]))
+      const taskIds = new Map(freshTasks.map((task) => [task.id, importedId(task.id)]))
       const remapDocument = <T,>(doc: T): T => JSON.parse(JSON.stringify(doc, (key, value) => {
         if (key === 'taskId') return taskIds.get(value) ?? value
         if (key === 'taskIds' && Array.isArray(value)) return value.map((id) => taskIds.get(id) ?? id)

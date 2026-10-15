@@ -7,6 +7,7 @@ import (
 	"one-api/common/utils"
 	"one-api/model"
 	"one-api/safty"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -50,14 +51,16 @@ func UpdateOption(c *gin.Context) {
 		})
 		return
 	}
-	switch option.Key {
-	case "GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoMaxImagesPerTask", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays":
+	// 光构设置与“光构设置”接口共用同一份键列表和校验，新增设置时不会漏掉
+	if slices.Contains(gouoSettingKeys, option.Key) {
 		value, err := normalizeGouoSetting(option.Key, option.Value)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 			return
 		}
 		option.Value = value
+	}
+	switch option.Key {
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && config.GitHubClientId == "" {
 			c.JSON(http.StatusOK, gin.H{

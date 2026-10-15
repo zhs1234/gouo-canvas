@@ -922,6 +922,10 @@ describe('data import', () => {
     expect((await getAllTasks()).find((item) => item.id !== 'existing')).toMatchObject({ cloudId: undefined, outputImages: ['new-image'] })
     expect(await getImage('new-image')).toMatchObject({ dataUrl: 'data:image/png;base64,AQID' })
     expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 1 个任务，保留 1 个同 ID 的现有任务', 'success')
+    // 再次导入同一份备份不能重复添加任务
+    const again = await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: 'existing', prompt: 'old' }), task({ id: 'new', outputImages: ['new-image'], cloudId: 'foreign' })], imageFiles: { 'new-image': { path: 'images/new.png' } } }, { 'images/new.png': new Uint8Array([1, 2, 3]) }), { importTasks: true })
+    expect(again).toBe(true)
+    expect(await getAllTasks()).toHaveLength(2)
   })
 
   it('does not change UI data or configuration when the import transaction fails', async () => {

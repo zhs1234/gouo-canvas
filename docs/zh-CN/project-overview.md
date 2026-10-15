@@ -99,7 +99,7 @@
 
 图片中继通过事务条件更新原子预扣用户和令牌额度，不跳过高余额账号。整个 HTTP 请求的渠道重试共用一份预扣，后端失败退款、成功结算，日志记录公开模型、单价快照、计费单位、版本和实际额度；用户组倍率和渠道模型映射不改变售价。价格或能力变化会要求客户端重新确认。
 
-光构产品客户端把多张拆成单图请求，每张成功的图片单独收费；直接调用 API 时，单个请求在模型数量上限内要求多张图只收费一次。旧 `GOUO_IMAGE_PRICE_CNY` 只用于首次迁移默认模型，迁移的输出上限为 1 张，其他模型需要管理员启用并定价。纯前端兼容模式同样可能拆成多个分别收费的请求。浏览器超时、下载图片失败或本地保存失败，不必然说明上游调用失败或后端应退款。持久账本支持中断后核对：未发送的预扣超过 20 分钟自动退款，已发送但结果未知的请求由管理员核对渠道记录后处理。用户可在使用记录查看请求状态；重试会要求确认新请求费用。
+光构产品客户端把多张拆成单图请求，每张成功的图片单独收费；直接调用 API 时，单个请求在模型数量上限内要求多张图只收费一次。旧 `GOUO_IMAGE_PRICE_CNY` 只用于首次迁移默认模型，迁移的输出上限为 1 张，其他模型需要管理员启用并定价。浏览器超时、下载图片失败或本地保存失败，不必然说明上游调用失败。没有向用户返回图片的请求会自动退款；超过 20 分钟仍未结算的请求（含旧版待核对记录）由定时任务退回，账本只保留供查阅和处理旧记录。用户可在使用记录查看请求状态；重试会要求确认新请求费用。
 
 依据：[relay/main.go](../../server/relay/main.go)、[quota.go](../../server/relay/relay_util/quota.go)、[openaiCompatibleImageApi.ts](../../src/lib/openaiCompatibleImageApi.ts)。价格、付款配置与生产验证见[后端说明](./backend.md)。
 
@@ -131,7 +131,7 @@
 
 数据库保存账号、额度、渠道与作品关系，`backend-data` 保存后端数据和资产。备份恢复必须同时覆盖数据库、资产文件和相关签名密钥。多个后端实例还需要共享数据库、协调层和资产文件系统；光构专用云库目前使用文件目录，不能因为上游有对象存储模块就认为本产品云库已经接入对象存储。
 
-仓库还保留 GitHub Pages、Vercel Hook 和镜像发布工作流。[Docker 工作流](../../.github/workflows/docker.yml)与 Compose 统一使用根 [Dockerfile](../../Dockerfile)，构建启用后端的产品前端；`gpt_image_playground` 镜像名称保留兼容。旧的 deploy/Dockerfile 运行时注入路径已移除。静态托管工作流仍需单独配置后端地址。本轮只修改发布配置，没有触发发布。
+仓库还保留 GitHub Pages、Vercel Hook 和镜像发布工作流。[Docker 工作流](../../.github/workflows/docker.yml)与 Compose 统一使用根 [Dockerfile](../../Dockerfile)，构建启用后端的产品前端；`gpt_image_playground` 镜像名称保留兼容。旧的 deploy/Dockerfile 运行时注入路径已移除。静态托管需要单独配置后端地址：GitHub Pages 工作流只在仓库变量 `VITE_GOUO_BACKEND_URL` 已设置时构建发布，后端还要把该站点加入跨域白名单并使用跨站 Cookie 设置。本轮只修改发布配置，没有触发发布。
 
 操作步骤见[开发指南](./development.md)、[Docker Compose 部署](./deployment/docker.md)、[Linux 手动部署](./deployment/manual.md)和[上线检查清单](./deployment/checklist.md)。
 
