@@ -1904,10 +1904,20 @@ export async function importData(file: File, options: ImportOptions = { importCo
     let skippedCount = 0
     if (options.importTasks && data.tasks) {
       const existingIds = new Set((await getAllTasks()).map((task) => task.id))
-      const importedTasks = data.tasks.filter((task) => !existingIds.has(task.id)).map((task): TaskRecord => ({
+      // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
+      // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过
+      const importedId = (id: string) => `imported-${id}`
+      // 本地已有 imported-x 而备份里的 x 也需要换 ID 时，它是之前导入 x 生成的，不是本地原有的同 ID 任务；
+      // 前缀可能多层嵌套，按长度从短到长判断，上一层总先判定
+      const remappedIds = new Set<string>()
+      for (const id of data.tasks.map((task) => task.id).sort((a, b) => a.length - b.length)) {
+        if (!existingIds.has(id) || (id.startsWith('imported-') && remappedIds.has(id.slice(9)))) remappedIds.add(id)
+      }
+      const remapped = data.tasks.filter((task) => remappedIds.has(task.id))
+      const freshTasks = remapped.filter((task) => !existingIds.has(importedId(task.id)))
+      const importedTasks = freshTasks.map((task): TaskRecord => ({
         ...task,
-        // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它。
-        id: crypto.randomUUID(),
+        id: importedId(task.id),
         params: { ...DEFAULT_PARAMS, ...task.params },
         cloudId: undefined,
         cloudHiddenAt: undefined,
@@ -1919,7 +1929,8 @@ export async function importData(file: File, options: ImportOptions = { importCo
       // 导入文档使用新 ID，避免覆盖另一个设备尚未拉取的项目。
       const canvasIds = new Map((data.canvasProjects ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
       const conversationIds = new Map((data.agentConversations ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
-      const taskIds = new Map(data.tasks.filter((task) => !existingIds.has(task.id)).map((task, index) => [task.id, importedTasks[index].id]))
+      // 之前导入过的任务已存为 imported-<id>，重复导入的文档也要指向它
+      const taskIds = new Map(remapped.map((task) => [task.id, importedId(task.id)]))
       const remapDocument = <T,>(doc: T): T => JSON.parse(JSON.stringify(doc, (key, value) => {
         if (key === 'taskId') return taskIds.get(value) ?? value
         if (key === 'taskIds' && Array.isArray(value)) return value.map((id) => taskIds.get(id) ?? id)

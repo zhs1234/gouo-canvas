@@ -41,6 +41,7 @@ export default function GouoSettings() {
         API.get('/api/gouo/admin/models'),
         API.get('/api/status')
       ]);
+      if (!settings || !catalog || !site) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!settings.data.success) throw new Error(settings.data.message);
       const next = { ...EMPTY, ...settings.data.data };
       setSaved(next);
@@ -65,6 +66,7 @@ export default function GouoSettings() {
     setSaving(true);
     try {
       const response = await API.put('/api/gouo/admin/settings', changed);
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       const next = { ...EMPTY, ...response.data.data };
       setSaved(next);

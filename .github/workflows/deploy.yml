@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   build:
+    # 客户端只对接光构后端：没有配置后端地址时发布出去的页面无法登录和生成，所以不发布
+    if: ${{ vars.VITE_GOUO_BACKEND_URL != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +29,8 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_GOUO_BACKEND_URL: ${{ vars.VITE_GOUO_BACKEND_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -359,11 +359,11 @@ docker compose exec db sh -c 'mysqladmin ping -h localhost -uroot -p"$MYSQL_ROOT
 检查：
 
 ```bash
-docker compose exec backend sh -c 'echo "$GOUO_CLOUD_LIBRARY_ENABLED"; echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
+docker compose exec backend sh -c 'echo "$GOUO_ASSET_DIR"; test -w "$GOUO_ASSET_DIR"'
 docker compose logs --tail=200 backend
 ```
 
-同时在管理端确认用户配额未满、单文件没有超过 25 MB。
+再到管理端“光构设置”确认“开放云端作品库”已打开：环境变量 `GOUO_CLOUD_LIBRARY_ENABLED` 只是初始值，管理员在后台保存过之后以后台设置为准。同时确认用户配额未满、单文件没有超过后台设置的上传上限（默认 25 MB）。
 
 ### 域名能打开但 `/api` 返回 404
 

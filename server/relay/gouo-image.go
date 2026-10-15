@@ -107,15 +107,19 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 		if !config.GouoAgentEnabled {
 			return common.StringErrorWrapperLocal("运营方已关闭 Agent", "agent_disabled", http.StatusForbidden)
 		}
+		// 客户端 Agent 只用对话接口；其他文本接口（responses、completions、Claude messages 等）不放行，
+		// 否则会绕过下面的单次回复上限
+		r, ok := relay.(*relayChat)
+		if !ok {
+			return common.StringErrorWrapperLocal("平台令牌只能用于 Agent 对话", "platform_token_endpoint", http.StatusForbidden)
+		}
 		// 后台为模型设置了单次回复上限时，客户端请求一律按上限截断
-		if r, ok := relay.(*relayChat); ok {
-			if limit := model.PricingInstance.GetPrice(relay.getOriginalModel()).GouoMaxTokens; limit > 0 {
-				if r.chatRequest.MaxCompletionTokens <= 0 || r.chatRequest.MaxCompletionTokens > limit {
-					r.chatRequest.MaxCompletionTokens = limit
-				}
-				if r.chatRequest.MaxTokens > limit {
-					r.chatRequest.MaxTokens = limit
-				}
+		if limit := model.PricingInstance.GetPrice(relay.getOriginalModel()).GouoMaxTokens; limit > 0 {
+			if r.chatRequest.MaxCompletionTokens <= 0 || r.chatRequest.MaxCompletionTokens > limit {
+				r.chatRequest.MaxCompletionTokens = limit
+			}
+			if r.chatRequest.MaxTokens > limit {
+				r.chatRequest.MaxTokens = limit
 			}
 		}
 		return nil

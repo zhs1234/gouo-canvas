@@ -49,6 +49,7 @@ const GouoStorage = () => {
         API.get('/api/gouo/admin/storage'),
         API.get('/api/gouo/admin/storage/users?page=1&size=100')
       ]);
+      if (!summaryResponse || !usersResponse) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!summaryResponse.data.success) throw new Error(summaryResponse.data.message);
       if (!usersResponse.data.success) throw new Error(usersResponse.data.message);
       setSummary(summaryResponse.data.data);
@@ -74,6 +75,7 @@ const GouoStorage = () => {
       const response = await API.put(`/api/gouo/admin/storage/users/${user.user_id}/quota`, {
         quota_bytes: Math.round(quotaGB * 1024 ** 3)
       });
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess('用户存储配额已更新');
       await loadData();
@@ -88,6 +90,7 @@ const GouoStorage = () => {
     setTasksLoading(true);
     try {
       const response = await API.get(`/api/gouo/admin/storage/users/${user.user_id}/tasks?page=${page}&size=12`);
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       setTasks(response.data.data.data || []);
       setTaskTotal(Number(response.data.data.total_count || 0));

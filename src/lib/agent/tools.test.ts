@@ -84,6 +84,22 @@ describe('Agent tool boundary', () => {
     expect(mocks.submit).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps counting submitted images across the automatic continue message', async () => {
+    const { AGENT_CONTINUE_PROMPT } = await import('./tools')
+    const call = (id: string, n: number) => ({ id, name: 'create_image_task', arguments: JSON.stringify({ prompt: '图', params: { n } }), status: 'done' as const })
+    const resumed = { ...conversation, messages: [
+      { id: 'user', role: 'user' as const, content: '画几张海报', createdAt: 1 },
+      { id: 'assistant', role: 'assistant' as const, content: '', createdAt: 2, toolCalls: [call('done', 4)] },
+      { id: 'continue', role: 'user' as const, content: AGENT_CONTINUE_PROMPT, createdAt: 3 },
+    ] }
+    // 停止后点“继续对话”不是新的一轮：已提交的 4 张仍计入，再提交要先确认
+    const pending = run('create_image_task', { prompt: '海报', params: { n: 2 } }, resumed)
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    mocks.dialog!.cancelAction!()
+    await expect(pending).rejects.toThrow('没有确认')
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
+
   it('shows the expected charge from the current model price in the confirmation', async () => {
     mocks.models.mockResolvedValue([{ id: 'gpt-image-2', price_cny: 0.15 }])
     const pending = run('create_image_task', { prompt: '海报', params: { n: 5 } })

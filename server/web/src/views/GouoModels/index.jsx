@@ -67,6 +67,7 @@ function ImageModels() {
     setLoading(true);
     try {
       const response = await API.get('/api/gouo/admin/models');
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       setRows(response.data.data.models || []);
       setDefaultModel(response.data.data.default_model || '');
@@ -102,6 +103,7 @@ function ImageModels() {
           gouo_max_inputs: Number(values.cap_inputs || 0)
         })
       });
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess(values.gouo_enabled ? `${values.model} 已保存` : `${values.model} 已在客户端下架`);
       setEditing(null);
@@ -116,6 +118,7 @@ function ImageModels() {
   const setDefault = async (model) => {
     try {
       const response = await API.put('/api/gouo/admin/settings', { GouoDefaultImageModel: model });
+      if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
       if (!response.data.success) throw new Error(response.data.message);
       showSuccess(model ? `默认模型已设为 ${model}` : '已清除默认模型，客户端使用目录第一个');
       setDefaultModel(model);
