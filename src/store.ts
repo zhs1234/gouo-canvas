@@ -1906,9 +1906,13 @@ export async function importData(file: File, options: ImportOptions = { importCo
       // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
       // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过
       const importedId = (id: string) => `imported-${id}`
-      // 本地已有 imported-x 而备份里的 x 不在本地时，它是之前导入 x 生成的，不是本地原有的同 ID 任务
-      const backupIds = new Set(data.tasks.map((task) => task.id))
-      const remapped = data.tasks.filter((task) => !existingIds.has(task.id) || (task.id.startsWith('imported-') && backupIds.has(task.id.slice(9)) && !existingIds.has(task.id.slice(9))))
+      // 本地已有 imported-x 而备份里的 x 也需要换 ID 时，它是之前导入 x 生成的，不是本地原有的同 ID 任务；
+      // 前缀可能多层嵌套，按长度从短到长判断，上一层总先判定
+      const remappedIds = new Set<string>()
+      for (const id of data.tasks.map((task) => task.id).sort((a, b) => a.length - b.length)) {
+        if (!existingIds.has(id) || (id.startsWith('imported-') && remappedIds.has(id.slice(9)))) remappedIds.add(id)
+      }
+      const remapped = data.tasks.filter((task) => remappedIds.has(task.id))
       const freshTasks = remapped.filter((task) => !existingIds.has(importedId(task.id)))
       const importedTasks = freshTasks.map((task): TaskRecord => ({
         ...task,
