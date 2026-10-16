@@ -82,6 +82,11 @@ Gouo-specific features live under the **光构** (Gouo) menu: 光构设置 (Gouo
 - **一次最多生成张数** (max images per submission): 1–10. Limits how many images the client submits at once on the creation page, canvas, and Agent; each image is still billed as a single-image request. This is a client submission limit; the images per HTTP request are bounded by each model's "maximum images per request".
 - **默认 Agent 模型** (default Agent model): the chat model new conversations start with, chosen from models that qualify for the Agent (step 10 in 3.8). When unset or unavailable to the user, the first model in the catalog is used.
 - **Agent 附加提示词** (extra Agent prompt): up to 4000 characters appended after the built-in rules to add tone, brand, or business requirements. It cannot relax the billing confirmation, tool, or safety rules, and applies from the next conversation turn.
+- **开放技能** (enable skills), **允许用户导入技能** (allow skill import), **允许所有用户从 GitHub 链接导入** (GitHub import for everyone): skills are written methods for the Agent. The client ships 9 built-in skills and users can import more (see "Skills" in the user guide).
+  - With skills off, the Agent no longer lists or uses skills, the client hides the skill entry points, and the server rejects skill document writes. Imported skills are kept.
+  - With import off, the client hides the import controls. This switch is enforced in the client only.
+  - GitHub import reads public repositories directly from the browser. Administrators can always use it; the third switch opens it to all users.
+  - Imported skills are stored as `skill` documents under `/api/gouo/skills`. Like canvases and conversations, they count toward user storage and are purged after the recycle-bin retention period once deleted.
 - **云端作品库** (cloud library): the on/off switch, default per-user storage (GB), per-file upload limit (1–100 MB), and recycle-bin retention (1–30 days); see [section 5](#5-cloud-library). When raising the upload limit, also raise Nginx `client_max_body_size` (32 MB in the deployment templates) and any CDN limit.
 
 The bottom of the page shows whether registration and password sign-in are open. Change them under Settings → System (root only); the client follows them: with registration closed, **免费注册** shows "registration is not open" and the sign-in page hides its registration link; with password sign-in closed, the sign-in page says sign-in is paused.
@@ -234,7 +239,7 @@ Restoring only the database leaves library records without images. Restoring onl
 | `PATCH /api/gouo/tasks/:clientTaskId/meta` | Submit metadata for an artwork the server already saved |
 | `POST /api/gouo/tasks/:id/hide`, `/restore` | Move an artwork to the recycle bin or restore it |
 | `PUT /api/gouo/collections/:id` | Create or update a collection (`/hide` and `/restore` as above) |
-| `/api/gouo/canvases[/:id]`, `/api/gouo/conversations[/:id]` | List, read, save, hide, and restore canvas and Agent conversation documents |
+| `/api/gouo/canvases[/:id]`, `/api/gouo/conversations[/:id]`, `/api/gouo/skills[/:id]` | List, read, save, hide, and restore canvas, Agent conversation, and imported skill documents |
 | `GET /api/gouo/image-charges` | Current user's image charge records |
 | `GET /api/gouo/image-results` | Recover a paid image result by its original request ID |
 | `GET /api/gouo/agent/models` | Agent models available to the current user |

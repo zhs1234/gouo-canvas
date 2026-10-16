@@ -2,6 +2,7 @@ import type { Skill, SkillDocument } from './types'
 import { BUILTIN_SKILLS } from './builtin'
 import { useStore } from '../../store'
 import { useSkillStore } from '../../stores/skillStore'
+import { isSkillsEnabled } from '../gouoBackend'
 
 export const MAX_ACTIVE_SKILLS = 4
 // 单个 skill 注入系统提示的正文上限，超出部分让模型按需读取参考文件
@@ -24,6 +25,7 @@ export function getAvailableSkills(disabled: string[], imported: SkillDocument[]
 }
 
 export function listAgentSkills(): Skill[] {
+  if (!isSkillsEnabled()) return []
   return getAvailableSkills(useStore.getState().settings.disabledSkills, useSkillStore.getState().skills)
 }
 

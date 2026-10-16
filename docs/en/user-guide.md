@@ -146,6 +146,17 @@ The Agent is a conversational assistant. Describe what you need; it proposes ide
 - Image tasks the Agent submits are charged at the selected image model's price and also appear in **我的作品**. If one message would create more than 4 images in total, you are asked to confirm first. The chat itself is billed by platform text usage.
 - **创作会话** (Agent conversations) in the sidebar keeps your history; the top right starts a new conversation or opens the history. Conversations sync with the account.
 
+### Skills
+
+Skills (**技能**) are written instructions that teach the Agent a creative method, such as image-prompt writing, reference-image editing, product and e-commerce photos, poster design, character consistency, text in images, logos and brand kits, and color themes.
+
+- The Agent activates a matching skill on its own. You can also pick one with **技能** below the input, or write `$name` in a message (for example `$poster-design`). An activated skill stays on for the whole conversation; up to 4 can be active at once, and you can remove them above the input.
+- **设置 → 技能** (Settings → Skills) lists built-in and imported skills. You can view their content, turn them on or off, and export them as a zip.
+- **Import**: a skill folder, its `.zip` / `.skill` archive, or a single `SKILL.md`, following the community Agent Skills format. A preview shows the source, license, and files first; when a name already exists you can replace it, save a copy, or skip. Administrators (or everyone, if the operator allows it) can also paste a GitHub link (a repository, a `tree/` folder, or `blob/…/SKILL.md`). Only public repositories work, and the import is pinned to the commit at that moment.
+- Only text files are kept: at most 1 MB per file and 2 MB per skill. Scripts under `scripts/` are listed but never run; images and other files are ignored.
+- Imported skills sync with the account and use cloud storage. Deleted skills cannot be restored from the interface; the server purges them after the recycle-bin retention period. Turning off a built-in skill only applies to the current browser.
+- Imported skills come from third parties. The Agent treats them as reference material only; they cannot change the billing confirmation or safety rules. Import skills only from sources you trust.
+
 ## 12. Cloud library and recycle bin
 
 When you are signed in, successful images are saved to your account by the server as soon as they are produced; the browser only caches them. Failed tasks are not uploaded. Favorites, canvases, and Agent conversations are saved with the account too.

@@ -38,6 +38,11 @@ var GouoAllowLowModeration = false
 var GouoAgentMaxRounds = 8
 var GouoAgentConfirmImages = 4
 
+// Agent 技能：是否开放、是否允许用户导入，以及普通用户能否从 GitHub 链接导入（管理员始终可以）
+var GouoSkillsEnabled = true
+var GouoSkillImportEnabled = true
+var GouoSkillGithubImport = false
+
 // GouoDefaultImageModel 是客户端未手动选择模型时使用的图片模型；为空或不可用时取目录中的第一个
 var GouoDefaultImageModel = ""
 var ChatLink = ""

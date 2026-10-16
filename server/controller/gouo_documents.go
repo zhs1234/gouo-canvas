@@ -136,6 +136,9 @@ func gouoDocumentKind(c *gin.Context) string {
 	if strings.Contains(c.FullPath(), "/canvases") {
 		return "canvas"
 	}
+	if strings.Contains(c.FullPath(), "/skills") {
+		return "skill"
+	}
 	return "conversation"
 }
 
@@ -156,8 +159,12 @@ func gouoDocumentWritable(c *gin.Context) bool {
 		gouoFail(c, http.StatusForbidden, "canvas_disabled", "运营方已关闭画布")
 		return false
 	}
-	if gouoDocumentKind(c) == "conversation" && !config.GouoAgentEnabled {
+	if gouoDocumentKind(c) != "canvas" && !config.GouoAgentEnabled {
 		gouoFail(c, http.StatusForbidden, "agent_disabled", "运营方已关闭 Agent")
+		return false
+	}
+	if gouoDocumentKind(c) == "skill" && !config.GouoSkillsEnabled {
+		gouoFail(c, http.StatusForbidden, "skills_disabled", "运营方已关闭技能")
 		return false
 	}
 	return true

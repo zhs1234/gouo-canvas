@@ -5,6 +5,8 @@ import type { Skill, SkillDocument } from '../../lib/skills/types'
 import { BUILTIN_SKILLS } from '../../lib/skills/builtin'
 import { skillFromDocument } from '../../lib/skills/catalog'
 import { buildSkillZip, collectSkillPackages, fileSkillEntries, githubSkillEntries, skillDocumentFromPackage, type SkillPackage } from '../../lib/skills/importSkill'
+import { getCurrentUser, isSkillGithubImportOpen, isSkillImportEnabled } from '../../lib/gouoBackend'
+import { useBackendStatus } from '../../hooks/useBackendStatus'
 import { DownloadIcon, ImportIcon, TrashIcon } from '../icons'
 
 type ImportAction = 'create' | 'replace' | 'copy' | 'skip'
@@ -74,9 +76,14 @@ export default function SkillsSettingsTab() {
   const fileInput = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement>(null)
   const abort = useRef<AbortController | null>(null)
+  const status = useBackendStatus()
+  const [isAdmin, setIsAdmin] = useState(false)
+  const canImport = isSkillImportEnabled(status)
+  const canImportGithub = canImport && (isAdmin || isSkillGithubImportOpen(status))
 
   useEffect(() => {
     void useSkillStore.getState().hydrate().catch((error) => console.warn('读取技能失败', error))
+    void getCurrentUser().then((user) => setIsAdmin((user.role ?? 0) >= 10)).catch((error) => console.warn('读取账号信息失败', error))
     return () => abort.current?.abort()
   }, [])
 
@@ -156,7 +163,7 @@ export default function SkillsSettingsTab() {
         <p className="mt-2">导入的技能来自第三方，只作为参考说明使用，其中的脚本不会执行。请只导入可信来源的技能。</p>
       </div>
 
-      <div className={cardClass}>
+      {canImport && <div className={cardClass}>
         <div className="flex items-center gap-2">
           <ImportIcon className="w-4 h-4 text-gray-700 dark:text-gray-300" />
           <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100">导入技能</h4>
@@ -166,11 +173,11 @@ export default function SkillsSettingsTab() {
           <button type="button" className={buttonClass} disabled={busy} onClick={() => fileInput.current?.click()}>选择文件</button>
           <button type="button" className={buttonClass} disabled={busy} onClick={() => folderInput.current?.click()}>选择文件夹</button>
         </div>
-        <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (githubUrl.trim()) importGithub() }}>
+        {canImportGithub && <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (githubUrl.trim()) importGithub() }}>
           <input type="url" value={githubUrl} onChange={(event) => setGithubUrl(event.target.value)} placeholder="GitHub 链接，如 https://github.com/用户/仓库/tree/main/skills/名称" aria-label="GitHub 技能链接"
             className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 outline-none focus:border-blue-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-gray-200" />
           <button type="submit" className={buttonClass} disabled={busy || !githubUrl.trim()}>{busy ? '读取中…' : '从 GitHub 导入'}</button>
-        </form>
+        </form>}
         <input ref={fileInput} type="file" multiple accept=".zip,.skill,.md,.markdown" className="hidden" onChange={(event) => { importFiles([...event.target.files || []]); event.target.value = '' }} />
         <input ref={folderInput} type="file" className="hidden" {...{ webkitdirectory: '' }} onChange={(event) => { importFiles([...event.target.files || []]); event.target.value = '' }} />
 
@@ -205,7 +212,7 @@ export default function SkillsSettingsTab() {
             <button type="button" className="rounded-xl bg-blue-500 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50" disabled={busy || pending.every((item) => item.action === 'skip')} onClick={() => void confirmImport()}>确认导入</button>
           </div>
         </div>}
-      </div>
+      </div>}
 
       <div className={cardClass}>
         <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100">我导入的技能</h4>

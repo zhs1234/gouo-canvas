@@ -97,6 +97,9 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterBool("GouoAllowLowModeration", &config.GouoAllowLowModeration)
 	config.GlobalOption.RegisterInt("GouoAgentMaxRounds", &config.GouoAgentMaxRounds)
 	config.GlobalOption.RegisterInt("GouoAgentConfirmImages", &config.GouoAgentConfirmImages)
+	config.GlobalOption.RegisterBool("GouoSkillsEnabled", &config.GouoSkillsEnabled)
+	config.GlobalOption.RegisterBool("GouoSkillImportEnabled", &config.GouoSkillImportEnabled)
+	config.GlobalOption.RegisterBool("GouoSkillGithubImport", &config.GouoSkillGithubImport)
 	// 云端作品库：环境变量是初始值，管理员在后台保存后以数据库为准
 	config.GlobalOption.RegisterBool("GouoCloudLibraryEnabled", &config.GouoCloudLibraryEnabled)
 	config.GlobalOption.RegisterInt("GouoTrashRetentionDays", &config.GouoTrashRetentionDays)

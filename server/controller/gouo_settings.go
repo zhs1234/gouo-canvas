@@ -14,7 +14,7 @@ import (
 )
 
 // 光构客户端相关的设置。系统设置接口只允许 root，这些设置普通管理员也需要日常维护
-var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays"}
+var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays"}
 
 func normalizeGouoSetting(key, value string) (string, error) {
 	value = strings.TrimSpace(value)
@@ -37,7 +37,7 @@ func normalizeGouoSetting(key, value string) (string, error) {
 		if utf8.RuneCountInString(value) > 4000 {
 			return "", errors.New("Agent 附加提示词不能超过 4000 个字符")
 		}
-	case "GouoCanvasEnabled", "GouoAgentEnabled", "GouoCloudLibraryEnabled", "GouoAllowLowModeration":
+	case "GouoCanvasEnabled", "GouoAgentEnabled", "GouoCloudLibraryEnabled", "GouoAllowLowModeration", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport":
 		if value != "true" && value != "false" {
 			return "", errors.New("开关只能是 true 或 false")
 		}

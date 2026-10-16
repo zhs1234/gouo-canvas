@@ -3,6 +3,8 @@ import { useStore, exportData, importData, clearData, type SettingsTab } from '.
 import { requestBrowserNotificationPermission } from '../lib/browserNotification'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
+import { useBackendStatus } from '../hooks/useBackendStatus'
+import { isSkillsEnabled } from '../lib/gouoBackend'
 import { CloseIcon } from './icons'
 import AboutSettingsTab from './settings/AboutSettingsTab'
 import DataSettingsTab from './settings/DataSettingsTab'
@@ -20,6 +22,7 @@ export default function SettingsModal() {
   const importInputRef = useRef<HTMLInputElement>(null)
   const settingsScrollBoundaryRef = useRef<HTMLDivElement>(null)
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const skillsEnabled = isSkillsEnabled(useBackendStatus())
   const [exportConfig, setExportConfig] = useState(true)
   const [exportTasks, setExportTasks] = useState(true)
   const [importConfig, setImportConfig] = useState(true)
@@ -127,7 +130,7 @@ export default function SettingsModal() {
                 </svg>
                 习惯配置
               </button>
-              <button
+              {skillsEnabled && <button
                 onClick={() => setActiveTab('skills')}
                 className={`whitespace-nowrap flex-shrink-0 flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${activeTab === 'skills' ? 'bg-white dark:bg-white/[0.08] shadow-sm text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100/80 dark:hover:bg-white/[0.04]'}`}
               >
@@ -135,7 +138,7 @@ export default function SettingsModal() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
                 技能
-              </button>
+              </button>}
               <button
                 onClick={() => setActiveTab('data')}
                 className={`whitespace-nowrap flex-shrink-0 flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl transition-colors ${activeTab === 'data' ? 'bg-white dark:bg-white/[0.08] shadow-sm text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100/80 dark:hover:bg-white/[0.04]'}`}
@@ -168,7 +171,7 @@ export default function SettingsModal() {
               />
             )}
 
-            {activeTab === 'skills' && <SkillsSettingsTab />}
+            {activeTab === 'skills' && skillsEnabled && <SkillsSettingsTab />}
 
             {activeTab === 'data' && (
               <DataSettingsTab
