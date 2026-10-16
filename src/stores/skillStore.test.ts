@@ -64,8 +64,16 @@ describe('技能存储', () => {
     // 路径穿越和导入时一样拒绝；大小按 UTF-8 字节计算，40 万个汉字约 1.2 MB，超过单文件 1 MB
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: '../outside.md', content: 'x' }] })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), scripts: ['/etc/run.sh'] })).toBeUndefined()
+    // 参考文件不能占用 SKILL.md，否则导出的压缩包会盖掉正文
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'SKILL.md', content: '覆盖' }] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'references/Skill.md', content: '覆盖' }] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), scripts: ['scripts/SKILL.md'] })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: '字'.repeat(400_000) }] })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: '字'.repeat(300_000) }, { path: 'b.md', content: '字'.repeat(300_000) }, { path: 'c.md', content: '字'.repeat(100_000) }] })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'references/a.md', content: '字'.repeat(300_000) }] })).toBeDefined()
+    // 1 MB 引号仍在限制内；两份 800 KB 引号原文不到 2 MB，转义后超过 3 MB。控制字符写成 \\u00XX，约 6 倍
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: '"'.repeat(1024 * 1024) }] })).toBeDefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: '"'.repeat(800 * 1024) }, { path: 'b.md', content: '"'.repeat(800 * 1024) }] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: '\u0001'.repeat(600 * 1024) }] })).toBeUndefined()
   })
 })

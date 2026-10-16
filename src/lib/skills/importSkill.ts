@@ -2,8 +2,9 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import type { Skill, SkillDocument, SkillFile } from './types'
 import { parseSkillMarkdown } from './parse'
 
-// 导入上限：技能只保存文本，总量要留在服务端单个文档 4 MB 的限制之内
-export const SKILL_IMPORT_LIMITS = { file: 1024 * 1024, total: 2 * 1024 * 1024, files: 200, path: 200, upload: 10 * 1024 * 1024, entries: 2000 }
+// 导入上限：技能只保存文本。服务端单次写入整段请求不能超过 4 MB，
+// 这里把原文卡在 2 MB，再把 JSON 序列化结果卡在 3 MB，给请求外壳留出余量
+export const SKILL_IMPORT_LIMITS = { file: 1024 * 1024, total: 2 * 1024 * 1024, serialized: 3 * 1024 * 1024, files: 200, path: 200, upload: 10 * 1024 * 1024, entries: 2000 }
 const TEXT_FILE = /\.(md|markdown|txt|json|ya?ml|csv|tsv)$/i
 const GITHUB_API = 'https://api.github.com'
 
@@ -44,20 +45,30 @@ function normalizePath(path: string) {
 const textEncoder = new TextEncoder()
 const byteLength = (text: string) => textEncoder.encode(text).length
 
-// 已规整、没有穿越且不超过长度上限的相对路径
+// 已规整、没有穿越且不超过长度上限的相对路径。SKILL.md 留给技能正文，参考文件再用这个名字时，导出会盖掉正文
 export function isSafeSkillPath(path: string) {
-  return Boolean(path) && normalizePath(path) === path && path.length <= SKILL_IMPORT_LIMITS.path
+  return Boolean(path) && normalizePath(path) === path && path.length <= SKILL_IMPORT_LIMITS.path && path.split('/').pop()?.toLowerCase() !== 'skill.md'
+}
+
+// 与最终写入服务端的文档同形。引号、反斜杠、换行转义后约 2 倍，控制字符写成 \u00XX 约 6 倍，
+// 只按 UTF-8 原文计量挡不住，所以直接量 JSON 字节
+function skillJsonBytes(skill: Pick<SkillDocument, 'name' | 'title' | 'description' | 'body' | 'files' | 'scripts' | 'license' | 'source' | 'sourceRef'>) {
+  return byteLength(JSON.stringify({
+    schemaVersion: 1, name: skill.name, title: skill.title, description: skill.description, body: skill.body, files: skill.files,
+    scripts: skill.scripts, license: skill.license, source: skill.source, sourceRef: skill.sourceRef,
+    enabled: true, createdAt: 0, updatedAt: 0, revision: 1,
+  }))
 }
 
 // 导入和恢复（备份、本地、云端）共用的上限检查：路径安全、文件数量，
-// 单文件和全部字段合计都按 UTF-8 字节计算，保证存到服务端时在单个文档 4 MB 以内
-export function skillWithinLimits(skill: Pick<SkillDocument, 'title' | 'description' | 'body' | 'files' | 'scripts' | 'license' | 'source' | 'sourceRef'>) {
+// 单文件和全部字段合计按 UTF-8 字节计算，序列化后的文档还要留在服务端 4 MB 限制之内
+export function skillWithinLimits(skill: Pick<SkillDocument, 'name' | 'title' | 'description' | 'body' | 'files' | 'scripts' | 'license' | 'source' | 'sourceRef'>) {
   const scripts = skill.scripts ?? []
   if (skill.files.length > SKILL_IMPORT_LIMITS.files || scripts.length > SKILL_IMPORT_LIMITS.files) return false
   if (![...skill.files.map((file) => file.path), ...scripts].every(isSafeSkillPath)) return false
   if (skill.files.some((file) => byteLength(file.content) > SKILL_IMPORT_LIMITS.file)) return false
   const fields = [skill.title, skill.description, skill.body, skill.license ?? '', skill.source ?? '', skill.sourceRef ?? '', ...scripts, ...skill.files.flatMap((file) => [file.path, file.content])]
-  return fields.reduce((total, text) => total + byteLength(text), 0) <= SKILL_IMPORT_LIMITS.total
+  return fields.reduce((total, text) => total + byteLength(text), 0) <= SKILL_IMPORT_LIMITS.total && skillJsonBytes(skill) <= SKILL_IMPORT_LIMITS.serialized
 }
 
 export async function collectSkillPackages(rawEntries: SkillEntry[], options: ImportSource = {}): Promise<SkillPackage[]> {
@@ -105,7 +116,7 @@ export async function collectSkillPackages(rawEntries: SkillEntry[], options: Im
       sourceRef: options.sourceRef,
       warnings,
     }
-    if (!skillWithinLimits(pkg)) throw new Error(`技能 ${parsed.name} 超出大小限制（单个文件 1 MB，合计 2 MB）`)
+    if (!skillWithinLimits(pkg)) throw new Error(`技能 ${parsed.name} 超出大小限制（单个文件 1 MB，合计 2 MB，写入后不超过 3 MB）`)
     packages.push(pkg)
   }
   return packages

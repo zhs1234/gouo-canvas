@@ -33,6 +33,12 @@ describe('collectSkillPackages', () => {
     await expect(collectSkillPackages([entry('SKILL.md', SKILL), ...many])).rejects.toThrow('超过 2 MB')
   })
 
+  it('引号转义后超过文档上限时拒绝，即使原文不到 2 MB', async () => {
+    const content = '"'.repeat(800 * 1024)
+    const quoted = (path: string): SkillEntry => ({ path, size: content.length, read: async () => content })
+    await expect(collectSkillPackages([entry('SKILL.md', SKILL), quoted('a.md'), quoted('b.md')])).rejects.toThrow('不超过 3 MB')
+  })
+
   it('忽略路径过长的文件，路径长度计入总量', async () => {
     const long = `references/${'x'.repeat(200)}.md`
     const [pkg] = await collectSkillPackages([entry('SKILL.md', SKILL), entry(long, '资料'), entry('references/ok.md', '资料')])
