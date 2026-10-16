@@ -101,6 +101,7 @@ vi.mock('./lib/transparentImage', () => ({
 }))
 import { clearImages, clearTasks, getAllTasks, getImage, importTaskData, putImage, putTask as putDbTask } from './lib/db'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
+import { refreshBackendStatus } from './lib/gouoBackend'
 import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
 
 const imageA = { id: 'image-a', dataUrl: 'data:image/png;base64,a' }
@@ -948,6 +949,17 @@ describe('data import', () => {
     expect(imported).toEqual([expect.objectContaining({ name: 'my-skill', revision: 1 })])
     expect(imported?.[0].id).not.toBe('backup-my-skill')
     expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 0 个任务，1 个技能', 'success')
+    // 运营方关闭技能导入后，备份里的技能不恢复；后台设置有缓存，拨快时钟让它重新读取
+    const loadStatus = async (data: Record<string, unknown>) => {
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data })))
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 120_000 })
+      await refreshBackendStatus()
+      vi.useRealTimers()
+    }
+    await loadStatus({ gouo_skill_import: false })
+    expect(await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: [skill('other-skill')] }), { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    await loadStatus({})
     vi.unstubAllGlobals()
   })
 

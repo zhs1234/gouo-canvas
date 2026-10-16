@@ -41,7 +41,7 @@ import { showBrowserNotification } from './lib/browserNotification'
 import { normalizeTaskParams } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
-import { getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError } from './lib/gouoBackend'
+import { getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled } from './lib/gouoBackend'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
@@ -1970,11 +1970,12 @@ export async function importData(file: File, options: ImportOptions = { importCo
         ? resolveDefaultFavoriteCollectionId(favoriteCollections, data.defaultFavoriteCollectionId)
         : state.defaultFavoriteCollectionId
       const normalizedFavorites = normalizeLoadedFavoriteState(importedTasks, favoriteCollections, defaultFavoriteCollectionId)
-      // 技能按名称去重：与内置或已有技能重名的跳过，新导入的换新 ID 作为独立文档同步
+      // 技能按名称去重：与内置或已有技能重名的跳过，新导入的换新 ID 作为独立文档同步；
+      // 运营方关闭技能或技能导入时，备份里的技能也不恢复，否则可以借备份绕过开关
       const [{ useSkillStore, normalizeSkillDocument }, { BUILTIN_SKILLS }] = await Promise.all([import('./stores/skillStore'), import('./lib/skills/builtin')])
       await useSkillStore.getState().hydrate()
       const skillNames = new Set([...BUILTIN_SKILLS.map((skill) => skill.name), ...useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.name)])
-      const skills = (data.skills ?? []).flatMap((value) => {
+      const skills = (isSkillsEnabled() && isSkillImportEnabled() ? data.skills ?? [] : []).flatMap((value) => {
         const doc = normalizeSkillDocument(value)
         if (!doc || doc.hiddenAt || skillNames.has(doc.name)) return []
         skillNames.add(doc.name)
