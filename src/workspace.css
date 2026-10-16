@@ -178,3 +178,42 @@ body { background: var(--ws-bg); color: var(--ws-text); }
 
 .generation-composer [contenteditable="true"] { border: 0 !important; background: transparent !important; box-shadow: none !important; }
 .generation-composer > [class*="backdrop-blur-2xl"] { background: var(--ws-surface) !important; }
+
+/* 侧栏底部的充值入口与导航项同款；收起时只留图标 */
+.sidebar-footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--ws-line); }
+.sidebar-footer button { display: flex; align-items: center; gap: 12px; width: 100%; border-radius: 9px; padding: 10px 12px; font-size: 13px; min-height: 37px; color: var(--ws-text-2); transition: background-color 180ms ease, color 180ms ease; }
+.sidebar-footer button:hover { background: var(--ws-surface); color: var(--ws-text); }
+.sidebar-collapsed .sidebar-footer span { display: none; }
+.sidebar-collapsed .sidebar-footer button { justify-content: center; }
+.workspace-header-logo { display: none; flex-shrink: 0; align-items: center; gap: 6px; white-space: nowrap; font-size: 16px; font-weight: 650; letter-spacing: 1px; color: var(--ws-text); }
+.workspace-header-logo img { width: 28px; height: 28px; object-fit: contain; }
+
+/* 懒加载页面的骨架屏，替代一行“正在打开”文字 */
+.page-skeleton { max-width: 1600px; margin: 0 auto; padding: 12px 40px 60px; }
+.page-skeleton > span, .page-skeleton-grid > span { display: block; border-radius: 12px; background: linear-gradient(100deg, var(--ws-raised) 30%, var(--ws-raised-2) 50%, var(--ws-raised) 70%) 0 0 / 300% 100%; animation: page-skeleton-shimmer 1.4s ease-in-out infinite; }
+.page-skeleton-title { width: 180px; height: 34px; }
+.page-skeleton-line { width: min(360px, 70%); height: 14px; margin: 14px 0 32px; }
+.page-skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.page-skeleton-grid > span { aspect-ratio: 1.25; border-radius: 18px; }
+@keyframes page-skeleton-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.page-load-failed, .not-found-page { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px 16px; text-align: center; }
+.page-load-failed strong { font-size: 18px; font-weight: 600; }
+.page-load-failed p, .not-found-page p { color: var(--ws-text-3); font-size: 13px; }
+.page-load-failed button, .not-found-page a { margin-top: 12px; border-radius: 10px; padding: 9px 20px; font-size: 13px; background: var(--ws-inverse-bg); color: var(--ws-inverse-text); transition: opacity 180ms ease; }
+.page-load-failed button:hover, .not-found-page a:hover { opacity: .88; }
+.not-found-page > strong { font-size: 72px; line-height: 1; font-weight: 300; letter-spacing: 4px; color: var(--ws-text-4); }
+.not-found-page h1 { font-size: 26px; font-weight: 500; }
+@media (max-width: 1100px) {
+  .page-skeleton { padding: 12px 24px 60px; }
+}
+@media (max-width: 760px) {
+  .sidebar-footer { display: none; }
+  .workspace-header-logo { display: flex; margin-right: auto; }
+  .workspace-header > div { width: 100%; }
+  .page-skeleton { padding: 12px 16px 40px; }
+  .page-skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+@media (max-width: 359px) {
+  .workspace-header-logo span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .page-skeleton > span, .page-skeleton-grid > span { animation: none; } }

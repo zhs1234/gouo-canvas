@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Moon, Sun } from 'lucide-react'
 import { useStore } from '../store'
 import { useTooltip } from '../hooks/useTooltip'
@@ -14,6 +15,13 @@ import { HelpCircleIcon, InstallIcon, SettingsIcon, SparklesIcon, UserIcon } fro
 const HelpModal = lazy(() => import('./HelpModal'))
 const InspirationLibraryModal = lazy(() => import('./InspirationLibraryModal'))
 const UserCenterModal = lazy(() => import('./UserCenterModal'))
+
+const ACCOUNT_MENU: Array<{ section: UserCenterSection; label: string }> = [
+  { section: 'overview', label: '用户中心' },
+  { section: 'topup', label: '充值/定价' },
+  { section: 'logs', label: '使用记录' },
+  { section: 'security', label: '账户与安全' },
+]
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -38,6 +46,8 @@ export default function Header({ compact = false }: { compact?: boolean }) {
   const [showInspiration, setShowInspiration] = useState(false)
   const [showUserCenter, setShowUserCenter] = useState(false)
   const [userCenterSection, setUserCenterSection] = useState<UserCenterSection>('overview')
+  const [accountMenu, setAccountMenu] = useState(false)
+  const accountMenuRef = useRef<HTMLDivElement>(null)
 
   const installTooltip = useTooltip()
   const helpTooltip = useTooltip()
@@ -56,6 +66,29 @@ export default function Header({ compact = false }: { compact?: boolean }) {
     window.addEventListener('gouo:open-user-center', openUserCenter)
     return () => window.removeEventListener('gouo:open-user-center', openUserCenter)
   }, [])
+
+  useEffect(() => {
+    if (!accountMenu) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!accountMenuRef.current?.contains(event.target as Node)) setAccountMenu(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAccountMenu(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [accountMenu])
+
+  const openUserCenter = (section: UserCenterSection) => {
+    dismissAllTooltips()
+    setAccountMenu(false)
+    setUserCenterSection(section)
+    setShowUserCenter(true)
+  }
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -118,6 +151,8 @@ export default function Header({ compact = false }: { compact?: boolean }) {
     <>
       <header data-no-drag-select className={compact ? 'workspace-header' : 'safe-area-top fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-gray-950/80 backdrop-blur border-b border-gray-200 dark:border-white/[0.08]'}>
         <div className="safe-area-x safe-header-inner max-w-7xl mx-auto flex items-center justify-between relative">
+          {/* 窄屏侧栏变成底部标签栏，Logo 改放在顶栏 */}
+          {compact && <Link to="/generate" className="workspace-header-logo" aria-label="光构首页"><img src={BRAND.logoUrl} alt="" /><span>{BRAND.name}</span></Link>}
           <div className={compact ? 'hidden' : 'flex-1 min-w-0 pr-2 flex items-center gap-2'}>
             <h1 className="inline-flex min-w-0 items-start relative mr-2">
               {showFavoriteCollectionTitle ? (
@@ -145,11 +180,7 @@ export default function Header({ compact = false }: { compact?: boolean }) {
             </div>
           )}
           <div className="flex items-center gap-1 shrink-0">
-            {compact && <AccountBalance refreshKey={showUserCenter} onClick={() => {
-              dismissAllTooltips()
-              setUserCenterSection('overview')
-              setShowUserCenter(true)
-            }} />}
+            {compact && <AccountBalance refreshKey={showUserCenter} onClick={() => openUserCenter('topup')} />}
             {!compact && <div className="relative" {...inspirationTooltip.handlers}>
               <button
                 type="button"
@@ -165,21 +196,31 @@ export default function Header({ compact = false }: { compact?: boolean }) {
               </button>
               <ViewportTooltip visible={inspirationTooltip.visible} className="whitespace-nowrap">灵感库</ViewportTooltip>
             </div>}
-            <div className="relative" {...userCenterTooltip.handlers}>
+            <div ref={accountMenuRef} className="relative" {...userCenterTooltip.handlers}>
               <button
                 onClick={() => {
                   dismissAllTooltips()
-                  setUserCenterSection('overview')
-                  setShowUserCenter(true)
+                  setAccountMenu(!accountMenu)
                 }}
                 className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-500/20 transition hover:brightness-110"
                 aria-label="用户中心"
+                aria-haspopup="menu"
+                aria-expanded={accountMenu}
               >
                 <UserIcon className="h-5 w-5" />
               </button>
-              <ViewportTooltip visible={userCenterTooltip.visible} className="whitespace-nowrap">
+              <ViewportTooltip visible={userCenterTooltip.visible && !accountMenu} className="whitespace-nowrap">
                 用户中心
               </ViewportTooltip>
+              {accountMenu && (
+                <div role="menu" aria-label="账户" className="absolute right-0 top-full z-50 mt-2 w-40 rounded-xl border border-gray-200 bg-white p-1 text-sm shadow-xl dark:border-white/10 dark:bg-gray-900">
+                  {ACCOUNT_MENU.map((item) => (
+                    <button key={item.section} type="button" role="menuitem" onClick={() => openUserCenter(item.section)} className="block w-full rounded-lg px-3 py-2 text-left text-gray-700 transition hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-gray-200 dark:hover:bg-white/[0.06] dark:focus:bg-white/[0.06]">
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {!isPwaInstalled && (
               <div
