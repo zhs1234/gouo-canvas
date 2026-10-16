@@ -7,6 +7,7 @@ import { getAgentModels, streamAgentCompletion, getAgentLimits } from '../lib/ag
 import { executeAgentTool, getAgentToolDefinitions } from '../lib/agent/tools'
 import { reconcileAgentTasks } from '../lib/agent/taskRecovery'
 import { buildSkillPrompt, findMentionedSkills, listAgentSkills, MAX_ACTIVE_SKILLS } from '../lib/skills/catalog'
+import { useSkillStore } from './skillStore'
 import type { AgentConversation, AgentModel, AgentToolCall, ChatMessage } from '../lib/agent/types'
 import type { Skill } from '../lib/skills/types'
 
@@ -145,7 +146,7 @@ async function runConversation(id: string, controller: AbortController) {
       const messages = await buildAgentMessages(conversation, model, useAgentStore.getState().systemPrompt, skills)
       const messageId = crypto.randomUUID()
       updateConversation(id, (current) => ({ messages: [...current.messages, { id: messageId, role: 'assistant', content: '', createdAt: Date.now() }] }))
-      const completion = await streamAgentCompletion({ model: model.id, messages, tools: getAgentToolDefinitions(skills), signal: controller.signal, onUpdate: (content, calls) => updateAssistant(id, messageId, content, calls) })
+      const completion = await streamAgentCompletion({ model: model.id, messages, tools: getAgentToolDefinitions(skills, conversation.skills), signal: controller.signal, onUpdate: (content, calls) => updateAssistant(id, messageId, content, calls) })
       updateAssistant(id, messageId, completion.content, completion.calls)
       if (!completion.calls.length) {
         if (!completion.content.trim()) throw new Error('模型没有返回可用内容，请检查模型配置后重试')
@@ -259,7 +260,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (hydratePromise) return hydratePromise
     hydratePromise = (async () => {
       const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
-      const [stored, storedTasks, lockState] = await Promise.all([getAllAgentConversations(), getAllTasks(), locks?.query()])
+      // 运行前要能读到导入的技能
+      const [stored, storedTasks, lockState] = await Promise.all([getAllAgentConversations(), getAllTasks(), locks?.query(), useSkillStore.getState().hydrate()])
       if (!isStorageScopeCurrent()) return
       const held = (lockState?.held ?? []).map((lock) => lock.name ?? '')
       const runningElsewhere = new Set(held.filter((name) => name.startsWith(AGENT_LOCK_PREFIX)).map((name) => name.slice(AGENT_LOCK_PREFIX.length)))

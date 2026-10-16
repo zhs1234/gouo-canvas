@@ -85,3 +85,8 @@ export function parseSkillMarkdown(text: string): ParsedSkillMarkdown {
     warnings,
   }
 }
+
+// 重名时加 -2、-3 后缀；截断后去掉结尾的连字符，否则会出现 -- 而不符合名称规范
+export function suffixSkillName(name: string, n: number) {
+  return `${name.slice(0, 60).replace(/-+$/, '')}-${n}`
+}

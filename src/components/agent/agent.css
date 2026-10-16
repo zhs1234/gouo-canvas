@@ -78,10 +78,12 @@
 .agent-skill-chip button:hover { color: var(--ws-text); background: var(--ws-raised); }
 .agent-skill-picker { border-top: 1px solid var(--ws-line); margin-top: 15px; padding: 12px 0 2px; }
 .agent-skill-picker p { color: var(--ws-text-3); font-size: 11px; margin-bottom: 10px; }
+.agent-skill-picker p button { margin-left: 6px; border: 0; background: transparent; padding: 0; color: var(--ws-accent); font-size: 11px; }
+.agent-skill-picker p button:hover { text-decoration: underline; }
 .agent-skill-picker > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; max-height: 260px; overflow: auto; }
-.agent-skill-picker button { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--ws-line); background: var(--ws-surface); color: var(--ws-text-2); }
-.agent-skill-picker button:hover { background: var(--ws-raised); }
-.agent-skill-picker button[aria-pressed="true"] { border-color: var(--ws-accent); background: var(--ws-raised); }
+.agent-skill-picker > div > button { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--ws-line); background: var(--ws-surface); color: var(--ws-text-2); }
+.agent-skill-picker > div > button:hover { background: var(--ws-raised); }
+.agent-skill-picker > div > button[aria-pressed="true"] { border-color: var(--ws-accent); background: var(--ws-raised); }
 .agent-skill-picker strong { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ws-text); font-weight: 600; }
 .agent-skill-picker code { font-size: 10px; color: var(--ws-text-4); font-weight: 400; }
 .agent-skill-picker span { font-size: 11px; line-height: 1.5; color: var(--ws-text-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

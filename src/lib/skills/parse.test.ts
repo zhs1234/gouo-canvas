@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSkillMarkdown } from './parse'
+import { parseSkillMarkdown, SKILL_NAME_PATTERN, suffixSkillName } from './parse'
 
 describe('parseSkillMarkdown', () => {
   it('解析常见 frontmatter 写法', () => {
@@ -31,5 +31,14 @@ describe('parseSkillMarkdown', () => {
     expect(() => parseSkillMarkdown('---\nname: ！！\ndescription: x\n---\n正文')).toThrow('小写字母')
     expect(() => parseSkillMarkdown('---\nname: a\ndescription: x\n---\n')).toThrow('正文为空')
     expect(() => parseSkillMarkdown('---\nname: a\n  bad indent\n---\n正文')).toThrow('缺少 description')
+  })
+})
+
+describe('suffixSkillName', () => {
+  it('截断到连字符处时去掉结尾的连字符，结果仍符合名称规范', () => {
+    const name = `${'a'.repeat(59)}-${'b'.repeat(4)}`
+    expect(suffixSkillName(name, 2)).toBe(`${'a'.repeat(59)}-2`)
+    expect(suffixSkillName(name, 2)).toMatch(SKILL_NAME_PATTERN)
+    expect(suffixSkillName('poster', 3)).toBe('poster-3')
   })
 })

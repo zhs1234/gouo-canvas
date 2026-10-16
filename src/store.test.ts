@@ -13,6 +13,8 @@ vi.mock('./lib/db', () => {
   return {
     CURRENT_THUMBNAIL_VERSION: 2,
     getAllTasks: async () => [...tasks.values()],
+    getAllSkills: async () => [],
+    putSkill: async () => {},
     putTask: async (task: TaskRecord) => {
       tasks.set(task.id, task)
       return task.id
@@ -933,6 +935,19 @@ describe('data import', () => {
     expect(await getAllTasks()).toHaveLength(2)
     // 重复导入的会话仍要指向之前导入的任务
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations?.[0].messages[0]).toMatchObject({ taskIds: ['imported-new'] })
+    vi.unstubAllGlobals()
+  })
+
+  it('imports backup skills with new IDs and skips names already taken', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    const { BUILTIN_SKILLS } = await import('./lib/skills/builtin')
+    const skill = (name: string) => ({ id: `backup-${name}`, schemaVersion: 1 as const, name, title: name, description: '用途', body: '正文', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 7 })
+    const result = await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: [skill('my-skill'), skill(BUILTIN_SKILLS[0].name), skill('my-skill'), { ...skill('broken'), body: '' }] }), { importTasks: true })
+    expect(result).toBe(true)
+    const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills
+    expect(imported).toEqual([expect.objectContaining({ name: 'my-skill', revision: 1 })])
+    expect(imported?.[0].id).not.toBe('backup-my-skill')
+    expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 0 个任务，1 个技能', 'success')
     vi.unstubAllGlobals()
   })
 

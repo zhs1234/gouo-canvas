@@ -17,6 +17,7 @@ export function normalizeSettings(input: unknown): AppSettings {
     referenceImageEditAction: record.referenceImageEditAction === 'replace-reference' || record.referenceImageEditAction === 'add-mask' ? record.referenceImageEditAction : 'ask',
     // 旧版按入口分别设置 zipDownloadRoutes，开启过任一入口即视为开启
     zipBatchDownload: flag('zipBatchDownload', Array.isArray(record.zipDownloadRoutes) ? record.zipDownloadRoutes.length > 0 : true),
+    disabledSkills: Array.isArray(record.disabledSkills) ? record.disabledSkills.filter((name): name is string => typeof name === 'string') : [],
   }
 }
 

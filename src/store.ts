@@ -19,6 +19,7 @@ import {
   getAllTasks,
   getAllCanvasProjects,
   getAllAgentConversations,
+  getAllSkills,
   putTask as dbPutTask,
   deleteTask as dbDeleteTask,
   clearTasks as dbClearTasks,
@@ -107,7 +108,7 @@ function isErrorToastTitle(title: string): boolean {
   return /(?:失败|错误|异常|报错|无法|不能|超时|中断|断开|请先|请输入|已达上限|不存在|已丢失)$/.test(title)
 }
 
-export type SettingsTab = 'general' | 'data' | 'about'
+export type SettingsTab = 'general' | 'skills' | 'data' | 'about'
 
 export function getCachedImage(id: string): string | undefined {
   const dataUrl = imageCache.get(id)
@@ -1829,6 +1830,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     const tasks = options.exportTasks ? (await getAllTasks()).filter((task) => !isLegacyAgentTask(task)) : []
     const canvasProjects = options.exportTasks ? await getAllCanvasProjects() : []
     const agentConversations = options.exportTasks ? await getAllAgentConversations() : []
+    const skills = options.exportTasks ? (await getAllSkills()).filter((skill) => !skill.hiddenAt) : []
     const requiredImages = new Set<string>(getDocumentImageIds([...canvasProjects, ...agentConversations]))
     for (const task of tasks) addTaskReferencedImageIds(requiredImages, task)
     for (const id of requiredImages) {
@@ -1863,6 +1865,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
       thumbnailsByImageId,
       canvasProjects,
       agentConversations,
+      skills,
       favoriteCollections,
       defaultFavoriteCollectionId,
     })
@@ -1902,6 +1905,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
     const settings = options.importConfig && data.settings ? normalizeSettings({ ...useStore.getState().settings, ...data.settings }) : undefined
     let importedCount = 0
     let skippedCount = 0
+    let importedSkillCount = 0
     if (options.importTasks && data.tasks) {
       const existingIds = new Set((await getAllTasks()).map((task) => task.id))
       // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
@@ -1966,8 +1970,20 @@ export async function importData(file: File, options: ImportOptions = { importCo
         ? resolveDefaultFavoriteCollectionId(favoriteCollections, data.defaultFavoriteCollectionId)
         : state.defaultFavoriteCollectionId
       const normalizedFavorites = normalizeLoadedFavoriteState(importedTasks, favoriteCollections, defaultFavoriteCollectionId)
-      await importTaskData(normalizedFavorites.tasks, images, thumbnails, { canvases, conversations })
-      if (canvases.length || conversations.length) {
+      // 技能按名称去重：与内置或已有技能重名的跳过，新导入的换新 ID 作为独立文档同步
+      const [{ useSkillStore, normalizeSkillDocument }, { BUILTIN_SKILLS }] = await Promise.all([import('./stores/skillStore'), import('./lib/skills/builtin')])
+      await useSkillStore.getState().hydrate()
+      const skillNames = new Set([...BUILTIN_SKILLS.map((skill) => skill.name), ...useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.name)])
+      const skills = (data.skills ?? []).flatMap((value) => {
+        const doc = normalizeSkillDocument(value)
+        if (!doc || doc.hiddenAt || skillNames.has(doc.name)) return []
+        skillNames.add(doc.name)
+        return [{ ...doc, id: crypto.randomUUID(), revision: 1, createdAt: Date.now(), updatedAt: Date.now() }]
+      })
+      importedSkillCount = skills.length
+      await importTaskData(normalizedFavorites.tasks, images, thumbnails, { canvases, conversations, skills })
+      if (skills.length) useSkillStore.setState((state) => ({ skills: [...state.skills, ...skills] }))
+      if (canvases.length || conversations.length || skills.length) {
         window.dispatchEvent(new Event('gouo:documents-changed'))
         const [{ useCanvasStore, markCanvasPersisted }, { useAgentStore, markAgentPersisted }] = await Promise.all([import('./stores/canvasStore'), import('./stores/agentStore')])
         for (const project of canvases) markCanvasPersisted(project)
@@ -1990,7 +2006,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
 
     let msg = '数据已成功导入'
     if (options.importTasks && data.tasks) {
-      msg = `已导入 ${importedCount} 个任务${skippedCount ? `，保留 ${skippedCount} 个同 ID 的现有任务` : ''}`
+      msg = `已导入 ${importedCount} 个任务${skippedCount ? `，保留 ${skippedCount} 个同 ID 的现有任务` : ''}${importedSkillCount ? `，${importedSkillCount} 个技能` : ''}`
     } else if (options.importConfig && data.settings) {
       msg = '配置已成功导入'
     }

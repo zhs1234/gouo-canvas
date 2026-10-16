@@ -6,6 +6,7 @@ import { getNumberedFileNameBase, sanitizeFileNamePart } from './exportFileName'
 import { isRecord } from './storeInputNormalization'
 import { getDocumentImageIds } from './documentAssets'
 import { validateCanvasProject } from './canvas/document'
+import type { SkillDocument } from './skills/types'
 
 type ZipFiles = Record<string, Uint8Array | [Uint8Array, { mtime: Date }]>
 
@@ -17,6 +18,7 @@ interface BuildExportZipOptions {
 interface BuildExportZipParams {
   canvasProjects?: CanvasProject[]
   agentConversations?: AgentConversation[]
+  skills?: SkillDocument[]
   options: BuildExportZipOptions
   exportedAt: number
   settings: AppSettings
@@ -86,6 +88,7 @@ export function buildExportZip(params: BuildExportZipParams) {
   if (params.options.exportTasks) {
     manifest.canvasProjects = params.canvasProjects
     manifest.agentConversations = params.agentConversations
+    if (params.skills?.length) manifest.skills = params.skills
     manifest.tasks = params.tasks
     manifest.favoriteCollections = params.favoriteCollections
     manifest.defaultFavoriteCollectionId = params.defaultFavoriteCollectionId
@@ -166,6 +169,7 @@ export function readExportZip(bytes: Uint8Array): ExportZipContents {
       if (!isRecord(data.imageFiles) || !Object.prototype.hasOwnProperty.call(data.imageFiles, id)) throw new Error(`任务 ${task.id} 缺少原图 ${id}`)
     }
   }
+  if (data.skills !== undefined && !Array.isArray(data.skills)) throw new Error('备份技能列表无效')
   for (const key of ['canvasProjects', 'agentConversations']) {
     if (data[key] === undefined) continue
     if (!Array.isArray(data[key])) throw new Error('备份文档列表无效')

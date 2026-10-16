@@ -9,7 +9,7 @@ import type { AgentConversation, AgentToolDefinition } from './types'
 import { getAgentRequestId, getAgentTaskResult } from './taskRecovery'
 import { formatPoints } from '../accountUsage'
 import { getAgentLimits } from './api'
-import { listAgentSkills, MAX_ACTIVE_SKILLS } from '../skills/catalog'
+import { listAgentSkills, listedSkillNames, MAX_ACTIVE_SKILLS } from '../skills/catalog'
 import type { Skill } from '../skills/types'
 
 // “继续对话”按钮发出的消息，统计本轮已提交的图片张数时不算作新的一轮
@@ -96,11 +96,15 @@ const skillToolDefinitions: AgentToolDefinition[] = [
   },
 ]
 
-// 没有可用 skill 时不提供 skill 工具；name 用 enum 限定在已有 skill 里，避免模型编造
-export function getAgentToolDefinitions(skills: Skill[]): AgentToolDefinition[] {
+// 没有可用 skill 时不提供 skill 工具。name 只用目录里列得出的名称（再加上本会话已启用的），
+// 避免把近两千个技能名写进每次请求；没列入目录的仍可用 $名称 指定，执行时会再校验
+export function getAgentToolDefinitions(skills: Skill[], activeNames: string[] = []): AgentToolDefinition[] {
   if (!skills.length) return agentToolDefinitions
-  const names = skills.map((skill) => skill.name)
-  return [...agentToolDefinitions, ...skillToolDefinitions.map((tool) => ({ ...tool, function: { ...tool.function, parameters: { ...tool.function.parameters, properties: { ...tool.function.parameters.properties as Record<string, unknown>, name: { type: 'string', enum: names } } } } }))]
+  const listed = new Set(listedSkillNames(skills))
+  for (const name of activeNames) if (skills.some((skill) => skill.name === name)) listed.add(name)
+  const names = [...new Set(skills.filter((skill) => listed.has(skill.name)).map((skill) => skill.name))]
+  const nameSchema = names.length ? { type: 'string', enum: names } : { type: 'string' }
+  return [...agentToolDefinitions, ...skillToolDefinitions.map((tool) => ({ ...tool, function: { ...tool.function, parameters: { ...tool.function.parameters, properties: { ...tool.function.parameters.properties as Record<string, unknown>, name: nameSchema } } } }))]
 }
 
 export function parseToolArguments(name: string, raw: string): Record<string, unknown> {
