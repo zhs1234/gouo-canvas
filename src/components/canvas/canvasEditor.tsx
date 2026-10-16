@@ -63,8 +63,11 @@ import { CanvasSidePanel, type InsertAssetPayload } from './canvasSidePanel'
 import { CanvasNodeCropDialog, type CanvasImageCropRect } from './canvasNodeCropDialog'
 import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from './canvasNodeMaskEditDialog'
 import { formatPoints } from '../../lib/accountUsage'
+import Select from '../Select'
 
 const EMPTY_IDS: string[] = []
+// 与生成输入框的参数下拉保持一致
+const NODE_SELECT_CLASS = 'rounded-lg border border-gray-200/60 bg-white/50 px-2.5 py-2 text-xs shadow-sm transition-all duration-200 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.03] dark:hover:bg-white/[0.06]'
 type Clipboard = { nodes: CanvasNodeData[]; connections: CanvasConnection[] }
 type Props = { project: CanvasProject; onOpenProject: (id: string) => void; onOpenAgent?: (id: string) => void }
 
@@ -654,44 +657,30 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           已连接 {inputs.filter((item) => item.type === 'text').length} 段文本 · {inputs.filter((item) => item.type === 'image').length} 张参考图
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
-          <select
-            className="min-w-0 flex-1 rounded-lg border bg-transparent p-2"
-            aria-label="生成模型"
-            value={config.model || settings.model}
-            onChange={(event) => run(patchNode(node.id, { metadata: { model: event.target.value } }))}
-          >
-            {models.length ? (
-              models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))
-            ) : (
-              <option value={settings.model}>{settings.model || '当前模型'}</option>
-            )}
-          </select>
-          <select
-            className="rounded-lg border bg-transparent p-2"
-            aria-label="画面尺寸"
-            value={config.size || 'auto'}
-            onChange={(event) => run(patchNode(node.id, { metadata: { size: event.target.value } }))}
-          >
-            {['auto', ...(models.find((model) => model.id === (config.model || settings.model))?.sizes?.includes('1K') ? ['1024x1024', '1536x1024', '1024x1536'] : [])].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-          <select
-            className="rounded-lg border bg-transparent p-2"
-            aria-label="生成数量"
-            value={config.count || 1}
-            onChange={(event) => run(patchNode(node.id, { metadata: { count: Number(event.target.value) } }))}
-          >
-            {[1, 2, 3, 4].map((value) => (
-              <option key={value} value={value}>
-                {value} 张
-              </option>
-            ))}
-          </select>
+          <div role="group" aria-label="生成模型" className="min-w-0 flex-1">
+            <Select
+              value={config.model || settings.model}
+              onChange={(value) => run(patchNode(node.id, { metadata: { model: String(value) } }))}
+              options={models.length ? models.map((model) => ({ label: model.name, value: model.id })) : [{ label: settings.model || '当前模型', value: settings.model }]}
+              className={NODE_SELECT_CLASS}
+            />
+          </div>
+          <div role="group" aria-label="画面尺寸" className="w-[104px]">
+            <Select
+              value={config.size || 'auto'}
+              onChange={(value) => run(patchNode(node.id, { metadata: { size: String(value) } }))}
+              options={['auto', ...(models.find((model) => model.id === (config.model || settings.model))?.sizes?.includes('1K') ? ['1024x1024', '1536x1024', '1024x1536'] : [])].map((value) => ({ label: value, value }))}
+              className={NODE_SELECT_CLASS}
+            />
+          </div>
+          <div role="group" aria-label="生成数量" className="w-[68px]">
+            <Select
+              value={config.count || 1}
+              onChange={(value) => run(patchNode(node.id, { metadata: { count: Number(value) } }))}
+              options={[1, 2, 3, 4].map((value) => ({ label: `${value} 张`, value }))}
+              className={NODE_SELECT_CLASS}
+            />
+          </div>
         </div>
         {config.maskImageId && (
           <div className="mt-2 flex items-center justify-between text-xs text-blue-400">

@@ -17,14 +17,6 @@
 .canvas-workspace .node-element {
   touch-action: none;
 }
-.canvas-workspace select option {
-  background: #292524;
-  color: #f5f5f4;
-}
-.canvas-workspace[data-theme='light'] select option {
-  background: #fbfaf7;
-  color: #292524;
-}
 .canvas-workspace button:focus-visible,
 .canvas-workspace a:focus-visible,
 .canvas-workspace select:focus-visible {

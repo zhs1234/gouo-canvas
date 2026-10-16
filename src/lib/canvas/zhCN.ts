@@ -203,7 +203,7 @@ export default {
       missingPluginDescription: '节点类型“{{type}}”的插件未安装或未启用',
       generateImage: '用文本生图',
       generate: '生图',
-      editText: '双击编辑文字',
+      editText: '双击输入文本',
       emptyImage: '空图片节点',
       emptyVideo: '空视频节点',
       emptyAudio: '空音频节点',
