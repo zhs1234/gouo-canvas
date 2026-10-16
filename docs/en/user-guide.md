@@ -154,7 +154,7 @@ Skills (**技能**) are written instructions that teach the Agent a creative met
 - **设置 → 技能** (Settings → Skills) lists built-in and imported skills. You can view their content, turn them on or off, and export them as a zip.
 - **Import**: a skill folder, its `.zip` / `.skill` archive, or a single `SKILL.md`, following the community Agent Skills format. A preview shows the source, license, and files first; when a name already exists you can replace it, save a copy, or skip. Administrators (or everyone, if the operator allows it) can also paste a GitHub link (a repository, a `tree/` folder, or `blob/…/SKILL.md`). Only public repositories work, and the import is pinned to the commit at that moment.
 - Only text files are kept: at most 1 MB per file and 2 MB per skill. Scripts under `scripts/` are listed but never run; images and other files are ignored.
-- Imported skills sync with the account and use cloud storage. Deleted skills cannot be restored from the interface; the server purges them after the recycle-bin retention period. Turning off a built-in skill only applies to the current browser.
+- Imported skills sync with the account and use cloud storage. If two devices each import a skill with the same name, the later one gets `-2` appended; **设置 → 技能** shows the actual name. Deleted skills cannot be restored from the interface; the server purges them after the recycle-bin retention period. Turning off a built-in skill only applies to the current browser.
 - Imported skills come from third parties. The Agent treats them as reference material only; they cannot change the billing confirmation or safety rules. Import skills only from sources you trust.
 
 ## 12. Cloud library and recycle bin

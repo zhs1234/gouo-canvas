@@ -12,16 +12,27 @@ export function skillFromDocument(doc: SkillDocument): Skill {
   return { name: doc.name, title: doc.title, description: doc.description, body: doc.body, files: doc.files, license: doc.license, source: doc.source, builtin: false }
 }
 
-// 内置技能在前；导入的技能与内置或更早导入的重名时不生效
-export function getAvailableSkills(disabled: string[], imported: SkillDocument[]): Skill[] {
-  const skills = BUILTIN_SKILLS.filter((skill) => !disabled.includes(skill.name))
-  const names = new Set(BUILTIN_SKILLS.map((skill) => skill.name))
-  for (const doc of [...imported].sort((a, b) => a.createdAt - b.createdAt)) {
-    if (!doc.enabled || doc.hiddenAt || names.has(doc.name)) continue
-    names.add(doc.name)
-    skills.push(skillFromDocument(doc))
+// 导入技能的启用名称。多台设备各自导入同名技能、或同步冲突另存副本时会重名，
+// 按导入先后（再按 ID）依次加 -2、-3，各设备算出的结果一致；内置技能的名称始终保留
+export function importedSkillNames(imported: SkillDocument[]) {
+  const taken = new Set(BUILTIN_SKILLS.map((skill) => skill.name))
+  const names = new Map<string, string>()
+  for (const doc of imported.filter((item) => !item.hiddenAt).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))) {
+    let name = doc.name
+    for (let n = 2; taken.has(name); n += 1) name = `${doc.name.slice(0, 60)}-${n}`
+    taken.add(name)
+    names.set(doc.id, name)
   }
-  return skills
+  return names
+}
+
+// 内置技能在前，导入的按导入先后排列
+export function getAvailableSkills(disabled: string[], imported: SkillDocument[]): Skill[] {
+  const names = importedSkillNames(imported)
+  return [
+    ...BUILTIN_SKILLS.filter((skill) => !disabled.includes(skill.name)),
+    ...imported.filter((doc) => doc.enabled && names.has(doc.id)).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)).map((doc) => ({ ...skillFromDocument(doc), name: names.get(doc.id)! })),
+  ]
 }
 
 export function listAgentSkills(): Skill[] {

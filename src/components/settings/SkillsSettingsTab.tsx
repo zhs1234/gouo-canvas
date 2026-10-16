@@ -3,7 +3,7 @@ import { useStore } from '../../store'
 import { useSkillStore } from '../../stores/skillStore'
 import type { Skill, SkillDocument } from '../../lib/skills/types'
 import { BUILTIN_SKILLS } from '../../lib/skills/builtin'
-import { skillFromDocument } from '../../lib/skills/catalog'
+import { importedSkillNames, skillFromDocument } from '../../lib/skills/catalog'
 import { buildSkillZip, collectSkillPackages, fileSkillEntries, githubSkillEntries, skillDocumentFromPackage, type SkillPackage } from '../../lib/skills/importSkill'
 import { getCurrentUser, isSkillGithubImportOpen, isSkillImportEnabled } from '../../lib/gouoBackend'
 import { useBackendStatus } from '../../hooks/useBackendStatus'
@@ -70,6 +70,7 @@ export default function SkillsSettingsTab() {
   const setConfirmDialog = useStore((state) => state.setConfirmDialog)
   const allImported = useSkillStore((state) => state.skills)
   const imported = allImported.filter((doc) => !doc.hiddenAt).sort((a, b) => a.createdAt - b.createdAt)
+  const importedNames = importedSkillNames(allImported)
   const [pending, setPending] = useState<PendingSkill[]>()
   const [busy, setBusy] = useState(false)
   const [githubUrl, setGithubUrl] = useState('')
@@ -221,7 +222,7 @@ export default function SkillsSettingsTab() {
 
       <div className={cardClass}>
         <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100">我导入的技能</h4>
-        {imported.length ? <div className="divide-y divide-gray-100 dark:divide-white/[0.06]">{imported.map((doc) => <SkillRow key={doc.id} skill={skillFromDocument(doc)} enabled={doc.enabled} source={doc.source} sourceRef={doc.sourceRef}
+        {imported.length ? <div className="divide-y divide-gray-100 dark:divide-white/[0.06]">{imported.map((doc) => <SkillRow key={doc.id} skill={{ ...skillFromDocument(doc), name: importedNames.get(doc.id) ?? doc.name }} enabled={doc.enabled} source={doc.source} sourceRef={doc.sourceRef}
           onToggle={() => updateImported(doc.id, { enabled: !doc.enabled })}
           onDelete={() => setConfirmDialog({ title: '删除技能', message: `删除「${doc.title}」？已启用它的会话之后不再使用它。`, confirmText: '删除', tone: 'danger', action: () => updateImported(doc.id, { hiddenAt: Date.now() }) })} />)}</div>
           : <p className="text-xs text-gray-400">还没有导入技能。</p>}
