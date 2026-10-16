@@ -11,22 +11,31 @@ const SKILL_PROMPT_LIMIT = 20_000
 // 目录写进每一次 Agent 请求。一次导入可以带进近两千个技能，名称加描述会撑满上下文，所以只列到这个长度
 export const SKILL_CATALOG_LIMIT = 12_000
 
-function formatSkillCatalog(skills: Skill[]) {
+function buildSkillCatalog(skills: Pick<Skill, 'name' | 'description'>[]) {
   const header = '\n可用 skill（创作方法指导）：需要时调用 activate_skill 加载对应说明；用户消息里的 $名称 表示要求使用该 skill。\n'
   let listed = ''
-  let count = 0
+  const names: string[] = []
   for (const skill of skills) {
     const line = `- ${skill.name}：${skill.description.slice(0, 300)}`
     const next = listed ? `${listed}\n${line}` : line
-    const rest = skills.length - count - 1
+    const rest = skills.length - names.length - 1
     const note = rest ? `\n（另有 ${rest} 个技能未列入以上目录，可用 $名称 指定）` : ''
     if ((header + next + note).length > SKILL_CATALOG_LIMIT) break
     listed = next
-    count += 1
+    names.push(skill.name)
   }
-  const omitted = skills.length - count
+  const omitted = skills.length - names.length
   const note = omitted ? `\n（另有 ${omitted} 个技能未列入以上目录，可用 $名称 指定）` : ''
-  return header + listed + note
+  return { text: header + listed + note, names }
+}
+
+function formatSkillCatalog(skills: Skill[]) {
+  return buildSkillCatalog(skills).text
+}
+
+// 工具定义里的 name 枚举与目录用同一份名单，避免近两千个技能名再写进每次请求
+export function listedSkillNames(skills: Pick<Skill, 'name' | 'description'>[]) {
+  return buildSkillCatalog(skills).names
 }
 
 export function skillFromDocument(doc: SkillDocument): Skill {
