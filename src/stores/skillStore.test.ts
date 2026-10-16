@@ -60,5 +60,6 @@ describe('技能存储', () => {
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: 'x'.repeat(1024 * 1024 + 1) }] })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), files: Array.from({ length: 3 }, (_, idx) => ({ path: `${idx}.md`, content: 'x'.repeat(1024 * 1024) })) })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), files: Array.from({ length: 201 }, (_, idx) => ({ path: `${idx}.md`, content: 'x' })) })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'x'.repeat(201), content: 'x' }] })).toBeUndefined()
   })
 })

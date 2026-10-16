@@ -33,6 +33,13 @@ describe('collectSkillPackages', () => {
     await expect(collectSkillPackages([entry('SKILL.md', SKILL), ...many])).rejects.toThrow('超过 2 MB')
   })
 
+  it('忽略路径过长的文件，路径长度计入总量', async () => {
+    const long = `references/${'x'.repeat(200)}.md`
+    const [pkg] = await collectSkillPackages([entry('SKILL.md', SKILL), entry(long, '资料'), entry('references/ok.md', '资料')])
+    expect(pkg.files.map((file) => file.path)).toEqual(['references/ok.md'])
+    expect(pkg.warnings).toEqual([expect.stringContaining('路径超过 200 字')])
+  })
+
   it('导出的压缩包可以原样导入', async () => {
     const zip = buildSkillZip({ name: 'poster-design', title: '海报：设计', description: '描述里有 "引号" 和冒号: 也没问题', body: '# 正文', files: [{ path: 'references/a.md', content: '资料' }], license: 'Apache-2.0', source: 'https://example.com/x', builtin: true })
     const [pkg] = await collectSkillPackages(zipSkillEntries(zip))

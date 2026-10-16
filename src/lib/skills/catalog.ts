@@ -3,6 +3,7 @@ import { BUILTIN_SKILLS } from './builtin'
 import { useStore } from '../../store'
 import { useSkillStore } from '../../stores/skillStore'
 import { isSkillsEnabled } from '../gouoBackend'
+import { suffixSkillName } from './parse'
 
 export const MAX_ACTIVE_SKILLS = 4
 // 单个 skill 注入系统提示的正文上限，超出部分让模型按需读取参考文件
@@ -19,7 +20,7 @@ export function importedSkillNames(imported: SkillDocument[]) {
   const names = new Map<string, string>()
   for (const doc of imported.filter((item) => !item.hiddenAt).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))) {
     let name = doc.name
-    for (let n = 2; taken.has(name); n += 1) name = `${doc.name.slice(0, 60)}-${n}`
+    for (let n = 2; taken.has(name); n += 1) name = suffixSkillName(doc.name, n)
     taken.add(name)
     names.set(doc.id, name)
   }

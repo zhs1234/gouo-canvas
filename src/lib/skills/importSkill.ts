@@ -3,7 +3,7 @@ import type { Skill, SkillDocument, SkillFile } from './types'
 import { parseSkillMarkdown } from './parse'
 
 // 导入上限：技能只保存文本，总量要留在服务端单个文档 4 MB 的限制之内
-export const SKILL_IMPORT_LIMITS = { file: 1024 * 1024, total: 2 * 1024 * 1024, files: 200, upload: 10 * 1024 * 1024 }
+export const SKILL_IMPORT_LIMITS = { file: 1024 * 1024, total: 2 * 1024 * 1024, files: 200, path: 200, upload: 10 * 1024 * 1024 }
 const TEXT_FILE = /\.(md|markdown|txt|json|ya?ml|csv|tsv)$/i
 const GITHUB_API = 'https://api.github.com'
 
@@ -57,14 +57,17 @@ export async function collectSkillPackages(rawEntries: SkillEntry[], options: Im
     const warnings = [...parsed.warnings]
     const dirName = root.dir.split('/').filter(Boolean).pop()
     if (dirName && dirName !== parsed.name) warnings.push(`目录名 ${dirName} 与 name 不一致，以 name 为准`)
-    const scripts = owned.map((entry) => entry.path.slice(root.dir.length)).filter((path) => path.startsWith('scripts/'))
-    const texts = owned.filter((entry) => TEXT_FILE.test(entry.path) && !entry.path.slice(root.dir.length).startsWith('scripts/'))
-    const ignored = owned.length - scripts.length - texts.length
-    if (texts.length > SKILL_IMPORT_LIMITS.files) throw new Error(`技能 ${parsed.name} 的文件超过 ${SKILL_IMPORT_LIMITS.files} 个`)
+    // 文件路径会列进 Agent 的系统提示，过长的路径不导入，路径长度也计入总量
+    const usable = owned.filter((entry) => entry.path.length - root.dir.length <= SKILL_IMPORT_LIMITS.path)
+    const scripts = usable.map((entry) => entry.path.slice(root.dir.length)).filter((path) => path.startsWith('scripts/'))
+    const texts = usable.filter((entry) => TEXT_FILE.test(entry.path) && !entry.path.slice(root.dir.length).startsWith('scripts/'))
+    const ignored = usable.length - scripts.length - texts.length
+    if (texts.length > SKILL_IMPORT_LIMITS.files || scripts.length > SKILL_IMPORT_LIMITS.files) throw new Error(`技能 ${parsed.name} 的文件超过 ${SKILL_IMPORT_LIMITS.files} 个`)
+    if (usable.length < owned.length) warnings.push(`已忽略 ${owned.length - usable.length} 个路径超过 ${SKILL_IMPORT_LIMITS.path} 字的文件`)
     let total = parsed.body.length
     const files: SkillFile[] = []
     for (const entry of texts.sort((a, b) => a.path.localeCompare(b.path))) {
-      total += entry.size
+      total += entry.size + entry.path.length - root.dir.length
       if (entry.size > SKILL_IMPORT_LIMITS.file) throw new Error(`${entry.path} 超过 1 MB`)
       if (total > SKILL_IMPORT_LIMITS.total) throw new Error(`技能 ${parsed.name} 的文本总量超过 2 MB`)
       files.push({ path: entry.path.slice(root.dir.length), content: await entry.read() })

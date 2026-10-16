@@ -14,15 +14,15 @@ export function normalizeSkillDocument(value: unknown): SkillDocument | undefine
   const item = value as Partial<SkillDocument>
   if (item.schemaVersion !== 1 || typeof item.id !== 'string' || !item.id || typeof item.name !== 'string' || !SKILL_NAME_PATTERN.test(item.name)) return
   if (typeof item.title !== 'string' || typeof item.description !== 'string' || typeof item.body !== 'string' || !item.body || item.body.length > MAX_SKILL_BODY) return
-  if (!Array.isArray(item.files) || item.files.length > SKILL_IMPORT_LIMITS.files || !item.files.every((file) => file && typeof file.path === 'string' && typeof file.content === 'string' && file.content.length <= SKILL_IMPORT_LIMITS.file)) return
-  if (item.files.reduce((total, file) => total + file.content.length, item.body.length) > SKILL_IMPORT_LIMITS.total) return
+  if (!Array.isArray(item.files) || item.files.length > SKILL_IMPORT_LIMITS.files || !item.files.every((file) => file && typeof file.path === 'string' && file.path.length <= SKILL_IMPORT_LIMITS.path && typeof file.content === 'string' && file.content.length <= SKILL_IMPORT_LIMITS.file)) return
+  if (item.files.reduce((total, file) => total + file.path.length + file.content.length, item.body.length) > SKILL_IMPORT_LIMITS.total) return
   if (!Number.isSafeInteger(item.revision) || !Number.isFinite(item.createdAt) || !Number.isFinite(item.updatedAt)) return
   // 只保留校验过的字段，可选字段类型不对时丢弃，避免界面拿到对象当文字渲染
   const text = (value: unknown) => typeof value === 'string' && value ? value : undefined
   return {
     id: item.id, schemaVersion: 1, name: item.name, title: item.title, description: item.description, body: item.body,
     files: item.files.map((file) => ({ path: file.path, content: file.content })),
-    scripts: Array.isArray(item.scripts) ? item.scripts.filter((path) => typeof path === 'string') : undefined,
+    scripts: Array.isArray(item.scripts) ? item.scripts.filter((path) => typeof path === 'string' && path.length <= SKILL_IMPORT_LIMITS.path).slice(0, SKILL_IMPORT_LIMITS.files) : undefined,
     license: text(item.license), source: text(item.source), sourceRef: text(item.sourceRef),
     enabled: item.enabled !== false,
     createdAt: item.createdAt!, updatedAt: item.updatedAt!, revision: item.revision!,
