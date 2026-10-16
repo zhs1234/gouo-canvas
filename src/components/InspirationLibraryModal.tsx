@@ -133,9 +133,9 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                     <div className="p-4">
                       <h3 className="font-semibold text-gray-900 dark:text-white">{item.title}</h3>
                       <p className="mt-1.5 line-clamp-2 min-h-10 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
-                      {item.referenceCount > 0 && <p className="mt-2 text-[11px] font-medium text-amber-600 dark:text-amber-400">需上传 {item.referenceCount} 张参考图</p>}
+                      {item.referenceCount > 0 && <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">需上传 {item.referenceCount} 张参考图</p>}
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        {item.tags.slice(0, 3).map((tag) => <span key={tag} className="rounded-md bg-gray-100 px-2 py-1 text-[10px] text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{tag}</span>)}
+                        {item.tags.slice(0, 3).map((tag) => <span key={tag} className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{tag}</span>)}
                       </div>
                     </div>
                   </button>
@@ -154,7 +154,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
           )}
         </div>
 
-        <footer hidden={page && Boolean(selected)} className={page ? 'inspiration-page-footer' : 'flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-5 py-3 text-[11px] text-gray-400 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7'}>
+        <footer hidden={page && Boolean(selected)} className={page ? 'inspiration-page-footer' : 'flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-5 py-3 text-xs text-gray-400 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7'}>
           <span>来源：{INSPIRATION_SOURCE.author} · <a href={`${import.meta.env.BASE_URL}inspiration-license.txt`} target="_blank" rel="noreferrer" className="underline hover:text-blue-600">许可与图片署名</a></span>
           <a href={INSPIRATION_SOURCE.url} target="_blank" rel="noreferrer" className="shrink-0 transition hover:text-blue-600">更多案例 ↗</a>
         </footer>
@@ -177,7 +177,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                 <img src={`${import.meta.env.BASE_URL}${selected.previewImage}`} alt={`${selected.title}风格示例`} decoding="async" onError={() => setFailedPreviews((ids) => [...ids, selected.id])} className="max-h-80 w-full rounded-xl object-contain" />
               </a>
             )}
-            <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">示例图：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.exampleUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原案例 ↗</a>。仅展示风格，非本模板生成记录；商用请核对原作者许可。</p>
+            <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">示例图：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.exampleUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原案例 ↗</a>。仅展示风格，非本模板生成记录；商用请核对原作者许可。</p>
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
               <a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原始模板 · {INSPIRATION_SOURCE.author} ↗</a>
               <span>版本 {INSPIRATION_SOURCE.revision.slice(0, 7)}</span>

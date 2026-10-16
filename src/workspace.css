@@ -3,7 +3,8 @@
   color-scheme: light;
   --ws-bg: #faf8f3; --ws-panel: #fffdf8; --ws-surface: #ffffff; --ws-raised: #efe9df; --ws-raised-2: #e5ddd0; --ws-fill-muted: #d6cfc4;
   --ws-line: rgb(23 23 25 / 0.1); --ws-line-strong: rgb(23 23 25 / 0.22);
-  --ws-text: #171719; --ws-text-2: #3f3d42; --ws-text-3: #6b6870; --ws-text-4: #8f8b93;
+  /* 次要文字 text-3/4 在米色底上也要达到 WCAG 4.5:1 */
+  --ws-text: #171719; --ws-text-2: #3f3d42; --ws-text-3: #58555c; --ws-text-4: #67646b;
   --ws-inverse-bg: #171719; --ws-inverse-text: #faf8f3;
   --ws-accent: rgb(var(--c-blue-500)); --ws-glow: #f2b37f55; --ws-warn-text: #b45309; --ws-warn-bg: #fdf0e3; --ws-announce-bg: #171719;
   --ws-ease: cubic-bezier(.22, 1, .36, 1);
@@ -12,7 +13,7 @@
   --ws-announce-bg: #2a1d15;
   --ws-bg: #111; --ws-panel: #1a1a1a; --ws-surface: #202020; --ws-raised: #262626; --ws-raised-2: #303030; --ws-fill-muted: #5b5b5b;
   --ws-line: #2b2b2b; --ws-line-strong: #4b4b4b;
-  --ws-text: #eee; --ws-text-2: #c8c8c8; --ws-text-3: #929292; --ws-text-4: #747474;
+  --ws-text: #eee; --ws-text-2: #c8c8c8; --ws-text-3: #a3a3a3; --ws-text-4: #8c8c8c;
   --ws-inverse-bg: #eceeed; --ws-inverse-text: #252525;
   --ws-accent: rgb(var(--c-blue-400)); --ws-glow: #4a26126b; --ws-warn-text: #e6b58e; --ws-warn-bg: #29221c;
 }
@@ -39,7 +40,7 @@ body { background: var(--ws-bg); color: var(--ws-text); }
 .sidebar-records > a > svg { color: var(--ws-text-3); padding: 4px; width: 24px; height: 24px; background: var(--ws-raised); border-radius: 6px; }
 .sidebar-records a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-section-title { display: flex; align-items: center; justify-content: space-between; color: var(--ws-text-3); font-size: 12px; margin: 24px 8px 10px; }
-.sidebar-records p { color: var(--ws-text-4); font-size: 11px; padding: 7px 8px; line-height: 1.7; }
+.sidebar-records p { color: var(--ws-text-4); font-size: 12px; padding: 7px 8px; line-height: 1.7; }
 .sidebar-collapsed .workspace-brand strong, .sidebar-collapsed .workspace-sidebar nav span, .sidebar-collapsed .sidebar-records { display: none; }
 .sidebar-collapsed .sidebar-toggle { top: 72px; right: 28px; transform: rotate(180deg); }
 .sidebar-collapsed .workspace-brand { padding: 0 8px; }
@@ -92,10 +93,10 @@ body { background: var(--ws-bg); color: var(--ws-text); }
 .generation-composer select, .generation-composer button { font-size: 12px; }
 .generation-batch-bar { position: fixed; z-index: 45; bottom: 16px; left: calc(var(--rail) + (100% - var(--rail)) / 2); transform: translateX(-50%); width: min(860px, calc(100% - var(--rail) - 28px)); }
 .prompt-shortcuts { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.prompt-shortcuts button { border: 1px solid var(--ws-line); background: var(--ws-panel); color: var(--ws-text-2); font-size: 11px; padding: 9px 16px; border-radius: 22px; white-space: nowrap; }
+.prompt-shortcuts button { border: 1px solid var(--ws-line); background: var(--ws-panel); color: var(--ws-text-2); font-size: 12px; padding: 9px 16px; border-radius: 22px; white-space: nowrap; }
 .prompt-shortcuts button:hover { background: var(--ws-raised); }
 .section-label { font-size: 13px; margin: 0 12px 18px; color: var(--ws-text); }
-.section-label span { float: right; color: var(--ws-text-4); font-size: 11px; }
+.section-label span { float: right; color: var(--ws-text-4); font-size: 12px; }
 .section-label a:hover { color: var(--ws-text-2); }
 .recent-results { margin: 0 0 40px; }
 .inspiration-cards { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3px; overflow: hidden; border-radius: 18px; }
@@ -105,7 +106,7 @@ body { background: var(--ws-bg); color: var(--ws-text); }
 .inspiration-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 25%,#000b 100%); }
 .inspiration-caption { position: absolute; z-index: 1; bottom: 18px; left: 20px; right: 12px; color: #fff; }
 .inspiration-caption strong { display: block; font-size: 22px; font-weight: 500; margin-bottom: 4px; }
-.inspiration-caption small { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; color: var(--ws-text-2); font-size: 11px; }
+.inspiration-caption small { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; color: rgb(255 255 255 / .82); font-size: 12px; }
 .inspiration-categories { display: flex; gap: 16px; margin: 28px 0 16px; }
 .inspiration-categories button { padding: 8px 17px; font-size: 12px; border-radius: 20px; }
 .inspiration-categories button[aria-pressed="true"] { background: var(--ws-raised); }

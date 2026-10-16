@@ -27,6 +27,13 @@ export default {
           foreground: 'hsl(var(--sidebar-foreground) / <alpha-value>)',
         },
       },
+      // 只加深文字用的 gray-400/500（边框、背景不受影响），浅色米色底上也达到 4.5:1；色值见 index.css 的 --c-text-gray-*
+      textColor: {
+        gray: {
+          400: 'rgb(var(--c-text-gray-400) / <alpha-value>)',
+          500: 'rgb(var(--c-text-gray-500) / <alpha-value>)',
+        },
+      },
       fontFamily: {
         sans: ['var(--font-ui-sans)'],
         mono: ['var(--font-mono)'],
