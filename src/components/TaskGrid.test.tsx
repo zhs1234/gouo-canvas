@@ -9,6 +9,8 @@ vi.mock('../lib/serverLibrary', () => ({ restoreServerTask: vi.fn() }))
 vi.mock('./TaskCard', () => ({ default: ({ task }: { task: TaskRecord }) => <span>{task.prompt}</span> }))
 
 it('caps a thousand-task gallery at 60 cards while searching the complete library', () => {
+  // Node 20 没有全局 navigator，服务端渲染会在读取 platform 时抛错
+  vi.stubGlobal('navigator', { platform: 'Linux' })
   state.tasks = Array.from({ length: 1000 }, (_, index) => ({ id: String(index), prompt: `图片 ${String(index).padStart(4, '0')}`, status: 'done', createdAt: index, inputImageIds: [], outputImages: [], params: DEFAULT_PARAMS, error: null, finishedAt: index, elapsed: 1 }))
   state.searchQuery = ''
   const page = renderToStaticMarkup(<TaskGrid />)
