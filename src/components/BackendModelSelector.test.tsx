@@ -5,23 +5,34 @@ import BackendModelSelector from './BackendModelSelector'
 const mocks = vi.hoisted(() => ({
   values: [] as unknown[],
   index: 0,
+  initials: [] as unknown[],
+  cached: [] as unknown[],
   effects: [] as (() => void | (() => void))[],
   state: { settings: { model: 'image-b' } as { model: string; gouoModelSelected?: boolean }, params: { n: 1, size: 'auto' }, inputImages: [] as string[], maskDraft: null as object | null },
   setSettings: vi.fn(),
   getImageModels: vi.fn(),
+  setters: [] as ReturnType<typeof vi.fn>[],
 }))
 
 vi.mock('react', async (original) => ({
   ...await original<typeof import('react')>(),
-  useState: () => [mocks.values[mocks.index++], vi.fn()],
+  useState: (initial: unknown) => {
+    mocks.initials.push(typeof initial === 'function' ? initial() : initial)
+    const setter = vi.fn()
+    mocks.setters.push(setter)
+    return [mocks.values[mocks.index++], setter]
+  },
   useEffect: (effect: () => void | (() => void)) => { mocks.effects.push(effect) },
 }))
 vi.mock('../store', () => ({ useStore: Object.assign((select: (state: typeof mocks.state) => unknown) => select(mocks.state), { getState: () => ({ settings: mocks.state.settings, setSettings: mocks.setSettings }) }) }))
-vi.mock('../lib/gouoBackend', async (original) => ({ ...await original<typeof import('../lib/gouoBackend')>(), getImageModels: mocks.getImageModels }))
+vi.mock('../lib/gouoBackend', async (original) => ({ ...await original<typeof import('../lib/gouoBackend')>(), getImageModels: mocks.getImageModels, getCachedImageModels: () => mocks.cached }))
 
 beforeEach(() => {
   mocks.values = [[{ id: 'image-b', name: '图片 B', price_cny: 0.1, price_version: 'version-b', reference: false, mask: false, max_outputs: 1, quota: 100 }], '', false]
   mocks.index = 0
+  mocks.initials = []
+  mocks.cached = []
+  mocks.setters = []
   mocks.effects = []
   mocks.setSettings.mockReset()
   mocks.state = { settings: { model: 'image-b' }, params: { n: 1, size: 'auto' }, inputImages: [], maskDraft: null }
@@ -77,4 +88,32 @@ it('switches to the backend default model when the user has not picked one', asy
   } finally {
     vi.unstubAllGlobals()
   }
+})
+
+it('shows the cached catalog right away and refreshes it in the background', async () => {
+  const cached = [{ id: 'image-b', name: '图片 B', price_cny: 0.1, price_version: 'version-b', reference: false, mask: false, max_outputs: 1, quota: 100 }]
+  mocks.cached = cached
+  mocks.getImageModels.mockRejectedValue(new Error('网络中断'))
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  renderToStaticMarkup(<BackendModelSelector onReady={() => {}} />)
+  expect(mocks.initials[0]).toBe(cached)
+  expect(mocks.initials[2]).toBe(false)
+  vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() })
+  try {
+    mocks.effects[0]()
+    await vi.waitFor(() => expect(mocks.getImageModels).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const [setModels, setError, setLoading] = mocks.setters
+    expect(setLoading).not.toHaveBeenCalledWith(true)
+    expect(setError).not.toHaveBeenCalled()
+    expect(setModels).not.toHaveBeenCalled()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
+
+it('waits for the first catalog when nothing is cached yet', () => {
+  renderToStaticMarkup(<BackendModelSelector onReady={() => {}} />)
+  expect(mocks.initials[0]).toEqual([])
+  expect(mocks.initials[2]).toBe(true)
 })
