@@ -1,27 +1,31 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Bot, Frame, Wallet } from 'lucide-react'
 import { BRAND } from '../config/brand'
 import { editOutputs, reuseConfig, useStore } from '../store'
 import { getAllAgentConversations, getAllCanvasProjects } from '../lib/db'
 import { INSPIRATION_TEMPLATES } from '../lib/inspirationTemplates'
+import { appendPrompt } from '../lib/inputValidation'
 import { requestUserCenter } from '../lib/userGuidance'
 import { useThemeStore } from '../lib/canvas/uiStore'
+import { getPageTitle, getWorkspacePage } from '../lib/workspaceRoutes'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import type { AgentConversation, CanvasProject } from '../types'
 import Header from './Header'
 import InputBar from './InputBar'
-import SearchBar from './SearchBar'
 import TaskCard from './TaskCard'
-import TaskGrid, { confirmRemoveTask } from './TaskGrid'
-import { FavoriteCollectionsView } from './favorites/FavoriteCollectionsView'
+import { confirmRemoveTask } from './TaskGrid'
 import { useFavoriteCollectionTitle } from './favorites/useFavoriteCollectionTitle'
-import SelectionActions from './input/selectionActions'
+import { lazyPage, PageSkeleton } from './PageLoader'
+import WorkspaceNavItem from './WorkspaceNavItem'
 import { ChevronLeftIcon, CollectionManageIcon, PlusIcon, SparklesIcon, ChatIcon, FavoriteIcon, EditIcon } from './icons'
 import '../workspace.css'
 
-const CanvasWorkspace = lazy(() => import('./canvas/CanvasWorkspace'))
-const AgentWorkspace = lazy(() => import('./agent/AgentWorkspace'))
-const InspirationLibraryPage = lazy(() => import('./InspirationLibraryModal').then((module) => ({ default: module.InspirationLibraryPage })))
+const CanvasWorkspace = lazyPage(() => import('./canvas/CanvasWorkspace'))
+const AgentWorkspace = lazyPage(() => import('./agent/AgentWorkspace'))
+const InspirationLibraryPage = lazyPage(() => import('./InspirationLibraryModal').then((module) => ({ default: module.InspirationLibraryPage })))
+const WorksWorkspace = lazyPage(() => import('./LibraryPages').then((module) => ({ default: module.WorksWorkspace })))
+const FavoritesWorkspace = lazyPage(() => import('./LibraryPages').then((module) => ({ default: module.FavoritesWorkspace })))
 const canvasBuildEnabled = import.meta.env.VITE_CANVAS_ENABLED !== 'false'
 const agentBuildEnabled = import.meta.env.VITE_AGENT_ENABLED !== 'false'
 
@@ -111,9 +115,18 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
     }
   }
   const templates = INSPIRATION_TEMPLATES.filter((item) => category === '精选' || item.tags.some((tag) => tag.includes(category)) || item.category.includes(category))
+  // 与灵感库一致：已有提示词时让用户选择追加还是替换，避免覆盖写好的内容
   const applyTemplate = (text: string) => {
-    if (prompt.trim()) {
-      useStore.getState().setConfirmDialog({ title: '替换当前提示词？', message: '已有的提示词将被所选模板替换，参考图片会保留。', confirmText: '使用模板', action: () => setPrompt(text) })
+    if (prompt.trim() && prompt !== text) {
+      useStore.getState().setConfirmDialog({
+        title: '输入框已有提示词',
+        message: '如何填入所选模板？参考图片、模型和参数保持不变。',
+        buttons: [
+          { label: '取消', tone: 'secondary', action: () => {} },
+          { label: '追加', tone: 'secondary', action: () => setPrompt(appendPrompt(useStore.getState().prompt, text)) },
+          { label: '替换', action: () => setPrompt(text) },
+        ],
+      })
     } else setPrompt(text)
     document.querySelector('[data-input-bar]')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' })
   }
@@ -132,10 +145,10 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
       </div>
     </section>
     {creationModes.map((item) => <div key={item.id} id={`panel-${item.id}`} role="tabpanel" aria-labelledby={`mode-${item.id}`} hidden={mode !== item.id} className={`workspace-mode-panel workspace-panel-${item.id}`}>
-      {mode === item.id && <Suspense fallback={<div className="workspace-loading" role="status">正在打开创作空间…</div>}>
+      {mode === item.id && <Suspense fallback={<PageSkeleton />}>
         {item.id === 'generate' && <>
           <div className="creation-composer">
-            <div className="creation-input"><div className="composer-heading"><SparklesIcon className="h-4 w-4" /> AI 图像<span>从一个想法开始</span></div><InputBar inline /></div>
+            <div className="creation-input"><div className="composer-heading"><SparklesIcon className="h-4 w-4" /> 生成图片<span>从一个想法开始</span></div><InputBar inline /></div>
             <div className="prompt-shortcuts">{INSPIRATION_TEMPLATES.slice(0, 6).map((item) => <button key={item.id} onClick={() => applyTemplate(item.prompt)}>/ {item.title}</button>)}</div>
           </div>
           <RecentResults />
@@ -156,36 +169,12 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
   </main>
 }
 
-function WorksWorkspace() {
-  const navigate = useNavigate()
-  return <main className="library-page" aria-labelledby="works-heading">
-    <header className="library-page-heading"><h1 id="works-heading">我的作品</h1><p>查看生成进度，管理作品，继续创作。</p></header>
-    <section data-drag-select-surface aria-label="作品列表">
-      <SearchBar onToggleFavorites={() => navigate('/favorites')} />
-      <TaskGrid />
-    </section>
-    <SelectionActions inline />
-  </main>
-}
-
-function FavoritesWorkspace() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const collection = useStore((s) => s.activeFavoriteCollectionId)
-  const title = useFavoriteCollectionTitle()
-  useEffect(() => {
-    const state = useStore.getState()
-    state.setActiveFavoriteCollectionId(null)
-    state.setSearchQuery('')
-    state.setFilterStatus('all')
-  }, [location.key])
-  return <main className="library-page" aria-labelledby="favorites-heading">
-    <header className="library-page-heading"><h1 id="favorites-heading">{title || '收藏'}</h1><p>{collection ? '收藏的作品，随时继续创作。' : '把喜欢的作品整理在一起，留住每一次灵感。'}</p></header>
-    <section data-drag-select-surface aria-label="收藏作品">
-      <SearchBar onToggleFavorites={() => navigate('/works')} />
-      {collection ? <TaskGrid /> : <FavoriteCollectionsView />}
-    </section>
-    <SelectionActions inline />
+function NotFoundPage() {
+  return <main className="not-found-page" aria-labelledby="not-found-heading">
+    <strong aria-hidden="true">404</strong>
+    <h1 id="not-found-heading">页面不存在</h1>
+    <p>链接可能输错了，或者这个页面已经移除。</p>
+    <Link to="/generate">返回创作</Link>
   </main>
 }
 
@@ -193,9 +182,8 @@ export default function Workspace() {
   const { canvasEnabled, agentEnabled } = useCreationFeatures()
   const location = useLocation()
   const navigate = useNavigate()
+  const page = getWorkspacePage(location.pathname, { canvasEnabled, agentEnabled })
   const favorite = location.pathname === '/favorites'
-  const inspiration = location.pathname === '/inspiration'
-  const works = location.pathname === '/works'
   const [mode, setMode] = useState('generate')
   const canvas = location.pathname === '/canvas' || location.pathname.startsWith('/canvas/') || (location.pathname === '/generate' && mode === 'canvas')
   const [collapsed, setCollapsed] = useState(false)
@@ -223,6 +211,10 @@ export default function Workspace() {
     }
   }
   const narrow = canvas ? !canvasExpanded : collapsed
+  const detailId = location.pathname.split('/')[2]
+  const favoriteTitle = useFavoriteCollectionTitle()
+  const detailTitle = page === 'canvas' ? projects.find((item) => item.id === detailId)?.title : page === 'agent' ? conversations.find((item) => item.id === detailId)?.title : page === 'favorites' ? favoriteTitle : ''
+  useEffect(() => { document.title = getPageTitle(page, detailTitle) }, [page, detailTitle])
   useLayoutEffect(() => { setCanvasExpanded(false) }, [canvas, location.key])
   useLayoutEffect(() => {
     const state = useStore.getState()
@@ -251,20 +243,24 @@ export default function Workspace() {
       <Link to="/generate" className="workspace-brand" aria-label="光构首页"><img src={BRAND.logoUrl} alt="" /><strong>{BRAND.name}<small>Gouo Canvas</small></strong></Link>
       <button className="sidebar-toggle" aria-label={narrow ? '展开导航' : '收起导航'} onClick={() => canvas ? setCanvasExpanded(narrow) : setCollapsed(!narrow)}><ChevronLeftIcon className="h-4 w-4" /></button>
       <nav>
-        <Link title="创作" to="/generate" className={!favorite && !inspiration && !works ? 'active' : ''} aria-current={!favorite && !inspiration && !works ? 'page' : undefined}><EditIcon className="h-5 w-5" /><span>创作</span></Link>
-        <Link title="我的作品" to="/works" className={works ? 'active' : ''} aria-current={works ? 'page' : undefined}><CollectionManageIcon className="h-5 w-5" /><span>我的作品</span></Link>
-        <Link title="收藏" to="/favorites" className={favorite ? 'active' : ''} aria-current={favorite ? 'page' : undefined}><FavoriteIcon className="h-5 w-5" /><span>收藏</span></Link>
-        <Link title="灵感库" to="/inspiration" className={inspiration ? 'active' : ''} aria-current={inspiration ? 'page' : undefined}><SparklesIcon className="h-5 w-5" /><span>灵感库</span></Link>
+        <WorkspaceNavItem to="/generate" label="创作" icon={<EditIcon className="h-5 w-5" />} active={page === 'generate'} collapsed={narrow} />
+        <WorkspaceNavItem to="/works" label="我的作品" icon={<CollectionManageIcon className="h-5 w-5" />} active={page === 'works'} collapsed={narrow} onPreload={WorksWorkspace.preload} />
+        <WorkspaceNavItem to="/favorites" label="收藏" icon={<FavoriteIcon className="h-5 w-5" />} active={page === 'favorites'} collapsed={narrow} onPreload={FavoritesWorkspace.preload} />
+        <WorkspaceNavItem to="/inspiration" label="灵感库" icon={<SparklesIcon className="h-5 w-5" />} active={page === 'inspiration'} collapsed={narrow} onPreload={InspirationLibraryPage.preload} />
+        {canvasEnabled && <WorkspaceNavItem to="/canvas" label="画布" icon={<Frame className="h-5 w-5" strokeWidth={1.8} />} active={page === 'canvas'} collapsed={narrow} onPreload={CanvasWorkspace.preload} />}
+        {agentEnabled && <WorkspaceNavItem to="/agent" label="Agent" icon={<Bot className="h-5 w-5" strokeWidth={1.8} />} active={page === 'agent'} collapsed={narrow} onPreload={AgentWorkspace.preload} />}
       </nav>
       <div className="sidebar-records"><div className="sidebar-section-title">创作会话{agentEnabled && <Link to="/agent" aria-label="新会话"><PlusIcon className="h-4 w-4" /></Link>}</div>
-        {agentEnabled && conversations.filter((item) => !item.hiddenAt && (item.messages.length || item.draft.trim())).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8).map((item) => <Link className={location.pathname.endsWith(item.id) ? 'active' : ''} key={item.id} to={`/agent/${item.id}`}><ChatIcon className="h-4 w-4" /><span>{item.title}</span></Link>)}
+        {agentEnabled && conversations.filter((item) => !item.hiddenAt && (item.messages.length || item.draft.trim())).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8).map((item) => <Link className={page === 'agent' && detailId === item.id ? 'active' : ''} key={item.id} to={`/agent/${item.id}`}><ChatIcon className="h-4 w-4" /><span>{item.title}</span></Link>)}
         {!conversations.some((item) => !item.hiddenAt && (item.messages.length || item.draft.trim())) && <p>你的对话会显示在这里</p>}
         <div className="sidebar-section-title">我的画布{canvasEnabled && <Link to="/canvas" aria-label="画布项目"><PlusIcon className="h-4 w-4" /></Link>}</div>
-        {canvasEnabled && projects.filter((item) => !item.hiddenAt).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8).map((item) => <Link key={item.id} to={`/canvas/${item.id}`}><CollectionManageIcon className="h-4 w-4" /><span>{item.title}</span></Link>)}
+        {canvasEnabled && projects.filter((item) => !item.hiddenAt).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 8).map((item) => <Link key={item.id} className={page === 'canvas' && detailId === item.id ? 'active' : ''} to={`/canvas/${item.id}`}><CollectionManageIcon className="h-4 w-4" /><span>{item.title}</span></Link>)}
         {!projects.some((item) => !item.hiddenAt) && <p>把灵感铺开，开始第一块画布</p>}
       </div>
+      <div className="sidebar-footer"><WorkspaceNavItem label="充值/定价" icon={<Wallet className="h-5 w-5" strokeWidth={1.8} />} collapsed={narrow} onClick={() => requestUserCenter('topup')} /></div>
     </aside>
-    <div className="workspace-main"><Header compact /><Suspense fallback={<div className="workspace-loading" role="status">正在打开创作空间…</div>}><Routes>
+    <div className="workspace-main"><Header compact /><Suspense fallback={<PageSkeleton />}><Routes>
+      <Route path="/" element={<Navigate to="/generate" replace />} />
       <Route path="/generate" element={<GenerateWorkspace mode={mode} setMode={setMode} />} />
       <Route path="/works" element={<WorksWorkspace />} />
       <Route path="/favorites" element={<FavoritesWorkspace />} />
@@ -272,7 +268,7 @@ export default function Workspace() {
       <Route path="/inspiration" element={<InspirationLibraryPage onApply={() => navigate('/generate')} />} />
       {canvasEnabled && <Route path="/canvas/:id?" element={<CanvasRoute />} />}
       {agentEnabled && <Route path="/agent/:id?" element={<AgentRoute />} />}
-      <Route path="*" element={<Navigate to="/generate" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes></Suspense></div>
   </div>
 }

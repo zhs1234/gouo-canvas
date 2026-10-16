@@ -15,6 +15,13 @@ export function createCanvasNode(type: CanvasNodeTypeId, position: Position, met
   }
 }
 
+// 按路由里的画布 ID 决定显示什么：本地读取和首次云端拉取都结束后仍找不到，才判定为不存在，避免同步稍慢时误报
+export function resolveCanvasRoute(projectId: string | undefined, projects: CanvasProject[], pulled: boolean) {
+  if (!projectId) return 'list'
+  if (projects.some((project) => project.id === projectId && !project.hiddenAt)) return 'open'
+  return pulled ? 'missing' : 'loading'
+}
+
 export function validateCanvasTitle(title: string) {
   if ([...title.trim()].length > 200) throw new Error('画布标题最多 200 个字符，请缩短标题后保存；原内容不会删除')
 }

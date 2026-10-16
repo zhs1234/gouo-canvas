@@ -1,10 +1,13 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { ALL_FAVORITES_COLLECTION_ID, clearFailedTasks, getTaskFavoriteCollectionIds, useStore } from '../store'
-import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
+import { getTaskModelIds, taskMatchesFilterStatus, taskMatchesModel, taskMatchesSearchQuery } from '../lib/taskFilters'
 import { useTooltip } from '../hooks/useTooltip'
+import { useImageModels } from '../hooks/useImageModels'
 import Select from './Select'
 import { ChevronLeftIcon, CollectionManageIcon, FavoriteIcon, TrashIcon } from './icons'
 import ViewportTooltip from './ViewportTooltip'
+
+const SELECT_CLASS = 'px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-white/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition'
 
 function SearchActionButton({
   tooltip,
@@ -55,10 +58,21 @@ export default function SearchBar({ onToggleFavorites }: { onToggleFavorites: ()
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const setActiveFavoriteCollectionId = useStore((s) => s.setActiveFavoriteCollectionId)
   const openManageCollectionsModal = useStore((s) => s.openManageCollectionsModal)
+  const sortOrder = useStore((s) => s.sortOrder)
+  const setSortOrder = useStore((s) => s.setSortOrder)
+  const filterModel = useStore((s) => s.filterModel)
+  const setFilterModel = useStore((s) => s.setFilterModel)
+  const tasks = useStore((s) => s.tasks)
+  const imageModels = useImageModels()
+  const modelOptions = useMemo(() => [
+    { label: '全部模型', value: '' },
+    ...getTaskModelIds(tasks).map((id) => ({ label: imageModels.find((model) => model.id === id)?.name || id, value: id })),
+  ], [tasks, imageModels])
   const failedCount = useStore((s) => {
     const q = s.searchQuery.trim().toLowerCase()
     return s.tasks.filter((task) => {
       if (!taskMatchesFilterStatus(task, 'error')) return false
+      if (!taskMatchesModel(task, s.filterModel)) return false
       if (s.filterFavorite) {
         if (!task.isFavorite) return false
         if (s.activeFavoriteCollectionId && s.activeFavoriteCollectionId !== ALL_FAVORITES_COLLECTION_ID && !getTaskFavoriteCollectionIds(task).includes(s.activeFavoriteCollectionId)) return false
@@ -102,6 +116,7 @@ export default function SearchBar({ onToggleFavorites }: { onToggleFavorites: ()
     const failedTaskIds = state.tasks
       .filter((task) => {
         if (!taskMatchesFilterStatus(task, 'error')) return false
+        if (!taskMatchesModel(task, state.filterModel)) return false
         if (state.filterFavorite) {
           if (!task.isFavorite) return false
           if (state.activeFavoriteCollectionId && state.activeFavoriteCollectionId !== ALL_FAVORITES_COLLECTION_ID && !getTaskFavoriteCollectionIds(task).includes(state.activeFavoriteCollectionId)) return false
@@ -129,8 +144,8 @@ export default function SearchBar({ onToggleFavorites }: { onToggleFavorites: ()
   }
 
   return (
-    <div ref={rootRef} data-no-drag-select className="mt-6 mb-4 flex gap-3">
-      <div className="flex gap-2 flex-shrink-0 z-20">
+    <div ref={rootRef} data-no-drag-select className="mt-6 mb-4 flex flex-wrap gap-2 sm:gap-3">
+      <div className="flex min-w-0 flex-1 gap-2 z-20 sm:flex-none">
         <SearchActionButton
           tooltip={favoriteTooltip}
           onClick={handleFavoriteClick}
@@ -153,7 +168,7 @@ export default function SearchBar({ onToggleFavorites }: { onToggleFavorites: ()
         )}
         {!inCollectionOverview && (
           <>
-            <div className="relative w-[112px]">
+            <div className="relative w-[92px] flex-shrink-0 sm:w-[112px]">
               <Select
                 value={filterStatus}
                 onChange={handleStatusChange}
@@ -164,7 +179,7 @@ export default function SearchBar({ onToggleFavorites }: { onToggleFavorites: ()
                   { label: '失败', value: 'error' },
                   { label: '回收站', value: 'hidden' },
                 ]}
-                className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/[0.08] bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-white/[0.06] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition"
+                className={SELECT_CLASS}
               />
             </div>
             {isFailedFilter && (
@@ -179,10 +194,34 @@ export default function SearchBar({ onToggleFavorites }: { onToggleFavorites: ()
                 <TrashIcon className="h-[18px] w-[18px]" />
               </button>
             )}
+            <div className="relative w-[92px] flex-shrink-0 sm:w-[104px]">
+              <Select
+                value={sortOrder}
+                onChange={setSortOrder}
+                options={[
+                  { label: '最新', value: 'newest' },
+                  { label: '最早', value: 'oldest' },
+                ]}
+                className={SELECT_CLASS}
+              />
+            </div>
+            {modelOptions.length > 1 && (
+              <div className="relative min-w-0 flex-1 sm:w-[160px] sm:flex-none">
+                <Select
+                  value={filterModel}
+                  onChange={(val) => {
+                    setFilterModel(val)
+                    clearSelection()
+                  }}
+                  options={modelOptions}
+                  className={SELECT_CLASS}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
-      <div className="relative z-10 flex-1">
+      <div className="relative z-10 order-first basis-full sm:order-none sm:basis-auto sm:flex-1">
         <svg
           className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500"
           fill="none"

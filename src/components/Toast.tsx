@@ -39,6 +39,18 @@ export default function Toast() {
       <div className="flex items-center gap-2.5 w-max max-w-[calc(100vw-32px)] sm:max-w-[min(44rem,80vw)] px-5 py-3.5 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border border-gray-200/60 dark:border-white/[0.08] rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] ring-1 ring-black/5 dark:ring-white/10 text-sm font-medium text-gray-700 dark:text-gray-300">
         <span className="flex-shrink-0">{getIcon()}</span>
         <span className="leading-5 whitespace-pre-line text-center">{toast.message}</span>
+        {toast.action && (
+          <button
+            type="button"
+            onClick={() => {
+              toast.action?.onClick()
+              useStore.setState({ toast: null })
+            }}
+            className="pointer-events-auto -my-2 -mr-2 flex-shrink-0 rounded-full px-3 py-2 text-blue-600 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-500/10"
+          >
+            {toast.action.label}
+          </button>
+        )}
       </div>
     </div>
   )

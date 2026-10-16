@@ -32,7 +32,7 @@ interface UserCenterModalProps {
 
 const SECTIONS: Array<{ id: UserCenterSection; label: string }> = [
   { id: 'overview', label: '概览' },
-  { id: 'topup', label: '充值' },
+  { id: 'topup', label: '充值/定价' },
   { id: 'logs', label: '使用记录' },
   { id: 'security', label: '账户与安全' },
 ]

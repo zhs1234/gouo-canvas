@@ -4,6 +4,8 @@ import type { CanvasColorTheme } from './theme'
 
 const CANVAS_SIDE_PANEL_MIN_WIDTH = 220
 const CANVAS_SIDE_PANEL_MAX_WIDTH = 480
+// 与 canvas.css 的断点一致：窄屏下资源面板是覆盖画布的抽屉
+export const CANVAS_DRAWER_QUERY = '(max-width: 900px)'
 
 // 画布和整个创作空间共用一套明暗主题，默认浅色，记在本机；index.html 首屏前按同一个键切换 html.dark，避免闪烁
 const THEME_STORAGE_KEY = 'gouo-theme'
@@ -54,10 +56,12 @@ export const useCanvasSidePanelStore = create<{
   width: number
   panelOpen: boolean
   setWidth: (width: number) => void
+  setPanelOpen: (open: boolean) => void
   togglePanel: () => void
 }>((set) => ({
   width: 280,
-  panelOpen: typeof window === 'undefined' || window.innerWidth >= 768,
+  panelOpen: typeof window === 'undefined' || !window.matchMedia(CANVAS_DRAWER_QUERY).matches,
   setWidth: (width) => set({ width: Math.min(CANVAS_SIDE_PANEL_MAX_WIDTH, Math.max(CANVAS_SIDE_PANEL_MIN_WIDTH, width)) }),
+  setPanelOpen: (open) => set({ panelOpen: open }),
   togglePanel: () => set((state) => ({ panelOpen: !state.panelOpen })),
 }))

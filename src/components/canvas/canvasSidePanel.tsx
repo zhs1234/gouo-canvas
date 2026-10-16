@@ -1,7 +1,7 @@
 // 基于上游 canvas-side-panel.tsx；资源和提示词接入光构现有仓库。
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { App, Input, Select } from 'antd'
-import { Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, ListChecks, Search, Settings2, Square, Type } from 'lucide-react'
+import { Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, ListChecks, Search, Settings2, Square, Type, X } from 'lucide-react'
 import { useTranslation } from '../../lib/canvas/i18n'
 import { useStore } from '../../store'
 import { INSPIRATION_PROMPTS } from '../../lib/inspirationPrompts'
@@ -83,6 +83,14 @@ export function CanvasSidePanel({
             {tab === value && <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full" style={{ background: theme.toolbar.activeText }} />}
           </button>
         ))}
+        <button
+          type="button"
+          aria-label="收起面板"
+          className="-mr-1.5 ml-auto grid size-7 place-items-center rounded-full opacity-60 transition hover:bg-black/5 hover:opacity-100 min-[901px]:hidden dark:hover:bg-white/10"
+          onClick={() => useCanvasSidePanelStore.getState().setPanelOpen(false)}
+        >
+          <X className="size-4" />
+        </button>
       </div>
       <div className="mt-2 min-h-0 flex-1 overflow-hidden">
         {tab === 'canvas' ? (
@@ -148,7 +156,7 @@ export function CanvasSidePanel({
         )}
       </div>
       <a
-        className="border-t px-4 py-2 text-[10px] opacity-40 hover:opacity-80"
+        className="border-t px-4 py-2 text-xs opacity-60 hover:opacity-90"
         style={{ borderColor: theme.toolbar.border }}
         href="https://github.com/basketikun/infinite-canvas"
         target="_blank"

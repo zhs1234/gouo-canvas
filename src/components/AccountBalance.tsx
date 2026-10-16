@@ -40,7 +40,7 @@ export default function AccountBalance({ onClick, refreshKey }: { onClick: () =>
   const text = typeof balance === 'number' ? `余额 ${formatPoints(balance)}` : balance === 'loading' ? '余额 …' : '余额暂不可用'
 
   return (
-    <button type="button" onClick={onClick} aria-label={`${text}，打开用户中心`} aria-busy={balance === 'loading'} className="whitespace-nowrap rounded-lg px-2.5 py-2 text-xs tabular-nums text-gray-400 outline-none hover:bg-white/[0.05] hover:text-gray-100 focus-visible:ring-2 focus-visible:ring-white/20">
+    <button type="button" onClick={onClick} aria-label={`${text}，去充值`} aria-busy={balance === 'loading'} className="whitespace-nowrap rounded-lg px-2.5 py-2 text-xs tabular-nums text-gray-400 outline-none hover:bg-black/[0.04] hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-black/10 dark:hover:bg-white/[0.05] dark:hover:text-gray-100 dark:focus-visible:ring-white/20">
       <span aria-live="polite">{text}</span>
     </button>
   )

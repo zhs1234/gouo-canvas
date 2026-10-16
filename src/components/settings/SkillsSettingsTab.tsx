@@ -43,10 +43,10 @@ function SkillRow({ skill, enabled, onToggle, onDelete, source, sourceRef }: { s
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{skill.title}</span>
-          <code className="text-[11px] text-gray-400">${skill.name}</code>
+          <code className="text-xs text-gray-400">${skill.name}</code>
         </div>
         <p data-selectable-text className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{skill.description}</p>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-400 dark:text-gray-500">
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
           {skill.license && <span>许可：{skill.license}</span>}
           {source && (/^https:\/\//.test(source) ? <a className="hover:text-blue-500 underline-offset-2 hover:underline" href={source} target="_blank" rel="noopener noreferrer">来源：{source.replace(/^https:\/\/(github\.com\/)?/, '')}{sourceRef ? `@${sourceRef.slice(0, 7)}` : ''}</a> : <span>来源：{source}</span>)}
           <button type="button" className="hover:text-blue-500" onClick={() => setOpen(!open)}>{open ? '收起内容' : '查看内容'}</button>
@@ -59,7 +59,7 @@ function SkillRow({ skill, enabled, onToggle, onDelete, source, sourceRef }: { s
     {open && <div className="mt-2 space-y-2">
       {/* 只按纯文本显示，导入内容里的 HTML 和图片链接不会被渲染或加载 */}
       <pre data-selectable-text className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-gray-50 p-3 text-xs leading-relaxed text-gray-600 dark:bg-white/[0.03] dark:text-gray-300">{skill.body}</pre>
-      {skill.files.length > 0 && <p className="text-[11px] text-gray-400">参考文件：{skill.files.map((file) => file.path).join('、')}</p>}
+      {skill.files.length > 0 && <p className="text-xs text-gray-400">参考文件：{skill.files.map((file) => file.path).join('、')}</p>}
     </div>}
   </div>
 }
@@ -195,14 +195,14 @@ export default function SkillsSettingsTab() {
           {pending.map((item, idx) => <div key={`${item.pkg.name}-${idx}`} className="rounded-xl bg-gray-50 p-3 dark:bg-white/[0.03]">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{item.pkg.title}</span>
-              <code className="text-[11px] text-gray-400">${item.pkg.name}</code>
-              <span className="text-[11px] text-gray-400">{item.pkg.files.length} 个参考文件{item.pkg.license ? ` · 许可：${item.pkg.license}` : ' · 未声明许可'}</span>
+              <code className="text-xs text-gray-400">${item.pkg.name}</code>
+              <span className="text-xs text-gray-400">{item.pkg.files.length} 个参考文件{item.pkg.license ? ` · 许可：${item.pkg.license}` : ' · 未声明许可'}</span>
             </div>
             <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{item.pkg.description}</p>
-            {item.pkg.source && <p className="mt-0.5 break-all text-[11px] text-gray-400">来源：{item.pkg.source}</p>}
-            {item.pkg.warnings.map((warning) => <p key={warning} className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">{warning}</p>)}
+            {item.pkg.source && <p className="mt-0.5 break-all text-xs text-gray-400">来源：{item.pkg.source}</p>}
+            {item.pkg.warnings.map((warning) => <p key={warning} className="mt-1 text-xs text-amber-600 dark:text-amber-400">{warning}</p>)}
             <details className="mt-1">
-              <summary className="cursor-pointer text-[11px] text-gray-400 hover:text-blue-500">查看内容</summary>
+              <summary className="cursor-pointer text-xs text-gray-400 hover:text-blue-500">查看内容</summary>
               <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-gray-600 dark:text-gray-300">{item.pkg.body}</pre>
             </details>
             <label className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
@@ -234,7 +234,7 @@ export default function SkillsSettingsTab() {
       <div className={cardClass}>
         <h4 className="text-sm font-bold text-gray-800 dark:text-gray-100">内置技能</h4>
         <div className="divide-y divide-gray-100 dark:divide-white/[0.06]">{BUILTIN_SKILLS.map((skill) => <SkillRow key={skill.name} skill={skill} enabled={!disabled.includes(skill.name)} source={skill.source?.split(',')[0].trim()} onToggle={() => toggleBuiltin(skill.name)} />)}</div>
-        <p className="text-[11px] leading-relaxed text-gray-400">内置技能改编自开源项目，来源与许可见各技能的「来源」，完整声明随应用一起发布。</p>
+        <p className="text-xs leading-relaxed text-gray-400">内置技能改编自开源项目，来源与许可见各技能的「来源」，完整声明随应用一起发布。</p>
       </div>
     </div>
   )

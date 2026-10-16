@@ -8,10 +8,11 @@ import { getSizeTier, normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getMaxTaskImages } from '../lib/gouoBackend'
+import { formatPoints } from '../lib/accountUsage'
+import { getReferenceImageIssue, MAX_PROMPT_LENGTH, parseImageCount, REFERENCE_IMAGE_TYPES } from '../lib/inputValidation'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import { useImageModels } from '../hooks/useImageModels'
 import BackendModelSelector from './BackendModelSelector'
-import { getActionableErrorMessage } from '../lib/userGuidance'
 import { useHintTooltip } from '../hooks/useHintTooltip'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { CloseIcon, PlusIcon, SettingsIcon } from './icons'
@@ -374,6 +375,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const [atImageMenuIndex, setAtImageMenuIndex] = useState(0)
   const [atImageMenuDismissed, setAtImageMenuDismissed] = useState(false)
   const [touchDragPreview, setTouchDragPreview] = useState<{ src: string; x: number; y: number } | null>(null)
+  const [brokenImageIds, setBrokenImageIds] = useState<string[]>([])
   const handleRef = useRef<HTMLDivElement>(null)
   const dragTouchRef = useRef({ startY: 0, moved: false })
   const suppressHandleClickUntilRef = useRef(0)
@@ -430,8 +432,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const dragCounter = useRef(0)
   const isMobile = useIsMobile()
 
-  const canSubmit = Boolean(prompt.trim() && backendModelReady && !isSubmitting)
-  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : maskDraft ? '遮罩编辑' : '生成图像'
+  const promptTooLong = prompt.length > MAX_PROMPT_LENGTH
+  const hasBrokenImage = inputImages.some((img) => brokenImageIds.includes(img.id))
+  const canSubmit = Boolean(prompt.trim() && !promptTooLong && !hasBrokenImage && backendModelReady && !isSubmitting)
   const promptPlaceholder = '描述你想生成的图片，可输入 @ 来指定参考图...'
   const submitCurrentMode = useCallback(() => {
     void submitTask()
@@ -450,6 +453,10 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const backendStatus = useBackendStatus()
   const backendModel = imageModels.find((model) => model.id === settings.model)
   const maxInputImages = backendModel?.max_inputs || API_MAX_IMAGES
+  // 与模型选择器的预估一致：按所选模型单价乘张数，模型或参数不可用时不显示数字
+  const estimate = backendModelReady && backendModel ? formatPoints(backendModel.price_cny * params.n) : ''
+  const submitLabel = `${maskDraft ? '遮罩编辑' : '生成图片'}${estimate ? ` · ${estimate}` : ''}`
+  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : `${maskDraft ? '遮罩编辑' : '生成图片'}${estimate ? `，预计消耗 ${estimate}` : ''}`
 
   // 所选模型不开放当前画质时，自动换成开放的最高画质，免得用户卡在提示上
   useEffect(() => {
@@ -471,7 +478,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const nDraftValue = Number(nInput)
   const effectiveNValue = Number.isNaN(nDraftValue) ? params.n : nDraftValue
   const streamConcurrentByN = effectiveNValue > 1
-  const nLimitHintText = `本次最多生成 ${outputImageLimit} 张图片`
+  const nLimitHintText = parseImageCount(nInput, outputImageLimit) === null && !(nDraftValue > outputImageLimit) ? `数量必须是 1 到 ${outputImageLimit} 的整数` : `本次最多生成 ${outputImageLimit} 张图片`
   const displaySize = normalizeImageSize(params.size) || DEFAULT_PARAMS.size
 
   // 自动画质可能由上游选成高画质，只有开放高画质时才提供
@@ -654,10 +661,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
   const commitN = useCallback(() => {
     nLimitHint.hide()
-    const nextValue = Number(nInput)
-    const normalizedValue =
-      nInput.trim() === '' ? DEFAULT_PARAMS.n : Number.isNaN(nextValue) ? params.n : nextValue
-    const clampedValue = Math.min(outputImageLimit, Math.max(1, normalizedValue))
+    const nextValue = nInput.trim() === '' ? DEFAULT_PARAMS.n : Number(nInput)
+    // 小数等非法草稿回到最后一次合法值，超出范围的整数夹到范围内
+    const clampedValue = Number.isInteger(nextValue) ? Math.min(outputImageLimit, Math.max(1, nextValue)) : params.n
     setNInput(String(clampedValue))
     setParams({ n: clampedValue })
   }, [nInput, nLimitHint, outputImageLimit, params.n, setParams])
@@ -672,13 +678,15 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
   const handleNInputChange = useCallback((value: string) => {
     setNInput(value)
-    const nextValue = Number(value)
-    if (!Number.isNaN(nextValue) && nextValue > outputImageLimit) {
+    const nextValue = parseImageCount(value, outputImageLimit)
+    // 合法值立即写入参数，积分预估随之更新；非法草稿不写入，失焦时回到合法值
+    if (nextValue !== null) setParams({ n: nextValue })
+    if (nextValue === null && value.trim()) {
       showNLimitHint()
     } else {
       hideNLimitHint()
     }
-  }, [hideNLimitHint, outputImageLimit, showNLimitHint])
+  }, [hideNLimitHint, outputImageLimit, setParams, showNLimitHint])
 
   const handleNLimitIncreaseAttempt = useCallback((preventDefault: () => void) => {
     const currentValue = Number(nInput)
@@ -737,37 +745,40 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   }
 
   const handleFiles = async (files: FileList | File[]) => {
-    try {
-      const currentCount = useStore.getState().inputImages.length
-      if (currentCount >= maxInputImages) {
-        useStore.getState().showToast(
-          `参考图数量已达上限（${maxInputImages} 张），无法继续添加`,
-          'error',
-        )
-        return
-      }
-
-      const remaining = maxInputImages - currentCount
-      const accepted = Array.from(files).filter((f) => f.type.startsWith('image/'))
-      const toAdd = accepted.slice(0, remaining)
-      const discarded = accepted.length - toAdd.length
-
-      for (const file of toAdd) {
-        await addImageFromFile(file)
-      }
-
-      if (discarded > 0) {
-        useStore.getState().showToast(
-          `已达上限 ${maxInputImages} 张，${discarded} 张图片被丢弃`,
-          'error',
-        )
-      }
-    } catch (err) {
+    const currentCount = useStore.getState().inputImages.length
+    if (currentCount >= maxInputImages) {
       useStore.getState().showToast(
-        getActionableErrorMessage(`图片添加失败：${err instanceof Error ? err.message : String(err)}`),
+        `参考图数量已达上限（${maxInputImages} 张），无法继续添加`,
         'error',
       )
+      return
     }
+
+    // 点击上传、拖拽和粘贴都走这里：逐个校验，不合格的文件不入库并说明原因，其余照常添加
+    const errors: string[] = []
+    const accepted = Array.from(files).filter((file) => {
+      const issue = getReferenceImageIssue(file)
+      if (issue) errors.push(issue)
+      return !issue
+    })
+    const toAdd = accepted.slice(0, maxInputImages - currentCount)
+    const discarded = accepted.length - toAdd.length
+
+    for (const file of toAdd) {
+      try {
+        await addImageFromFile(file)
+      } catch (err) {
+        console.warn('添加参考图失败', err)
+        errors.push(err instanceof Error ? err.message : String(err))
+      }
+    }
+
+    // 错误提示只显示一行，多个文件不合格时只列第一个原因
+    const discardedText = discarded > 0 ? `已达上限 ${maxInputImages} 张，${discarded} 张图片被丢弃` : ''
+    if (!errors.length && !discardedText) return
+    useStore.getState().showToast(errors.length
+      ? `${errors[0]}${errors.length > 1 ? `，另有 ${errors.length - 1} 个文件未添加` : ''}${discardedText ? `；${discardedText}` : ''}`
+      : discardedText, 'error')
   }
 
   const handleFilesRef = useRef(handleFiles)
@@ -837,11 +848,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
     try {
       const image = await createInputImageFromFile(file)
-      if (!image) {
-        showToast('请选择有效图片', 'error')
-        return
-      }
-
       const currentImages = useStore.getState().inputImages
       const currentIdx = currentImages.findIndex((item) => item.id === target.id)
       const targetIdx = currentIdx >= 0 ? currentIdx : target.index
@@ -863,7 +869,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       replaceInputImage(targetIdx, image)
       showToast('参考图已替换', 'success')
     } catch (err) {
-      showToast(`参考图替换失败：${err instanceof Error ? err.message : String(err)}`, 'error')
+      // 错误提示只显示冒号前的标题，校验原因直接展示
+      console.warn('替换参考图失败', err)
+      showToast(err instanceof Error ? err.message : String(err), 'error')
     }
   }
 
@@ -918,7 +926,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const handlePromptPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const text = e.clipboardData.getData('text/plain')
     if (!text) return
-    if (Array.from(e.clipboardData.items).some((item) => item.type.startsWith('image/'))) return
+    if (Array.from(e.clipboardData.items).some((item) => item.kind === 'file')) return
 
     e.preventDefault()
     insertPromptTextAtSelection(text.replace(/\r\n?/g, '\n'))
@@ -945,16 +953,17 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items
       if (!items) return
-      const imageFiles: File[] = []
+      // 粘贴的非图片文件也交给 handleFiles 提示原因，而不是静默忽略
+      const files: File[] = []
       for (const item of Array.from(items)) {
-        if (item.type.startsWith('image/')) {
+        if (item.kind === 'file') {
           const file = item.getAsFile()
-          if (file) imageFiles.push(file)
+          if (file) files.push(file)
         }
       }
-      if (imageFiles.length > 0) {
+      if (files.length > 0) {
         e.preventDefault()
-        handleFilesRef.current(imageFiles)
+        handleFilesRef.current(files)
       }
     }
     document.addEventListener('paste', handlePaste)
@@ -1439,8 +1448,23 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
                 src={displaySrc}
                 className="w-full h-full object-cover hover:opacity-90 transition-opacity pointer-events-none"
                 alt=""
+                onError={() => displaySrc === img.dataUrl && setBrokenImageIds((ids) => ids.includes(img.id) ? ids : [...ids, img.id])}
               />
             </div>
+          )}
+          {/* 旧版本留下的损坏图片无法解码，显示占位而不是裂图，生成前需替换或移除 */}
+          {brokenImageIds.includes(img.id) && (
+            <button
+              type="button"
+              className="absolute inset-0 z-[25] flex flex-col items-center justify-center gap-0.5 bg-red-50 text-xs leading-tight text-red-500 dark:bg-red-950/60 dark:text-red-300"
+              onClick={(e) => {
+                e.stopPropagation()
+                openReplaceReferenceFilePicker(idx, img.id)
+              }}
+              title="图片无法显示，点击重新上传"
+            >
+              重新上传
+            </button>
           )}
           {isMaskTarget && (
             <span className="absolute left-1 top-1 rounded bg-blue-500/90 px-1.5 py-0.5 text-[8px] leading-none text-white font-bold tracking-wider backdrop-blur-sm z-10 pointer-events-none">
@@ -1499,7 +1523,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
       </svg>
-      <span className="text-[8px] leading-none">{maskTargetImage ? '清空全部' : '清空'}</span>
+      <span className="text-xs leading-none">{maskTargetImage ? '清空全部' : '清空'}</span>
     </button>
   )
 
@@ -1615,7 +1639,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
           <div className="relative grid">
             {showAtImageMenu && (
               <div style={{ left: `${menuLeft}px` }} className="absolute bottom-full z-50 mb-2 w-64 overflow-hidden rounded-2xl border border-gray-200/70 bg-white/95 p-1.5 shadow-xl ring-1 ring-black/5 backdrop-blur-xl dark:border-white/[0.08] dark:bg-gray-900/95 dark:ring-white/10">
-                <div className="px-2 pb-1 pt-0.5 text-[11px] text-gray-400 dark:text-gray-500">选择图片引用</div>
+                <div className="px-2 pb-1 pt-0.5 text-xs text-gray-500 dark:text-gray-400">选择图片引用</div>
                 <div className="max-h-56 overflow-y-auto custom-scrollbar">
                   {atImageOptions.map((option, optionIndex) => (
                     <button
@@ -1708,6 +1732,12 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
               </button>
             )}
           </div>
+          {prompt.length > 0 && (
+            <div className={`mt-1 px-1 text-right text-xs ${promptTooLong ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
+              {promptTooLong && <span role="alert">提示词超出 {(prompt.length - MAX_PROMPT_LENGTH).toLocaleString('zh-CN')} 字，请精简后再生成 · </span>}
+              {prompt.length.toLocaleString('zh-CN')} / {MAX_PROMPT_LENGTH.toLocaleString('zh-CN')}
+            </div>
+          )}
 
           {/* 参数 + 按钮 */}
           <div className="mt-3">
@@ -1752,13 +1782,13 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
                   <button
                     onClick={submitCurrentMode}
                     disabled={!canSubmit}
-                    className="p-2.5 rounded-xl transition-all shadow-sm hover:shadow bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm hover:shadow bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none dark:disabled:bg-white/[0.06] dark:disabled:text-gray-500 disabled:cursor-not-allowed"
                     aria-label={submitButtonAriaLabel}
                     aria-busy={isSubmitting}
                   >
-                    {isSubmitting ? <span className="text-sm" role="status">提交中…</span> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {isSubmitting ? <span role="status">提交中…</span> : <><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>}
+                    </svg><span>{submitLabel}</span></>}
                   </button>
                 </div>
               </div>
@@ -1851,12 +1881,12 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
                     disabled={!canSubmit}
                     aria-label={submitButtonAriaLabel}
                     aria-busy={isSubmitting}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none dark:disabled:bg-white/[0.06] dark:disabled:text-gray-500 disabled:cursor-not-allowed"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                    <span role={isSubmitting ? 'status' : undefined}>{isSubmitting ? '提交中…' : maskDraft ? '遮罩编辑' : '生成图像'}</span>
+                    <span role={isSubmitting ? 'status' : undefined}>{isSubmitting ? '提交中…' : submitLabel}</span>
                   </button>
                 </div>
               </div>
@@ -1866,7 +1896,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={REFERENCE_IMAGE_TYPES.join(',')}
             multiple
             className="hidden"
             onChange={handleFileUpload}
@@ -1874,7 +1904,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
           <input
             ref={cameraInputRef}
             type="file"
-            accept="image/*"
+            accept={REFERENCE_IMAGE_TYPES.join(',')}
             capture="environment"
             className="hidden"
             onChange={handleFileUpload}
@@ -1882,7 +1912,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
           <input
             ref={replaceFileInputRef}
             type="file"
-            accept="image/*"
+            accept={REFERENCE_IMAGE_TYPES.join(',')}
             className="hidden"
             onChange={handleReplaceFileUpload}
           />

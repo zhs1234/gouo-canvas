@@ -40,13 +40,13 @@ import { callImageApi } from './lib/api'
 import { showBrowserNotification } from './lib/browserNotification'
 import { normalizeTaskParams } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
-import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
+import { blobToDataUrl } from './lib/dataUrl'
+import { readReferenceImageFile } from './lib/inputValidation'
 import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
 import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
-import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
-import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus } from './lib/taskFilters'
+import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus, type TaskSortOrder } from './lib/taskFilters'
 import { isRecord, normalizeInputImages, normalizeMaskDraft } from './lib/storeInputNormalization'
 import { getLoadedStorageName } from './lib/storageScope'
 import { getDocumentImageIds } from './lib/documentAssets'
@@ -85,6 +85,7 @@ const TASK_LOCK_PREFIX = 'gouo-task:'
 const TAB_LOCK = 'gouo-tab'
 const ERROR_TOAST_MAX_LENGTH = 80
 type ToastType = 'info' | 'success' | 'error'
+type ToastAction = { label: string; onClick: () => void }
 
 export function getErrorToastMessage(message: string): string {
   const text = message.trim()
@@ -553,6 +554,10 @@ interface AppState {
   setFilterStatus: (status: AppState['filterStatus']) => void
   filterFavorite: boolean
   setFilterFavorite: (f: boolean) => void
+  sortOrder: TaskSortOrder
+  setSortOrder: (order: TaskSortOrder) => void
+  filterModel: string
+  setFilterModel: (model: string) => void
 
   // 多选
   selectedTaskIds: string[]
@@ -566,7 +571,9 @@ interface AppState {
 
   // UI
   detailTaskId: string | null
-  setDetailTaskId: (id: string | null) => void
+  /** 打开详情时所在列表的任务 id，用于在详情弹窗里左右切换 */
+  detailTaskList: string[]
+  setDetailTaskId: (id: string | null, list?: string[]) => void
   lightboxImageId: string | null
   lightboxImageList: string[]
   setLightboxImageId: (id: string | null, list?: string[]) => void
@@ -580,8 +587,8 @@ interface AppState {
   dismissSupportPrompt: () => void
 
   // Toast
-  toast: { message: string; type: ToastType } | null
-  showToast: (message: string, type?: ToastType) => void
+  toast: { message: string; type: ToastType; action?: ToastAction } | null
+  showToast: (message: string, type?: ToastType, action?: ToastAction) => void
 
   // Confirm dialog
   confirmDialog: {
@@ -783,6 +790,10 @@ export const useStore = create<AppState>()(
       setFilterStatus: (filterStatus) => set({ filterStatus }),
       filterFavorite: false,
       setFilterFavorite: (filterFavorite) => set(filterFavorite ? { filterFavorite, selectedTaskIds: [], selectedFavoriteCollectionIds: [] } : { filterFavorite, activeFavoriteCollectionId: null, selectedTaskIds: [], selectedFavoriteCollectionIds: [] }),
+      sortOrder: 'newest',
+      setSortOrder: (sortOrder) => set({ sortOrder }),
+      filterModel: '',
+      setFilterModel: (filterModel) => set({ filterModel }),
 
       // Selection
       selectedTaskIds: [],
@@ -818,9 +829,10 @@ export const useStore = create<AppState>()(
 
       // UI
       detailTaskId: null,
-      setDetailTaskId: (detailTaskId) => {
+      detailTaskList: [],
+      setDetailTaskId: (detailTaskId, list) => {
         if (detailTaskId) dismissAllTooltips()
-        set({ detailTaskId })
+        set({ detailTaskId, detailTaskList: detailTaskId ? list ?? [] : [] })
       },
       lightboxImageId: null,
       lightboxImageList: [],
@@ -846,13 +858,14 @@ export const useStore = create<AppState>()(
 
       // Toast
       toast: null,
-      showToast: (message, type = 'info') => {
+      showToast: (message, type = 'info', action) => {
         const toastMessage = getToastMessage(message, type)
-        const toast = { message: toastMessage, type }
+        const toast = { message: toastMessage, type, action }
         set({ toast })
+        // 带操作按钮的提示多留一会儿，给用户点按的时间
         setTimeout(() => {
           set((s) => (s.toast === toast ? { toast: null } : s))
-        }, 3000)
+        }, action ? 5000 : 3000)
       },
 
       // Confirm
@@ -1455,12 +1468,9 @@ export function renameFavoriteCollection(collectionId: string, name: string) {
   showToast('收藏夹名称已更新', 'success')
 }
 
-export async function updateTasksFavoriteCollections(taskIds: string[], collectionIds: string[]) {
-  const ids = normalizeFavoriteCollectionIds(collectionIds)
-  const uniqueTaskIds = Array.from(new Set(taskIds)).filter(Boolean)
-  if (!uniqueTaskIds.length) return
-  const { tasks, setTasks, clearSelection, showToast } = useStore.getState()
-  const idSet = new Set(uniqueTaskIds)
+async function saveTasksFavoriteCollections(taskIds: string[], ids: string[]) {
+  const { tasks, setTasks } = useStore.getState()
+  const idSet = new Set(taskIds)
   const changedTaskIds = new Set<string>()
   const updated = tasks.map((task) => {
     if (!idSet.has(task.id)) return task
@@ -1468,14 +1478,42 @@ export async function updateTasksFavoriteCollections(taskIds: string[], collecti
     changedTaskIds.add(task.id)
     return { ...task, favoriteCollectionIds: ids, isFavorite: ids.length > 0 }
   })
-  if (!changedTaskIds.size) {
-    clearSelection()
-    return
-  }
+  if (!changedTaskIds.size) return 0
   setTasks(updated)
   await Promise.all(updated.filter((task) => changedTaskIds.has(task.id)).map((task) => putTask(task)))
+  return changedTaskIds.size
+}
+
+export async function updateTasksFavoriteCollections(taskIds: string[], collectionIds: string[]) {
+  const ids = normalizeFavoriteCollectionIds(collectionIds)
+  const uniqueTaskIds = Array.from(new Set(taskIds)).filter(Boolean)
+  if (!uniqueTaskIds.length) return
+  const changed = await saveTasksFavoriteCollections(uniqueTaskIds, ids)
+  const { clearSelection, showToast } = useStore.getState()
   clearSelection()
-  showToast(ids.length ? '收藏夹已更新' : '已取消收藏', 'success')
+  if (changed) showToast(ids.length ? '收藏夹已更新' : '已取消收藏', 'success')
+}
+
+// 单个作品一键收藏：未收藏时直接放进默认收藏夹（未设默认时用第一个），已收藏时取消收藏
+export async function toggleTaskFavorite(taskId: string) {
+  const state = useStore.getState()
+  const task = state.tasks.find((t) => t.id === taskId)
+  if (!task) return
+  if (task.isFavorite) {
+    await saveTasksFavoriteCollections([taskId], [])
+    state.showToast('已取消收藏', 'success')
+    return
+  }
+  const collectionId = state.defaultFavoriteCollectionId ?? state.favoriteCollections[0]?.id
+  if (!collectionId) {
+    state.openFavoritePicker([taskId])
+    return
+  }
+  await saveTasksFavoriteCollections([taskId], [collectionId])
+  state.showToast(`已收藏到「${getFavoriteCollectionTitle(collectionId)}」`, 'success', {
+    label: '移动到…',
+    onClick: () => useStore.getState().openFavoritePicker([taskId]),
+  })
 }
 
 export async function deleteFavoriteCollection(collectionId: string, deleteTasks = false) {
@@ -1857,6 +1895,8 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
       }
     }
 
+    // 压缩库只在备份时用到，不放进首包
+    const { buildExportZip } = await import('./lib/exportZip')
     const { bytes: zipped } = buildExportZip({
       options,
       exportedAt,
@@ -1899,6 +1939,7 @@ interface ImportOptions {
 /** 导入 ZIP 数据 */
 export async function importData(file: File, options: ImportOptions = { importConfig: true, importTasks: true }): Promise<boolean> {
   try {
+    const { MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } = await import('./lib/exportZip')
     if (file.size > MAX_BACKUP_FILE_BYTES) throw new Error(`备份文件不能超过 ${MAX_BACKUP_FILE_BYTES / 1024 / 1024} MB`)
     const buffer = await file.arrayBuffer()
     const { manifest: data, files } = readExportZip(new Uint8Array(buffer))
@@ -2050,14 +2091,12 @@ export async function importData(file: File, options: ImportOptions = { importCo
 
 /** 添加图片到输入（文件上传） */
 export async function addImageFromFile(file: File): Promise<void> {
-  const image = await createInputImageFromFile(file)
-  if (!image) return
-  useStore.getState().addInputImage(image)
+  useStore.getState().addInputImage(await createInputImageFromFile(file))
 }
 
-export async function createInputImageFromFile(file: File): Promise<InputImage | null> {
-  if (!file.type.startsWith('image/')) return null
-  const dataUrl = await fileToDataUrl(file)
+// 格式、大小或解码不通过时抛出可直接展示的错误
+export async function createInputImageFromFile(file: File): Promise<InputImage> {
+  const dataUrl = await readReferenceImageFile(file)
   const id = await storeImage(dataUrl, 'upload')
   cacheImage(id, dataUrl)
   return { id, dataUrl }

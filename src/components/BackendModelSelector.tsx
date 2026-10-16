@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getImageModels, getImageParamIssue, getMaxTaskImages, resolveBackendModel, type GouoImageModel } from '../lib/gouoBackend'
+import { getCachedImageModels, getImageModels, getImageParamIssue, getMaxTaskImages, resolveBackendModel, type GouoImageModel } from '../lib/gouoBackend'
 import { useStore } from '../store'
 import ModelSelect from './ModelSelect'
 import { formatPoints } from '../lib/accountUsage'
@@ -9,14 +9,16 @@ export default function BackendModelSelector({ onReady, compact = false, showEst
   const params = useStore((s) => s.params)
   const inputCount = useStore((s) => s.inputImages.length)
   const hasMask = useStore((s) => Boolean(s.maskDraft))
-  const [models, setModels] = useState<GouoImageModel[]>([])
+  // 本次打开已读取过的目录先直接显示，后台再刷新，切回创作页时不必等待
+  const [models, setModels] = useState<GouoImageModel[]>(getCachedImageModels)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !getCachedImageModels().length)
 
   useEffect(() => {
     let cancelled = false
     const refresh = async () => {
-      setLoading(true)
+      const cached = getCachedImageModels().length > 0
+      if (!cached) setLoading(true)
       try {
         const data = await getImageModels()
         if (cancelled) return
@@ -31,6 +33,8 @@ export default function BackendModelSelector({ onReady, compact = false, showEst
       } catch (err) {
         if (cancelled) return
         console.warn('读取图片模型目录失败', err)
+        // 后台刷新失败时保留已有目录；提交前仍会重新核对模型和价格
+        if (cached) return
         setError(err instanceof Error ? err.message : String(err))
         setModels([])
       } finally {

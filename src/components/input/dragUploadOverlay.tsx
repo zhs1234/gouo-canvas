@@ -1,3 +1,5 @@
+import { getReferenceImageMaxBytes } from '../../lib/inputValidation'
+
 export default function DragUploadOverlay({
   visible,
   atImageLimit,
@@ -34,7 +36,7 @@ export default function DragUploadOverlay({
           ) : (
             <>
               <p className="text-lg font-semibold text-gray-700 dark:text-gray-200">释放以上传图片</p>
-              <p className="text-sm text-gray-400 mt-1">支持 JPG、PNG、WebP 等格式</p>
+              <p className="text-sm text-gray-400 mt-1">支持 PNG、JPEG、WebP，单张不超过 {Math.floor(getReferenceImageMaxBytes() / 1024 / 1024)} MB</p>
             </>
           )}
         </div>

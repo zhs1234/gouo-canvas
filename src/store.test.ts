@@ -103,7 +103,7 @@ vi.mock('./lib/transparentImage', () => ({
 import { clearImages, clearTasks, getAllTasks, getImage, importTaskData, putImage, putTask as putDbTask } from './lib/db'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { refreshBackendStatus } from './lib/gouoBackend'
-import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
+import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, toggleTaskFavorite, useStore } from './store'
 
 const imageA = { id: 'image-a', dataUrl: 'data:image/png;base64,a' }
 const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
@@ -144,6 +144,17 @@ describe('product model task snapshots', () => {
     expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
     expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
+  })
+
+  it('refuses prompts longer than the server limit before creating a task', async () => {
+    useStore.setState({ prompt: '猫'.repeat(32001) })
+    await submitTask()
+    const { callImageApi } = await import('./lib/api')
+    expect(useStore.getState().showToast).toHaveBeenCalledWith('提示词不能超过 32000 字，请精简后再生成', 'error')
+    expect(useStore.getState().tasks).toHaveLength(0)
+    expect(callImageApi).not.toHaveBeenCalled()
+    const { submitImageTask } = await import('./lib/imageTasks')
+    await expect(submitImageTask({ prompt: '猫'.repeat(32001), source: { kind: 'generate' } })).rejects.toThrow('提示词不能超过 32000 字')
   })
 
   it('blocks duplicate submissions until task creation and then permits the next task', async () => {
@@ -528,6 +539,49 @@ describe('favorite collection deletion', () => {
       favoriteCollectionIds: [collectionB.id],
     })
     expect((await getAllTasks()).map((item) => item.id)).toEqual([sharedTask.id])
+  })
+})
+
+describe('one-step favorite', () => {
+  const collectionA = { id: 'collection-a', name: '收藏夹 A', createdAt: 1, updatedAt: 1 }
+  const collectionB = { id: 'collection-b', name: '收藏夹 B', createdAt: 1, updatedAt: 1 }
+
+  beforeEach(async () => {
+    await clearTasks()
+    useStore.setState({
+      tasks: [task({ id: 'fav-task' })],
+      favoriteCollections: [collectionA, collectionB],
+      defaultFavoriteCollectionId: collectionB.id,
+      favoritePickerTaskIds: null,
+      selectedTaskIds: ['other-task'],
+      showToast: vi.fn(),
+    })
+  })
+
+  it('favorites into the default collection without opening the picker, then unfavorites on the next click', async () => {
+    await toggleTaskFavorite('fav-task')
+    let state = useStore.getState()
+    expect(state.tasks[0]).toMatchObject({ isFavorite: true, favoriteCollectionIds: [collectionB.id] })
+    expect(state.favoritePickerTaskIds).toBeNull()
+    expect(state.selectedTaskIds).toEqual(['other-task'])
+    expect((await getAllTasks())[0]).toMatchObject({ isFavorite: true, favoriteCollectionIds: [collectionB.id] })
+    const [message, type, action] = vi.mocked(state.showToast).mock.calls[0]
+    expect(message).toBe('已收藏到「收藏夹 B」')
+    expect(type).toBe('success')
+    expect(action?.label).toBe('移动到…')
+    action?.onClick()
+    expect(useStore.getState().favoritePickerTaskIds).toEqual(['fav-task'])
+
+    await toggleTaskFavorite('fav-task')
+    state = useStore.getState()
+    expect(state.tasks[0]).toMatchObject({ isFavorite: false, favoriteCollectionIds: [] })
+    expect(vi.mocked(state.showToast).mock.calls[1]).toEqual(['已取消收藏', 'success'])
+  })
+
+  it('falls back to the first collection when no default collection is set', async () => {
+    useStore.setState({ defaultFavoriteCollectionId: null })
+    await toggleTaskFavorite('fav-task')
+    expect(useStore.getState().tasks[0].favoriteCollectionIds).toEqual([collectionA.id])
   })
 })
 

@@ -1,4 +1,4 @@
-import { type CSSProperties, type FormEvent, type ReactNode, useEffect, useState } from 'react'
+import { type CSSProperties, type FormEvent, type ReactNode, Suspense, useEffect, useState } from 'react'
 import { BRAND } from '../config/brand'
 import {
   getBackendStatus,
@@ -10,9 +10,14 @@ import {
   sendPasswordReset,
   type GouoUser,
 } from '../lib/gouoBackend'
-import { activateUserStorage, shouldReloadForStorageScopeChange } from '../lib/storageScope'
+import { activateUserStorage, getLoadedStorageUserId, shouldReloadForStorageScopeChange } from '../lib/storageScope'
 import TurnstileChallenge from './TurnstileChallenge'
-import LandingPage from './landing/LandingPage'
+import { lazyPage } from './PageLoader'
+import './landing/landing.css'
+
+// 首页只给未登录访客看，不放进首包；没有登录记录时和登录检查并行下载
+const LandingPage = lazyPage(() => import('./landing/LandingPage'))
+if (!getLoadedStorageUserId()) LandingPage.preload()
 
 type AuthMode = 'login' | 'register' | 'reset'
 
@@ -81,6 +86,11 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
       })
     return () => { cancelled = true }
   }, [])
+
+  // 登录检查结束后移除 index.html 里的首屏骨架，此时工作区或首页已经渲染
+  useEffect(() => {
+    if (!checking) document.getElementById('boot-skeleton')?.remove()
+  }, [checking])
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -176,20 +186,22 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
     }
   }
 
-  if (checking) {
-    return (
-      <main className="gouo-public gouo-grainient-light grid min-h-[100dvh] place-items-center">
-        <img src={BRAND.logoUrl} alt="正在检查登录状态" className="h-14 w-14 animate-pulse rounded-2xl" />
-      </main>
-    )
-  }
+  const loadingScreen = (
+    <main className="gouo-public gouo-grainient-light grid min-h-[100dvh] place-items-center">
+      <img src={BRAND.logoUrl} alt="正在检查登录状态" className="h-14 w-14 animate-pulse rounded-2xl" />
+    </main>
+  )
+
+  if (checking) return loadingScreen
 
   if (view === 'home') {
     return (
-      <LandingPage
-        onLogin={() => { setMode('login'); setError(''); setView('auth') }}
-        onRegister={() => { setMode('register'); setError(''); setView('auth') }}
-      />
+      <Suspense fallback={loadingScreen}>
+        <LandingPage
+          onLogin={() => { setMode('login'); setError(''); setView('auth') }}
+          onRegister={() => { setMode('register'); setError(''); setView('auth') }}
+        />
+      </Suspense>
     )
   }
 
