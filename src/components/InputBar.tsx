@@ -9,7 +9,7 @@ import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getMaxTaskImages } from '../lib/gouoBackend'
 import { formatPoints } from '../lib/accountUsage'
-import { getReferenceImageIssue, MAX_PROMPT_LENGTH, REFERENCE_IMAGE_TYPES } from '../lib/inputValidation'
+import { getReferenceImageIssue, MAX_PROMPT_LENGTH, parseImageCount, REFERENCE_IMAGE_TYPES } from '../lib/inputValidation'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import { useImageModels } from '../hooks/useImageModels'
 import BackendModelSelector from './BackendModelSelector'
@@ -478,7 +478,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const nDraftValue = Number(nInput)
   const effectiveNValue = Number.isNaN(nDraftValue) ? params.n : nDraftValue
   const streamConcurrentByN = effectiveNValue > 1
-  const nLimitHintText = `本次最多生成 ${outputImageLimit} 张图片`
+  const nLimitHintText = parseImageCount(nInput, outputImageLimit) === null && !(nDraftValue > outputImageLimit) ? `数量必须是 1 到 ${outputImageLimit} 的整数` : `本次最多生成 ${outputImageLimit} 张图片`
   const displaySize = normalizeImageSize(params.size) || DEFAULT_PARAMS.size
 
   // 自动画质可能由上游选成高画质，只有开放高画质时才提供
@@ -661,10 +661,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
   const commitN = useCallback(() => {
     nLimitHint.hide()
-    const nextValue = Number(nInput)
-    const normalizedValue =
-      nInput.trim() === '' ? DEFAULT_PARAMS.n : Number.isNaN(nextValue) ? params.n : nextValue
-    const clampedValue = Math.min(outputImageLimit, Math.max(1, normalizedValue))
+    const nextValue = nInput.trim() === '' ? DEFAULT_PARAMS.n : Number(nInput)
+    // 小数等非法草稿回到最后一次合法值，超出范围的整数夹到范围内
+    const clampedValue = Number.isInteger(nextValue) ? Math.min(outputImageLimit, Math.max(1, nextValue)) : params.n
     setNInput(String(clampedValue))
     setParams({ n: clampedValue })
   }, [nInput, nLimitHint, outputImageLimit, params.n, setParams])
@@ -679,13 +678,15 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
 
   const handleNInputChange = useCallback((value: string) => {
     setNInput(value)
-    const nextValue = Number(value)
-    if (!Number.isNaN(nextValue) && nextValue > outputImageLimit) {
+    const nextValue = parseImageCount(value, outputImageLimit)
+    // 合法值立即写入参数，积分预估随之更新；非法草稿不写入，失焦时回到合法值
+    if (nextValue !== null) setParams({ n: nextValue })
+    if (nextValue === null && value.trim()) {
       showNLimitHint()
     } else {
       hideNLimitHint()
     }
-  }, [hideNLimitHint, outputImageLimit, showNLimitHint])
+  }, [hideNLimitHint, outputImageLimit, setParams, showNLimitHint])
 
   const handleNLimitIncreaseAttempt = useCallback((preventDefault: () => void) => {
     const currentValue = Number(nInput)

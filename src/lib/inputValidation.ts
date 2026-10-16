@@ -38,3 +38,10 @@ export async function readReferenceImageFile(file: File) {
   }
   return fileToDataUrl(file)
 }
+
+// 数量输入框的草稿只在是 1 到上限的整数时才写入参数
+export function parseImageCount(value: string, max: number) {
+  if (!value.trim()) return null
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 1 && n <= max ? n : null
+}

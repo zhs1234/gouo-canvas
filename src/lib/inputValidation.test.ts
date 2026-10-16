@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getReferenceImageIssue, MAX_REFERENCE_IMAGE_BYTES, readReferenceImageFile } from './inputValidation'
+import { DEFAULT_PARAMS } from '../types'
+import { getReferenceImageIssue, MAX_REFERENCE_IMAGE_BYTES, parseImageCount, readReferenceImageFile } from './inputValidation'
+import { normalizeTaskParams } from './paramCompatibility'
 
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -25,5 +27,21 @@ describe('reference image upload checks', () => {
     expect(decode).toHaveBeenCalledTimes(1)
     await expect(readReferenceImageFile(new File([new Uint8Array([1, 2, 3])], 'ok.png', { type: 'image/png' }))).resolves.toBe('data:image/png;base64,AQID')
     expect(close).toHaveBeenCalled()
+  })
+})
+
+describe('image count input', () => {
+  it('accepts only integers within the limit', () => {
+    expect(parseImageCount('3', 4)).toBe(3)
+    expect(parseImageCount('2.5', 4)).toBeNull()
+    expect(parseImageCount('0', 4)).toBeNull()
+    expect(parseImageCount('5', 4)).toBeNull()
+    expect(parseImageCount('', 4)).toBeNull()
+    expect(parseImageCount('abc', 4)).toBeNull()
+  })
+
+  it('repairs a fractional count restored from older saved settings', () => {
+    expect(normalizeTaskParams({ ...DEFAULT_PARAMS, n: 2.5 }).n).toBe(2)
+    expect(normalizeTaskParams({ ...DEFAULT_PARAMS, n: 0.5 }).n).toBe(1)
   })
 })
