@@ -38,7 +38,7 @@
 .agent-canvas-select select, .agent-count-select select { color: var(--ws-text-2); max-width: 170px; background: var(--ws-surface); border: 0; outline: 0; text-overflow: ellipsis; }
 .agent-composer-spacer { flex: 1; }
 .agent-send { background: var(--ws-inverse-bg); color: var(--ws-inverse-text); width: 34px; height: 34px; border: 0; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
-.agent-send:disabled { background: var(--ws-raised-2); color: var(--ws-text-3); opacity: 1; }
+.agent-workspace .agent-send:disabled { background: var(--ws-raised-2); color: var(--ws-text-3); opacity: 1; }
 .agent-stop span { display: block; background: var(--ws-inverse-text); width: 11px; height: 11px; border-radius: 2px; }
 .agent-composer-note { color: var(--ws-text-4); font-size: 12px; text-align: center; margin: 10px 0 0; }
 .agent-image-model-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 5px 0; font-size: 12px; color: var(--ws-text-3); }
