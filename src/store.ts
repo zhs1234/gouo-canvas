@@ -1937,23 +1937,26 @@ export async function importData(file: File, options: ImportOptions = { importCo
       const restoreSkills = getCachedBackendStatus() !== null && isSkillsEnabled() && isSkillImportEnabled()
       const { useSkillStore, normalizeSkillDocument } = await import('./stores/skillStore')
       await useSkillStore.getState().hydrate()
+      // 只和导入前就有的技能比对，每份本地技能最多认领一次；先认 imported-<原 ID>，
+      // 否则备份里同时有 x 和 imported-x 时，后者会被误认成前者刚恢复的那份而丢掉
       const localIds = new Set(useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.id))
+      const claimedIds = new Set<string>()
       // 删除的技能仍留着记录，同 ID 写入会让整个导入事务失败，所以这类换新 UUID
       const takenIds = new Set(useSkillStore.getState().skills.map((skill) => skill.id))
       // 会话按导入技能的文档 ID 记录启用状态，恢复后逐个指向新 ID 或本地已有的那份
       const skillIds = new Map<string, string>()
       const skills = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
         const doc = normalizeSkillDocument(value)
-        if (!doc || doc.hiddenAt) return []
+        if (!doc || doc.hiddenAt || skillIds.has(doc.id)) return []
         const restoredId = `imported-${doc.id}`
-        const existingId = localIds.has(doc.id) ? doc.id : localIds.has(restoredId) ? restoredId : undefined
+        const existingId = [restoredId, doc.id].find((id) => localIds.has(id) && !claimedIds.has(id))
         if (existingId) {
           skillIds.set(doc.id, existingId)
+          claimedIds.add(existingId)
           return []
         }
         const id = takenIds.has(restoredId) ? crypto.randomUUID() : restoredId
         skillIds.set(doc.id, id)
-        localIds.add(id)
         takenIds.add(id)
         return [{ ...doc, id, revision: 1, updatedAt: Date.now() }]
       })

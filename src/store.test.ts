@@ -998,6 +998,17 @@ describe('data import', () => {
     expect(await importData(file, { importTasks: true })).toBe(true)
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-skill-late', 'imported-skill-early'])
+    // 备份里同时有 x 和 imported-x 两份不同的技能时各自恢复，再次导入时也各自认回
+    const pair = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: ['x', 'imported-x'] }], skills: [skill('x', 1, '原件'), skill('imported-x', 2, '另一份')] as SkillDocument[] })
+    useSkillStore.setState({ skills: [], hydrated: true })
+    expect(await importData(pair, { importTasks: true })).toBe(true)
+    const pairDocs = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
+    expect(pairDocs.map((doc) => [doc.id, doc.body])).toEqual([['imported-x', '原件'], ['imported-imported-x', '另一份']])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
+    useSkillStore.setState({ skills: pairDocs, hydrated: true })
+    expect(await importData(pair, { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
     // 恢复后又删除的技能仍留着记录：再次导入换新 ID，不能与它撞 ID 导致整个导入失败
     useSkillStore.setState({ skills: imported!.map((doc) => ({ ...doc, hiddenAt: 5 })), hydrated: true })
     expect(await importData(file, { importTasks: true })).toBe(true)
