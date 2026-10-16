@@ -959,10 +959,13 @@ describe('data import', () => {
     expect(await importData(backup([skill('early-skill')]), { importTasks: true })).toBe(true)
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
     await loadStatus(async () => Response.json({ success: true, data: {} }))
-    expect(await importData(backup([skill('my-skill'), skill(BUILTIN_SKILLS[0].name), skill('my-skill'), { ...skill('broken'), body: '' }]), { importTasks: true })).toBe(true)
+    // 会话里启用的导入技能按文档 ID 记录，恢复后要指向新 ID
+    const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1, skills: ['backup-my-skill', BUILTIN_SKILLS[0].name] }
+    expect(await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [conversation], skills: [skill('my-skill'), skill(BUILTIN_SKILLS[0].name), skill('my-skill'), { ...skill('broken'), body: '' }] as SkillDocument[] }), { importTasks: true })).toBe(true)
     const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills
     expect(imported).toEqual([expect.objectContaining({ name: 'my-skill', revision: 1 })])
     expect(imported?.[0].id).not.toBe('backup-my-skill')
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([imported?.[0].id, BUILTIN_SKILLS[0].name])
     expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 0 个任务，1 个技能', 'success')
     // 运营方关闭技能导入后，备份里的技能不恢复
     await loadStatus(async () => Response.json({ success: true, data: { gouo_skill_import: false } }))

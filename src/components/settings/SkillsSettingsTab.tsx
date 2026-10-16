@@ -80,7 +80,8 @@ export default function SkillsSettingsTab() {
   const abort = useRef<AbortController | null>(null)
   const status = useBackendStatus()
   const [isAdmin, setIsAdmin] = useState(false)
-  const canImport = isSkillImportEnabled(status)
+  // 读到后台设置之前不开放导入，避免在设置接口异常时绕过关闭的导入开关
+  const canImport = status !== null && isSkillImportEnabled(status)
   const canImportGithub = canImport && (isAdmin || isSkillGithubImportOpen(status))
 
   useEffect(() => {
