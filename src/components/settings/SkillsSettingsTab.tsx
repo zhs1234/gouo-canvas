@@ -4,6 +4,7 @@ import { useSkillStore } from '../../stores/skillStore'
 import type { Skill, SkillDocument } from '../../lib/skills/types'
 import { BUILTIN_SKILLS } from '../../lib/skills/builtin'
 import { skillFromDocument } from '../../lib/skills/catalog'
+import { suffixSkillName } from '../../lib/skills/parse'
 import { buildSkillZip, collectSkillPackages, fileSkillEntries, githubSkillEntries, skillDocumentFromPackage, type SkillPackage } from '../../lib/skills/importSkill'
 import { DownloadIcon, ImportIcon, TrashIcon } from '../icons'
 
@@ -128,8 +129,8 @@ export default function SkillsSettingsTab() {
           await useSkillStore.getState().save({ ...skillDocumentFromPackage(item.pkg, item.conflict.id), enabled: item.conflict.enabled })
         } else if (item.action === 'copy') {
           let suffix = 2
-          while (taken.has(`${item.pkg.name.slice(0, 60)}-${suffix}`)) suffix += 1
-          const name = `${item.pkg.name.slice(0, 60)}-${suffix}`
+          while (taken.has(suffixSkillName(item.pkg.name, suffix))) suffix += 1
+          const name = suffixSkillName(item.pkg.name, suffix)
           taken.add(name)
           await useSkillStore.getState().save(skillDocumentFromPackage({ ...item.pkg, name, title: `${item.pkg.title}（副本）` }))
         } else {
