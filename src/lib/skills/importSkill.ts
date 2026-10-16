@@ -3,7 +3,7 @@ import type { Skill, SkillDocument, SkillFile } from './types'
 import { parseSkillMarkdown } from './parse'
 
 // 导入上限：技能只保存文本，总量要留在服务端单个文档 4 MB 的限制之内
-export const SKILL_IMPORT_LIMITS = { file: 1024 * 1024, total: 2 * 1024 * 1024, files: 200, path: 200, upload: 10 * 1024 * 1024 }
+export const SKILL_IMPORT_LIMITS = { file: 1024 * 1024, total: 2 * 1024 * 1024, files: 200, path: 200, upload: 10 * 1024 * 1024, entries: 2000 }
 const TEXT_FILE = /\.(md|markdown|txt|json|ya?ml|csv|tsv)$/i
 const GITHUB_API = 'https://api.github.com'
 
@@ -41,6 +41,25 @@ function normalizePath(path: string) {
   return parts.join('/')
 }
 
+const textEncoder = new TextEncoder()
+const byteLength = (text: string) => textEncoder.encode(text).length
+
+// 已规整、没有穿越且不超过长度上限的相对路径
+export function isSafeSkillPath(path: string) {
+  return Boolean(path) && normalizePath(path) === path && path.length <= SKILL_IMPORT_LIMITS.path
+}
+
+// 导入和恢复（备份、本地、云端）共用的上限检查：路径安全、文件数量，
+// 单文件和全部字段合计都按 UTF-8 字节计算，保证存到服务端时在单个文档 4 MB 以内
+export function skillWithinLimits(skill: Pick<SkillDocument, 'title' | 'description' | 'body' | 'files' | 'scripts' | 'license' | 'source' | 'sourceRef'>) {
+  const scripts = skill.scripts ?? []
+  if (skill.files.length > SKILL_IMPORT_LIMITS.files || scripts.length > SKILL_IMPORT_LIMITS.files) return false
+  if (![...skill.files.map((file) => file.path), ...scripts].every(isSafeSkillPath)) return false
+  if (skill.files.some((file) => byteLength(file.content) > SKILL_IMPORT_LIMITS.file)) return false
+  const fields = [skill.title, skill.description, skill.body, skill.license ?? '', skill.source ?? '', skill.sourceRef ?? '', ...scripts, ...skill.files.flatMap((file) => [file.path, file.content])]
+  return fields.reduce((total, text) => total + byteLength(text), 0) <= SKILL_IMPORT_LIMITS.total
+}
+
 export async function collectSkillPackages(rawEntries: SkillEntry[], options: ImportSource = {}): Promise<SkillPackage[]> {
   const entries = rawEntries.flatMap((entry) => {
     const path = normalizePath(entry.path)
@@ -74,7 +93,7 @@ export async function collectSkillPackages(rawEntries: SkillEntry[], options: Im
     }
     if (scripts.length) warnings.push(`包含 ${scripts.length} 个脚本，浏览器里不会执行，Agent 只能参考文字说明`)
     if (ignored) warnings.push(`已忽略 ${ignored} 个非文本文件（图片、字体等）`)
-    packages.push({
+    const pkg = {
       name: parsed.name,
       title: (parsed.metadata.title || parsed.name).slice(0, 60),
       description: parsed.description,
@@ -82,10 +101,12 @@ export async function collectSkillPackages(rawEntries: SkillEntry[], options: Im
       files,
       scripts,
       license: parsed.license,
-      source: options.sourceFor ? options.sourceFor(root.dir) : options.source,
+      source: (options.sourceFor ? options.sourceFor(root.dir) : options.source)?.slice(0, 2000),
       sourceRef: options.sourceRef,
       warnings,
-    })
+    }
+    if (!skillWithinLimits(pkg)) throw new Error(`技能 ${parsed.name} 超出大小限制（单个文件 1 MB，合计 2 MB）`)
+    packages.push(pkg)
   }
   return packages
 }
@@ -96,6 +117,7 @@ export function zipSkillEntries(bytes: Uint8Array, prefix = ''): SkillEntry[] {
   const files = unzipSync(bytes, {
     filter: (file) => {
       if (file.name.endsWith('/')) return false
+      if (entries.length >= SKILL_IMPORT_LIMITS.entries) throw new Error(`压缩包内文件超过 ${SKILL_IMPORT_LIMITS.entries} 个`)
       entries.push({ path: prefix + file.name, size: file.originalSize, read: async () => strFromU8(files[file.name]) })
       // 只解压可能用到的文本；脚本和二进制只记录路径
       if (!TEXT_FILE.test(file.name) || file.originalSize > SKILL_IMPORT_LIMITS.file) return false
@@ -109,6 +131,7 @@ export function zipSkillEntries(bytes: Uint8Array, prefix = ''): SkillEntry[] {
 
 // 上传的 .zip/.skill 展开为条目；单个 .md 视为 SKILL.md；选择文件夹时保留相对路径
 export async function fileSkillEntries(fileList: File[]): Promise<SkillEntry[]> {
+  if (fileList.length > SKILL_IMPORT_LIMITS.entries) throw new Error(`所选文件超过 ${SKILL_IMPORT_LIMITS.entries} 个，请选择单个技能目录`)
   const entries: SkillEntry[] = []
   for (const file of fileList) {
     const path = file.webkitRelativePath || file.name

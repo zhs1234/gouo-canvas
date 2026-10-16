@@ -117,7 +117,8 @@ export default function SkillsSettingsTab() {
   const confirmImport = async () => {
     if (!pending) return
     setBusy(true)
-    const taken = new Set([...BUILTIN_SKILLS.map((skill) => skill.name), ...imported.map((doc) => doc.name)])
+    // 本批要新建的名称也算已占用，另存副本时不会和它们重名
+    const taken = new Set([...BUILTIN_SKILLS.map((skill) => skill.name), ...imported.map((doc) => doc.name), ...pending.filter((item) => item.action === 'create').map((item) => item.pkg.name)])
     let count = 0
     // 逐个保存；中途失败时已保存的从待导入列表移除，重试不会重复导入
     let idx = 0

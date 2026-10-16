@@ -46,6 +46,11 @@ describe('collectSkillPackages', () => {
     expect(pkg).toMatchObject({ name: 'poster-design', title: '海报：设计', description: '描述里有 "引号" 和冒号: 也没问题', body: '# 正文', license: 'Apache-2.0', files: [{ path: 'references/a.md', content: '资料' }], warnings: [] })
   })
 
+  it('压缩包条目过多时直接拒绝', () => {
+    const many = Object.fromEntries(Array.from({ length: 2001 }, (_, idx) => [`a/${idx}.png`, new Uint8Array()]))
+    expect(() => zipSkillEntries(zipSync(many))).toThrow('超过 2000 个')
+  })
+
   it('压缩包里只解压文本文件', async () => {
     const zip = zipSync({ 'a/SKILL.md': strToU8(SKILL.replace('poster-design', 'a')), 'a/image.png': new Uint8Array(10), 'a/': new Uint8Array() })
     const entries = zipSkillEntries(zip)
