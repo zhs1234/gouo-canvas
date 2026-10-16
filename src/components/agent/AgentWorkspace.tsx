@@ -9,6 +9,7 @@ import { getMaxTaskImages, getMaxUploadBytes } from '../../lib/gouoBackend'
 import { AGENT_CONTINUE_PROMPT, executeAgentTool } from '../../lib/agent/tools'
 import { formatPoints } from '../../lib/accountUsage'
 import { downloadImageIds, formatExportFileTime } from '../../lib/downloadImages'
+import { listAgentSkills, MAX_ACTIVE_SKILLS } from '../../lib/skills/catalog'
 import type { AgentConversation, AgentToolCall } from '../../lib/agent/types'
 import BackendModelSelector from '../BackendModelSelector'
 import ModelSelect from '../ModelSelect'
@@ -22,6 +23,8 @@ const toolLabels: Record<string, string> = {
   get_task_status: '查询生成进度',
   add_task_output: '放入画布',
   select_reference: '选择参考图',
+  activate_skill: '启用技能',
+  read_skill_file: '读取技能资料',
 }
 
 // gallery 为点开大图时可左右切换的图片；只在会话消息里传，输入框附件和参考图选择器里不可点开
@@ -152,6 +155,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
   const [loadError, setLoadError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [showReferences, setShowReferences] = useState(false)
+  const [showSkills, setShowSkills] = useState(false)
   const [, setImageModelReady] = useState(false)
   const creating = useRef<Promise<AgentConversation> | null>(null)
   const creatingForProject = useRef(projectId)
@@ -247,7 +251,17 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
     finally { setUploading(false) }
   }
 
+  const skills = listAgentSkills()
+  const activeSkills = skills.filter((skill) => conversation?.skills?.includes(skill.name))
+  const toggleSkill = (name: string) => {
+    if (!conversation) return
+    const active = activeSkills.map((skill) => skill.name)
+    if (!active.includes(name) && active.length >= MAX_ACTIVE_SKILLS) { useStore.getState().showToast(`最多同时启用 ${MAX_ACTIVE_SKILLS} 个技能`, 'error'); return }
+    useAgentStore.getState().configureConversation(conversation.id, { skills: active.includes(name) ? active.filter((value) => value !== name) : [...active, name] })
+  }
+
   const composer = <div className="agent-composer-region">
+    {activeSkills.length ? <div className="agent-skill-chips">{activeSkills.map((skill) => <span key={skill.name} className="agent-skill-chip" title={skill.description}>{skill.title}{!running && <button type="button" aria-label={`停用技能 ${skill.title}`} onClick={() => toggleSkill(skill.name)}><CloseIcon width={11} height={11} /></button>}</span>)}</div> : null}
     {conversation?.referenceImageIds.length ? <div className="agent-attachments">{conversation.referenceImageIds.map((imageId) => <AgentImage key={imageId} id={imageId} onRemove={running ? undefined : () => useAgentStore.getState().configureConversation(id, { referenceImageIds: conversation.referenceImageIds.filter((value) => value !== imageId) })} />)}</div> : null}
     <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void send() }}
       onDragOver={(event) => { if ([...event.dataTransfer.types].includes('Files')) event.preventDefault() }}
@@ -265,13 +279,15 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
           <ModelSelect compact label="Agent 模型" models={models} value={conversation?.modelId || ''} disabled={running || modelsLoading || !conversation} placeholder={modelsLoading ? '正在加载…' : unavailableModel ? '原模型已不可用，请重新选择' : !models.length ? '暂无可用模型' : undefined} onChange={(modelId) => useAgentStore.getState().configureConversation(id, { modelId })} />
         </div>
         {model && <span className="agent-model-price" title="按后台定价计费，实际扣费还会乘以账号分组倍率">{model.input_price_cny || model.output_price_cny ? `输入 ${formatPoints(model.input_price_cny)} · 输出 ${formatPoints(model.output_price_cny)} / 百万 token` : '免费'}</span>}
-        <button type="button" className={`agent-text-button ${showReferences ? 'is-active' : ''}`} aria-label="选择已有图片作为参考" aria-expanded={showReferences} disabled={running || !conversation} onClick={() => setShowReferences(!showReferences)}>@</button>
+        <button type="button" className={`agent-text-button ${showReferences ? 'is-active' : ''}`} aria-label="选择已有图片作为参考" aria-expanded={showReferences} disabled={running || !conversation} onClick={() => { setShowReferences(!showReferences); setShowSkills(false) }}>@</button>
+        {skills.length > 0 && <button type="button" className={`agent-text-button ${showSkills ? 'is-active' : ''}`} aria-label="选择技能" aria-expanded={showSkills} disabled={running || !conversation} onClick={() => { setShowSkills(!showSkills); setShowReferences(false) }}>技能{activeSkills.length ? ` ${activeSkills.length}` : ''}</button>}
         <label className="agent-count-select" title="Agent 生成图片时默认每次的张数；在消息里写明张数时以消息为准"><span>张数</span><select aria-label="每次生成张数" value={Math.min(conversation?.imageCount ?? 1, getMaxTaskImages())} disabled={running || !conversation} onChange={(event) => useAgentStore.getState().configureConversation(id, { imageCount: Number(event.target.value) })}>{Array.from({ length: getMaxTaskImages() }, (_, idx) => <option key={idx} value={idx + 1}>{idx + 1} 张</option>)}</select></label>
         <label className="agent-canvas-select"><span>画布</span><select aria-label="关联画布" value={conversation?.projectId || ''} disabled={running || !conversation} onChange={(event) => useAgentStore.getState().configureConversation(id, { projectId: event.target.value || undefined })}><option value="">未关联</option>{conversation?.projectId && !linkedProject && <option value={conversation.projectId} disabled>原画布已不可用</option>}{projects.filter((project) => !project.hiddenAt).map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></label>
         <span className="agent-composer-spacer" />
         {running ? <button type="button" className="agent-send agent-stop" aria-label="停止 Agent" title="停止对话；已提交的图片继续生成" onClick={() => useAgentStore.getState().stop(id)}><span /></button> : <button className="agent-send" type="submit" aria-label="发送" disabled={!conversation?.draft.trim() || uploading || !model || modelsLoading}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></button>}
       </div>
       <input hidden type="file" ref={fileInput} multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { void attachFiles([...event.target.files || []]); event.target.value = '' }} />
+      {showSkills && <div className="agent-skill-picker"><p>启用的技能会让 Agent 按其中的方法构思和撰写提示词；也可以在消息里输入 $名称 启用。最多同时启用 {MAX_ACTIVE_SKILLS} 个。</p><div>{skills.map((skill) => <button type="button" key={skill.name} aria-pressed={activeSkills.includes(skill)} onClick={() => toggleSkill(skill.name)}><strong>{skill.title}<code>${skill.name}</code></strong><span>{skill.description}</span></button>)}</div></div>}
       {showReferences && <div className="agent-reference-picker"><p>画布素材与最近生成的图片</p><div>{referenceOptions.map((imageId) => <button type="button" key={imageId} aria-label={`引用图片 ${imageId.slice(0, 8)}`} aria-pressed={conversation?.referenceImageIds.includes(imageId)} onClick={() => {
         if (!conversation) return
         const refs = conversation.referenceImageIds
