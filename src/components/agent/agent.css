@@ -107,7 +107,7 @@
 /* 生成中的占位框：与结果图同样最高 360px，按目标比例，窄抽屉里缩到容器宽度 */
 .agent-image-pending { position: relative; isolation: isolate; overflow: hidden; width: min(100%, calc(360px * var(--ratio))); aspect-ratio: var(--ratio); min-width: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--ws-line); background: var(--ws-panel); text-align: center; padding: 16px; }
 /* 模糊的色块缓慢流动，像颜料在画布上晕开 */
-.agent-image-pending::before { content: ''; position: absolute; inset: -35%; z-index: -1; background: radial-gradient(circle at 30% 35%, rgba(50, 184, 215, .34), transparent 32%), radial-gradient(circle at 72% 62%, rgba(139, 92, 246, .28), transparent 34%), radial-gradient(circle at 48% 82%, rgba(245, 158, 11, .16), transparent 28%); filter: blur(30px); animation: agent-pending-drift 10s ease-in-out infinite alternate; }
+.agent-image-pending::before { content: ''; position: absolute; inset: -35%; z-index: -1; background: radial-gradient(circle at 30% 35%, rgb(var(--c-blue-400) / .34), transparent 32%), radial-gradient(circle at 72% 62%, rgba(139, 92, 246, .28), transparent 34%), radial-gradient(circle at 48% 82%, rgba(245, 158, 11, .16), transparent 28%); filter: blur(30px); animation: agent-pending-drift 10s ease-in-out infinite alternate; }
 /* 一道很淡的斜向高光掠过 */
 .agent-image-pending::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .06) 50%, transparent 65%); background-size: 300% 100%; animation: agent-pending-sweep 3.6s ease-in-out infinite; }
 .agent-image-pending-text { display: flex; flex-direction: column; gap: 5px; animation: agent-pending-text .6s ease both; }

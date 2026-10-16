@@ -12,7 +12,7 @@
   --muted-foreground: 240 4% 46%;
   --border: 240 6% 90%;
   --input: 240 6% 90%;
-  --primary: 221 83% 53%;
+  --primary: 21 66% 50%;
   --primary-foreground: 0 0% 100%;
   --sidebar: 240 5% 96%;
   --sidebar-foreground: 240 10% 10%;
@@ -23,7 +23,7 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
   scrollbar-gutter: stable;
-  /* 浅色主题的强调色：首页暖橙色系，Tailwind 的 blue-* 都映射到这里 */
+  /* 全站主色（首页暖橙色系）：Tailwind 的 blue-* 都映射到这里，--ws-accent 取 500 档；深色主题在 :root.dark 里换一套更亮的 */
   --c-blue-50: 253 244 236; --c-blue-100: 251 230 213; --c-blue-200: 246 205 173; --c-blue-300: 240 173 128;
   --c-blue-400: 232 138 86; --c-blue-500: 214 104 44; --c-blue-600: 190 85 32; --c-blue-700: 158 68 27;
   --c-blue-800: 128 56 26; --c-blue-900: 105 47 24; --c-blue-950: 58 24 11;
@@ -80,14 +80,14 @@ body.drag-selecting * {
   --muted-foreground: 240 5% 65%;
   --border: 240 4% 22%;
   --input: 240 4% 22%;
-  --primary: 217 91% 60%;
+  --primary: 22 74% 55%;
   --primary-foreground: 0 0% 100%;
   --sidebar: 240 5% 12%;
   --sidebar-foreground: 0 0% 98%;
-  /* 深色主题保持原来的 Tailwind 蓝 */
-  --c-blue-50: 239 246 255; --c-blue-100: 219 234 254; --c-blue-200: 191 219 254; --c-blue-300: 147 197 253;
-  --c-blue-400: 96 165 250; --c-blue-500: 59 130 246; --c-blue-600: 37 99 235; --c-blue-700: 29 78 216;
-  --c-blue-800: 30 64 175; --c-blue-900: 30 58 138; --c-blue-950: 23 37 84;
+  /* 深色主题同样用暖橙，300–600 档提亮一些，保证深底上的文字和图标够清楚 */
+  --c-blue-50: 253 244 236; --c-blue-100: 251 230 213; --c-blue-200: 246 205 173; --c-blue-300: 243 180 136;
+  --c-blue-400: 240 151 93; --c-blue-500: 226 116 54; --c-blue-600: 200 92 36; --c-blue-700: 166 72 28;
+  --c-blue-800: 134 58 26; --c-blue-900: 108 48 24; --c-blue-950: 60 25 12;
 }
 
 .dark * {
@@ -120,8 +120,8 @@ input[type="number"] {
 }
 
 @keyframes pulse-border {
-  0%, 100% { border-color: #3b82f6; }
-  50% { border-color: #93c5fd; }
+  0%, 100% { border-color: rgb(var(--c-blue-500)); }
+  50% { border-color: rgb(var(--c-blue-300)); }
 }
 
 .hide-scrollbar {
@@ -265,9 +265,9 @@ input[type="number"] {
   padding: 0 7px;
   margin: 0 2px;
   border-radius: 6px;
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #dbeafe;
+  background: rgb(var(--c-blue-50));
+  color: rgb(var(--c-blue-600));
+  border: 1px solid rgb(var(--c-blue-100));
   font-size: inherit;
   font-weight: 600;
   line-height: 1;
@@ -285,25 +285,25 @@ input[type="number"] {
 
 [contenteditable]::selection,
 [contenteditable] *::selection {
-  background: rgba(37, 99, 235, 0.2);
+  background: rgb(var(--c-blue-600) / 0.2);
   color: inherit;
 }
 
 .mention-tag:hover {
-  background: #dbeafe;
+  background: rgb(var(--c-blue-100));
 }
 
 .mention-tag.selected {
-  background: #2563eb;
+  background: rgb(var(--c-blue-600));
   color: #ffffff;
-  border-color: #1d4ed8;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+  border-color: rgb(var(--c-blue-700));
+  box-shadow: inset 0 0 0 1px rgb(var(--c-blue-600) / 0.25);
 }
 
 .dark .mention-tag {
-  background: rgba(59, 130, 246, 0.12);
-  color: #93c5fd;
-  border-color: rgba(59, 130, 246, 0.2);
+  background: rgb(var(--c-blue-500) / 0.12);
+  color: rgb(var(--c-blue-300));
+  border-color: rgb(var(--c-blue-500) / 0.2);
 }
 
 .dark .mention-tag::selection,
@@ -314,19 +314,19 @@ input[type="number"] {
 
 .dark [contenteditable]::selection,
 .dark [contenteditable] *::selection {
-  background: rgba(59, 130, 246, 0.3);
+  background: rgb(var(--c-blue-500) / 0.3);
   color: inherit;
 }
 
 .dark .mention-tag:hover {
-  background: rgba(59, 130, 246, 0.2);
+  background: rgb(var(--c-blue-500) / 0.2);
 }
 
 .dark .mention-tag.selected {
-  background: #3b82f6;
+  background: rgb(var(--c-blue-500));
   color: #ffffff;
-  border-color: #60a5fa;
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.35);
+  border-color: rgb(var(--c-blue-400));
+  box-shadow: inset 0 0 0 1px rgb(var(--c-blue-500) / 0.35);
 }
 
 /* 修复 iOS/Webkit 上带圆角的滚动容器内容/滚动条溢出的 bug */
