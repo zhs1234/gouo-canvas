@@ -1,6 +1,7 @@
 import type { AgentConversation, CanvasProject } from '../types'
+import type { SkillDocument } from './skills/types'
 import { deleteImageIfUnreferenced, useStore } from '../store'
-import { deleteCloudAssetMapItems, deleteDocuments, getAllAgentConversations, getAllCanvasProjects, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, putAgentConversation, putCanvasProject, putCloudMeta } from './db'
+import { deleteCloudAssetMapItems, deleteDocuments, getAllAgentConversations, getAllCanvasProjects, getAllSkills, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, getSkill, putAgentConversation, putCanvasProject, putCloudMeta, putSkill } from './db'
 import { getDocumentImageIds } from './documentAssets'
 import { backendRequest, getLoadedTrashRetentionMs, GouoAssetMissingError, GouoConflictError, refreshBackendStatus, type GouoCloudAsset } from './gouoBackend'
 import { downloadAsset, uploadImage } from './serverLibrary'
@@ -8,10 +9,11 @@ import { isStorageScopeCurrent } from './storageScope'
 import { serializeCanvasProject, validateCanvasProject } from './canvas/document'
 import { markAgentPersisted, normalizeAgentConversation, useAgentStore } from '../stores/agentStore'
 import { markCanvasPersisted, useCanvasStore } from '../stores/canvasStore'
+import { normalizeSkillDocument, useSkillStore } from '../stores/skillStore'
 
-// 画布与会话以服务端为准：本地保存后直接写到服务端，打开时读取服务端的新版本。
-type Document = CanvasProject | AgentConversation
-type Kind = 'canvases' | 'conversations'
+// 画布、会话与导入的技能以服务端为准：本地保存后直接写到服务端，打开时读取服务端的新版本。
+type Document = CanvasProject | AgentConversation | SkillDocument
+type Kind = 'canvases' | 'conversations' | 'skills'
 interface CloudDocument {
   client_id: string
   title: string
@@ -26,7 +28,7 @@ interface SavedState {
   fingerprint: string
 }
 
-const KINDS = ['canvases', 'conversations'] as const
+const KINDS = ['canvases', 'conversations', 'skills'] as const
 let pushing: Promise<void> | null = null
 let pushAgain = false
 let retryTimer: ReturnType<typeof setTimeout> | undefined
@@ -38,12 +40,14 @@ export function documentFingerprint(doc: Document) {
 }
 
 const metaKey = (kind: Kind, id: string) => `document:${kind}:${id}`
-const readLocal = (kind: Kind, id: string): Promise<Document | undefined> => (kind === 'canvases' ? getCanvasProject(id) : getAgentConversation(id))
-const inMemory = (kind: Kind, id: string): Document | undefined => (kind === 'canvases' ? useCanvasStore.getState().projects : useAgentStore.getState().conversations).find((item) => item.id === id)
+const readLocal = (kind: Kind, id: string): Promise<Document | undefined> => (kind === 'canvases' ? getCanvasProject(id) : kind === 'skills' ? getSkill(id) : getAgentConversation(id))
+const inMemory = (kind: Kind, id: string): Document | undefined => (kind === 'canvases' ? useCanvasStore.getState().projects : kind === 'skills' ? useSkillStore.getState().skills : useAgentStore.getState().conversations).find((item) => item.id === id)
+const readAll = (kind: Kind): Promise<Document[]> => (kind === 'canvases' ? getAllCanvasProjects() : kind === 'skills' ? getAllSkills() : getAllAgentConversations())
 
 async function writeLocal(kind: Kind, doc: Document, expectedRevision: number, fromServer: boolean) {
   const before = fromServer ? inMemory(kind, doc.id) : undefined
   if (kind === 'canvases') await putCanvasProject(serializeCanvasProject(doc as CanvasProject), expectedRevision, fromServer)
+  else if (kind === 'skills') await putSkill(doc as SkillDocument, expectedRevision, fromServer)
   else await putAgentConversation(doc as AgentConversation, expectedRevision, fromServer)
   // 写库期间用户又有编辑：替换内存后把这份编辑另存为副本，不直接丢弃。
   const current = before && inMemory(kind, doc.id)
@@ -56,6 +60,8 @@ async function writeLocal(kind: Kind, doc: Document, expectedRevision: number, f
       if (fromServer) delete histories[doc.id]
       return { projects: [...state.projects.filter((item) => item.id !== doc.id), doc as CanvasProject], histories }
     })
+  } else if (kind === 'skills') {
+    useSkillStore.setState((state) => ({ skills: [...state.skills.filter((item) => item.id !== doc.id), doc as SkillDocument] }))
   } else {
     markAgentPersisted(doc as AgentConversation)
     useAgentStore.setState((state) => ({ conversations: [...state.conversations.filter((item) => item.id !== doc.id), doc as AgentConversation] }))
@@ -79,7 +85,7 @@ function reportOnce(key: string, message: string) {
 async function acceptRemote(kind: Kind, remote: CloudDocument) {
   const raw = remote.document
   if (kind === 'canvases') validateCanvasProject(raw)
-  const normalized = kind === 'canvases' ? (raw as CanvasProject) : normalizeAgentConversation(raw)
+  const normalized = kind === 'canvases' ? (raw as CanvasProject) : kind === 'skills' ? normalizeSkillDocument(raw) : normalizeAgentConversation(raw)
   if (!normalized || normalized.id !== remote.client_id) throw new Error('云端文档格式无效')
   // 内存中还有未落库的编辑，或会话正在运行：本次跳过，下次再读取。
   const busy = (local: Document | undefined, memory: Document | undefined) => Boolean((memory && local && memory.revision !== local.revision) || (memory && 'status' in memory && memory.status === 'running'))
@@ -165,8 +171,7 @@ async function pushPending() {
   do {
     pushAgain = false
     for (const kind of KINDS) {
-      const records = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
-      for (const doc of records) {
+      for (const doc of await readAll(kind)) {
         if (!isStorageScopeCurrent()) return
         try {
           await pushDocument(kind, doc.id)
@@ -207,19 +212,19 @@ async function pullDocuments(kind: Kind) {
   }
 }
 
-// 回收站中的画布和会话到期后彻底删除，与服务端清理保持一致；保留期未知时不清理
+// 回收站中的画布、会话和技能到期后彻底删除，与服务端清理保持一致；保留期未知时不清理
 async function purgeExpiredDocuments() {
   await refreshBackendStatus()
   const retention = getLoadedTrashRetentionMs()
   if (!retention) return
   const cutoff = Date.now() - retention
   for (const kind of KINDS) {
-    const records: Document[] = kind === 'canvases' ? await getAllCanvasProjects() : await getAllAgentConversations()
-    const expired = records.filter((doc) => doc.hiddenAt && doc.hiddenAt < cutoff)
+    const expired = (await readAll(kind)).filter((doc) => doc.hiddenAt && doc.hiddenAt < cutoff)
     if (!expired.length) continue
     const ids = new Set(expired.map((doc) => doc.id))
     await deleteDocuments(kind, [...ids])
     if (kind === 'canvases') useCanvasStore.setState((state) => ({ projects: state.projects.filter((item) => !ids.has(item.id)) }))
+    else if (kind === 'skills') useSkillStore.setState((state) => ({ skills: state.skills.filter((item) => !ids.has(item.id)) }))
     else useAgentStore.setState((state) => ({ conversations: state.conversations.filter((item) => !ids.has(item.id)) }))
     for (const imageId of getDocumentImageIds(expired)) await deleteImageIfUnreferenced(imageId)
   }
@@ -227,12 +232,12 @@ async function purgeExpiredDocuments() {
 
 export async function startServerDocuments() {
   try {
-    await Promise.all([useCanvasStore.getState().hydrate(), useAgentStore.getState().hydrate()])
+    await Promise.all([useCanvasStore.getState().hydrate(), useAgentStore.getState().hydrate(), useSkillStore.getState().hydrate()])
     await purgeExpiredDocuments()
     for (const kind of KINDS) await pullDocuments(kind)
   } catch (err) {
-    console.warn('读取云端画布和会话失败', err)
-    useStore.getState().showToast(`读取云端画布和会话失败：${err instanceof Error ? err.message : String(err)}`, 'error')
+    console.warn('读取云端画布、会话和技能失败', err)
+    useStore.getState().showToast(`读取云端画布、会话和技能失败：${err instanceof Error ? err.message : String(err)}`, 'error')
   }
   let timer: ReturnType<typeof setTimeout> | undefined
   window.addEventListener('gouo:documents-changed', (event) => {

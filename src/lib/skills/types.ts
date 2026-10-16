@@ -4,6 +4,8 @@ export interface SkillFile {
 }
 
 export interface Skill {
+  // 会话里记录启用状态用的稳定标识：内置技能是名称，导入的技能是文档 ID；名称可能因重名加后缀而变化
+  key: string
   name: string
   title: string
   description: string

@@ -176,10 +176,10 @@ export async function executeAgentTool(input: {
       const end = offset + SKILL_FILE_CHUNK
       return { result: JSON.stringify({ name: skill.name, path: file.path, content: file.content.slice(offset, end), ...(end < file.content.length ? { nextOffset: end } : {}) }) }
     }
-    const active = (conversation.skills || []).filter((name) => listAgentSkills().some((item) => item.name === name))
-    if (active.includes(skill.name)) return { result: JSON.stringify({ name: skill.name, status: 'already_active' }) }
+    const active = (conversation.skills || []).filter((key) => listAgentSkills().some((item) => item.key === key))
+    if (active.includes(skill.key)) return { result: JSON.stringify({ name: skill.name, status: 'already_active' }) }
     if (active.length >= MAX_ACTIVE_SKILLS) throw new Error(`本会话最多同时启用 ${MAX_ACTIVE_SKILLS} 个 skill，请让用户在输入框上方移除不需要的 skill`)
-    return { result: JSON.stringify({ name: skill.name, status: 'activated', note: '说明已加入系统提示，请按说明继续。' }), skills: [...active, skill.name] }
+    return { result: JSON.stringify({ name: skill.name, status: 'activated', note: '说明已加入系统提示，请按说明继续。' }), skills: [...active, skill.key] }
   }
   await useCanvasStore.getState().hydrate()
   input.signal.throwIfAborted()

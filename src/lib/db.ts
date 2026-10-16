@@ -257,8 +257,10 @@ export function putCloudMeta(key: string, value: unknown): Promise<IDBValidKey> 
 }
 
 // 文档与其同步记录在同一事务里读取，避免旧内容与其他标签页刚写入的新服务端版本号配对提交。
-export async function getDocumentWithCloudMeta<T>(kind: 'canvases' | 'conversations', id: string, metaKey: string): Promise<{ doc?: CanvasProject | AgentConversation; meta?: T }> {
-  const storeName = kind === 'canvases' ? STORE_CANVASES : STORE_AGENT_CONVERSATIONS
+const DOCUMENT_STORES = { canvases: STORE_CANVASES, conversations: STORE_AGENT_CONVERSATIONS, skills: STORE_SKILLS }
+
+export async function getDocumentWithCloudMeta<T>(kind: keyof typeof DOCUMENT_STORES, id: string, metaKey: string): Promise<{ doc?: CanvasProject | AgentConversation | SkillDocument; meta?: T }> {
+  const storeName = DOCUMENT_STORES[kind]
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction([storeName, STORE_CLOUD_META], 'readonly')
@@ -269,10 +271,10 @@ export async function getDocumentWithCloudMeta<T>(kind: 'canvases' | 'conversati
   })
 }
 
-// 彻底删除画布或会话及其同步记录；图片由调用方按引用情况清理。
-export async function deleteDocuments(kind: 'canvases' | 'conversations', ids: string[]): Promise<void> {
+// 彻底删除画布、会话或技能及其同步记录；图片由调用方按引用情况清理。
+export async function deleteDocuments(kind: keyof typeof DOCUMENT_STORES, ids: string[]): Promise<void> {
   if (!ids.length) return
-  const storeName = kind === 'canvases' ? STORE_CANVASES : STORE_AGENT_CONVERSATIONS
+  const storeName = DOCUMENT_STORES[kind]
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction([storeName, STORE_CLOUD_META], 'readwrite')

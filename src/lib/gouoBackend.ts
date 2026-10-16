@@ -23,6 +23,8 @@ export interface GouoUser {
   used_cny?: number
   quota_cny_rate?: number
   image_price_cny?: number
+  // 管理员为 10 及以上，root 为 100
+  role?: number
 }
 
 interface RegisterInput {
@@ -179,6 +181,9 @@ interface GouoBackendStatus {
   gouo_trash_retention_days?: number
   gouo_max_upload_bytes?: number
   gouo_allow_low_moderation?: boolean
+  gouo_skills_enabled?: boolean
+  gouo_skill_import?: boolean
+  gouo_skill_github_import?: boolean
 }
 
 export interface GouoCloudStorage {
@@ -358,6 +363,21 @@ export function getCachedBackendStatus() {
 export function subscribeBackendStatus(listener: (status: GouoBackendStatus) => void) {
   statusListeners.add(listener)
   return () => { statusListeners.delete(listener) }
+}
+
+// 还没读到后台设置时不开放，避免页面刚打开或接口失败时仍把技能注入 Agent。
+// 旧版后台没有这项时按开启处理；GitHub 链接导入默认只给管理员
+export function isSkillsEnabled(status = cachedStatus) {
+  if (!status) return false
+  return status.gouo_skills_enabled !== false
+}
+
+export function isSkillImportEnabled(status = cachedStatus) {
+  return status?.gouo_skill_import !== false
+}
+
+export function isSkillGithubImportOpen(status = cachedStatus) {
+  return status?.gouo_skill_github_import === true
 }
 
 // 回收站保留期由后台设置；未取到后台设置时返回 null，调用方不做本地清理，避免误删服务端仍可恢复的内容

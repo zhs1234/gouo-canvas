@@ -146,7 +146,8 @@ async function runConversation(id: string, controller: AbortController) {
       const messages = await buildAgentMessages(conversation, model, useAgentStore.getState().systemPrompt, skills)
       const messageId = crypto.randomUUID()
       updateConversation(id, (current) => ({ messages: [...current.messages, { id: messageId, role: 'assistant', content: '', createdAt: Date.now() }] }))
-      const completion = await streamAgentCompletion({ model: model.id, messages, tools: getAgentToolDefinitions(skills, conversation.skills), signal: controller.signal, onUpdate: (content, calls) => updateAssistant(id, messageId, content, calls) })
+      const activeNames = skills.filter((skill) => conversation.skills?.includes(skill.key)).map((skill) => skill.name)
+      const completion = await streamAgentCompletion({ model: model.id, messages, tools: getAgentToolDefinitions(skills, activeNames), signal: controller.signal, onUpdate: (content, calls) => updateAssistant(id, messageId, content, calls) })
       updateAssistant(id, messageId, completion.content, completion.calls)
       if (!completion.calls.length) {
         if (!completion.content.trim()) throw new Error('模型没有返回可用内容，请检查模型配置后重试')

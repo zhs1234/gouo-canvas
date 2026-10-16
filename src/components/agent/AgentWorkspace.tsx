@@ -253,16 +253,16 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
     finally { setUploading(false) }
   }
 
-  const activeSkills = skills.filter((skill) => conversation?.skills?.includes(skill.name))
-  const toggleSkill = (name: string) => {
+  const activeSkills = skills.filter((skill) => conversation?.skills?.includes(skill.key))
+  const toggleSkill = (key: string) => {
     if (!conversation) return
-    const active = activeSkills.map((skill) => skill.name)
-    if (!active.includes(name) && active.length >= MAX_ACTIVE_SKILLS) { useStore.getState().showToast(`最多同时启用 ${MAX_ACTIVE_SKILLS} 个技能`, 'error'); return }
-    useAgentStore.getState().configureConversation(conversation.id, { skills: active.includes(name) ? active.filter((value) => value !== name) : [...active, name] })
+    const active = activeSkills.map((skill) => skill.key)
+    if (!active.includes(key) && active.length >= MAX_ACTIVE_SKILLS) { useStore.getState().showToast(`最多同时启用 ${MAX_ACTIVE_SKILLS} 个技能`, 'error'); return }
+    useAgentStore.getState().configureConversation(conversation.id, { skills: active.includes(key) ? active.filter((value) => value !== key) : [...active, key] })
   }
 
   const composer = <div className="agent-composer-region">
-    {activeSkills.length ? <div className="agent-skill-chips">{activeSkills.map((skill) => <span key={skill.name} className="agent-skill-chip" title={skill.description}>{skill.title}{!running && <button type="button" aria-label={`停用技能 ${skill.title}`} onClick={() => toggleSkill(skill.name)}><CloseIcon width={11} height={11} /></button>}</span>)}</div> : null}
+    {activeSkills.length ? <div className="agent-skill-chips">{activeSkills.map((skill) => <span key={skill.key} className="agent-skill-chip" title={skill.description}>{skill.title}{!running && <button type="button" aria-label={`停用技能 ${skill.title}`} onClick={() => toggleSkill(skill.key)}><CloseIcon width={11} height={11} /></button>}</span>)}</div> : null}
     {conversation?.referenceImageIds.length ? <div className="agent-attachments">{conversation.referenceImageIds.map((imageId) => <AgentImage key={imageId} id={imageId} onRemove={running ? undefined : () => useAgentStore.getState().configureConversation(id, { referenceImageIds: conversation.referenceImageIds.filter((value) => value !== imageId) })} />)}</div> : null}
     <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); void send() }}
       onDragOver={(event) => { if ([...event.dataTransfer.types].includes('Files')) event.preventDefault() }}
@@ -288,7 +288,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
         {running ? <button type="button" className="agent-send agent-stop" aria-label="停止 Agent" title="停止对话；已提交的图片继续生成" onClick={() => useAgentStore.getState().stop(id)}><span /></button> : <button className="agent-send" type="submit" aria-label="发送" disabled={!conversation?.draft.trim() || uploading || !model || modelsLoading}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></button>}
       </div>
       <input hidden type="file" ref={fileInput} multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { void attachFiles([...event.target.files || []]); event.target.value = '' }} />
-      {showSkills && <div className="agent-skill-picker"><p>启用的技能会让 Agent 按其中的方法构思和撰写提示词；也可以在消息里输入 $名称 启用。最多同时启用 {MAX_ACTIVE_SKILLS} 个。<button type="button" onClick={() => useStore.getState().setShowSettings(true, 'skills')}>管理和导入技能</button></p><div>{skills.map((skill) => <button type="button" key={skill.name} aria-pressed={activeSkills.includes(skill)} onClick={() => toggleSkill(skill.name)}><strong>{skill.title}<code>${skill.name}</code></strong><span>{skill.description}</span></button>)}</div></div>}
+      {showSkills && <div className="agent-skill-picker"><p>启用的技能会让 Agent 按其中的方法构思和撰写提示词；也可以在消息里输入 $名称 启用。最多同时启用 {MAX_ACTIVE_SKILLS} 个。<button type="button" onClick={() => useStore.getState().setShowSettings(true, 'skills')}>管理和导入技能</button></p><div>{skills.map((skill) => <button type="button" key={skill.key} aria-pressed={activeSkills.includes(skill)} onClick={() => toggleSkill(skill.key)}><strong>{skill.title}<code>${skill.name}</code></strong><span>{skill.description}</span></button>)}</div></div>}
       {showReferences && <div className="agent-reference-picker"><p>画布素材与最近生成的图片</p><div>{referenceOptions.map((imageId) => <button type="button" key={imageId} aria-label={`引用图片 ${imageId.slice(0, 8)}`} aria-pressed={conversation?.referenceImageIds.includes(imageId)} onClick={() => {
         if (!conversation) return
         const refs = conversation.referenceImageIds

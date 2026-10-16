@@ -17,6 +17,9 @@ const EMPTY = {
   GouoAllowLowModeration: 'false',
   GouoAgentMaxRounds: '8',
   GouoAgentConfirmImages: '4',
+  GouoSkillsEnabled: 'true',
+  GouoSkillImportEnabled: 'true',
+  GouoSkillGithubImport: 'false',
   GouoCloudLibraryEnabled: 'true',
   GouoAssetUserQuotaBytes: String(2 * 1024 ** 3),
   GouoAssetMaxFileBytes: String(25 * 1024 ** 2),
@@ -230,6 +233,21 @@ export default function GouoSettings() {
             </MenuItem>
           ))}
         </TextField>
+        {toggle(
+          'GouoSkillsEnabled',
+          '开放技能',
+          '技能是写给 Agent 的创作方法说明（内置 9 个，用户也可以导入）。关闭后 Agent 不再列出和使用技能，客户端隐藏技能入口；用户导入的技能保留。'
+        )}
+        {toggle(
+          'GouoSkillImportEnabled',
+          '允许用户导入技能',
+          '关闭后客户端隐藏导入入口，只能使用内置技能和已导入的技能。导入的技能按文档同步到服务端，计入用户空间。'
+        )}
+        {toggle(
+          'GouoSkillGithubImport',
+          '允许所有用户从 GitHub 链接导入',
+          '管理员始终可以从 GitHub 链接导入；开启后普通用户也可以。上传压缩包导入不受这项影响。'
+        )}
         <TextField
           label="Agent 附加提示词"
           multiline

@@ -41,7 +41,8 @@ import { showBrowserNotification } from './lib/browserNotification'
 import { normalizeTaskParams } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
-import { getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError } from './lib/gouoBackend'
+import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
+import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
@@ -1930,6 +1931,36 @@ export async function importData(file: File, options: ImportOptions = { importCo
       }))
       importedCount = importedTasks.length
       skippedCount = data.tasks.length - importedCount
+      // 同名技能都保留：同步冲突会留下多份同名文档，目录按导入先后加后缀区分。
+      // 换成固定的新 ID，避免覆盖另一台设备尚未拉取的文档，再次导入同一份备份时也能认出；本地已有的沿用那份。
+      // 运营方关闭技能或技能导入时不恢复，否则可以借备份绕过开关；读不到后台设置时同样不恢复
+      if (data.skills?.length) await refreshBackendStatus()
+      const restoreSkills = getCachedBackendStatus() !== null && isSkillsEnabled() && isSkillImportEnabled()
+      const { useSkillStore, normalizeSkillDocument } = await import('./stores/skillStore')
+      await useSkillStore.getState().hydrate()
+      // 只和导入前就有的技能比对。每份最多两个候选（原 ID、imported-<原 ID>），本批内做最大匹配，原 ID 优先；
+      // 按备份顺序贪心认领时，x 与 imported-x 谁先出现都会在一种本地组合下认错并多复制一份
+      const localIds = new Set(useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.id))
+      // 删除的技能仍留着记录，同 ID 写入会让整个导入事务失败，所以这类换新 UUID
+      const takenIds = new Set(useSkillStore.getState().skills.map((skill) => skill.id))
+      const docs = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
+        const doc = normalizeSkillDocument(value)
+        return doc && !doc.hiddenAt ? [doc] : []
+      }).filter((doc, index, list) => list.findIndex((item) => item.id === doc.id) === index)
+      const matched = matchRestoredSkillIds(docs.map((doc) => doc.id), localIds)
+      // 会话按导入技能的文档 ID 记录启用状态，恢复后逐个指向新 ID 或本地已有的那份
+      const skillIds = new Map<string, string>()
+      const skills = docs.flatMap((doc) => {
+        const existingId = matched.get(doc.id)
+        if (existingId) {
+          skillIds.set(doc.id, existingId)
+          return []
+        }
+        const id = restoredSkillId(doc.id, takenIds)
+        skillIds.set(doc.id, id)
+        takenIds.add(id)
+        return [{ ...doc, id, revision: 1, updatedAt: Date.now() }]
+      })
       // 导入文档使用新 ID，避免覆盖另一个设备尚未拉取的项目。
       const canvasIds = new Map((data.canvasProjects ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
       const conversationIds = new Map((data.agentConversations ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
@@ -1940,6 +1971,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
         if (key === 'taskIds' && Array.isArray(value)) return value.map((id) => taskIds.get(id) ?? id)
         if (key === 'projectId') return canvasIds.get(value) ?? value
         if (key === 'conversationId') return conversationIds.get(value) ?? value
+        if (key === 'skills' && Array.isArray(value)) return [...new Set(value.map((id) => skillIds.get(id) ?? id))]
         return value
       })) as T
       const canvases = (data.canvasProjects ?? []).map((doc) => ({ ...remapDocument(doc), id: canvasIds.get(doc.id)! }))
@@ -1970,16 +2002,6 @@ export async function importData(file: File, options: ImportOptions = { importCo
         ? resolveDefaultFavoriteCollectionId(favoriteCollections, data.defaultFavoriteCollectionId)
         : state.defaultFavoriteCollectionId
       const normalizedFavorites = normalizeLoadedFavoriteState(importedTasks, favoriteCollections, defaultFavoriteCollectionId)
-      // 技能按名称去重：与内置或已有技能重名的跳过，新导入的换新 ID 作为独立文档同步
-      const [{ useSkillStore, normalizeSkillDocument }, { BUILTIN_SKILLS }] = await Promise.all([import('./stores/skillStore'), import('./lib/skills/builtin')])
-      await useSkillStore.getState().hydrate()
-      const skillNames = new Set([...BUILTIN_SKILLS.map((skill) => skill.name), ...useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.name)])
-      const skills = (data.skills ?? []).flatMap((value) => {
-        const doc = normalizeSkillDocument(value)
-        if (!doc || doc.hiddenAt || skillNames.has(doc.name)) return []
-        skillNames.add(doc.name)
-        return [{ ...doc, id: crypto.randomUUID(), revision: 1, createdAt: Date.now(), updatedAt: Date.now() }]
-      })
       importedSkillCount = skills.length
       await importTaskData(normalizedFavorites.tasks, images, thumbnails, { canvases, conversations, skills })
       if (skills.length) useSkillStore.setState((state) => ({ skills: [...state.skills, ...skills] }))

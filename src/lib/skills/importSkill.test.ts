@@ -47,7 +47,7 @@ describe('collectSkillPackages', () => {
   })
 
   it('导出的压缩包可以原样导入', async () => {
-    const zip = buildSkillZip({ name: 'poster-design', title: '海报：设计', description: '描述里有 "引号" 和冒号: 也没问题', body: '# 正文', files: [{ path: 'references/a.md', content: '资料' }], license: 'Apache-2.0', source: 'https://example.com/x', builtin: true })
+    const zip = buildSkillZip({ key: 'poster-design', name: 'poster-design', title: '海报：设计', description: '描述里有 "引号" 和冒号: 也没问题', body: '# 正文', files: [{ path: 'references/a.md', content: '资料' }], license: 'Apache-2.0', source: 'https://example.com/x', builtin: true })
     const [pkg] = await collectSkillPackages(zipSkillEntries(zip))
     expect(pkg).toMatchObject({ name: 'poster-design', title: '海报：设计', description: '描述里有 "引号" 和冒号: 也没问题', body: '# 正文', license: 'Apache-2.0', files: [{ path: 'references/a.md', content: '资料' }], warnings: [] })
   })

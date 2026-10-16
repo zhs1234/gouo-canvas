@@ -125,3 +125,42 @@ func TestGouoAgentDirectoryRequiresExplicitCapabilities(t *testing.T) {
 	price.GouoEnabled = true
 	require.Nil(t, gouoAgentCapabilities(price))
 }
+
+func TestGouoSkillDocumentsFollowSkillSwitch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoDocument{}, &model.GouoAsset{}, &model.GouoTask{}, &model.GouoStorageQuota{}))
+	oldDB, oldEnabled, oldAgent, oldSkills := model.DB, config.GouoCloudLibraryEnabled, config.GouoAgentEnabled, config.GouoSkillsEnabled
+	model.DB, config.GouoCloudLibraryEnabled = db, true
+	t.Cleanup(func() {
+		model.DB, config.GouoCloudLibraryEnabled, config.GouoAgentEnabled, config.GouoSkillsEnabled = oldDB, oldEnabled, oldAgent, oldSkills
+	})
+	require.NoError(t, db.Create(&model.User{Id: 1, Username: "skill-user", AccessToken: "skill-token", AffCode: "skill-aff"}).Error)
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("id", 1) })
+	for _, path := range []string{"/conversations", "/skills"} {
+		router.PUT(path+"/:id", PutGouoDocument)
+		router.GET(path+"/:id", GetGouoDocument)
+		router.POST(path+"/:id/hide", HideGouoDocument)
+	}
+	request := func(method, path string, value any) *httptest.ResponseRecorder {
+		data, err := json.Marshal(value)
+		require.NoError(t, err)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(method, path, bytes.NewReader(data)))
+		return rec
+	}
+	// 技能是独立的文档类型，正文里写到 password、data:image/ 这类字样也能保存
+	input := map[string]any{"client_id": "skill", "title": "海报", "expected_revision": 0, "document": map[string]any{"schemaVersion": 1, "name": "poster", "body": "不要在提示词里写 password，也不要用 data:image/ 内嵌图片", "files": []any{map[string]string{"path": "references/a.md", "content": "资料"}}}}
+	require.Equal(t, http.StatusOK, request("PUT", "/skills/skill", input).Code)
+	require.Equal(t, http.StatusNotFound, request("GET", "/conversations/skill", nil).Code)
+	require.Equal(t, http.StatusOK, request("GET", "/skills/skill", nil).Code)
+	config.GouoSkillsEnabled = false
+	input["expected_revision"] = 1
+	require.Contains(t, request("PUT", "/skills/skill", input).Body.String(), "skills_disabled")
+	require.Equal(t, http.StatusOK, request("POST", "/skills/skill/hide", map[string]int{"expected_revision": 1}).Code)
+	config.GouoSkillsEnabled, config.GouoAgentEnabled = true, false
+	input["expected_revision"] = 2
+	require.Contains(t, request("PUT", "/skills/skill", input).Body.String(), "agent_disabled")
+}
