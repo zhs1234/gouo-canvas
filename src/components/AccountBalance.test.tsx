@@ -61,7 +61,7 @@ it.each([
   await Promise.resolve()
   const markup = renderToStaticMarkup(<AccountBalance onClick={onClick} />)
   expect(markup).toContain(expected)
-  expect(markup).toContain(`aria-label="${expected}，打开用户中心"`)
+  expect(markup).toContain(`aria-label="${expected}，去充值"`)
   expect(onClick).not.toHaveBeenCalled()
 })
 
