@@ -37,7 +37,7 @@ import { generateCanvasNode } from '../../lib/canvas/generation'
 import { fitNodeSize } from '../../lib/canvas/nodeSize'
 import { createCanvasViewportPersistence, visibleCanvasNodes } from '../../lib/canvas/viewport'
 import { canvasThemes } from '../../lib/canvas/theme'
-import { useThemeStore } from '../../lib/canvas/uiStore'
+import { CANVAS_DRAWER_QUERY, useCanvasSidePanelStore, useThemeStore } from '../../lib/canvas/uiStore'
 import {
   CanvasNodeType,
   type CanvasConnection,
@@ -63,14 +63,18 @@ import { CanvasSidePanel, type InsertAssetPayload } from './canvasSidePanel'
 import { CanvasNodeCropDialog, type CanvasImageCropRect } from './canvasNodeCropDialog'
 import { CanvasNodeMaskEditDialog, type CanvasImageMaskEditPayload } from './canvasNodeMaskEditDialog'
 import { formatPoints } from '../../lib/accountUsage'
+import Select from '../Select'
 
 const EMPTY_IDS: string[] = []
+// 与生成输入框的参数下拉保持一致
+const NODE_SELECT_CLASS = 'rounded-lg border border-gray-200/60 bg-white/50 px-2.5 py-2 text-xs shadow-sm transition-all duration-200 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.03] dark:hover:bg-white/[0.06]'
 type Clipboard = { nodes: CanvasNodeData[]; connections: CanvasConnection[] }
 type Props = { project: CanvasProject; onOpenProject: (id: string) => void; onOpenAgent?: (id: string) => void }
 
 export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
   const { message, modal } = App.useApp()
   const theme = canvasThemes[useThemeStore((state) => state.theme)]
+  const panelOpen = useCanvasSidePanelStore((state) => state.panelOpen)
   const selectedIds = useCanvasStore((state) => state.selectedNodeIds[project.id] || EMPTY_IDS)
   const history = useCanvasStore((state) => state.histories[project.id])
   const saveError = useCanvasStore((state) => state.error)
@@ -132,6 +136,17 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
   )
   const choose = useCallback((ids: string[]) => useCanvasStore.getState().setSelection(project.id, ids), [project.id])
   const viewportPersistence = useMemo(() => createCanvasViewportPersistence((next) => run(update({ viewport: next }, false))), [run, update])
+
+  useEffect(() => {
+    // 窄屏下资源面板是盖住画布的抽屉，进入画布或窗口变窄时默认收起
+    const media = window.matchMedia(CANVAS_DRAWER_QUERY)
+    const close = () => {
+      if (media.matches) useCanvasSidePanelStore.getState().setPanelOpen(false)
+    }
+    close()
+    media.addEventListener('change', close)
+    return () => media.removeEventListener('change', close)
+  }, [])
 
   useEffect(() => {
     const container = containerRef.current
@@ -642,44 +657,30 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           已连接 {inputs.filter((item) => item.type === 'text').length} 段文本 · {inputs.filter((item) => item.type === 'image').length} 张参考图
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
-          <select
-            className="min-w-0 flex-1 rounded-lg border bg-transparent p-2"
-            aria-label="生成模型"
-            value={config.model || settings.model}
-            onChange={(event) => run(patchNode(node.id, { metadata: { model: event.target.value } }))}
-          >
-            {models.length ? (
-              models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))
-            ) : (
-              <option value={settings.model}>{settings.model || '当前模型'}</option>
-            )}
-          </select>
-          <select
-            className="rounded-lg border bg-transparent p-2"
-            aria-label="画面尺寸"
-            value={config.size || 'auto'}
-            onChange={(event) => run(patchNode(node.id, { metadata: { size: event.target.value } }))}
-          >
-            {['auto', ...(models.find((model) => model.id === (config.model || settings.model))?.sizes?.includes('1K') ? ['1024x1024', '1536x1024', '1024x1536'] : [])].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-          <select
-            className="rounded-lg border bg-transparent p-2"
-            aria-label="生成数量"
-            value={config.count || 1}
-            onChange={(event) => run(patchNode(node.id, { metadata: { count: Number(event.target.value) } }))}
-          >
-            {[1, 2, 3, 4].map((value) => (
-              <option key={value} value={value}>
-                {value} 张
-              </option>
-            ))}
-          </select>
+          <div role="group" aria-label="生成模型" className="min-w-0 flex-1">
+            <Select
+              value={config.model || settings.model}
+              onChange={(value) => run(patchNode(node.id, { metadata: { model: String(value) } }))}
+              options={models.length ? models.map((model) => ({ label: model.name, value: model.id })) : [{ label: settings.model || '当前模型', value: settings.model }]}
+              className={NODE_SELECT_CLASS}
+            />
+          </div>
+          <div role="group" aria-label="画面尺寸" className="w-[104px]">
+            <Select
+              value={config.size || 'auto'}
+              onChange={(value) => run(patchNode(node.id, { metadata: { size: String(value) } }))}
+              options={['auto', ...(models.find((model) => model.id === (config.model || settings.model))?.sizes?.includes('1K') ? ['1024x1024', '1536x1024', '1024x1536'] : [])].map((value) => ({ label: value, value }))}
+              className={NODE_SELECT_CLASS}
+            />
+          </div>
+          <div role="group" aria-label="生成数量" className="w-[68px]">
+            <Select
+              value={config.count || 1}
+              onChange={(value) => run(patchNode(node.id, { metadata: { count: Number(value) } }))}
+              options={[1, 2, 3, 4].map((value) => ({ label: `${value} 张`, value }))}
+              className={NODE_SELECT_CLASS}
+            />
+          </div>
         </div>
         {config.maskImageId && (
           <div className="mt-2 flex items-center justify-between text-xs text-blue-400">
@@ -763,7 +764,9 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full" style={{ background: theme.canvas.background, color: theme.node.text }}>
+    <div className="relative flex h-full min-h-0 w-full" style={{ background: theme.canvas.background, color: theme.node.text }}>
+      {/* 遮罩只在窄屏抽屉模式下显示（见 canvas.css），点击收起面板 */}
+      {panelOpen && <div aria-hidden className="canvas-side-backdrop" onClick={() => useCanvasSidePanelStore.getState().setPanelOpen(false)} />}
       <CanvasSidePanel
         nodes={nodes}
         selectedNodeIds={selected}
@@ -776,6 +779,8 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           const node = nodes.find((item) => item.id === id)
           if (!node) return
           choose([id])
+          // 抽屉会挡住定位到的节点，窄屏下定位后收起
+          if (window.matchMedia(CANVAS_DRAWER_QUERY).matches) useCanvasSidePanelStore.getState().setPanelOpen(false)
           onViewportChange({
             k: Math.min(1, viewport.k),
             x: size.width / 2 - (node.position.x + node.width / 2) * Math.min(1, viewport.k),
@@ -1033,6 +1038,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
         />
         <CanvasToolbar
           selectedCount={selected.size + (selectedConnection ? 1 : 0)}
+          nodeCount={nodes.length}
           canvasTool={canvasTool}
           canUndo={Boolean(history?.past.length)}
           canRedo={Boolean(history?.future.length)}
@@ -1049,8 +1055,9 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           onClear={() =>
             modal.confirm({
               title: '清空画布中的节点？',
-              content: '可以使用撤销恢复，图片素材会继续保留。',
+              content: `将删除全部 ${nodes.length} 个节点和 ${project.connections.length} 条连线，可以使用撤销恢复，图片素材会继续保留。`,
               okText: '清空',
+              okButtonProps: { danger: true },
               cancelText: '取消',
               onOk: () => update({ nodes: [], connections: [] }),
             })

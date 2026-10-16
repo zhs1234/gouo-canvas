@@ -11,6 +11,8 @@ type History = { past: CanvasProject[]; future: CanvasProject[] }
 interface CanvasState {
   projects: CanvasProject[]
   hydrated: boolean
+  // 首次从服务端拉取文档已结束（成功、失败或未启用云同步），之后仍找不到的画布才算不存在
+  documentsPulled: boolean
   error: string | null
   selectedNodeIds: Record<string, string[]>
   histories: Record<string, History>
@@ -65,6 +67,7 @@ const save = (project: CanvasProject) => {
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   projects: [],
   hydrated: false,
+  documentsPulled: false,
   error: null,
   selectedNodeIds: {},
   histories: {},
