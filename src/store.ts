@@ -46,7 +46,7 @@ import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestor
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
-import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus } from './lib/taskFilters'
+import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus, type TaskSortOrder } from './lib/taskFilters'
 import { isRecord, normalizeInputImages, normalizeMaskDraft } from './lib/storeInputNormalization'
 import { getLoadedStorageName } from './lib/storageScope'
 import { getDocumentImageIds } from './lib/documentAssets'
@@ -554,6 +554,10 @@ interface AppState {
   setFilterStatus: (status: AppState['filterStatus']) => void
   filterFavorite: boolean
   setFilterFavorite: (f: boolean) => void
+  sortOrder: TaskSortOrder
+  setSortOrder: (order: TaskSortOrder) => void
+  filterModel: string
+  setFilterModel: (model: string) => void
 
   // 多选
   selectedTaskIds: string[]
@@ -567,7 +571,9 @@ interface AppState {
 
   // UI
   detailTaskId: string | null
-  setDetailTaskId: (id: string | null) => void
+  /** 打开详情时所在列表的任务 id，用于在详情弹窗里左右切换 */
+  detailTaskList: string[]
+  setDetailTaskId: (id: string | null, list?: string[]) => void
   lightboxImageId: string | null
   lightboxImageList: string[]
   setLightboxImageId: (id: string | null, list?: string[]) => void
@@ -784,6 +790,10 @@ export const useStore = create<AppState>()(
       setFilterStatus: (filterStatus) => set({ filterStatus }),
       filterFavorite: false,
       setFilterFavorite: (filterFavorite) => set(filterFavorite ? { filterFavorite, selectedTaskIds: [], selectedFavoriteCollectionIds: [] } : { filterFavorite, activeFavoriteCollectionId: null, selectedTaskIds: [], selectedFavoriteCollectionIds: [] }),
+      sortOrder: 'newest',
+      setSortOrder: (sortOrder) => set({ sortOrder }),
+      filterModel: '',
+      setFilterModel: (filterModel) => set({ filterModel }),
 
       // Selection
       selectedTaskIds: [],
@@ -819,9 +829,10 @@ export const useStore = create<AppState>()(
 
       // UI
       detailTaskId: null,
-      setDetailTaskId: (detailTaskId) => {
+      detailTaskList: [],
+      setDetailTaskId: (detailTaskId, list) => {
         if (detailTaskId) dismissAllTooltips()
-        set({ detailTaskId })
+        set({ detailTaskId, detailTaskList: detailTaskId ? list ?? [] : [] })
       },
       lightboxImageId: null,
       lightboxImageList: [],

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import type { TaskRecord } from '../types'
 import { ALL_FAVORITES_COLLECTION_ID, getTaskFavoriteCollectionIds, useStore, reuseConfig, editOutputs, removeTask } from '../store'
-import { taskMatchesFilterStatus, taskMatchesSearchQuery } from '../lib/taskFilters'
+import { sortTasksByCreatedAt, taskMatchesFilterStatus, taskMatchesModel, taskMatchesSearchQuery } from '../lib/taskFilters'
 import TaskCard from './TaskCard'
 import { restoreServerTask } from '../lib/serverLibrary'
 import { EMPTY_GALLERY_PROMPTS } from '../lib/userGuidance'
@@ -33,6 +33,8 @@ export default function TaskGrid() {
   const searchQuery = useStore((s) => s.searchQuery)
   const filterStatus = useStore((s) => s.filterStatus)
   const filterFavorite = useStore((s) => s.filterFavorite)
+  const sortOrder = useStore((s) => s.sortOrder)
+  const filterModel = useStore((s) => s.filterModel)
   const activeFavoriteCollectionId = useStore((s) => s.activeFavoriteCollectionId)
   const setDetailTaskId = useStore((s) => s.setDetailTaskId)
   const selectedTaskIds = useStore((s) => s.selectedTaskIds)
@@ -54,7 +56,7 @@ export default function TaskGrid() {
   const initialSelection = useRef<string[]>([])
   const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
   const [pagination, setPagination] = useState({ filter: '', page: 1 })
-  const sortedTasks = useMemo(() => [...tasks].sort((a, b) => b.createdAt - a.createdAt), [tasks])
+  const sortedTasks = useMemo(() => sortTasksByCreatedAt(tasks, sortOrder), [tasks, sortOrder])
 
   const filteredTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -65,10 +67,11 @@ export default function TaskGrid() {
         if (activeFavoriteCollectionId && activeFavoriteCollectionId !== ALL_FAVORITES_COLLECTION_ID && !getTaskFavoriteCollectionIds(t).includes(activeFavoriteCollectionId)) return false
       }
       if (!taskMatchesFilterStatus(t, filterStatus)) return false
+      if (!taskMatchesModel(t, filterModel)) return false
       return taskMatchesSearchQuery(t, q)
     })
-  }, [sortedTasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
-  const filterKey = JSON.stringify([searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId])
+  }, [sortedTasks, searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId, filterModel])
+  const filterKey = JSON.stringify([searchQuery, filterStatus, filterFavorite, activeFavoriteCollectionId, sortOrder, filterModel])
   const pageCount = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE))
   const page = Math.min(pagination.filter === filterKey ? pagination.page : 1, pageCount)
   const visibleTasks = filteredTasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -288,7 +291,7 @@ export default function TaskGrid() {
   }, [clearSelection, isMac])
 
   if (!filteredTasks.length) {
-    const showExamples = tasks.length === 0 && !searchQuery && !filterFavorite && filterStatus === 'all'
+    const showExamples = tasks.length === 0 && !searchQuery && !filterFavorite && filterStatus === 'all' && !filterModel
     return (
       <div className="py-12 text-center text-gray-400 dark:text-gray-500 sm:py-16">
         {!showExamples ? (
@@ -357,7 +360,7 @@ export default function TaskGrid() {
                   return
                 }
 
-                setDetailTaskId(task.id)
+                setDetailTaskId(task.id, filteredTasks.map((item) => item.id))
               }}
               onReuse={() => reuseConfig(task)}
               onEditOutputs={() => editOutputs(task)}
