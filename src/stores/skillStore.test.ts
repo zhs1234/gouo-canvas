@@ -51,6 +51,8 @@ describe('技能存储', () => {
     const { normalizeSkillDocument } = await import('./skillStore')
     expect(normalizeSkillDocument(skill({ enabled: undefined as unknown as boolean, scripts: ['a.py', 1 as unknown as string] }))).toMatchObject({ enabled: true, scripts: ['a.py'] })
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md' }] })).toBeUndefined()
+    // 可选字段类型不对时丢弃，不带入未知字段
+    expect(normalizeSkillDocument({ ...skill({ hiddenAt: 5 }), source: {}, license: 1, sourceRef: [], extra: 'x' })).toEqual({ ...skill({ hiddenAt: 5 }), scripts: undefined, license: undefined, source: undefined, sourceRef: undefined })
     expect(normalizeSkillDocument({ ...skill(), schemaVersion: 2 })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), body: '' })).toBeUndefined()
     // 备份或云端数据可能被改过，导入时的大小和数量上限要重新检查
