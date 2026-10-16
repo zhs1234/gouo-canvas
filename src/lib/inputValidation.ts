@@ -1,6 +1,9 @@
 import { fileToDataUrl } from './dataUrl'
 import { getMaxUploadBytes } from './gouoBackend'
 
+// 与服务端图片接口的提示词上限一致（gpt-image 系列上游同为 32000 字符）
+export const MAX_PROMPT_LENGTH = 32000
+
 // 参考图会原样转发给上游编辑接口，只收上游普遍支持的格式；服务端按文件内容同样校验
 export const REFERENCE_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
