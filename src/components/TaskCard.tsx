@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { TaskRecord } from '../types'
-import { useStore, ensureImageThumbnailCached, subscribeImageThumbnail, retryTask } from '../store'
+import { useStore, ensureImageThumbnailCached, subscribeImageThumbnail, retryTask, toggleTaskFavorite } from '../store'
 import { formatImageRatio } from '../lib/size'
 import { getParamDisplay, ActualValueBadge } from '../lib/paramDisplay'
 import { useImageModels } from '../hooks/useImageModels'
-import { TransparentBgIcon } from './icons'
+import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
+import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
+import { EditIcon, FavoriteIcon, TransparentBgIcon, TrashIcon } from './icons'
 import ViewportTooltip from './ViewportTooltip'
 
 interface Props {
@@ -56,6 +59,68 @@ function TaskActionButton({
   )
 }
 
+type SheetAction = { label: string; icon: ReactNode; onClick: () => void; disabled?: boolean; danger?: boolean }
+
+// 触屏设备上卡片操作收进「更多」，以底部面板展示，每项点击区域不小于 44px
+function TaskActionSheet({ actions, onClose }: { actions: SheetAction[]; onClose: () => void }) {
+  const sheetRef = useRef<HTMLDivElement>(null)
+  useCloseOnEscape(true, onClose)
+  usePreventBackgroundScroll(true, sheetRef)
+  // 面板通过 portal 渲染，React 事件仍会冒泡回卡片，需要拦住避免打开详情或触发滑动选择
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+
+  return createPortal(
+    <div
+      data-no-drag-select
+      className="fixed inset-0 z-[70] flex items-end justify-center"
+      onClick={(e) => {
+        stop(e)
+        onClose()
+      }}
+      onTouchStart={stop}
+      onTouchMove={stop}
+      onTouchEnd={stop}
+      onTouchCancel={stop}
+    >
+      <div className="absolute inset-0 bg-black/30 animate-overlay-in" />
+      <div
+        ref={sheetRef}
+        role="menu"
+        aria-label="作品操作"
+        className="relative w-full max-w-md rounded-t-2xl bg-white p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-gray-900 animate-modal-in"
+        onClick={stop}
+      >
+        {actions.map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            role="menuitem"
+            disabled={action.disabled}
+            onClick={() => {
+              onClose()
+              action.onClick()
+            }}
+            className={`flex min-h-[48px] w-full items-center gap-3 rounded-xl px-4 text-left text-[15px] transition hover:bg-gray-50 disabled:opacity-40 dark:hover:bg-white/[0.06] ${
+              action.danger ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200'
+            }`}
+          >
+            <span className="flex h-5 w-5 items-center justify-center">{action.icon}</span>
+            {action.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-1 flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gray-100 text-[15px] font-medium text-gray-600 dark:bg-white/[0.06] dark:text-gray-300"
+        >
+          取消
+        </button>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function TaskCard({
   task,
   onReuse,
@@ -77,7 +142,7 @@ export default function TaskCard({
   const settings = useStore((s) => s.settings)
   // 显示后台填写的模型名；模型已下架或目录未加载时退回模型 ID
   const modelName = useImageModels().find((model) => model.id === task.apiModel)?.name || task.apiModel
-  const openFavoritePicker = useStore((s) => s.openFavoritePicker)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const swipeResetTimerRef = useRef<number | null>(null)
   const suppressClickUntilRef = useRef(0)
@@ -314,6 +379,22 @@ export default function TaskCard({
   const hasPartialOutputFailure = task.status === 'done' && outputErrorCount > 0
 
   const isInterrupted = task.status === 'error' && task.error === '已停止生成。'
+  const createdAt = new Date(task.createdAt)
+  const createdAtText = createdAt.toLocaleString('zh-CN', {
+    ...(createdAt.getFullYear() === new Date(now).getFullYear() ? {} : { year: 'numeric' }),
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  const showRetry = task.status === 'error' || settings.alwaysShowRetryButton
+  const sheetActions: SheetAction[] = [
+    ...(showRetry ? [{ label: '重试任务', icon: <RetryIcon className="h-5 w-5" />, onClick: () => retryTask(task) }] : []),
+    { label: task.isFavorite ? '取消收藏' : '收藏', icon: <FavoriteIcon filled={task.isFavorite} className="h-5 w-5 text-yellow-500" />, onClick: () => void toggleTaskFavorite(task.id) },
+    { label: '复用配置', icon: <ReuseIcon className="h-5 w-5" />, onClick: onReuse },
+    { label: '编辑输出', icon: <EditIcon className="h-5 w-5" />, onClick: onEditOutputs, disabled: !task.outputImages?.length },
+    { label: task.cloudHiddenAt ? '恢复作品' : '删除任务', icon: <TrashIcon className="h-5 w-5" />, onClick: onDelete, danger: !task.cloudHiddenAt },
+  ]
 
   return (
     <div className="relative rounded-xl">
@@ -469,30 +550,51 @@ export default function TaskCard({
             </>
           )}
         </div>
-        {/* 操作按钮：悬停显示，触屏常显 */}
+        {/* 触屏设备：操作收进「更多」，避免常驻图标遮挡图片 */}
+        <button
+          type="button"
+          aria-label="更多操作"
+          aria-haspopup="menu"
+          className="absolute bottom-0 right-0 hidden h-11 w-11 items-center justify-center [@media(hover:none)]:flex"
+          onClick={(e) => {
+            e.stopPropagation()
+            setSheetOpen(true)
+          }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+          onTouchCancel={(e) => e.stopPropagation()}
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm">
+            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="5" cy="12" r="1.8" />
+              <circle cx="12" cy="12" r="1.8" />
+              <circle cx="19" cy="12" r="1.8" />
+            </svg>
+          </span>
+        </button>
+        {/* 操作按钮：鼠标设备悬停显示 */}
         <div
           data-tag-scroll-area
-          className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-black/45 p-0.5 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+          className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-black/45 p-0.5 backdrop-blur-sm opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:hidden"
           onClick={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
           onTouchEnd={(e) => e.stopPropagation()}
           onTouchCancel={(e) => e.stopPropagation()}
         >
-        {(task.status === 'error' || settings.alwaysShowRetryButton) && (
+        {showRetry && (
           <TaskActionButton
             tooltip="重试任务"
             onClick={() => retryTask(task)}
             className="p-1.5 rounded-md text-white/85 hover:bg-white/15 hover:text-blue-300 transition"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            <RetryIcon className="w-4 h-4" />
           </TaskActionButton>
         )}
         <TaskActionButton
-          tooltip={task.isFavorite ? '编辑收藏夹' : '收藏任务'}
-          onClick={() => openFavoritePicker([task.id])}
+          tooltip={task.isFavorite ? '取消收藏' : '收藏'}
+          onClick={() => void toggleTaskFavorite(task.id)}
           className={`p-1.5 rounded-md transition hover:bg-white/15 ${task.isFavorite ? 'text-yellow-300' : 'text-white/85 hover:text-yellow-300'}`}
         >
           <svg
@@ -514,19 +616,7 @@ export default function TaskCard({
           onClick={onReuse}
           className="p-1.5 rounded-md text-white/85 hover:bg-white/15 hover:text-blue-300 transition"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-            />
-          </svg>
+          <ReuseIcon className="w-4 h-4" />
         </TaskActionButton>
         <TaskActionButton
           tooltip="编辑输出"
@@ -575,6 +665,9 @@ export default function TaskCard({
         <p className="min-h-[2.5rem] text-xs leading-5 text-gray-700 line-clamp-2 dark:text-gray-300">
           {task.prompt || '(无提示词)'}
         </p>
+        <time dateTime={createdAt.toISOString()} className="text-[11px] leading-4 text-gray-400 dark:text-gray-500">
+          {createdAtText}
+        </time>
         <div
           data-tag-scroll-area
           className="flex overflow-x-auto hide-scrollbar gap-1.5 whitespace-nowrap mask-edge-r min-w-0 pr-2"
@@ -641,6 +734,23 @@ export default function TaskCard({
         </div>
       </div>
       </div>
+      {sheetOpen && <TaskActionSheet actions={sheetActions} onClose={() => setSheetOpen(false)} />}
     </div>
+  )
+}
+
+function RetryIcon({ className }: { className: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+  )
+}
+
+function ReuseIcon({ className }: { className: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+    </svg>
   )
 }

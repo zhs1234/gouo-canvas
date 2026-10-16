@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { TaskRecord, FavoriteCollection } from '../../types'
 import {
   ALL_FAVORITES_COLLECTION_ID,
@@ -25,7 +26,8 @@ export function FavoriteCollectionsView() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const suppressClickUntilRef = useRef(0)
-  
+  const navigate = useNavigate()
+
   const cards = useMemo<CollectionCard[]>(() => {
     const allTasks = getCollectionTasks(ALL_FAVORITES_COLLECTION_ID, tasks)
     return [
@@ -119,9 +121,29 @@ export function FavoriteCollectionsView() {
     })
   }
 
+  // 还没有任何收藏时给出引导；只有默认收藏夹时不再展示空的收藏夹卡片
+  const hasFavorites = cards[0].tasks.length > 0
+  const showGuide = !hasFavorites && !searchQuery.trim()
+
   return (
     <div data-favorite-collections-root className="relative min-h-[50vh]">
-      {filteredCards.length === 0 ? (
+      {showGuide && (
+        <div data-no-drag-select className="mx-auto max-w-md py-16 text-center">
+          <FavoriteIcon className="mx-auto mb-4 h-12 w-12 text-yellow-400/80" />
+          <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100">还没有收藏的作品</h2>
+          <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
+            在「我的作品」里点击作品上的星标即可收藏，收藏后会出现在这里；还可以新建收藏夹分类整理。
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/works')}
+            className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-blue-500 px-5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-600"
+          >
+            去我的作品
+          </button>
+        </div>
+      )}
+      {showGuide && collections.length <= 1 ? null : filteredCards.length === 0 ? (
         <div className="py-32 text-center text-gray-400 dark:text-gray-500">
           <FavoriteIcon className="mx-auto mb-4 h-12 w-12 text-gray-300 dark:text-gray-600" />
           <p className="text-sm">{cards.length === 0 ? '还没有收藏的图片' : '没有找到匹配的收藏夹'}</p>
