@@ -42,7 +42,7 @@ import { normalizeTaskParams } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
 import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
-import { matchRestoredSkillIds } from './lib/skills/matchRestoredSkillIds'
+import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
@@ -1956,8 +1956,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
           skillIds.set(doc.id, existingId)
           return []
         }
-        const restoredId = `imported-${doc.id}`
-        const id = takenIds.has(restoredId) ? crypto.randomUUID() : restoredId
+        const id = restoredSkillId(doc.id, takenIds)
         skillIds.set(doc.id, id)
         takenIds.add(id)
         return [{ ...doc, id, revision: 1, updatedAt: Date.now() }]
