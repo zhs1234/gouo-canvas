@@ -61,5 +61,11 @@ describe('技能存储', () => {
     expect(normalizeSkillDocument({ ...skill(), files: Array.from({ length: 3 }, (_, idx) => ({ path: `${idx}.md`, content: 'x'.repeat(1024 * 1024) })) })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), files: Array.from({ length: 201 }, (_, idx) => ({ path: `${idx}.md`, content: 'x' })) })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'x'.repeat(201), content: 'x' }] })).toBeUndefined()
+    // 路径穿越和导入时一样拒绝；大小按 UTF-8 字节计算，40 万个汉字约 1.2 MB，超过单文件 1 MB
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: '../outside.md', content: 'x' }] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), scripts: ['/etc/run.sh'] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: '字'.repeat(400_000) }] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: '字'.repeat(300_000) }, { path: 'b.md', content: '字'.repeat(300_000) }, { path: 'c.md', content: '字'.repeat(100_000) }] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'references/a.md', content: '字'.repeat(300_000) }] })).toBeDefined()
   })
 })
