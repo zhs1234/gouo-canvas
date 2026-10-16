@@ -9,7 +9,8 @@ import { getMaxTaskImages, getMaxUploadBytes } from '../../lib/gouoBackend'
 import { AGENT_CONTINUE_PROMPT, executeAgentTool } from '../../lib/agent/tools'
 import { formatPoints } from '../../lib/accountUsage'
 import { downloadImageIds, formatExportFileTime } from '../../lib/downloadImages'
-import { listAgentSkills, MAX_ACTIVE_SKILLS } from '../../lib/skills/catalog'
+import { MAX_ACTIVE_SKILLS } from '../../lib/skills/catalog'
+import { useAgentSkills } from '../../hooks/useAgentSkills'
 import type { AgentConversation, AgentToolCall } from '../../lib/agent/types'
 import BackendModelSelector from '../BackendModelSelector'
 import ModelSelect from '../ModelSelect'
@@ -156,6 +157,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
   const [uploading, setUploading] = useState(false)
   const [showReferences, setShowReferences] = useState(false)
   const [showSkills, setShowSkills] = useState(false)
+  const skills = useAgentSkills()
   const [, setImageModelReady] = useState(false)
   const creating = useRef<Promise<AgentConversation> | null>(null)
   const creatingForProject = useRef(projectId)
@@ -251,7 +253,6 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
     finally { setUploading(false) }
   }
 
-  const skills = listAgentSkills()
   const activeSkills = skills.filter((skill) => conversation?.skills?.includes(skill.name))
   const toggleSkill = (name: string) => {
     if (!conversation) return
@@ -287,7 +288,7 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
         {running ? <button type="button" className="agent-send agent-stop" aria-label="停止 Agent" title="停止对话；已提交的图片继续生成" onClick={() => useAgentStore.getState().stop(id)}><span /></button> : <button className="agent-send" type="submit" aria-label="发送" disabled={!conversation?.draft.trim() || uploading || !model || modelsLoading}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></button>}
       </div>
       <input hidden type="file" ref={fileInput} multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { void attachFiles([...event.target.files || []]); event.target.value = '' }} />
-      {showSkills && <div className="agent-skill-picker"><p>启用的技能会让 Agent 按其中的方法构思和撰写提示词；也可以在消息里输入 $名称 启用。最多同时启用 {MAX_ACTIVE_SKILLS} 个。</p><div>{skills.map((skill) => <button type="button" key={skill.name} aria-pressed={activeSkills.includes(skill)} onClick={() => toggleSkill(skill.name)}><strong>{skill.title}<code>${skill.name}</code></strong><span>{skill.description}</span></button>)}</div></div>}
+      {showSkills && <div className="agent-skill-picker"><p>启用的技能会让 Agent 按其中的方法构思和撰写提示词；也可以在消息里输入 $名称 启用。最多同时启用 {MAX_ACTIVE_SKILLS} 个。<button type="button" onClick={() => useStore.getState().setShowSettings(true, 'skills')}>管理和导入技能</button></p><div>{skills.map((skill) => <button type="button" key={skill.name} aria-pressed={activeSkills.includes(skill)} onClick={() => toggleSkill(skill.name)}><strong>{skill.title}<code>${skill.name}</code></strong><span>{skill.description}</span></button>)}</div></div>}
       {showReferences && <div className="agent-reference-picker"><p>画布素材与最近生成的图片</p><div>{referenceOptions.map((imageId) => <button type="button" key={imageId} aria-label={`引用图片 ${imageId.slice(0, 8)}`} aria-pressed={conversation?.referenceImageIds.includes(imageId)} onClick={() => {
         if (!conversation) return
         const refs = conversation.referenceImageIds

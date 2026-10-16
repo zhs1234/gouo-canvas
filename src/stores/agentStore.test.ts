@@ -22,7 +22,7 @@ vi.mock('../store', () => ({
   ensureImageCached: vi.fn(async () => 'data:image/png;base64,aGVsbG8='),
   useStore: { getState: () => ({ tasks: mocks.tasks, showToast: mocks.toast }), subscribe: (listener: typeof mocks.onTasks) => { mocks.onTasks = listener } },
 }))
-vi.mock('../lib/db', () => ({ getAllAgentConversations: async () => mocks.stored, getAllTasks: async () => mocks.storedTasks, putAgentConversation: mocks.put }))
+vi.mock('../lib/db', () => ({ getAllAgentConversations: async () => mocks.stored, getAllTasks: async () => mocks.storedTasks, putAgentConversation: mocks.put, getAllSkills: async () => [] }))
 vi.mock('../lib/documentAssets', () => ({ registerDocumentImageReferences: vi.fn() }))
 vi.mock('../lib/storageScope', () => ({ isStorageScopeCurrent: () => mocks.currentScope }))
 vi.mock('../lib/agent/api', () => ({ getAgentModels: async () => mocks.catalog, streamAgentCompletion: mocks.stream, getAgentLimits: () => ({ maxRounds: mocks.maxRounds, confirmImages: 4 }) }))

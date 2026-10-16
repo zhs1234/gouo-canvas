@@ -1,12 +1,30 @@
-import type { Skill } from './types'
+import type { Skill, SkillDocument } from './types'
 import { BUILTIN_SKILLS } from './builtin'
+import { useStore } from '../../store'
+import { useSkillStore } from '../../stores/skillStore'
 
 export const MAX_ACTIVE_SKILLS = 4
 // 单个 skill 注入系统提示的正文上限，超出部分让模型按需读取参考文件
 const SKILL_PROMPT_LIMIT = 20_000
 
+export function skillFromDocument(doc: SkillDocument): Skill {
+  return { name: doc.name, title: doc.title, description: doc.description, body: doc.body, files: doc.files, license: doc.license, source: doc.source, builtin: false }
+}
+
+// 内置技能在前；导入的技能与内置或更早导入的重名时不生效
+export function getAvailableSkills(disabled: string[], imported: SkillDocument[]): Skill[] {
+  const skills = BUILTIN_SKILLS.filter((skill) => !disabled.includes(skill.name))
+  const names = new Set(BUILTIN_SKILLS.map((skill) => skill.name))
+  for (const doc of [...imported].sort((a, b) => a.createdAt - b.createdAt)) {
+    if (!doc.enabled || doc.hiddenAt || names.has(doc.name)) continue
+    names.add(doc.name)
+    skills.push(skillFromDocument(doc))
+  }
+  return skills
+}
+
 export function listAgentSkills(): Skill[] {
-  return BUILTIN_SKILLS
+  return getAvailableSkills(useStore.getState().settings.disabledSkills, useSkillStore.getState().skills)
 }
 
 // 用户消息里的 $名称 表示要求使用该 skill

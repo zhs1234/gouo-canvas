@@ -7,6 +7,7 @@ import { getAgentModels, streamAgentCompletion, getAgentLimits } from '../lib/ag
 import { executeAgentTool, getAgentToolDefinitions } from '../lib/agent/tools'
 import { reconcileAgentTasks } from '../lib/agent/taskRecovery'
 import { buildSkillPrompt, findMentionedSkills, listAgentSkills, MAX_ACTIVE_SKILLS } from '../lib/skills/catalog'
+import { useSkillStore } from './skillStore'
 import type { AgentConversation, AgentModel, AgentToolCall, ChatMessage } from '../lib/agent/types'
 import type { Skill } from '../lib/skills/types'
 
@@ -259,7 +260,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (hydratePromise) return hydratePromise
     hydratePromise = (async () => {
       const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
-      const [stored, storedTasks, lockState] = await Promise.all([getAllAgentConversations(), getAllTasks(), locks?.query()])
+      // 运行前要能读到导入的技能
+      const [stored, storedTasks, lockState] = await Promise.all([getAllAgentConversations(), getAllTasks(), locks?.query(), useSkillStore.getState().hydrate()])
       if (!isStorageScopeCurrent()) return
       const held = (lockState?.held ?? []).map((lock) => lock.name ?? '')
       const runningElsewhere = new Set(held.filter((name) => name.startsWith(AGENT_LOCK_PREFIX)).map((name) => name.slice(AGENT_LOCK_PREFIX.length)))

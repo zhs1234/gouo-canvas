@@ -3,14 +3,16 @@ import { loadImage } from './canvasImage'
 import { getLoadedStorageName, isStorageScopeCurrent } from './storageScope'
 import { addTaskReferencedImageIds } from './taskImages'
 import { getDocumentImageIds, getLiveDocumentImageIds } from './documentAssets'
+import type { SkillDocument } from './skills/types'
 
 const DB_NAME = getLoadedStorageName()
-const DB_VERSION = 5
+const DB_VERSION = 6
 const STORE_CANVASES = 'canvasProjects'
 const STORE_TASKS = 'tasks'
 const STORE_IMAGES = 'images'
 const STORE_THUMBNAILS = 'thumbnails'
 const STORE_AGENT_CONVERSATIONS = 'agentConversations'
+const STORE_SKILLS = 'skills'
 const STORE_CLOUD_META = 'cloudSyncMeta'
 const STORE_CLOUD_ASSET_MAP = 'cloudAssetMap'
 const THUMBNAIL_MAX_SIZE = 720
@@ -41,6 +43,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_AGENT_CONVERSATIONS)) {
         db.createObjectStore(STORE_AGENT_CONVERSATIONS, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_SKILLS)) {
+        db.createObjectStore(STORE_SKILLS, { keyPath: 'id' })
       }
       if (!db.objectStoreNames.contains(STORE_CLOUD_META)) {
         db.createObjectStore(STORE_CLOUD_META, { keyPath: 'key' })
@@ -95,15 +100,16 @@ export function clearTasks(): Promise<undefined> {
 }
 
 // 整批恢复共用一个事务，冲突或空间不足时不能留下半套任务和图片。
-export async function importTaskData(tasks: TaskRecord[], images: StoredImage[], thumbnails: StoredImageThumbnail[], documents?: { canvases: CanvasProject[]; conversations: AgentConversation[] }) {
+export async function importTaskData(tasks: TaskRecord[], images: StoredImage[], thumbnails: StoredImageThumbnail[], documents?: { canvases: CanvasProject[]; conversations: AgentConversation[]; skills?: SkillDocument[] }) {
   const db = await openDB()
   return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction([STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_CLOUD_ASSET_MAP, STORE_CANVASES, STORE_AGENT_CONVERSATIONS], 'readwrite')
+    const tx = db.transaction([STORE_TASKS, STORE_IMAGES, STORE_THUMBNAILS, STORE_CLOUD_ASSET_MAP, STORE_CANVASES, STORE_AGENT_CONVERSATIONS, STORE_SKILLS], 'readwrite')
     tx.oncomplete = () => { db.close(); resolve() }
     tx.onerror = tx.onabort = () => { db.close(); reject(tx.error ?? new Error('导入事务已中止')) }
     try {
       for (const doc of documents?.canvases ?? []) tx.objectStore(STORE_CANVASES).add(doc)
       for (const doc of documents?.conversations ?? []) tx.objectStore(STORE_AGENT_CONVERSATIONS).add(doc)
+      for (const doc of documents?.skills ?? []) tx.objectStore(STORE_SKILLS).add(doc)
       for (const task of tasks) tx.objectStore(STORE_TASKS).add(task)
       for (const image of images) {
         const store = tx.objectStore(STORE_IMAGES)
@@ -334,7 +340,16 @@ export function getAgentConversation(id: string): Promise<AgentConversation | un
   return dbTransaction(STORE_AGENT_CONVERSATIONS, 'readonly', (s) => s.get(id))
 }
 
-async function putDocument(storeName: string, document: CanvasProject | AgentConversation, expectedRevision?: number, fromSync = false): Promise<void> {
+export async function getAllSkills(): Promise<SkillDocument[]> {
+  const records: SkillDocument[] = await dbTransaction(STORE_SKILLS, 'readonly', (s) => s.getAll())
+  return records.filter((item) => item.schemaVersion === 1)
+}
+
+export function getSkill(id: string): Promise<SkillDocument | undefined> {
+  return dbTransaction(STORE_SKILLS, 'readonly', (s) => s.get(id))
+}
+
+async function putDocument(storeName: string, document: CanvasProject | AgentConversation | SkillDocument, expectedRevision?: number, fromSync = false): Promise<void> {
   if (!isStorageScopeCurrent()) throw new Error('账号已切换，请刷新页面')
   const db = await openDB()
   return new Promise((resolve, reject) => {
@@ -344,7 +359,7 @@ async function putDocument(storeName: string, document: CanvasProject | AgentCon
     let failure: Error | undefined
     let changed = false
     req.onsuccess = () => {
-      const current = req.result as CanvasProject | AgentConversation | undefined
+      const current = req.result as CanvasProject | AgentConversation | SkillDocument | undefined
       if (!isStorageScopeCurrent() || (expectedRevision !== undefined && (current?.revision ?? 0) !== expectedRevision)) {
         failure = new Error('文档已变更，请读取最新内容后重试')
         tx.abort()
@@ -375,6 +390,10 @@ export function putCanvasProject(project: CanvasProject, expectedRevision?: numb
 
 export function putAgentConversation(conversation: AgentConversation, expectedRevision?: number, fromSync = false): Promise<void> {
   return putDocument(STORE_AGENT_CONVERSATIONS, conversation, expectedRevision, fromSync)
+}
+
+export function putSkill(skill: SkillDocument, expectedRevision?: number, fromSync = false): Promise<void> {
+  return putDocument(STORE_SKILLS, skill, expectedRevision, fromSync)
 }
 
 // ===== Image hashing & dedup =====

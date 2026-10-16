@@ -31,6 +31,7 @@ vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: (select: (state: { 
 vi.mock('../../lib/db', () => ({ storeImageWithSize: vi.fn() }))
 vi.mock('../../lib/gouoBackend', () => ({ getMaxTaskImages: () => 10 }))
 vi.mock('../../lib/agent/tools', () => ({ executeAgentTool: mocks.tool }))
+vi.mock('../../hooks/useAgentSkills', () => ({ useAgentSkills: () => [] }))
 vi.mock('../BackendModelSelector', () => ({ default: () => null }))
 vi.mock('../ModelSelect', async (original) => {
   const module = await original<typeof import('../ModelSelect')>()
