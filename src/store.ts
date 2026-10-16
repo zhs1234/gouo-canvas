@@ -44,7 +44,6 @@ import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
 import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
 import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
-import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
 import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus } from './lib/taskFilters'
 import { isRecord, normalizeInputImages, normalizeMaskDraft } from './lib/storeInputNormalization'
@@ -1857,6 +1856,8 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
       }
     }
 
+    // 压缩库只在备份时用到，不放进首包
+    const { buildExportZip } = await import('./lib/exportZip')
     const { bytes: zipped } = buildExportZip({
       options,
       exportedAt,
@@ -1899,6 +1900,7 @@ interface ImportOptions {
 /** 导入 ZIP 数据 */
 export async function importData(file: File, options: ImportOptions = { importConfig: true, importTasks: true }): Promise<boolean> {
   try {
+    const { MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } = await import('./lib/exportZip')
     if (file.size > MAX_BACKUP_FILE_BYTES) throw new Error(`备份文件不能超过 ${MAX_BACKUP_FILE_BYTES / 1024 / 1024} MB`)
     const buffer = await file.arrayBuffer()
     const { manifest: data, files } = readExportZip(new Uint8Array(buffer))

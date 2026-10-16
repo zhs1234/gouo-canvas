@@ -38,6 +38,7 @@ createRoot(rootElement, {
   // 渲染出错时 React 会卸载整棵树，页面只剩背景色；改为显示错误信息和刷新入口，便于反馈定位
   onUncaughtError: (error, info) => {
     console.error(error, info.componentStack)
+    document.getElementById('boot-skeleton')?.remove()
     const panel = document.createElement('div')
     panel.style.cssText = 'max-width:760px;margin:12vh auto;padding:24px;font:14px/1.7 system-ui,sans-serif;color:#eee;background:#1a1a1a;border:1px solid #333;border-radius:16px'
     const title = document.createElement('p')

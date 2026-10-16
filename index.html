@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#faf8f3" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="光构" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -12,10 +12,72 @@
     <link rel="apple-touch-icon" href="./gouo-logo-180.png" />
     <link rel="icon" href="./gouo-logo-64.png" type="image/png" />
     <title>光构 · Gouo Canvas</title>
-    <script>try { if (localStorage.getItem('gouo-theme') === 'dark') { document.documentElement.classList.add('dark'); document.querySelector('meta[name="theme-color"]').setAttribute('content', '#111111') } } catch {}</script>
+    <!-- 网络字体不阻塞首屏：样式表加载完成前先用系统字体 -->
+    <link rel="stylesheet" href="https://fontsapi.zeoseven.com/442/main/result.css" media="print" onload="this.media='all'" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@lobehub/webfont-harmony-sans-sc@1.0.0/css/index.css" media="print" onload="this.media='all'" />
+    <script>try { if (localStorage.getItem('gouo-theme') === 'dark') { document.documentElement.classList.add('dark'); document.querySelector('meta[name="theme-color"]').setAttribute('content', '#111111') } if (!localStorage.getItem('gouo-canvas:active-user')) document.documentElement.dataset.boot = 'public' } catch {}</script>
+    <style>
+      /* 首屏骨架：脚本下载期间先画出侧栏、顶栏和输入区，登录检查结束后由 BackendAuthGate 移除 */
+      html { background: #faf8f3; }
+      html.dark { background: #111; }
+      #boot-skeleton { --bg: #faf8f3; --panel: #fffdf8; --raised: #efe9df; --line: rgb(23 23 25 / 0.1); --text: #171719; position: fixed; inset: 0; z-index: 200; display: flex; overflow: hidden; background: var(--bg); font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+      #boot-skeleton, #boot-skeleton * { box-sizing: border-box; }
+      html.dark #boot-skeleton { --bg: #111; --panel: #1a1a1a; --raised: #262626; --line: #2b2b2b; --text: #eee; }
+      #boot-skeleton i { display: block; border-radius: 10px; background: var(--raised); animation: boot-pulse 1.4s ease-in-out infinite; }
+      .boot-side { width: 240px; flex-shrink: 0; display: flex; flex-direction: column; gap: 5px; padding: 26px 12px; background: var(--panel); }
+      .boot-brand { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; margin-bottom: 26px; color: var(--text); font-size: 20px; font-weight: 650; letter-spacing: 2px; }
+      .boot-brand img { width: 30px; height: 30px; }
+      #boot-skeleton .boot-side i { width: 55%; height: 14px; margin: 11px 12px; }
+      #boot-skeleton .boot-side i:first-of-type { width: auto; height: 37px; margin: 0; }
+      .boot-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; padding: 14px 40px; }
+      .boot-bar { align-self: stretch; display: flex; align-items: center; justify-content: flex-end; height: 40px; margin-bottom: 58px; }
+      .boot-bar img { display: none; width: 28px; height: 28px; }
+      #boot-skeleton .boot-bar i { width: 286px; height: 40px; }
+      #boot-skeleton .boot-title { width: 300px; max-width: 80%; height: 34px; margin-bottom: 24px; }
+      #boot-skeleton .boot-modes { width: 340px; max-width: 100%; height: 42px; margin-bottom: 34px; border-radius: 28px; }
+      #boot-skeleton .boot-input { width: 100%; max-width: 1200px; height: 216px; border: 1px solid var(--line); border-radius: 24px; background: var(--panel); }
+      .boot-chips { display: flex; gap: 10px; margin-top: 16px; }
+      #boot-skeleton .boot-chips i { width: 100px; height: 36px; border-radius: 22px; }
+      .boot-logo { display: none; width: 56px; height: 56px; border-radius: 16px; animation: boot-pulse 1.4s ease-in-out infinite; }
+      html[data-boot="public"] #boot-skeleton { align-items: center; justify-content: center; }
+      html[data-boot="public"] #boot-skeleton > div { display: none; }
+      html[data-boot="public"] .boot-logo { display: block; }
+      @keyframes boot-pulse { 50% { opacity: 0.55; } }
+      @media (max-width: 1100px) {
+        .boot-side { width: 200px; }
+        .boot-main { padding: 14px 24px; }
+      }
+      @media (max-width: 760px) {
+        .boot-side { position: fixed; left: 0; right: 0; bottom: 0; width: auto; height: 58px; flex-direction: row; gap: 8px; padding: 7px 12px; border-top: 1px solid var(--line); }
+        .boot-brand { display: none; }
+        #boot-skeleton .boot-side i, #boot-skeleton .boot-side i:first-of-type { flex: 0 0 54px; height: 44px; margin: 0; }
+        #boot-skeleton .boot-side i:not(:first-of-type) { flex: 0 0 auto; width: 34px; height: 34px; margin: 5px 0; border-radius: 9px; }
+        .boot-side { justify-content: space-around; }
+        .boot-main { padding: 10px 12px; }
+        .boot-bar { justify-content: space-between; margin-bottom: 44px; }
+        .boot-bar img { display: block; }
+        #boot-skeleton .boot-bar i { width: 286px; }
+        #boot-skeleton .boot-title { width: 240px; height: 28px; }
+        #boot-skeleton .boot-modes { width: 290px; }
+        #boot-skeleton .boot-input { height: 310px; }
+        .boot-chips { display: none; }
+      }
+      @media (prefers-reduced-motion: reduce) { #boot-skeleton i, .boot-logo { animation: none; } }
+    </style>
   </head>
   <body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 min-h-screen">
     <div id="root"></div>
+    <div id="boot-skeleton" role="status" aria-label="正在打开光构">
+      <div class="boot-side"><span class="boot-brand"><img src="./gouo-logo-192.png" alt="" />光构</span><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="boot-main">
+        <div class="boot-bar"><img src="./gouo-logo-192.png" alt="" /><i></i></div>
+        <i class="boot-title"></i>
+        <i class="boot-modes"></i>
+        <i class="boot-input"></i>
+        <div class="boot-chips"><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <img class="boot-logo" src="./gouo-logo-192.png" alt="" />
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,4 +1,3 @@
-import { zipSync } from 'fflate'
 import type { TaskRecord } from '../types'
 import { ensureImageCached } from '../store'
 import { getNumberedFileNameBase, sanitizeFileNamePart } from './exportFileName'
@@ -81,6 +80,8 @@ export async function downloadImageEntriesAsZip(entries: DownloadImageZipEntry[]
   }
 
   if (successCount > 0) {
+    // 压缩库只在批量下载时用到，不放进首包
+    const { zipSync } = await import('fflate')
     const zipped = zipSync(zipFiles, { level: 6 })
     const buffer = zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength) as ArrayBuffer
     triggerDownload(new Blob([buffer], { type: 'application/zip' }), `${sanitizeFileNamePart(zipFileNameBase) || 'images'}.zip`)
