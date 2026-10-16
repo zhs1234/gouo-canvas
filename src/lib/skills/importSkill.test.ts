@@ -75,6 +75,11 @@ describe('GitHub 导入', () => {
     expect(pkg).toMatchObject({ name: 'poster-design', sourceRef: 'abc123', source: 'https://github.com/o/r/tree/feature/skills/skills/poster', files: [{ path: 'references/a.md', content: '资料' }] })
   })
 
+  it('文件列表被截断时拒绝导入，避免缺少参考文件', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.includes('/commits/') ? Response.json({ sha: 'abc' }) : Response.json({ tree: [{ path: 'SKILL.md', type: 'blob', size: 1 }], truncated: true })))
+    await expect(githubSkillEntries('https://github.com/o/r')).rejects.toThrow('只返回了部分文件列表')
+  })
+
   it('接口限流时给出可操作的提示', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 403 })))
     await expect(githubSkillEntries('https://github.com/o/r')).rejects.toThrow('每小时 60 次')

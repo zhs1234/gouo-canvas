@@ -53,5 +53,10 @@ describe('技能存储', () => {
     expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md' }] })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), schemaVersion: 2 })).toBeUndefined()
     expect(normalizeSkillDocument({ ...skill(), body: '' })).toBeUndefined()
+    // 备份或云端数据可能被改过，导入时的大小和数量上限要重新检查
+    expect(normalizeSkillDocument({ ...skill(), body: 'x'.repeat(100_001) })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: [{ path: 'a.md', content: 'x'.repeat(1024 * 1024 + 1) }] })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: Array.from({ length: 3 }, (_, idx) => ({ path: `${idx}.md`, content: 'x'.repeat(1024 * 1024) })) })).toBeUndefined()
+    expect(normalizeSkillDocument({ ...skill(), files: Array.from({ length: 201 }, (_, idx) => ({ path: `${idx}.md`, content: 'x' })) })).toBeUndefined()
   })
 })

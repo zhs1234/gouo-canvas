@@ -1,18 +1,21 @@
 import { create } from 'zustand'
 import { getAllSkills, putSkill } from '../lib/db'
 import { isStorageScopeCurrent } from '../lib/storageScope'
-import { SKILL_NAME_PATTERN } from '../lib/skills/parse'
+import { MAX_SKILL_BODY, SKILL_NAME_PATTERN } from '../lib/skills/parse'
+import { SKILL_IMPORT_LIMITS } from '../lib/skills/importSkill'
 import type { SkillDocument } from '../lib/skills/types'
 
 let hydratePromise: Promise<void> | undefined
 
-// 从 IndexedDB 或云端恢复的 skill 必须字段齐全，文件列表只接受文本
+// 从 IndexedDB、备份或云端恢复的 skill 必须字段齐全，文件列表只接受文本；
+// 这些来源可能被改过，大小和数量按导入时的上限重新检查
 export function normalizeSkillDocument(value: unknown): SkillDocument | undefined {
   if (!value || typeof value !== 'object') return
   const item = value as Partial<SkillDocument>
   if (item.schemaVersion !== 1 || typeof item.id !== 'string' || !item.id || typeof item.name !== 'string' || !SKILL_NAME_PATTERN.test(item.name)) return
-  if (typeof item.title !== 'string' || typeof item.description !== 'string' || typeof item.body !== 'string' || !item.body) return
-  if (!Array.isArray(item.files) || !item.files.every((file) => file && typeof file.path === 'string' && typeof file.content === 'string')) return
+  if (typeof item.title !== 'string' || typeof item.description !== 'string' || typeof item.body !== 'string' || !item.body || item.body.length > MAX_SKILL_BODY) return
+  if (!Array.isArray(item.files) || item.files.length > SKILL_IMPORT_LIMITS.files || !item.files.every((file) => file && typeof file.path === 'string' && typeof file.content === 'string' && file.content.length <= SKILL_IMPORT_LIMITS.file)) return
+  if (item.files.reduce((total, file) => total + file.content.length, item.body.length) > SKILL_IMPORT_LIMITS.total) return
   if (!Number.isSafeInteger(item.revision) || !Number.isFinite(item.createdAt) || !Number.isFinite(item.updatedAt)) return
   return {
     ...item as SkillDocument,
