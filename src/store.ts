@@ -1938,6 +1938,8 @@ export async function importData(file: File, options: ImportOptions = { importCo
       const { useSkillStore, normalizeSkillDocument } = await import('./stores/skillStore')
       await useSkillStore.getState().hydrate()
       const localIds = new Set(useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.id))
+      // 删除的技能仍留着记录，同 ID 写入会让整个导入事务失败，所以这类换新 UUID
+      const takenIds = new Set(useSkillStore.getState().skills.map((skill) => skill.id))
       // 会话按导入技能的文档 ID 记录启用状态，恢复后逐个指向新 ID 或本地已有的那份
       const skillIds = new Map<string, string>()
       const skills = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
@@ -1949,9 +1951,11 @@ export async function importData(file: File, options: ImportOptions = { importCo
           skillIds.set(doc.id, existingId)
           return []
         }
-        skillIds.set(doc.id, restoredId)
-        localIds.add(restoredId)
-        return [{ ...doc, id: restoredId, revision: 1, updatedAt: Date.now() }]
+        const id = takenIds.has(restoredId) ? crypto.randomUUID() : restoredId
+        skillIds.set(doc.id, id)
+        localIds.add(id)
+        takenIds.add(id)
+        return [{ ...doc, id, revision: 1, updatedAt: Date.now() }]
       })
       // 导入文档使用新 ID，避免覆盖另一个设备尚未拉取的项目。
       const canvasIds = new Map((data.canvasProjects ?? []).map((doc) => [doc.id, crypto.randomUUID()]))

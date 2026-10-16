@@ -998,6 +998,13 @@ describe('data import', () => {
     expect(await importData(file, { importTasks: true })).toBe(true)
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-skill-late', 'imported-skill-early'])
+    // 恢复后又删除的技能仍留着记录：再次导入换新 ID，不能与它撞 ID 导致整个导入失败
+    useSkillStore.setState({ skills: imported!.map((doc) => ({ ...doc, hiddenAt: 5 })), hydrated: true })
+    expect(await importData(file, { importTasks: true })).toBe(true)
+    const again = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
+    expect(again.map((doc) => doc.body)).toEqual(['较早', '较晚'])
+    expect(again.some((doc) => doc.id.startsWith('imported-'))).toBe(false)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([again[1].id, again[0].id])
     vi.unstubAllGlobals()
   })
 
