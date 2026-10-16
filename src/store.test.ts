@@ -1027,13 +1027,16 @@ describe('data import', () => {
       expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
       expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
     }
-    // imported- 前缀叠到超过服务端 128 字节时换 UUID，会话仍指向这份新技能
+    // imported- 前缀叠到超过服务端 128 字节时改用原 ID 的散列，会话指向这份新技能，再次导入时认回
     const longId = 'b'.repeat(120)
     useSkillStore.setState({ skills: [], hydrated: true })
     const longFile = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: [longId] }], skills: [skill(longId, 1, '很长')] as SkillDocument[] })
     expect(await importData(longFile, { importTasks: true })).toBe(true)
     const longDocs = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
-    expect(longDocs.map((doc) => doc.id)).toEqual([expect.stringMatching(/^[0-9a-f-]{36}$/)])
+    expect(longDocs.map((doc) => doc.id)).toEqual([expect.stringMatching(/^imported-h[0-9a-f]{16}$/)])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([longDocs[0].id])
+    expect(await importData(longFile, { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([longDocs[0].id])
     // 恢复后又删除的技能仍留着记录：再次导入换新 ID，不能与它撞 ID 导致整个导入失败
     useSkillStore.setState({ skills: imported!.map((doc) => ({ ...doc, hiddenAt: 5 })), hydrated: true })
