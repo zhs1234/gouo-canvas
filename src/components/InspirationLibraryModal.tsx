@@ -27,12 +27,30 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
   const [failedPreviews, setFailedPreviews] = useState<string[]>([])
   const libraryRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLDivElement>(null)
+  const tabsRef = useRef<HTMLDivElement>(null)
+  // 分类栏左右是否还有可滚动的内容，决定渐隐遮罩和箭头的显示
+  const [tabEdges, setTabEdges] = useState({ start: false, end: false })
   const setPrompt = useStore((s) => s.setPrompt)
   const showToast = useStore((s) => s.showToast)
 
   useCloseOnEscape(!page || Boolean(selected), selected ? () => setSelected(null) : () => onClose?.())
   usePreventBackgroundScroll(!page, [libraryRef, detailRef])
   useEffect(() => { if (page && selected) detailRef.current?.focus() }, [page, selected])
+
+  const updateTabEdges = () => {
+    const el = tabsRef.current
+    if (!el) return
+    const start = el.scrollLeft > 1
+    const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+    setTabEdges((prev) => prev.start === start && prev.end === end ? prev : { start, end })
+  }
+  // 详情页返回列表时分类栏重新显示，需要重新测量
+  useEffect(() => {
+    updateTabEdges()
+    window.addEventListener('resize', updateTabEdges)
+    return () => window.removeEventListener('resize', updateTabEdges)
+  }, [selected])
+  const scrollTabs = (dir: number) => tabsRef.current?.scrollBy({ left: dir * tabsRef.current.clientWidth * 0.6, behavior: 'smooth' })
 
   const prompts = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase('zh-CN')
@@ -103,12 +121,16 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
               </svg>
               <input autoFocus={!page} aria-label="搜索灵感" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模板、风格、场景或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
             </div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1 lg:max-w-[66%] lg:pb-0">
-              {INSPIRATION_CATEGORIES.map((item) => (
-                <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition ${category === item ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.09]'}`}>
-                  {item}
-                </button>
-              ))}
+            <div className={`inspiration-tabs relative min-w-0 lg:max-w-[66%]${tabEdges.start ? ' has-start' : ''}${tabEdges.end ? ' has-end' : ''}`}>
+              <div ref={tabsRef} data-inspiration-tabs onScroll={updateTabEdges} className="hide-scrollbar flex gap-1.5 overflow-x-auto">
+                {INSPIRATION_CATEGORIES.map((item) => (
+                  <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition ${category === item ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.09]'}`}>
+                    {item}
+                  </button>
+                ))}
+              </div>
+              <button type="button" data-inspiration-tabs-arrow hidden={!tabEdges.start} onClick={() => scrollTabs(-1)} className="inspiration-tabs-arrow left-0" aria-label="向左滚动分类"><ChevronLeftIcon className="h-4 w-4" /></button>
+              <button type="button" data-inspiration-tabs-arrow hidden={!tabEdges.end} onClick={() => scrollTabs(1)} className="inspiration-tabs-arrow right-0" aria-label="向右滚动分类"><ChevronLeftIcon className="h-4 w-4 rotate-180" /></button>
             </div>
           </div>
         </header>
@@ -140,7 +162,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                     </div>
                   </button>
                   <div className="flex gap-2 border-t border-gray-100 p-3 dark:border-white/[0.06]">
-                    <button type="button" onClick={() => void copyPrompt(item)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition hover:border-blue-200 hover:text-blue-600 dark:border-white/10" aria-label={`复制${item.title}提示词`}><CopyIcon className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => void copyPrompt(item)} className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs text-gray-500 transition hover:border-blue-200 hover:text-blue-600 dark:border-white/10 dark:text-gray-400" aria-label={`复制${item.title}提示词`}><CopyIcon className="h-4 w-4" />复制</button>
                     <button type="button" onClick={() => usePrompt(item)} className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 dark:bg-white dark:text-gray-950 dark:hover:bg-blue-500 dark:hover:text-white">填入提示词</button>
                   </div>
                 </article>

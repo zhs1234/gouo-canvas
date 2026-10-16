@@ -21,3 +21,10 @@
   .inspiration-page-header { margin-bottom: 24px; }
   .inspiration-page-footer { flex-wrap: wrap; }
 }
+/* 分类栏横向溢出时：两端渐隐 + 箭头，滚到头的一侧不显示 */
+.inspiration-tabs > [data-inspiration-tabs] { --fade-start: 0px; --fade-end: 0px; -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent); }
+.inspiration-tabs.has-start > [data-inspiration-tabs] { --fade-start: 48px; }
+.inspiration-tabs.has-end > [data-inspiration-tabs] { --fade-end: 48px; }
+.inspiration-tabs-arrow { position: absolute; top: 50%; translate: 0 -50%; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--ws-line); background: var(--ws-surface); color: var(--ws-text-2); box-shadow: 0 2px 8px rgb(0 0 0 / .12); }
+.inspiration-tabs-arrow:hover { color: var(--ws-text); background: var(--ws-raised); }
+.inspiration-tabs-arrow[hidden] { display: none; }
