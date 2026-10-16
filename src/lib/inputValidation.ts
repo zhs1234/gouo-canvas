@@ -45,3 +45,7 @@ export function parseImageCount(value: string, max: number) {
   const n = Number(value)
   return Number.isInteger(n) && n >= 1 && n <= max ? n : null
 }
+
+export function appendPrompt(current: string, text: string) {
+  return current.trim() ? `${current.trimEnd()}\n\n${text}` : text
+}

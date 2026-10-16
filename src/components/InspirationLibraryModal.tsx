@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { INSPIRATION_CATEGORIES, INSPIRATION_PROMPTS, INSPIRATION_SOURCE, type InspirationCategory, type InspirationPrompt } from '../lib/inspirationPrompts'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
+import { appendPrompt } from '../lib/inputValidation'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { useStore } from '../store'
@@ -45,7 +46,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
 
   const applyPrompt = (item: InspirationPrompt, append = false) => {
     const current = useStore.getState().prompt
-    setPrompt(append && current.trim() ? `${current.trimEnd()}\n\n${item.prompt}` : item.prompt)
+    setPrompt(append ? appendPrompt(current, item.prompt) : item.prompt)
     showToast(`已填入「${item.title}」，请替换占位内容${item.referenceCount ? '并上传参考图' : ''}`, 'success')
     if (page) onApply?.()
     else onClose?.()

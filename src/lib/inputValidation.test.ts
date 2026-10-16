@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS } from '../types'
-import { getReferenceImageIssue, MAX_REFERENCE_IMAGE_BYTES, parseImageCount, readReferenceImageFile } from './inputValidation'
+import { appendPrompt, getReferenceImageIssue, MAX_REFERENCE_IMAGE_BYTES, parseImageCount, readReferenceImageFile } from './inputValidation'
 import { normalizeTaskParams } from './paramCompatibility'
 
 afterEach(() => { vi.unstubAllGlobals() })
@@ -44,4 +44,9 @@ describe('image count input', () => {
     expect(normalizeTaskParams({ ...DEFAULT_PARAMS, n: 2.5 }).n).toBe(2)
     expect(normalizeTaskParams({ ...DEFAULT_PARAMS, n: 0.5 }).n).toBe(1)
   })
+})
+
+it('appends a template after the existing prompt instead of replacing it', () => {
+  expect(appendPrompt('一只猫  \n', '赛博朋克海报')).toBe('一只猫\n\n赛博朋克海报')
+  expect(appendPrompt('   ', '赛博朋克海报')).toBe('赛博朋克海报')
 })

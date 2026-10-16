@@ -4,6 +4,7 @@ import { BRAND } from '../config/brand'
 import { editOutputs, reuseConfig, useStore } from '../store'
 import { getAllAgentConversations, getAllCanvasProjects } from '../lib/db'
 import { INSPIRATION_TEMPLATES } from '../lib/inspirationTemplates'
+import { appendPrompt } from '../lib/inputValidation'
 import { requestUserCenter } from '../lib/userGuidance'
 import { useThemeStore } from '../lib/canvas/uiStore'
 import { useBackendStatus } from '../hooks/useBackendStatus'
@@ -111,9 +112,18 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
     }
   }
   const templates = INSPIRATION_TEMPLATES.filter((item) => category === '精选' || item.tags.some((tag) => tag.includes(category)) || item.category.includes(category))
+  // 与灵感库一致：已有提示词时让用户选择追加还是替换，避免覆盖写好的内容
   const applyTemplate = (text: string) => {
-    if (prompt.trim()) {
-      useStore.getState().setConfirmDialog({ title: '替换当前提示词？', message: '已有的提示词将被所选模板替换，参考图片会保留。', confirmText: '使用模板', action: () => setPrompt(text) })
+    if (prompt.trim() && prompt !== text) {
+      useStore.getState().setConfirmDialog({
+        title: '输入框已有提示词',
+        message: '如何填入所选模板？参考图片、模型和参数保持不变。',
+        buttons: [
+          { label: '取消', tone: 'secondary', action: () => {} },
+          { label: '追加', tone: 'secondary', action: () => setPrompt(appendPrompt(useStore.getState().prompt, text)) },
+          { label: '替换', action: () => setPrompt(text) },
+        ],
+      })
     } else setPrompt(text)
     document.querySelector('[data-input-bar]')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' })
   }
