@@ -270,7 +270,7 @@ describe('Agent tool boundary', () => {
 })
 
 describe('Agent skill 工具', () => {
-  const skill = (name: string): Skill => ({ name, title: name, description: '用途', body: '正文', files: [{ path: 'references/long.md', content: 'a'.repeat(25_000) }], builtin: true })
+  const skill = (name: string): Skill => ({ key: name, name, title: name, description: '用途', body: '正文', files: [{ path: 'references/long.md', content: 'a'.repeat(25_000) }], builtin: true })
 
   it('没有可用 skill 时不提供 skill 工具，有时 name 限定为已有名称', () => {
     expect(getAgentToolDefinitions([]).map((tool) => tool.function.name)).not.toContain('activate_skill')

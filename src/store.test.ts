@@ -3,6 +3,7 @@ import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_PARAMS } from './types'
 import { DEFAULT_SETTINGS, normalizeSettings } from './lib/settings'
 import type { ExportData, StoredImage, StoredImageThumbnail, TaskRecord } from './types'
+import type { SkillDocument } from './lib/skills/types'
 import { getSelectedImageMentionLabel } from './lib/promptImageMentions'
 vi.mock('./lib/db', () => {
   const tasks = new Map<string, TaskRecord>()
@@ -941,25 +942,32 @@ describe('data import', () => {
 
   it('imports backup skills with new IDs and skips names already taken', async () => {
     vi.stubGlobal('window', new EventTarget())
+    // 后台设置有缓存，拨快时钟让它重新读取
+    let clock = 0
+    const loadStatus = async (respond: () => Promise<Response>) => {
+      vi.stubGlobal('fetch', vi.fn(respond))
+      clock += 1
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + clock * 600_000 })
+      await refreshBackendStatus()
+      vi.useRealTimers()
+    }
     const { BUILTIN_SKILLS } = await import('./lib/skills/builtin')
     const skill = (name: string) => ({ id: `backup-${name}`, schemaVersion: 1 as const, name, title: name, description: '用途', body: '正文', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 7 })
-    const result = await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: [skill('my-skill'), skill(BUILTIN_SKILLS[0].name), skill('my-skill'), { ...skill('broken'), body: '' }] }), { importTasks: true })
-    expect(result).toBe(true)
+    const backup = (skills: unknown[]) => importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: skills as SkillDocument[] })
+    // 读不到后台设置（启动时或接口故障）时不恢复技能，避免绕过关闭的导入开关
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline') }))
+    expect(await importData(backup([skill('early-skill')]), { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    await loadStatus(async () => Response.json({ success: true, data: {} }))
+    expect(await importData(backup([skill('my-skill'), skill(BUILTIN_SKILLS[0].name), skill('my-skill'), { ...skill('broken'), body: '' }]), { importTasks: true })).toBe(true)
     const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills
     expect(imported).toEqual([expect.objectContaining({ name: 'my-skill', revision: 1 })])
     expect(imported?.[0].id).not.toBe('backup-my-skill')
     expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 0 个任务，1 个技能', 'success')
-    // 运营方关闭技能导入后，备份里的技能不恢复；后台设置有缓存，拨快时钟让它重新读取
-    const loadStatus = async (data: Record<string, unknown>) => {
-      vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data })))
-      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 120_000 })
-      await refreshBackendStatus()
-      vi.useRealTimers()
-    }
-    await loadStatus({ gouo_skill_import: false })
-    expect(await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: [skill('other-skill')] }), { importTasks: true })).toBe(true)
+    // 运营方关闭技能导入后，备份里的技能不恢复
+    await loadStatus(async () => Response.json({ success: true, data: { gouo_skill_import: false } }))
+    expect(await importData(backup([skill('other-skill')]), { importTasks: true })).toBe(true)
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
-    await loadStatus({})
     vi.unstubAllGlobals()
   })
 

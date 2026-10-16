@@ -24,7 +24,7 @@ describe('getAvailableSkills', () => {
     expect(names).not.toContain(BUILTIN_SKILLS[1].name)
     expect(names.slice(-4)).toEqual([`${builtin}-2`, 'mine', 'later', 'mine-2'])
     expect(skills.find((skill) => skill.name === 'mine')).toMatchObject({ title: '先导入', builtin: false })
-    expect(skills.find((skill) => skill.name === 'mine-2')).toMatchObject({ title: '后导入', builtin: false })
+    expect(skills.find((skill) => skill.name === 'mine-2')).toMatchObject({ key: 'dup-new', title: '后导入', builtin: false })
     expect(skills.filter((skill) => skill.name === builtin)).toEqual([BUILTIN_SKILLS[0]])
     expect(names).not.toContain('off')
     expect(names).not.toContain('deleted')

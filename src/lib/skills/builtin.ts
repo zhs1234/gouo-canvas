@@ -11,6 +11,7 @@ export const BUILTIN_SKILLS: Skill[] = Object.keys(RAW_FILES).filter((path) => p
   const dir = path.slice(0, -'SKILL.md'.length)
   const parsed = parseSkillMarkdown(RAW_FILES[path])
   return {
+    key: parsed.name,
     name: parsed.name,
     title: parsed.metadata.title || parsed.name,
     description: parsed.description,
