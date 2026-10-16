@@ -49,6 +49,9 @@
     transform: none;
   }
 }
+.canvas-workspace .canvas-side-backdrop {
+  display: none;
+}
 @media (max-width: 900px) {
   .canvas-workspace .canvas-dock {
     bottom: 84px;
@@ -58,8 +61,15 @@
   .canvas-workspace .canvas-side-panel {
     position: absolute;
     inset: 0 auto 0 0;
-    width: min(280px, 78vw) !important;
+    width: min(280px, 82%) !important;
     box-shadow: 10px 0 40px #0005;
+  }
+  .canvas-workspace .canvas-side-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 59;
+    background: #0006;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -37,7 +37,7 @@ import { generateCanvasNode } from '../../lib/canvas/generation'
 import { fitNodeSize } from '../../lib/canvas/nodeSize'
 import { createCanvasViewportPersistence, visibleCanvasNodes } from '../../lib/canvas/viewport'
 import { canvasThemes } from '../../lib/canvas/theme'
-import { useThemeStore } from '../../lib/canvas/uiStore'
+import { CANVAS_DRAWER_QUERY, useCanvasSidePanelStore, useThemeStore } from '../../lib/canvas/uiStore'
 import {
   CanvasNodeType,
   type CanvasConnection,
@@ -71,6 +71,7 @@ type Props = { project: CanvasProject; onOpenProject: (id: string) => void; onOp
 export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
   const { message, modal } = App.useApp()
   const theme = canvasThemes[useThemeStore((state) => state.theme)]
+  const panelOpen = useCanvasSidePanelStore((state) => state.panelOpen)
   const selectedIds = useCanvasStore((state) => state.selectedNodeIds[project.id] || EMPTY_IDS)
   const history = useCanvasStore((state) => state.histories[project.id])
   const saveError = useCanvasStore((state) => state.error)
@@ -132,6 +133,17 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
   )
   const choose = useCallback((ids: string[]) => useCanvasStore.getState().setSelection(project.id, ids), [project.id])
   const viewportPersistence = useMemo(() => createCanvasViewportPersistence((next) => run(update({ viewport: next }, false))), [run, update])
+
+  useEffect(() => {
+    // 窄屏下资源面板是盖住画布的抽屉，进入画布或窗口变窄时默认收起
+    const media = window.matchMedia(CANVAS_DRAWER_QUERY)
+    const close = () => {
+      if (media.matches) useCanvasSidePanelStore.getState().setPanelOpen(false)
+    }
+    close()
+    media.addEventListener('change', close)
+    return () => media.removeEventListener('change', close)
+  }, [])
 
   useEffect(() => {
     const container = containerRef.current
@@ -763,7 +775,9 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full" style={{ background: theme.canvas.background, color: theme.node.text }}>
+    <div className="relative flex h-full min-h-0 w-full" style={{ background: theme.canvas.background, color: theme.node.text }}>
+      {/* 遮罩只在窄屏抽屉模式下显示（见 canvas.css），点击收起面板 */}
+      {panelOpen && <div aria-hidden className="canvas-side-backdrop" onClick={() => useCanvasSidePanelStore.getState().setPanelOpen(false)} />}
       <CanvasSidePanel
         nodes={nodes}
         selectedNodeIds={selected}
@@ -776,6 +790,8 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           const node = nodes.find((item) => item.id === id)
           if (!node) return
           choose([id])
+          // 抽屉会挡住定位到的节点，窄屏下定位后收起
+          if (window.matchMedia(CANVAS_DRAWER_QUERY).matches) useCanvasSidePanelStore.getState().setPanelOpen(false)
           onViewportChange({
             k: Math.min(1, viewport.k),
             x: size.width / 2 - (node.position.x + node.width / 2) * Math.min(1, viewport.k),

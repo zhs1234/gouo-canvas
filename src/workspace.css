@@ -173,6 +173,8 @@ body { background: var(--ws-bg); color: var(--ws-text); }
 .canvas-agent-drawer > .agent-workspace { min-height: 0; flex: 1; }
 @media (max-width: 760px) {
   .canvas-route { height: calc(100dvh - 116px); min-height: 300px; }
+  /* 底部导航含安全区高度，画布要整体让出，否则底部工具栏和缩放条会被导航挡住 */
+  .canvas-mode .workspace-main { padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
   .canvas-agent-drawer { position: fixed; inset: 52px 0 62px; width: 100%; }
 }
 
