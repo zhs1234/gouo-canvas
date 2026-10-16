@@ -77,6 +77,23 @@ beforeEach(() => {
 })
 
 describe('server documents', () => {
+  it('首次拉取结束后标记文档已拉取，拉取失败也标记，画布页据此判定画布是否存在', async () => {
+    const setState = vi.fn()
+    vi.doMock('../stores/canvasStore', () => ({ markCanvasPersisted: vi.fn(), useCanvasStore: { getState: () => ({ projects: [], hydrate: async () => {} }), setState } }))
+    const docs = await import('./serverDocuments')
+    await docs.startServerDocuments()
+    expect(setState).toHaveBeenCalledWith({ documentsPulled: true })
+
+    vi.resetModules()
+    setState.mockClear()
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.backendRequest).mockRejectedValue(new Error('offline'))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const failed = await import('./serverDocuments')
+    await failed.startServerDocuments()
+    expect(setState).toHaveBeenCalledWith({ documentsPulled: true })
+  })
+
   it('导入的技能和会话一样写到服务端，并读取其他设备导入的技能', async () => {
     const skill = (patch: Partial<SkillDocument> = {}): SkillDocument => ({ id: 'skill', schemaVersion: 1, name: 'poster', title: '海报', description: '用途', body: '正文', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 1, ...patch })
     storedSkills.set('skill', skill())
@@ -124,7 +141,7 @@ describe('server documents', () => {
       markCanvasPersisted: vi.fn(),
       useCanvasStore: {
         getState: () => ({ ...canvasState, hydrate: async () => {} }),
-        setState: (update: (state: typeof canvasState) => Partial<typeof canvasState>) => Object.assign(canvasState, update(canvasState)),
+        setState: (update: Partial<typeof canvasState> | ((state: typeof canvasState) => Partial<typeof canvasState>)) => Object.assign(canvasState, typeof update === 'function' ? update(canvasState) : update),
       },
     }))
     const backend = await import('./gouoBackend')

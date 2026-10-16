@@ -5,6 +5,7 @@ import { ArrowLeft, Download, Plus, RotateCcw, Search, Trash2, Upload } from 'lu
 import { useCanvasStore } from '../../stores/canvasStore'
 import { useThemeStore } from '../../lib/canvas/uiStore'
 import { exportCanvasProjects, importCanvasArchive } from '../../lib/canvas/export'
+import { resolveCanvasRoute } from '../../lib/canvas/document'
 import { CanvasEditor } from './canvasEditor'
 import { getTrashRetentionDays } from '../../lib/gouoBackend'
 import './canvas.css'
@@ -40,13 +41,14 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
   const { message, modal } = App.useApp()
   const projects = useCanvasStore((state) => state.projects)
   const hydrated = useCanvasStore((state) => state.hydrated)
+  const pulled = useCanvasStore((state) => state.documentsPulled)
   const error = useCanvasStore((state) => state.error)
   const [query, setQuery] = useState('')
   const [trash, setTrash] = useState(false)
   const [selected, setSelected] = useState(new Set<string>())
   const [busy, setBusy] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
-  const current = projects.find((project) => project.id === projectId && !project.hiddenAt)
+  const route = resolveCanvasRoute(projectId, projects, pulled)
   const perform = async (action: () => Promise<unknown>) => {
     try {
       setBusy(true)
@@ -64,28 +66,50 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
       .hydrate()
       .catch((err) => console.error('读取画布失败', err))
   }, [])
-  if (!hydrated)
+  if (!hydrated || route === 'loading')
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-sm">
         <span role={error ? 'alert' : 'status'}>{error || '正在读取画布…'}</span>
         {error && <Button onClick={() => void perform(() => useCanvasStore.getState().hydrate())}>重新读取</Button>}
       </div>
     )
-  if (current) return <CanvasEditor key={current.id} project={current} onOpenProject={onOpenProject} onOpenAgent={onOpenAgent} />
+  if (route === 'open') {
+    const current = projects.find((project) => project.id === projectId)!
+    return <CanvasEditor key={current.id} project={current} onOpenProject={onOpenProject} onOpenAgent={onOpenAgent} />
+  }
+  if (route === 'missing')
+    return (
+      <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <h1 className="text-xl font-semibold">画布不存在或已删除</h1>
+        <p className="max-w-sm text-sm opacity-50">
+          {projects.some((project) => project.id === projectId) ? '这张画布已移入回收站，可以在画布列表的回收站中恢复。' : '链接可能有误，或这张画布已被彻底删除。'}
+        </p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          <Button icon={<ArrowLeft className="size-4" />} onClick={() => onOpenProject('')}>
+            返回画布列表
+          </Button>
+          <Button
+            type="primary"
+            icon={<Plus className="size-4" />}
+            loading={busy}
+            onClick={() =>
+              void perform(async () => {
+                const project = await useCanvasStore.getState().createProject()
+                onOpenProject(project.id)
+              })
+            }
+          >
+            新建画布
+          </Button>
+        </div>
+      </div>
+    )
   const visible = projects
     .filter((project) => Boolean(project.hiddenAt) === trash && project.title.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => b.updatedAt - a.updatedAt)
   return (
     <div className="h-full overflow-y-auto px-5 py-8 md:px-12 md:py-12">
       <div className="mx-auto max-w-6xl">
-        {projectId && (
-          <div role="alert" className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-            这张画布不存在或已移入回收站。
-            <button className="ml-2 underline" onClick={() => onOpenProject('')}>
-              返回列表
-            </button>
-          </div>
-        )}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{trash ? '画布回收站' : '我的画布'}</h1>

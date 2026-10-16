@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyCanvasAgentOps, type CanvasAgentSnapshot } from './agentOps'
-import { createCanvasNode, referencedCanvasImageIds, serializeCanvasProject, validateCanvasProject } from './document'
+import { createCanvasNode, referencedCanvasImageIds, resolveCanvasRoute, serializeCanvasProject, validateCanvasProject } from './document'
 import { applyGroupSelection, applyUngroupSelection, getGroupWrapRect } from './nodeGeometry'
 import { fitNodeSize } from './nodeSize'
 import { pinchCanvasViewport, visibleCanvasNodes } from './viewport'
@@ -123,5 +123,24 @@ describe('复用的分组与视口几何', () => {
     expect(performance.now() - start).toBeLessThan(1500)
     expect(nodes).toHaveLength(1100)
     expect(visibleCanvasNodes(nodes, { x: -9000, y: -20000, k: 1 }, { width: 1200, height: 800 }).some((node) => node.type === 'image')).toBe(true)
+  })
+})
+
+describe('按路由打开画布', () => {
+  const project = { ...empty, id: 'a' }
+
+  it('没有 ID 显示列表，找到未删除的画布直接打开', () => {
+    expect(resolveCanvasRoute(undefined, [project], false)).toBe('list')
+    expect(resolveCanvasRoute('a', [project], false)).toBe('open')
+  })
+
+  it('首次云端拉取结束前找不到画布时继续等待，不误报不存在', () => {
+    expect(resolveCanvasRoute('b', [project], false)).toBe('loading')
+    expect(resolveCanvasRoute('b', [project, { ...project, id: 'b' }], false)).toBe('open')
+  })
+
+  it('拉取结束后仍找不到或已移入回收站，判定为不存在', () => {
+    expect(resolveCanvasRoute('b', [project], true)).toBe('missing')
+    expect(resolveCanvasRoute('a', [{ ...project, hiddenAt: 1 }], true)).toBe('missing')
   })
 })

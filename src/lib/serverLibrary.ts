@@ -33,6 +33,7 @@ import {
   type GouoCloudTaskAsset,
 } from './gouoBackend'
 import { isStorageScopeCurrent } from './storageScope'
+import { useCanvasStore } from '../stores/canvasStore'
 
 // 作品以服务端为准：图片在生成时由服务端直接保存，浏览器只缓存，不再排队上传或双向合并。
 let enabled = false
@@ -340,7 +341,11 @@ function installSubscriptions() {
 // 启动时可能被调用两次（开发模式下 effect 会执行两遍）；共用同一次启动，避免并发拉取文档互相冲突
 let starting: Promise<void> | undefined
 export function startServerLibrary() {
-  starting ??= startOnce().finally(() => { if (!enabled) starting = undefined })
+  starting ??= startOnce().finally(() => {
+    // 未启用云同步或启动失败时不会再拉取文档，画布页不必继续等待
+    useCanvasStore.setState({ documentsPulled: true })
+    if (!enabled) starting = undefined
+  })
   return starting
 }
 

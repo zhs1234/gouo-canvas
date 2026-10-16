@@ -239,6 +239,7 @@ export async function startServerDocuments() {
     console.warn('读取云端画布、会话和技能失败', err)
     useStore.getState().showToast(`读取云端画布、会话和技能失败：${err instanceof Error ? err.message : String(err)}`, 'error')
   }
+  useCanvasStore.setState({ documentsPulled: true })
   let timer: ReturnType<typeof setTimeout> | undefined
   window.addEventListener('gouo:documents-changed', (event) => {
     if ((event as CustomEvent<{ fromSync?: boolean }>).detail?.fromSync) return
