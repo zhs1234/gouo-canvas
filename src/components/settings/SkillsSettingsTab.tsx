@@ -3,12 +3,8 @@ import { useStore } from '../../store'
 import { useSkillStore } from '../../stores/skillStore'
 import type { Skill, SkillDocument } from '../../lib/skills/types'
 import { BUILTIN_SKILLS } from '../../lib/skills/builtin'
-<<<<<<< HEAD
 import { importedSkillNames, skillFromDocument } from '../../lib/skills/catalog'
-=======
-import { skillFromDocument } from '../../lib/skills/catalog'
 import { suffixSkillName } from '../../lib/skills/parse'
->>>>>>> feat/skills-import
 import { buildSkillZip, collectSkillPackages, fileSkillEntries, githubSkillEntries, skillDocumentFromPackage, type SkillPackage } from '../../lib/skills/importSkill'
 import { getCurrentUser, isSkillGithubImportOpen, isSkillImportEnabled } from '../../lib/gouoBackend'
 import { useBackendStatus } from '../../hooks/useBackendStatus'
