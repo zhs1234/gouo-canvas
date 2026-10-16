@@ -1049,6 +1049,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
         />
         <CanvasToolbar
           selectedCount={selected.size + (selectedConnection ? 1 : 0)}
+          nodeCount={nodes.length}
           canvasTool={canvasTool}
           canUndo={Boolean(history?.past.length)}
           canRedo={Boolean(history?.future.length)}
@@ -1065,8 +1066,9 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           onClear={() =>
             modal.confirm({
               title: '清空画布中的节点？',
-              content: '可以使用撤销恢复，图片素材会继续保留。',
+              content: `将删除全部 ${nodes.length} 个节点和 ${project.connections.length} 条连线，可以使用撤销恢复，图片素材会继续保留。`,
               okText: '清空',
+              okButtonProps: { danger: true },
               cancelText: '取消',
               onOk: () => update({ nodes: [], connections: [] }),
             })
