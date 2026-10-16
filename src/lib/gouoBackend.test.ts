@@ -15,6 +15,16 @@ afterEach(() => {
 })
 
 describe('gouoBackend', () => {
+  it('keeps skills disabled until backend status has loaded', async () => {
+    const { isSkillsEnabled } = await import('./gouoBackend')
+    expect(isSkillsEnabled()).toBe(false)
+    expect(isSkillsEnabled(null)).toBe(false)
+    // 旧版后台没有这项时按开启处理；明确关闭才关掉
+    expect(isSkillsEnabled({})).toBe(true)
+    expect(isSkillsEnabled({ gouo_skills_enabled: true })).toBe(true)
+    expect(isSkillsEnabled({ gouo_skills_enabled: false })).toBe(false)
+  })
+
   it('uses the backend default model unless the user picked a model that is still available', async () => {
     const { resolveBackendModel } = await import('./gouoBackend')
     const model = (id: string, isDefault = false) => ({ id, name: id, price_cny: 0.1, price_version: id, reference: true, mask: true, max_outputs: 1, quota: 1, ...(isDefault ? { default: true } : {}) })

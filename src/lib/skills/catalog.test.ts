@@ -4,7 +4,7 @@ import type { SkillDocument } from './types'
 vi.mock('../../store', () => ({ useStore: { getState: () => ({ settings: { disabledSkills: [] } }) } }))
 vi.mock('../../stores/skillStore', () => ({ useSkillStore: { getState: () => ({ skills: [] }) } }))
 
-import { buildSkillPrompt, getAvailableSkills, SKILL_CATALOG_LIMIT } from './catalog'
+import { buildSkillPrompt, getAvailableSkills, listAgentSkills, SKILL_CATALOG_LIMIT } from './catalog'
 import { BUILTIN_SKILLS } from './builtin'
 
 const doc = (patch: Partial<SkillDocument>): SkillDocument => ({ id: patch.name || 'x', schemaVersion: 1, name: 'x', title: 'x', description: 'x', body: 'x', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 1, ...patch })
@@ -52,5 +52,14 @@ describe('buildSkillPrompt', () => {
     const active = buildSkillPrompt([last.key], skills)
     expect(active).toContain(`<skill_content name="${last.name}"`)
     expect(active).toContain('技能正文')
+  })
+
+  it('读不到后台设置时不把技能交给 Agent，旧版后台没有这项时仍开放', async () => {
+    const { refreshBackendStatus } = await import('../gouoBackend')
+    expect(listAgentSkills()).toEqual([])
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data: {} })))
+    await refreshBackendStatus()
+    expect(listAgentSkills().length).toBeGreaterThan(0)
+    vi.unstubAllGlobals()
   })
 })

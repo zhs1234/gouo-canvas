@@ -963,14 +963,41 @@ describe('data import', () => {
     const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1, skills: ['backup-my-skill', BUILTIN_SKILLS[0].name] }
     expect(await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [conversation], skills: [skill('my-skill'), skill(BUILTIN_SKILLS[0].name), skill('my-skill'), { ...skill('broken'), body: '' }] as SkillDocument[] }), { importTasks: true })).toBe(true)
     const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills
-    expect(imported).toEqual([expect.objectContaining({ name: 'my-skill', revision: 1 })])
-    expect(imported?.[0].id).not.toBe('backup-my-skill')
-    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([imported?.[0].id, BUILTIN_SKILLS[0].name])
-    expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 0 个任务，1 个技能', 'success')
+    expect(imported).toEqual([
+      expect.objectContaining({ name: 'my-skill', id: 'imported-backup-my-skill', revision: 1, createdAt: 1 }),
+      expect.objectContaining({ name: BUILTIN_SKILLS[0].name, id: `imported-backup-${BUILTIN_SKILLS[0].name}` }),
+    ])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-backup-my-skill', BUILTIN_SKILLS[0].name])
+    expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 0 个任务，2 个技能', 'success')
     // 运营方关闭技能导入后，备份里的技能不恢复
     await loadStatus(async () => Response.json({ success: true, data: { gouo_skill_import: false } }))
     expect(await importData(backup([skill('other-skill')]), { importTasks: true })).toBe(true)
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps same-name skills from a backup and remaps each session to its own document', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data: {} })))
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 3_600_000 })
+    await refreshBackendStatus()
+    vi.useRealTimers()
+    const { useSkillStore } = await import('./stores/skillStore')
+    useSkillStore.setState({ skills: [], hydrated: true })
+    const skill = (id: string, createdAt: number, body: string) => ({ id, schemaVersion: 1 as const, name: 'dup', title: '同名', description: '用途', body, files: [], enabled: true, createdAt, updatedAt: createdAt, revision: 4 })
+    const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1, skills: ['skill-late', 'skill-early', 'skill-late'] }
+    const file = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [conversation], skills: [skill('skill-early', 1, '较早'), skill('skill-late', 2, '较晚')] as SkillDocument[] })
+    expect(await importData(file, { importTasks: true })).toBe(true)
+    const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills
+    expect(imported).toEqual([
+      expect.objectContaining({ id: 'imported-skill-early', name: 'dup', body: '较早', createdAt: 1 }),
+      expect.objectContaining({ id: 'imported-skill-late', name: 'dup', body: '较晚', createdAt: 2 }),
+    ])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-skill-late', 'imported-skill-early'])
+    // 再次导入同一份备份时认出已恢复的文档，不另建副本，会话仍指向它们
+    expect(await importData(file, { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-skill-late', 'imported-skill-early'])
     vi.unstubAllGlobals()
   })
 

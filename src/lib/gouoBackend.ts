@@ -365,9 +365,11 @@ export function subscribeBackendStatus(listener: (status: GouoBackendStatus) => 
   return () => { statusListeners.delete(listener) }
 }
 
-// 技能开关未加载或旧版后台没有这项时按开启处理；GitHub 链接导入默认只给管理员
+// 还没读到后台设置时不开放，避免页面刚打开或接口失败时仍把技能注入 Agent。
+// 旧版后台没有这项时按开启处理；GitHub 链接导入默认只给管理员
 export function isSkillsEnabled(status = cachedStatus) {
-  return status?.gouo_skills_enabled !== false
+  if (!status) return false
+  return status.gouo_skills_enabled !== false
 }
 
 export function isSkillImportEnabled(status = cachedStatus) {
