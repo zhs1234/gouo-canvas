@@ -4,6 +4,7 @@ import zhCN from 'antd/locale/zh_CN'
 import { ArrowLeft, Download, Plus, RotateCcw, Search, Trash2, Upload } from 'lucide-react'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { useThemeStore } from '../../lib/canvas/uiStore'
+import { canvasThemes } from '../../lib/canvas/theme'
 import { exportCanvasProjects, importCanvasArchive } from '../../lib/canvas/export'
 import { resolveCanvasRoute } from '../../lib/canvas/document'
 import { CanvasEditor } from './canvasEditor'
@@ -24,7 +25,7 @@ export default function CanvasWorkspace(props: CanvasWorkspaceProps) {
       locale={zhCN}
       theme={{
         algorithm: colorTheme === 'dark' ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
-        token: { colorPrimary: '#5b8fff', borderRadius: 10, fontFamily: 'inherit' },
+        token: { colorPrimary: canvasThemes[colorTheme].accent, borderRadius: 10, fontFamily: 'inherit' },
       }}
       getPopupContainer={() => rootRef.current || document.body}
     >

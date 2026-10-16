@@ -4,6 +4,8 @@ export type CanvasBackgroundMode = 'dots' | 'lines' | 'blank'
 
 export const canvasThemes = {
   light: {
+    // 全站主色，与 index.css 的 --c-blue-500 一致；antd 要具体色值才能推算悬停等衍生色
+    accent: '#d6682c',
     canvas: {
       background: '#f4f2ed',
       dot: 'rgba(68,64,60,.28)',
@@ -32,6 +34,7 @@ export const canvasThemes = {
     },
   },
   dark: {
+    accent: '#e27436',
     canvas: {
       background: '#181715',
       dot: 'rgba(245,245,244,.24)',
