@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	_ "golang.org/x/image/webp"
@@ -158,6 +159,19 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	case *relayImageEdits:
 		prompt = r.request.Prompt
 	}
+	if utf8.RuneCountInString(prompt) > gouoImagePromptMaxRunes {
+		return common.StringErrorWrapperLocal(fmt.Sprintf("提示词不能超过 %d 字", gouoImagePromptMaxRunes), "prompt_too_long", http.StatusBadRequest)
+	}
+	// 参考图和遮罩原样转发给上游，扣费前按内容核对格式和大小，伪造扩展名或超大的文件不进入上游请求
+	if form != nil {
+		for _, name := range []string{"image", "image[]", "mask"} {
+			for _, header := range form.File[name] {
+				if err := checkGouoImageUpload(header); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if result, _ := safty.CheckContent(prompt); !result.IsSafe {
 		return common.StringErrorWrapperLocal("提示词包含不允许的内容，请修改后重试", result.Code, http.StatusBadRequest)
 	}
@@ -250,6 +264,28 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 			return nil
 		}
 		c.Set("gouo_image_capture", capture)
+	}
+	return nil
+}
+
+// 与客户端输入框的上限一致（gpt-image 系列上游同为 32000 字符）
+const gouoImagePromptMaxRunes = 32000
+
+// 上游编辑接口普遍只收这几种格式；按文件头解码判断，不信任文件名和声明的类型
+var gouoImageUploadFormats = []string{"png", "jpeg", "webp"}
+
+func checkGouoImageUpload(header *multipart.FileHeader) *types.OpenAIErrorWithStatusCode {
+	if header.Size > config.GouoAssetMaxFileBytes {
+		return common.StringErrorWrapperLocal(fmt.Sprintf("单张图片不能超过 %d MB", config.GouoAssetMaxFileBytes>>20), "file_too_large", http.StatusRequestEntityTooLarge)
+	}
+	file, err := header.Open()
+	if err != nil {
+		return common.StringErrorWrapperLocal("无法读取上传的图片", "file_open_failed", http.StatusBadRequest)
+	}
+	defer file.Close()
+	cfg, format, err := image.DecodeConfig(file)
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || !slices.Contains(gouoImageUploadFormats, format) {
+		return common.StringErrorWrapperLocal("仅支持 PNG、JPEG 和 WebP 图片", "unsupported_image", http.StatusUnsupportedMediaType)
 	}
 	return nil
 }
