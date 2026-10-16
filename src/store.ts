@@ -42,6 +42,7 @@ import { normalizeTaskParams } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
 import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
+import { matchRestoredSkillIds } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
 import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
@@ -1937,24 +1938,25 @@ export async function importData(file: File, options: ImportOptions = { importCo
       const restoreSkills = getCachedBackendStatus() !== null && isSkillsEnabled() && isSkillImportEnabled()
       const { useSkillStore, normalizeSkillDocument } = await import('./stores/skillStore')
       await useSkillStore.getState().hydrate()
-      // 只和导入前就有的技能比对，每份本地技能最多认领一次；先认 imported-<原 ID>，
-      // 否则备份里同时有 x 和 imported-x 时，后者会被误认成前者刚恢复的那份而丢掉
+      // 只和导入前就有的技能比对。每份最多两个候选（原 ID、imported-<原 ID>），本批内做最大匹配，原 ID 优先；
+      // 按备份顺序贪心认领时，x 与 imported-x 谁先出现都会在一种本地组合下认错并多复制一份
       const localIds = new Set(useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.id))
-      const claimedIds = new Set<string>()
       // 删除的技能仍留着记录，同 ID 写入会让整个导入事务失败，所以这类换新 UUID
       const takenIds = new Set(useSkillStore.getState().skills.map((skill) => skill.id))
+      const docs = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
+        const doc = normalizeSkillDocument(value)
+        return doc && !doc.hiddenAt ? [doc] : []
+      }).filter((doc, index, list) => list.findIndex((item) => item.id === doc.id) === index)
+      const matched = matchRestoredSkillIds(docs.map((doc) => doc.id), localIds)
       // 会话按导入技能的文档 ID 记录启用状态，恢复后逐个指向新 ID 或本地已有的那份
       const skillIds = new Map<string, string>()
-      const skills = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
-        const doc = normalizeSkillDocument(value)
-        if (!doc || doc.hiddenAt || skillIds.has(doc.id)) return []
-        const restoredId = `imported-${doc.id}`
-        const existingId = [restoredId, doc.id].find((id) => localIds.has(id) && !claimedIds.has(id))
+      const skills = docs.flatMap((doc) => {
+        const existingId = matched.get(doc.id)
         if (existingId) {
           skillIds.set(doc.id, existingId)
-          claimedIds.add(existingId)
           return []
         }
+        const restoredId = `imported-${doc.id}`
         const id = takenIds.has(restoredId) ? crypto.randomUUID() : restoredId
         skillIds.set(doc.id, id)
         takenIds.add(id)

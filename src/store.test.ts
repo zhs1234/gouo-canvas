@@ -1009,6 +1009,24 @@ describe('data import', () => {
     expect(await importData(pair, { importTasks: true })).toBe(true)
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
+    // 本地同时有原件 x 和恢复副本 imported-x 时，两种备份顺序都认回各自的 ID，不再多复制一份
+    const both = [skill('x', 1, '原件'), skill('imported-x', 2, '另一份')]
+    for (const order of [both, [...both].reverse()]) {
+      useSkillStore.setState({ skills: both, hydrated: true })
+      const again = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: ['x', 'imported-x'] }], skills: order as SkillDocument[] })
+      expect(await importData(again, { importTasks: true })).toBe(true)
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['x', 'imported-x'])
+    }
+    // 本地只有 imported-x 和 imported-imported-x 时，备份里 imported-x 排在 x 前面也要接上链条
+    const chain = [skill('imported-x', 1, '第一份'), skill('imported-imported-x', 2, '第二份')]
+    for (const order of [[skill('imported-x', 2, '另一份'), skill('x', 1, '原件')], [skill('x', 1, '原件'), skill('imported-x', 2, '另一份')]]) {
+      useSkillStore.setState({ skills: chain, hydrated: true })
+      const again = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: ['x', 'imported-x'] }], skills: order as SkillDocument[] })
+      expect(await importData(again, { importTasks: true })).toBe(true)
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
+    }
     // 恢复后又删除的技能仍留着记录：再次导入换新 ID，不能与它撞 ID 导致整个导入失败
     useSkillStore.setState({ skills: imported!.map((doc) => ({ ...doc, hiddenAt: 5 })), hydrated: true })
     expect(await importData(file, { importTasks: true })).toBe(true)
