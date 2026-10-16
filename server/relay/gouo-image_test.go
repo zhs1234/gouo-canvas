@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"image"
+	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
@@ -325,15 +326,21 @@ func TestGouoImageEditFormChecks(t *testing.T) {
 		"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.2, GouoMaxOutputs: 1, GouoReference: true, GouoMaxInputs: 2},
 	}}
 	t.Cleanup(func() { model.PricingInstance = old })
-	edit := func(files ...string) *types.OpenAIErrorWithStatusCode {
+	var pngData bytes.Buffer
+	require.NoError(t, png.Encode(&pngData, image.NewRGBA(image.Rect(0, 0, 2, 2))))
+	upload := func(prompt string, files map[string][]byte, names ...string) *types.OpenAIErrorWithStatusCode {
 		var body bytes.Buffer
 		writer := multipart.NewWriter(&body)
 		require.NoError(t, writer.WriteField("model", "image-a"))
-		require.NoError(t, writer.WriteField("prompt", "改色"))
-		for _, name := range files {
+		require.NoError(t, writer.WriteField("prompt", prompt))
+		for _, name := range names {
 			part, err := writer.CreateFormFile(name, "a.png")
 			require.NoError(t, err)
-			_, err = part.Write([]byte("png"))
+			data, ok := files[name]
+			if !ok {
+				data = pngData.Bytes()
+			}
+			_, err = part.Write(data)
 			require.NoError(t, err)
 		}
 		require.NoError(t, writer.Close())
@@ -343,9 +350,11 @@ func TestGouoImageEditFormChecks(t *testing.T) {
 		require.NoError(t, c.Request.ParseMultipartForm(1<<20))
 		r := NewRelayImageEdits(c)
 		r.request.N = 1
+		r.request.Prompt = prompt
 		r.setOriginalModel("image-a")
 		return prepareGouoImage(c, r)
 	}
+	edit := func(names ...string) *types.OpenAIErrorWithStatusCode { return upload("改色", nil, names...) }
 	require.Nil(t, edit("image", "image"))
 	require.Nil(t, edit("image[]", "image[]"))
 	// 同名 image 重复时结构体只绑定第一个，但全部会转发给上游，按实际文件数核对参考图上限
@@ -355,6 +364,25 @@ func TestGouoImageEditFormChecks(t *testing.T) {
 	require.Equal(t, "invalid_form_file", edit("image", "image[0]").Code)
 	// 遮罩按表单里的文件判断，模型不支持遮罩时拒绝
 	require.Equal(t, "image_capability_unavailable", edit("image", "mask").Code)
+
+	// 参考图按内容判断格式：改了扩展名的文本、不支持的格式和损坏的文件头都在扣费前拒绝
+	var gifData bytes.Buffer
+	require.NoError(t, gif.Encode(&gifData, image.NewPaletted(image.Rect(0, 0, 2, 2), []color.Color{color.Black}), nil))
+	for _, data := range [][]byte{[]byte("hello"), gifData.Bytes(), pngData.Bytes()[:20]} {
+		err := upload("改色", map[string][]byte{"image[]": data}, "image[]")
+		require.Equal(t, "unsupported_image", err.Code)
+		require.Equal(t, http.StatusUnsupportedMediaType, err.StatusCode)
+	}
+	// 超过后台设置的单文件上限时拒绝
+	oldMax := config.GouoAssetMaxFileBytes
+	config.GouoAssetMaxFileBytes = int64(pngData.Len() - 1)
+	err := edit("image")
+	config.GouoAssetMaxFileBytes = oldMax
+	require.Equal(t, "file_too_large", err.Code)
+	require.Equal(t, http.StatusRequestEntityTooLarge, err.StatusCode)
+	// 提示词按字符数计，与客户端上限一致
+	require.Nil(t, upload(strings.Repeat("猫", 32000), nil, "image"))
+	require.Equal(t, "prompt_too_long", upload(strings.Repeat("猫", 32001), nil, "image").Code)
 
 	// JSON 请求体会原样转发给上游，提示词、张数等可能和这里校验的不一致，必须拒绝
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

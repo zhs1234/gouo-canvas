@@ -146,6 +146,17 @@ describe('product model task snapshots', () => {
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
   })
 
+  it('refuses prompts longer than the server limit before creating a task', async () => {
+    useStore.setState({ prompt: '猫'.repeat(32001) })
+    await submitTask()
+    const { callImageApi } = await import('./lib/api')
+    expect(useStore.getState().showToast).toHaveBeenCalledWith('提示词不能超过 32000 字，请精简后再生成', 'error')
+    expect(useStore.getState().tasks).toHaveLength(0)
+    expect(callImageApi).not.toHaveBeenCalled()
+    const { submitImageTask } = await import('./lib/imageTasks')
+    await expect(submitImageTask({ prompt: '猫'.repeat(32001), source: { kind: 'generate' } })).rejects.toThrow('提示词不能超过 32000 字')
+  })
+
   it('blocks duplicate submissions until task creation and then permits the next task', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => { release = resolve })

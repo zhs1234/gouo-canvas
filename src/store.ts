@@ -40,7 +40,8 @@ import { callImageApi } from './lib/api'
 import { showBrowserNotification } from './lib/browserNotification'
 import { normalizeTaskParams } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
-import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
+import { blobToDataUrl } from './lib/dataUrl'
+import { readReferenceImageFile } from './lib/inputValidation'
 import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
 import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
@@ -2052,14 +2053,12 @@ export async function importData(file: File, options: ImportOptions = { importCo
 
 /** 添加图片到输入（文件上传） */
 export async function addImageFromFile(file: File): Promise<void> {
-  const image = await createInputImageFromFile(file)
-  if (!image) return
-  useStore.getState().addInputImage(image)
+  useStore.getState().addInputImage(await createInputImageFromFile(file))
 }
 
-export async function createInputImageFromFile(file: File): Promise<InputImage | null> {
-  if (!file.type.startsWith('image/')) return null
-  const dataUrl = await fileToDataUrl(file)
+// 格式、大小或解码不通过时抛出可直接展示的错误
+export async function createInputImageFromFile(file: File): Promise<InputImage> {
+  const dataUrl = await readReferenceImageFile(file)
   const id = await storeImage(dataUrl, 'upload')
   cacheImage(id, dataUrl)
   return { id, dataUrl }
