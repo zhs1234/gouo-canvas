@@ -183,6 +183,15 @@ function LightboxInner({ src, imageId, maskPreviewSrc, onClose, showNav, current
 
   // 缩放倍率显示：2s 无操作后自动隐藏
   const [showZoomBadge, setShowZoomBadge] = useState(false)
+  // 小于屏幕可用区域的图片放大到铺满（与 max-w/max-h 的 85% 一致），大图仍由 max-w/max-h 缩小
+  const [fitSize, setFitSize] = useState<{ width: number; height: number } | null>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const updateFitSize = useCallback(() => {
+    const img = imgRef.current
+    if (!img?.naturalWidth || !img.naturalHeight) return
+    const ratio = Math.min(window.innerWidth * 0.85 / img.naturalWidth, window.innerHeight * 0.85 / img.naturalHeight)
+    setFitSize(ratio > 1 ? { width: img.naturalWidth * ratio, height: img.naturalHeight * ratio } : null)
+  }, [])
   const zoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 拖拽状态
   const dragRef = useRef({
@@ -227,8 +236,11 @@ function LightboxInner({ src, imageId, maskPreviewSrc, onClose, showNav, current
     scaleRef.current = 1
     txRef.current = 0
     tyRef.current = 0
+    // data URL 可能在挂载前就已解码完成，onLoad 不一定触发，这里补算一次
+    if (imgRef.current?.complete) updateFitSize()
+    else setFitSize(null)
     rerender()
-  }, [src, rerender])
+  }, [src, rerender, updateFitSize])
 
   useEffect(() => {
     const suppressClick = () => {
@@ -621,9 +633,12 @@ function LightboxInner({ src, imageId, maskPreviewSrc, onClose, showNav, current
           }}
         >
           <img
+            ref={imgRef}
             src={src}
             data-image-id={imageId}
             className="saveable-image max-w-[85vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            style={fitSize ?? undefined}
+            onLoad={updateFitSize}
             onDragStart={(e) => e.preventDefault()}
             alt=""
           />
