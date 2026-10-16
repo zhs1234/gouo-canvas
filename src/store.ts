@@ -85,6 +85,7 @@ const TASK_LOCK_PREFIX = 'gouo-task:'
 const TAB_LOCK = 'gouo-tab'
 const ERROR_TOAST_MAX_LENGTH = 80
 type ToastType = 'info' | 'success' | 'error'
+type ToastAction = { label: string; onClick: () => void }
 
 export function getErrorToastMessage(message: string): string {
   const text = message.trim()
@@ -580,8 +581,8 @@ interface AppState {
   dismissSupportPrompt: () => void
 
   // Toast
-  toast: { message: string; type: ToastType } | null
-  showToast: (message: string, type?: ToastType) => void
+  toast: { message: string; type: ToastType; action?: ToastAction } | null
+  showToast: (message: string, type?: ToastType, action?: ToastAction) => void
 
   // Confirm dialog
   confirmDialog: {
@@ -846,13 +847,14 @@ export const useStore = create<AppState>()(
 
       // Toast
       toast: null,
-      showToast: (message, type = 'info') => {
+      showToast: (message, type = 'info', action) => {
         const toastMessage = getToastMessage(message, type)
-        const toast = { message: toastMessage, type }
+        const toast = { message: toastMessage, type, action }
         set({ toast })
+        // 带操作按钮的提示多留一会儿，给用户点按的时间
         setTimeout(() => {
           set((s) => (s.toast === toast ? { toast: null } : s))
-        }, 3000)
+        }, action ? 5000 : 3000)
       },
 
       // Confirm
@@ -1455,12 +1457,9 @@ export function renameFavoriteCollection(collectionId: string, name: string) {
   showToast('收藏夹名称已更新', 'success')
 }
 
-export async function updateTasksFavoriteCollections(taskIds: string[], collectionIds: string[]) {
-  const ids = normalizeFavoriteCollectionIds(collectionIds)
-  const uniqueTaskIds = Array.from(new Set(taskIds)).filter(Boolean)
-  if (!uniqueTaskIds.length) return
-  const { tasks, setTasks, clearSelection, showToast } = useStore.getState()
-  const idSet = new Set(uniqueTaskIds)
+async function saveTasksFavoriteCollections(taskIds: string[], ids: string[]) {
+  const { tasks, setTasks } = useStore.getState()
+  const idSet = new Set(taskIds)
   const changedTaskIds = new Set<string>()
   const updated = tasks.map((task) => {
     if (!idSet.has(task.id)) return task
@@ -1468,14 +1467,42 @@ export async function updateTasksFavoriteCollections(taskIds: string[], collecti
     changedTaskIds.add(task.id)
     return { ...task, favoriteCollectionIds: ids, isFavorite: ids.length > 0 }
   })
-  if (!changedTaskIds.size) {
-    clearSelection()
-    return
-  }
+  if (!changedTaskIds.size) return 0
   setTasks(updated)
   await Promise.all(updated.filter((task) => changedTaskIds.has(task.id)).map((task) => putTask(task)))
+  return changedTaskIds.size
+}
+
+export async function updateTasksFavoriteCollections(taskIds: string[], collectionIds: string[]) {
+  const ids = normalizeFavoriteCollectionIds(collectionIds)
+  const uniqueTaskIds = Array.from(new Set(taskIds)).filter(Boolean)
+  if (!uniqueTaskIds.length) return
+  const changed = await saveTasksFavoriteCollections(uniqueTaskIds, ids)
+  const { clearSelection, showToast } = useStore.getState()
   clearSelection()
-  showToast(ids.length ? '收藏夹已更新' : '已取消收藏', 'success')
+  if (changed) showToast(ids.length ? '收藏夹已更新' : '已取消收藏', 'success')
+}
+
+// 单个作品一键收藏：未收藏时直接放进默认收藏夹（未设默认时用第一个），已收藏时取消收藏
+export async function toggleTaskFavorite(taskId: string) {
+  const state = useStore.getState()
+  const task = state.tasks.find((t) => t.id === taskId)
+  if (!task) return
+  if (task.isFavorite) {
+    await saveTasksFavoriteCollections([taskId], [])
+    state.showToast('已取消收藏', 'success')
+    return
+  }
+  const collectionId = state.defaultFavoriteCollectionId ?? state.favoriteCollections[0]?.id
+  if (!collectionId) {
+    state.openFavoritePicker([taskId])
+    return
+  }
+  await saveTasksFavoriteCollections([taskId], [collectionId])
+  state.showToast(`已收藏到「${getFavoriteCollectionTitle(collectionId)}」`, 'success', {
+    label: '移动到…',
+    onClick: () => useStore.getState().openFavoritePicker([taskId]),
+  })
 }
 
 export async function deleteFavoriteCollection(collectionId: string, deleteTasks = false) {
