@@ -246,7 +246,7 @@ export default function DetailModal() {
   const requestPrompt = task.transparentOutput && task.transparentPrompt
     ? task.transparentPrompt
     : task.prompt
-  const promptSentToApi = stripInternalPromptText(replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length))
+  const promptSentToApi = replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length)
   const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== promptSentToApi)
   const rawImageUrls = task.rawImageUrls ?? []
   const isPngOutput = task.params.output_format === 'png'
@@ -824,7 +824,8 @@ export default function DetailModal() {
               )}
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4">
-              {stripInternalPromptText(task.prompt) || '(无提示词)'}
+              {/* 用户原文原样展示；内部句子清理只用于上游 revised_prompt，否则正文里的相似说法会被截断，和复制结果不一致 */}
+              {task.prompt || '(无提示词)'}
             </p>
             {showRevisedPrompt && currentRevisedPrompt && (
               <div className="mb-4">

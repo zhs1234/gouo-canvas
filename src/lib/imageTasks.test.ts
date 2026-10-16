@@ -84,6 +84,15 @@ describe('统一图片任务入口', () => {
     await expect(submitImageTask({ prompt: '测试', requestId: 'call id', source: { kind: 'agent' } })).rejects.toThrow('请求标识')
     expect(fixtures.execute).not.toHaveBeenCalled()
   })
+  it('按 Unicode 码点计算提示词长度，表情不会被提前拒绝', async () => {
+    const accepted = `${'a'.repeat(31999)}😀`
+    expect(accepted.length).toBeGreaterThan(32000)
+    await submitImageTask({ prompt: accepted, source: { kind: 'generate' } })
+    expect(fixtures.saved).toHaveLength(1)
+    expect(fixtures.quote).toHaveBeenCalled()
+    await expect(submitImageTask({ prompt: `${'a'.repeat(32000)}😀`, source: { kind: 'generate' } })).rejects.toThrow('提示词不能超过 32000 字')
+    expect(fixtures.saved).toHaveLength(1)
+  })
   it('画布遮罩重排主图并保留首页遮罩草稿', async () => {
     const draft = { targetImageId: 'homepage', maskDataUrl: 'homepage-mask' }
     fixtures.state.maskDraft = draft
