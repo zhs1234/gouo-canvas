@@ -135,7 +135,7 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
       {mode === item.id && <Suspense fallback={<div className="workspace-loading" role="status">正在打开创作空间…</div>}>
         {item.id === 'generate' && <>
           <div className="creation-composer">
-            <div className="creation-input"><div className="composer-heading"><SparklesIcon className="h-4 w-4" /> AI 图像<span>从一个想法开始</span></div><InputBar inline /></div>
+            <div className="creation-input"><div className="composer-heading"><SparklesIcon className="h-4 w-4" /> 生成图片<span>从一个想法开始</span></div><InputBar inline /></div>
             <div className="prompt-shortcuts">{INSPIRATION_TEMPLATES.slice(0, 6).map((item) => <button key={item.id} onClick={() => applyTemplate(item.prompt)}>/ {item.title}</button>)}</div>
           </div>
           <RecentResults />

@@ -8,6 +8,7 @@ import { getSizeTier, normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getMaxTaskImages } from '../lib/gouoBackend'
+import { formatPoints } from '../lib/accountUsage'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import { useImageModels } from '../hooks/useImageModels'
 import BackendModelSelector from './BackendModelSelector'
@@ -431,7 +432,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const isMobile = useIsMobile()
 
   const canSubmit = Boolean(prompt.trim() && backendModelReady && !isSubmitting)
-  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : maskDraft ? '遮罩编辑' : '生成图像'
   const promptPlaceholder = '描述你想生成的图片，可输入 @ 来指定参考图...'
   const submitCurrentMode = useCallback(() => {
     void submitTask()
@@ -450,6 +450,10 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const backendStatus = useBackendStatus()
   const backendModel = imageModels.find((model) => model.id === settings.model)
   const maxInputImages = backendModel?.max_inputs || API_MAX_IMAGES
+  // 与模型选择器的预估一致：按所选模型单价乘张数，模型或参数不可用时不显示数字
+  const estimate = backendModelReady && backendModel ? formatPoints(backendModel.price_cny * params.n) : ''
+  const submitLabel = `${maskDraft ? '遮罩编辑' : '生成图片'}${estimate ? ` · ${estimate}` : ''}`
+  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : `${maskDraft ? '遮罩编辑' : '生成图片'}${estimate ? `，预计消耗 ${estimate}` : ''}`
 
   // 所选模型不开放当前画质时，自动换成开放的最高画质，免得用户卡在提示上
   useEffect(() => {
@@ -1752,13 +1756,13 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
                   <button
                     onClick={submitCurrentMode}
                     disabled={!canSubmit}
-                    className="p-2.5 rounded-xl transition-all shadow-sm hover:shadow bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm hover:shadow bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-white/[0.04] disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label={submitButtonAriaLabel}
                     aria-busy={isSubmitting}
                   >
-                    {isSubmitting ? <span className="text-sm" role="status">提交中…</span> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {isSubmitting ? <span role="status">提交中…</span> : <><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>}
+                    </svg><span>{submitLabel}</span></>}
                   </button>
                 </div>
               </div>
@@ -1856,7 +1860,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                    <span role={isSubmitting ? 'status' : undefined}>{isSubmitting ? '提交中…' : maskDraft ? '遮罩编辑' : '生成图像'}</span>
+                    <span role={isSubmitting ? 'status' : undefined}>{isSubmitting ? '提交中…' : submitLabel}</span>
                   </button>
                 </div>
               </div>
