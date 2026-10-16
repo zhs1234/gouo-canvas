@@ -163,11 +163,13 @@ export async function githubSkillEntries(input: string, signal?: AbortSignal): P
   if (!sha) throw new Error('找不到这个仓库或分支，私有仓库无法导入')
   const tree = await githubJson<{ tree: Array<{ path: string; type: string; size?: number }>; truncated?: boolean }>(`${base}/git/trees/${sha}?recursive=1`, signal)
   if (!tree) throw new Error('读取仓库文件列表失败')
+  // 列表被截断时可能缺少参考文件，不能导入不完整的技能
+  if (tree.truncated) throw new Error('仓库文件过多，GitHub 只返回了部分文件列表，请下载技能目录的压缩包后导入')
   const target = pathParts.join('/')
   const dir = blob ? target.split('/').slice(0, -1).join('/') : target
   const prefix = dir ? `${dir}/` : ''
   const blobs = tree.tree.filter((item) => item.type === 'blob' && item.path.startsWith(prefix))
-  if (!blobs.length) throw new Error(tree.truncated ? '仓库过大，请改用指向技能目录的链接' : '这个路径下没有文件')
+  if (!blobs.length) throw new Error('这个路径下没有文件')
   if (blobs.length > 2000) throw new Error('目录内文件过多，请改用指向单个技能目录的链接')
   return {
     entries: blobs.map((item) => ({

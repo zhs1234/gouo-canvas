@@ -116,10 +116,13 @@ export default function SkillsSettingsTab() {
   const confirmImport = async () => {
     if (!pending) return
     setBusy(true)
+    const taken = new Set([...BUILTIN_SKILLS.map((skill) => skill.name), ...imported.map((doc) => doc.name)])
+    let count = 0
+    // 逐个保存；中途失败时已保存的从待导入列表移除，重试不会重复导入
+    let idx = 0
     try {
-      const taken = new Set([...BUILTIN_SKILLS.map((skill) => skill.name), ...imported.map((doc) => doc.name)])
-      let count = 0
-      for (const item of pending) {
+      for (; idx < pending.length; idx += 1) {
+        const item = pending[idx]
         if (item.action === 'skip') continue
         if (item.action === 'replace' && item.conflict && item.conflict !== 'builtin') {
           await useSkillStore.getState().save({ ...skillDocumentFromPackage(item.pkg, item.conflict.id), enabled: item.conflict.enabled })
@@ -138,7 +141,9 @@ export default function SkillsSettingsTab() {
       setGithubUrl('')
       showToast(count ? `已导入 ${count} 个技能` : '没有导入任何技能', count ? 'success' : 'info')
     } catch (error) {
-      showToast(error instanceof Error ? `导入失败：${error.message}` : '导入失败', 'error')
+      setPending(pending.slice(idx))
+      const reason = error instanceof Error ? error.message : '保存失败'
+      showToast(count ? `已导入 ${count} 个技能，其余未导入：${reason}` : `导入失败：${reason}`, 'error')
     } finally {
       setBusy(false)
     }
