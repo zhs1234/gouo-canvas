@@ -145,7 +145,7 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
       </div>
     </section>
     {creationModes.map((item) => <div key={item.id} id={`panel-${item.id}`} role="tabpanel" aria-labelledby={`mode-${item.id}`} hidden={mode !== item.id} className={`workspace-mode-panel workspace-panel-${item.id}`}>
-      {mode === item.id && <Suspense fallback={<div className="workspace-loading" role="status">正在打开创作空间…</div>}>
+      {mode === item.id && <Suspense fallback={<PageSkeleton />}>
         {item.id === 'generate' && <>
           <div className="creation-composer">
             <div className="creation-input"><div className="composer-heading"><SparklesIcon className="h-4 w-4" /> 生成图片<span>从一个想法开始</span></div><InputBar inline /></div>

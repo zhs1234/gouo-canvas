@@ -665,7 +665,7 @@ export default function TaskCard({
         <p className="min-h-[2.5rem] text-xs leading-5 text-gray-700 line-clamp-2 dark:text-gray-300">
           {task.prompt || '(无提示词)'}
         </p>
-        <time dateTime={createdAt.toISOString()} className="text-[11px] leading-4 text-gray-400 dark:text-gray-500">
+        <time dateTime={createdAt.toISOString()} className="text-xs leading-4 text-gray-500 dark:text-gray-400">
           {createdAtText}
         </time>
         <div

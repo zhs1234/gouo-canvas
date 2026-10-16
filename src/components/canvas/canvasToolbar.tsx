@@ -179,7 +179,7 @@ export function CanvasToolbar({
           style={{ left: panelX || '50%', background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item }}
         >
           <div className="px-1 pb-2 text-sm font-medium opacity-65">{t('canvas.toolbar.appearance')}</div>
-          <div className="px-1 pb-1.5 text-[11px] font-medium opacity-50">{t('canvas.toolbar.themeMode')}</div>
+          <div className="px-1 pb-1.5 text-xs font-medium opacity-70">{t('canvas.toolbar.themeMode')}</div>
           <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: theme.toolbar.itemHover }}>
             <CanvasThemeButton colorTheme={colorTheme} targetTheme="light" onThemeChange={setTheme}>
               <Sun className="size-4" />
@@ -190,7 +190,7 @@ export function CanvasToolbar({
               {t('canvas.toolbar.dark')}
             </CanvasThemeButton>
           </div>
-          <div className="mt-3 px-1 pb-1.5 text-[11px] font-medium opacity-50">{t('canvas.toolbar.gridStyle')}</div>
+          <div className="mt-3 px-1 pb-1.5 text-xs font-medium opacity-70">{t('canvas.toolbar.gridStyle')}</div>
           <Segmented
             className="w-full !p-1 [&_.ant-segmented-group]:!flex [&_.ant-segmented-item]:!min-h-8 [&_.ant-segmented-item]:!flex-1 [&_.ant-segmented-item-label]:!min-h-8 [&_.ant-segmented-item-label]:!leading-8"
             value={backgroundMode}

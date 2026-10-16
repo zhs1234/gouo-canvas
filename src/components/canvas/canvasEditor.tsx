@@ -653,7 +653,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           value={config.prompt || ''}
           onChange={(event) => run(patchNode(node.id, { metadata: { prompt: event.target.value } }))}
         />
-        <div className="my-2 text-[11px] opacity-50">
+        <div className="my-2 text-xs opacity-70">
           已连接 {inputs.filter((item) => item.type === 'text').length} 段文本 · {inputs.filter((item) => item.type === 'image').length} 张参考图
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
@@ -712,7 +712,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
           </div>
         ) : null}
         {models.find((model) => model.id === (config.model || settings.model)) && (
-          <div className="mt-2 text-[11px] opacity-50">
+          <div className="mt-2 text-xs opacity-70">
             本次预计 {formatPoints((models.find((model) => model.id === (config.model || settings.model))?.price_cny || 0) * (config.count || 1))}
           </div>
         )}

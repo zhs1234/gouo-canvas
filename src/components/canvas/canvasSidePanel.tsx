@@ -156,7 +156,7 @@ export function CanvasSidePanel({
         )}
       </div>
       <a
-        className="border-t px-4 py-2 text-[10px] opacity-40 hover:opacity-80"
+        className="border-t px-4 py-2 text-xs opacity-60 hover:opacity-90"
         style={{ borderColor: theme.toolbar.border }}
         href="https://github.com/basketikun/infinite-canvas"
         target="_blank"

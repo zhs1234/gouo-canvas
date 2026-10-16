@@ -7,6 +7,11 @@ import { installMobileViewportGuards } from './lib/viewport'
 
 installMobileViewportGuards()
 
+// 服务端邮件和支付回跳的充值链接是 <客户端地址>/topup，哈希路由看不到这个路径，转成 #/topup 才能打开充值页
+if (/\/topup\/?$/.test(window.location.pathname)) {
+  window.history.replaceState(null, '', `${window.location.pathname.replace(/topup\/?$/, '')}${window.location.search}#/topup`)
+}
+
 // 纯 HTTP 局域网访问不是安全上下文，没有 randomUUID；getRandomValues 不受此限制。
 if (!crypto.randomUUID) {
   crypto.randomUUID = () => {
