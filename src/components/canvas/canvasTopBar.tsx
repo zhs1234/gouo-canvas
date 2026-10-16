@@ -1,6 +1,6 @@
 // 基于 basketikun/infinite-canvas (MIT)，来源及适配说明见 UPSTREAM.md。
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from 'lucide-react'
+import { BookOpen, Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Redo2, Trash2, Undo2, Upload } from 'lucide-react'
 import { Button, Dropdown, Modal } from 'antd'
 import { useTranslation } from '../../lib/canvas/i18n'
 
@@ -135,23 +135,25 @@ export function CanvasTopBar({
                 aria-label="画布标题（最多 200 个字符）"
                 aria-invalid={[...titleDraft.trim()].length > 200}
                 title={`标题最多 200 个字符，当前 ${[...titleDraft.trim()].length} 个`}
+                onFocus={(event) => event.target.select()}
                 onChange={(event) => onTitleDraftChange(event.target.value)}
                 onBlur={onFinishTitleEditing}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') onFinishTitleEditing()
                   if (event.key === 'Escape') onCancelTitleEditing()
                 }}
-                className="max-w-[280px] bg-transparent p-0 text-left text-lg font-semibold tracking-normal outline-none"
+                className="w-[280px] min-w-0 max-w-full border-b border-dashed border-current bg-transparent p-0 text-left text-lg font-semibold tracking-normal outline-none"
                 style={{ color: theme.node.text }}
               />
             ) : (
               <button
                 type="button"
-                className="max-w-[280px] truncate border-b border-dashed border-transparent text-left text-lg font-semibold tracking-normal transition hover:border-current"
-                onDoubleClick={onStartTitleEditing}
+                className="group/title flex min-w-0 max-w-[280px] items-center gap-1.5 text-left text-lg font-semibold tracking-normal"
+                onClick={onStartTitleEditing}
                 title={t('canvas.renameHint')}
               >
-                {title}
+                <span className="truncate border-b border-dashed border-transparent transition group-hover/title:border-current">{title}</span>
+                <Pencil className="size-3.5 shrink-0 opacity-40 transition group-hover/title:opacity-80" aria-hidden />
               </button>
             )}
           </div>
