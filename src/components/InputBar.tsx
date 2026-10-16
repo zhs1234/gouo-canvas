@@ -9,7 +9,7 @@ import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getMaxTaskImages } from '../lib/gouoBackend'
 import { formatPoints } from '../lib/accountUsage'
-import { getReferenceImageIssue, MAX_PROMPT_LENGTH, parseImageCount, REFERENCE_IMAGE_TYPES } from '../lib/inputValidation'
+import { getReferenceImageIssue, MAX_PROMPT_LENGTH, parseImageCount, promptCodePointLength, REFERENCE_IMAGE_TYPES } from '../lib/inputValidation'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import { useImageModels } from '../hooks/useImageModels'
 import BackendModelSelector from './BackendModelSelector'
@@ -432,7 +432,8 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const dragCounter = useRef(0)
   const isMobile = useIsMobile()
 
-  const promptTooLong = prompt.length > MAX_PROMPT_LENGTH
+  const promptChars = promptCodePointLength(prompt)
+  const promptTooLong = promptChars > MAX_PROMPT_LENGTH
   const hasBrokenImage = inputImages.some((img) => brokenImageIds.includes(img.id))
   const canSubmit = Boolean(prompt.trim() && !promptTooLong && !hasBrokenImage && backendModelReady && !isSubmitting)
   const promptPlaceholder = '描述你想生成的图片，可输入 @ 来指定参考图...'
@@ -1734,8 +1735,8 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
           </div>
           {prompt.length > 0 && (
             <div className={`mt-1 px-1 text-right text-xs ${promptTooLong ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
-              {promptTooLong && <span role="alert">提示词超出 {(prompt.length - MAX_PROMPT_LENGTH).toLocaleString('zh-CN')} 字，请精简后再生成 · </span>}
-              {prompt.length.toLocaleString('zh-CN')} / {MAX_PROMPT_LENGTH.toLocaleString('zh-CN')}
+              {promptTooLong && <span role="alert">提示词超出 {(promptChars - MAX_PROMPT_LENGTH).toLocaleString('zh-CN')} 字，请精简后再生成 · </span>}
+              {promptChars.toLocaleString('zh-CN')} / {MAX_PROMPT_LENGTH.toLocaleString('zh-CN')}
             </div>
           )}
 
