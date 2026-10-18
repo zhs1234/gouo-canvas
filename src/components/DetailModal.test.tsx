@@ -67,3 +67,11 @@ it('hides a revised prompt that only appends an upstream parameter sentence', ()
   expect(markup).not.toContain('模型改写后的提示词')
   expect(markup).not.toContain('Requested output image size:')
 })
+
+it('does not show a rewrite when the original prompt already contains an internal sentence and the API echoes it', () => {
+  const prompt = 'Draw a cat. Requested output image size: 1024x1024.'
+  state.tasks = [task(prompt, prompt)]
+  const markup = renderToStaticMarkup(<DetailModal />)
+  expect(markup).toContain(prompt)
+  expect(markup).not.toContain('模型改写后的提示词')
+})
