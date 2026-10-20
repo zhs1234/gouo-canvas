@@ -12,15 +12,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func InitConfig() {
+func InitConfig(t *testing.T) {
+	t.Helper()
 	viper.AddConfigPath("/one-api")
 	viper.SetConfigName("config")
-	viper.ReadInConfig()
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			t.Skip("未找到 /one-api/config，跳过依赖外部通知服务的测试")
+		}
+		t.Fatal(err)
+	}
 	requester.InitHttpClient()
 }
 
 func TestDingTalkSend(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	access_token := viper.GetString("notify.dingtalk.token")
 	secret := viper.GetString("notify.dingtalk.secret")
 	dingTalk := channel.NewDingTalk(access_token, secret)
@@ -31,7 +37,7 @@ func TestDingTalkSend(t *testing.T) {
 }
 
 func TestDingTalkSendWithKeyWord(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	access_token := viper.GetString("notify.dingtalk.token")
 	keyWord := viper.GetString("notify.dingtalk.keyWord")
 
@@ -42,7 +48,7 @@ func TestDingTalkSendWithKeyWord(t *testing.T) {
 }
 
 func TestDingTalkSendError(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	access_token := viper.GetString("notify.dingtalk.token")
 	secret := "test"
 	dingTalk := channel.NewDingTalk(access_token, secret)
@@ -53,7 +59,7 @@ func TestDingTalkSendError(t *testing.T) {
 }
 
 func TestLarkSend(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	access_token := viper.GetString("notify.lark.token")
 	secret := viper.GetString("notify.lark.secret")
 	dingTalk := channel.NewLark(access_token, secret)
@@ -64,7 +70,7 @@ func TestLarkSend(t *testing.T) {
 }
 
 func TestLarkSendWithKeyWord(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	access_token := viper.GetString("notify.lark.token")
 	keyWord := viper.GetString("notify.lark.keyWord")
 
@@ -75,7 +81,7 @@ func TestLarkSendWithKeyWord(t *testing.T) {
 }
 
 func TestLarkSendError(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	access_token := viper.GetString("notify.lark.token")
 	secret := "test"
 	dingTalk := channel.NewLark(access_token, secret)
@@ -86,7 +92,7 @@ func TestLarkSendError(t *testing.T) {
 }
 
 func TestPushdeerSend(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	pushkey := viper.GetString("notify.pushdeer.pushkey")
 	dingTalk := channel.NewPushdeer(pushkey, "")
 
@@ -96,7 +102,7 @@ func TestPushdeerSend(t *testing.T) {
 }
 
 func TestPushdeerSendError(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	pushkey := "test"
 	dingTalk := channel.NewPushdeer(pushkey, "")
 
@@ -106,7 +112,7 @@ func TestPushdeerSendError(t *testing.T) {
 }
 
 func TestTelegramSend(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	secret := viper.GetString("notify.telegram.bot_api_key")
 	chatID := viper.GetString("notify.telegram.chat_id")
 	httpProxy := viper.GetString("notify.telegram.http_proxy")
@@ -118,7 +124,7 @@ func TestTelegramSend(t *testing.T) {
 }
 
 func TestTelegramSendError(t *testing.T) {
-	InitConfig()
+	InitConfig(t)
 	secret := "test"
 	chatID := viper.GetString("notify.telegram.chat_id")
 	dingTalk := channel.NewTelegram(secret, chatID, "")
