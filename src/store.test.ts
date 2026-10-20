@@ -157,6 +157,16 @@ describe('product model task snapshots', () => {
     await expect(submitImageTask({ prompt: '猫'.repeat(32001), source: { kind: 'generate' } })).rejects.toThrow('提示词不能超过 32000 字')
   })
 
+  it('accepts a non-BMP prompt that is within 32000 code points', async () => {
+    const prompt = `${'a'.repeat(31999)}😀`
+    expect(prompt.length).toBeGreaterThan(32000)
+    useStore.setState({ prompt })
+    await submitTask()
+    expect(useStore.getState().showToast).not.toHaveBeenCalledWith('提示词不能超过 32000 字，请精简后再生成', 'error')
+    expect(useStore.getState().tasks).toHaveLength(1)
+    expect(useStore.getState().tasks[0].prompt).toBe(prompt)
+  })
+
   it('blocks duplicate submissions until task creation and then permits the next task', async () => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => { release = resolve })

@@ -243,11 +243,12 @@ export default function DetailModal() {
   const currentRevisedPrompt = currentOutputImageId ? stripInternalPromptText(task.revisedPromptByImage?.[currentOutputImageId] ?? '') : ''
   // 将 @图N 等 mention 标记和透明背景追加提示词都按实际请求内容比较，
   // 避免仅由本地请求预处理导致的不一致被当作“API 改写”。
+  // 展示仍用未清理的用户原文；比较时请求侧也去掉同样的内部句子，否则原文里已有这类句子、上游原样返回时会被当成改写。
   const requestPrompt = task.transparentOutput && task.transparentPrompt
     ? task.transparentPrompt
     : task.prompt
-  const promptSentToApi = stripInternalPromptText(replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length))
-  const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== promptSentToApi)
+  const promptSentToApi = replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length)
+  const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== stripInternalPromptText(promptSentToApi))
   const rawImageUrls = task.rawImageUrls ?? []
   const isPngOutput = task.params.output_format === 'png'
   const transparentOutputText = formatParamValue('transparent_output', Boolean(task.transparentOutput || task.params.transparent_output))
@@ -824,7 +825,8 @@ export default function DetailModal() {
               )}
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4">
-              {stripInternalPromptText(task.prompt) || '(无提示词)'}
+              {/* 用户原文原样展示；内部句子清理只用于上游 revised_prompt，否则正文里的相似说法会被截断，和复制结果不一致 */}
+              {task.prompt || '(无提示词)'}
             </p>
             {showRevisedPrompt && currentRevisedPrompt && (
               <div className="mb-4">
