@@ -15,7 +15,6 @@ import type { CanvasResourceReference } from '../../lib/canvas/resources'
 import { useTranslation } from '../../lib/canvas/i18n'
 
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-const selectionBlue = '#2f80ff'
 
 type CanvasNodeProps = {
   data: CanvasNodeData
@@ -139,7 +138,7 @@ export const CanvasNode = React.memo(function CanvasNode({
   // Transparent nodes such as SVGs blend into the canvas while retaining outlines for selected or related states.
   const transparentBg = Boolean(definition?.transparentBackground)
   const isActive = isConnectionTarget || isSelected || isFocusRelated
-  const imageBorderColor = isActive ? selectionBlue : isRelated ? theme.node.muted : 'transparent'
+  const imageBorderColor = isActive ? theme.accent : isRelated ? theme.node.muted : 'transparent'
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const resizeRef = useRef({
@@ -370,12 +369,12 @@ export const CanvasNode = React.memo(function CanvasNode({
           background: isGroup ? 'transparent' : hasImageContent || transparentBg ? 'transparent' : theme.node.fill,
           borderColor: isGroup
             ? isGroupDropTarget || isActive
-              ? selectionBlue
+              ? theme.accent
               : theme.node.stroke
             : hasImageContent
               ? imageBorderColor
               : isActive
-                ? selectionBlue
+                ? theme.accent
                 : isRelated
                   ? theme.node.muted
                   : transparentBg
@@ -383,9 +382,9 @@ export const CanvasNode = React.memo(function CanvasNode({
                     : theme.node.stroke,
           borderStyle: isGroup ? 'dashed' : 'solid',
           boxShadow: isGroupDropTarget
-            ? `0 0 0 2px ${selectionBlue}66, inset 0 0 0 999px ${selectionBlue}10`
+            ? `0 0 0 2px ${theme.accent}66, inset 0 0 0 999px ${theme.accent}10`
             : isActive
-              ? `0 0 0 1px ${selectionBlue}55`
+              ? `0 0 0 1px ${theme.accent}55`
               : isRelated
                 ? `0 0 0 1px ${theme.node.muted}55, 0 18px 48px rgba(0,0,0,.14)`
                 : undefined,
@@ -466,7 +465,7 @@ export const CanvasNode = React.memo(function CanvasNode({
             className="pointer-events-none absolute inset-0 z-[60] grid place-items-center rounded-[inherit]"
             style={{
               background: `color-mix(in srgb, ${theme.canvas.background} ${referenceSelectionState === 'target' ? 78 : referenceSelectionState === 'disabled' ? 60 : 34}%, transparent)`,
-              boxShadow: referenceSelectionState === 'available' ? `inset 0 0 0 2px ${selectionBlue}` : undefined,
+              boxShadow: referenceSelectionState === 'available' ? `inset 0 0 0 2px ${theme.accent}` : undefined,
             }}
           >
             {referenceSelectionState !== 'disabled' ? (
@@ -713,7 +712,7 @@ function ExpandedTextCard({ node, text, index, onSetPrimary }: { node: CanvasNod
             style={{ color: theme.node.text }}
             onClick={(event) => (event.stopPropagation(), onSetPrimary())}
           >
-            <Star className="size-3.5" style={{ color: selectionBlue }} />
+            <Star className="size-3.5" style={{ color: theme.accent }} />
             {t('canvas.node.setPrimaryText')}
           </button>
         </>
@@ -1000,7 +999,7 @@ function ExpandedImageCard({
             title={t('canvas.node.setPrimary')}
             onClick={(event) => (event.stopPropagation(), onSetPrimary())}
           >
-            <Star className="size-3 shrink-0" style={{ color: selectionBlue }} />
+            <Star className="size-3 shrink-0" style={{ color: theme.accent }} />
             <span className="truncate">{t('canvas.node.setPrimary')}</span>
           </button>
         </div>

@@ -10,7 +10,7 @@ export default {
         background: 'hsl(var(--background) / <alpha-value>)',
         border: 'hsl(var(--border) / <alpha-value>)',
         gray: colors.zinc,
-        // 强调色随主题切换：深色沿用 Tailwind 蓝，浅色换成首页同系的暖橙，色值见 index.css 的 --c-blue-*
+        // blue-* 即全站主色（首页同系的暖橙），深浅两套色值见 index.css 的 --c-blue-*
         blue: Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((shade) => [shade, `rgb(var(--c-blue-${shade}) / <alpha-value>)`])),
         foreground: 'hsl(var(--foreground) / <alpha-value>)',
         input: 'hsl(var(--input) / <alpha-value>)',
@@ -25,6 +25,13 @@ export default {
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar) / <alpha-value>)',
           foreground: 'hsl(var(--sidebar-foreground) / <alpha-value>)',
+        },
+      },
+      // 只加深文字用的 gray-400/500（边框、背景不受影响），浅色米色底上也达到 4.5:1；色值见 index.css 的 --c-text-gray-*
+      textColor: {
+        gray: {
+          400: 'rgb(var(--c-text-gray-400) / <alpha-value>)',
+          500: 'rgb(var(--c-text-gray-500) / <alpha-value>)',
         },
       },
       fontFamily: {

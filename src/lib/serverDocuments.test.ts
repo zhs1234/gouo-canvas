@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentConversation } from '../types'
+import type { SkillDocument } from './skills/types'
 
 const conversation = (patch: Partial<AgentConversation> = {}): AgentConversation => ({
   id: 'conv', schemaVersion: 1, title: '会话', modelId: 'model', messages: [], draft: '', referenceImageIds: [], status: 'idle', createdAt: 1, updatedAt: 1, revision: 1, ...patch,
@@ -11,6 +12,9 @@ let agentState: { conversations: AgentConversation[]; hydrate: () => Promise<voi
 let requests: Array<{ path: string; body?: Record<string, unknown> }>
 let remotePage: unknown[]
 let downloadAsset: ReturnType<typeof vi.fn>
+let storedSkills: Map<string, SkillDocument>
+let skillState: { skills: SkillDocument[]; hydrate: () => Promise<void> }
+let remoteSkills: unknown[]
 
 beforeEach(() => {
   vi.resetModules()
@@ -20,6 +24,9 @@ beforeEach(() => {
   requests = []
   remotePage = []
   agentState = { conversations: [], hydrate: async () => {} }
+  storedSkills = new Map()
+  skillState = { skills: [], hydrate: async () => {} }
+  remoteSkills = []
   downloadAsset = vi.fn()
   vi.doMock('../store', () => ({ deleteImageIfUnreferenced: vi.fn(), useStore: { getState: () => ({ showToast: vi.fn() }) } }))
   vi.doMock('./storageScope', () => ({ isStorageScopeCurrent: () => true }))
@@ -33,7 +40,17 @@ beforeEach(() => {
       setState: (update: (state: typeof agentState) => Partial<typeof agentState>) => Object.assign(agentState, update(agentState)),
     },
   }))
+  vi.doMock('../stores/skillStore', () => ({
+    normalizeSkillDocument: (value: SkillDocument) => value,
+    useSkillStore: {
+      getState: () => skillState,
+      setState: (update: (state: typeof skillState) => Partial<typeof skillState>) => Object.assign(skillState, update(skillState)),
+    },
+  }))
   vi.doMock('./db', () => ({
+    getAllSkills: async () => [...storedSkills.values()],
+    getSkill: async (id: string) => storedSkills.get(id),
+    putSkill: async (doc: SkillDocument) => { storedSkills.set(doc.id, doc) },
     getAllCanvasProjects: async () => [],
     getAllAgentConversations: async () => [...stored.values()],
     getCanvasProject: async () => undefined,
@@ -41,8 +58,8 @@ beforeEach(() => {
     putCanvasProject: vi.fn(),
     putAgentConversation: async (doc: AgentConversation) => { stored.set(doc.id, doc) },
     getCloudMeta: async (key: string) => meta.get(key),
-    getDocumentWithCloudMeta: async (_kind: string, id: string, key: string) => ({ doc: stored.get(id), meta: meta.get(key) }),
-    deleteDocuments: async (_kind: string, ids: string[]) => { for (const id of ids) stored.delete(id) },
+    getDocumentWithCloudMeta: async (kind: string, id: string, key: string) => ({ doc: kind === 'skills' ? storedSkills.get(id) : stored.get(id), meta: meta.get(key) }),
+    deleteDocuments: async (kind: string, ids: string[]) => { for (const id of ids) (kind === 'skills' ? storedSkills : stored).delete(id) },
     deleteCloudAssetMapItems: vi.fn(),
     putCloudMeta: async (key: string, value: unknown) => { meta.set(key, value) },
   }))
@@ -54,12 +71,40 @@ beforeEach(() => {
     backendRequest: vi.fn(async (path: string, init?: RequestInit) => {
       requests.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined })
       if (init?.method === 'PUT') return { client_id: 'conv', title: '会话', revision: 3, document: {}, assets: [] }
-      return { items: path.includes('canvases') ? [] : remotePage, next_cursor: 'next', has_more: false }
+      return { items: path.includes('conversations') ? remotePage : path.includes('skills') ? remoteSkills : [], next_cursor: 'next', has_more: false }
     }),
   }))
 })
 
 describe('server documents', () => {
+  it('首次拉取结束后标记文档已拉取，拉取失败也标记，画布页据此判定画布是否存在', async () => {
+    const setState = vi.fn()
+    vi.doMock('../stores/canvasStore', () => ({ markCanvasPersisted: vi.fn(), useCanvasStore: { getState: () => ({ projects: [], hydrate: async () => {} }), setState } }))
+    const docs = await import('./serverDocuments')
+    await docs.startServerDocuments()
+    expect(setState).toHaveBeenCalledWith({ documentsPulled: true })
+
+    vi.resetModules()
+    setState.mockClear()
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.backendRequest).mockRejectedValue(new Error('offline'))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const failed = await import('./serverDocuments')
+    await failed.startServerDocuments()
+    expect(setState).toHaveBeenCalledWith({ documentsPulled: true })
+  })
+
+  it('导入的技能和会话一样写到服务端，并读取其他设备导入的技能', async () => {
+    const skill = (patch: Partial<SkillDocument> = {}): SkillDocument => ({ id: 'skill', schemaVersion: 1, name: 'poster', title: '海报', description: '用途', body: '正文', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 1, ...patch })
+    storedSkills.set('skill', skill())
+    remoteSkills = [{ client_id: 'remote-skill', title: '远端', revision: 2, document: skill({ id: 'remote-skill', name: 'remote', revision: 4 }), assets: [] }]
+    const docs = await import('./serverDocuments')
+    await docs.startServerDocuments()
+    expect(requests.find((request) => request.path === '/api/gouo/skills/skill')?.body).toMatchObject({ client_id: 'skill', title: '海报', document: { name: 'poster', body: '正文' } })
+    expect(storedSkills.get('remote-skill')).toMatchObject({ name: 'remote', revision: 4 })
+    expect(skillState.skills.map((item) => item.id)).toEqual(['remote-skill'])
+  })
+
   it('writes changed documents to the server once and skips unchanged ones', async () => {
     stored.set('conv', conversation())
     const docs = await import('./serverDocuments')
@@ -96,7 +141,7 @@ describe('server documents', () => {
       markCanvasPersisted: vi.fn(),
       useCanvasStore: {
         getState: () => ({ ...canvasState, hydrate: async () => {} }),
-        setState: (update: (state: typeof canvasState) => Partial<typeof canvasState>) => Object.assign(canvasState, update(canvasState)),
+        setState: (update: Partial<typeof canvasState> | ((state: typeof canvasState) => Partial<typeof canvasState>)) => Object.assign(canvasState, typeof update === 'function' ? update(canvasState) : update),
       },
     }))
     const backend = await import('./gouoBackend')

@@ -10,6 +10,7 @@ import { getTransparentRequestParams, createTransparentOutputMeta } from './tran
 import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
 import { isStorageScopeCurrent } from './storageScope'
 import { formatPoints } from './accountUsage'
+import { MAX_PROMPT_LENGTH, promptCodePointLength } from './inputValidation'
 
 interface ImageTaskInput {
   prompt: string
@@ -31,7 +32,8 @@ type SubmitOptions = { allowFullMask?: boolean }
 const pendingRequests = new Map<string, Promise<string>>()
 
 export function submitImageTask(input: ImageTaskInput): Promise<string> {
-  if (!input.prompt.trim() || input.prompt.length > 100000) return Promise.reject(new Error('提示词为空或过长'))
+  if (!input.prompt.trim()) return Promise.reject(new Error('请输入提示词'))
+  if (promptCodePointLength(input.prompt) > MAX_PROMPT_LENGTH) return Promise.reject(new Error(`提示词不能超过 ${MAX_PROMPT_LENGTH} 字，请精简后再生成`))
   if (input.inputImageIds && (input.inputImageIds.length > 16 || input.inputImageIds.some((id) => typeof id !== 'string' || !id))) return Promise.reject(new Error('参考图片无效'))
   if (input.params?.n !== undefined && (!Number.isInteger(input.params.n) || input.params.n < 1 || input.params.n > getMaxTaskImages())) return Promise.reject(new Error(`图片数量必须为 1 到 ${getMaxTaskImages()}`))
   if (input.requestId && !/^[a-zA-Z0-9_:-]{1,512}$/.test(input.requestId)) return Promise.reject(new Error('任务请求标识无效，请重新发起任务'))
@@ -80,6 +82,11 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
     if (!prompt.trim()) {
       if (input) throw new Error('请输入提示词')
       showToast('请输入提示词', 'error')
+      return
+    }
+    // 与服务端图片接口的上限一致，超出时不建任务；画布和 Agent 的入口在 submitImageTask 里同样拦截
+    if (promptCodePointLength(prompt) > MAX_PROMPT_LENGTH) {
+      showToast(`提示词不能超过 ${MAX_PROMPT_LENGTH} 字，请精简后再生成`, 'error')
       return
     }
 

@@ -4,9 +4,12 @@ import { getAllAgentConversations, getAllTasks, putAgentConversation } from '../
 import { registerDocumentImageReferences } from '../lib/documentAssets'
 import { isStorageScopeCurrent } from '../lib/storageScope'
 import { getAgentModels, streamAgentCompletion, getAgentLimits } from '../lib/agent/api'
-import { agentToolDefinitions, executeAgentTool } from '../lib/agent/tools'
+import { executeAgentTool, getAgentToolDefinitions } from '../lib/agent/tools'
 import { reconcileAgentTasks } from '../lib/agent/taskRecovery'
+import { buildSkillPrompt, findMentionedSkills, listAgentSkills, MAX_ACTIVE_SKILLS } from '../lib/skills/catalog'
+import { useSkillStore } from './skillStore'
 import type { AgentConversation, AgentModel, AgentToolCall, ChatMessage } from '../lib/agent/types'
+import type { Skill } from '../lib/skills/types'
 
 const activeRuns = new Map<string, AbortController>()
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -31,6 +34,7 @@ export function normalizeAgentConversation(value: unknown): AgentConversation | 
     messages: item.status === 'running' ? item.messages.map((msg) => ({ ...msg, toolCalls: msg.toolCalls?.map((call) => call.status === 'running' || call.status === 'pending' ? { ...call, status: 'error' } : call) })) : item.messages,
     draft: typeof item.draft === 'string' ? item.draft : '',
     imageCount: Number.isInteger(item.imageCount) && item.imageCount! >= 1 && item.imageCount! <= 10 ? item.imageCount : undefined,
+    skills: Array.isArray(item.skills) ? [...new Set(item.skills.filter((name) => typeof name === 'string'))].slice(0, MAX_ACTIVE_SKILLS) : undefined,
     status: item.status === 'running' ? 'interrupted' : ['idle', 'completed', 'stopped', 'error', 'interrupted'].includes(item.status || '') ? item.status! : 'idle',
     error: item.status === 'running' ? '上次会话连接已中断，已保留内容。请检查已提交的图片任务后手动继续。' : item.error,
   }
@@ -76,7 +80,7 @@ function updateConversation(id: string, update: (conversation: AgentConversation
   }, 300))
 }
 
-export async function buildAgentMessages(conversation: AgentConversation, model: AgentModel, operatorPrompt = ''): Promise<ChatMessage[]> {
+export async function buildAgentMessages(conversation: AgentConversation, model: AgentModel, operatorPrompt = '', skills: Skill[] = []): Promise<ChatMessage[]> {
   const userStarts = conversation.messages.map((msg, index) => msg.role === 'user' ? index : -1).filter((index) => index >= 0)
   const messages = conversation.messages.slice(userStarts.length > 12 ? userStarts[userStarts.length - 12] : 0)
   const result: ChatMessage[] = [{
@@ -93,6 +97,7 @@ export async function buildAgentMessages(conversation: AgentConversation, model:
   if (unstartedCallIds.size) result[0].content += '\n先前有工具调用在执行前中断，未提交任务。用户要求继续时，可完成尚未提交的生成请求；已提交的任务仍不可重复执行。'
   const acknowledged = conversation.messages.flatMap((msg) => msg.toolCalls || []).filter((call) => call.recovery === 'acknowledged' && call.execution !== 'not_started').map((call) => call.id)
   if (acknowledged.length) result[0].content += `\n用户已手动核对以下原图片请求：${acknowledged.join(', ')}。这些原请求仍不可重复执行；只有用户明确的新生成需求才可使用新的工具调用提交。`
+  result[0].content += buildSkillPrompt(conversation.skills, skills)
   const lastUserIndex = messages.map((msg) => msg.role).lastIndexOf('user')
   for (const [idx, msg] of messages.entries()) {
     if (msg.role === 'tool') {
@@ -137,10 +142,12 @@ async function runConversation(id: string, controller: AbortController) {
       const conversation = useAgentStore.getState().conversations.find((item) => item.id === id)!
       const model = useAgentStore.getState().models.find((item) => item.id === conversation.modelId)
       if (!model) throw new Error('所选 Agent 模型已不可用，请重新选择')
-      const messages = await buildAgentMessages(conversation, model, useAgentStore.getState().systemPrompt)
+      const skills = listAgentSkills()
+      const messages = await buildAgentMessages(conversation, model, useAgentStore.getState().systemPrompt, skills)
       const messageId = crypto.randomUUID()
       updateConversation(id, (current) => ({ messages: [...current.messages, { id: messageId, role: 'assistant', content: '', createdAt: Date.now() }] }))
-      const completion = await streamAgentCompletion({ model: model.id, messages, tools: agentToolDefinitions, signal: controller.signal, onUpdate: (content, calls) => updateAssistant(id, messageId, content, calls) })
+      const activeNames = skills.filter((skill) => conversation.skills?.includes(skill.key)).map((skill) => skill.name)
+      const completion = await streamAgentCompletion({ model: model.id, messages, tools: getAgentToolDefinitions(skills, activeNames), signal: controller.signal, onUpdate: (content, calls) => updateAssistant(id, messageId, content, calls) })
       updateAssistant(id, messageId, completion.content, completion.calls)
       if (!completion.calls.length) {
         if (!completion.content.trim()) throw new Error('模型没有返回可用内容，请检查模型配置后重试')
@@ -184,6 +191,7 @@ async function runConversation(id: string, controller: AbortController) {
         updateConversation(id, (item) => ({
           messages: [...item.messages, { id: crypto.randomUUID(), role: 'tool', content: output.result, toolCallId: call.id, toolName: call.name, createdAt: Date.now(), taskIds: output.taskIds, referenceImageIds: output.referenceImageIds }],
           ...(call.name === 'select_reference' && !failed ? { referenceImageIds: output.referenceImageIds || [] } : {}),
+          ...(output.skills ? { skills: output.skills } : {}),
         }))
         await persistConversation(id)
       }
@@ -233,7 +241,7 @@ interface AgentState {
   loadModels: () => Promise<void>
   createConversation: (projectId?: string) => Promise<AgentConversation>
   updateDraft: (id: string, draft: string) => void
-  configureConversation: (id: string, patch: Pick<Partial<AgentConversation>, 'modelId' | 'projectId' | 'referenceImageIds' | 'title' | 'imageCount'>) => void
+  configureConversation: (id: string, patch: Pick<Partial<AgentConversation>, 'modelId' | 'projectId' | 'referenceImageIds' | 'title' | 'imageCount' | 'skills'>) => void
   acknowledgeImageRecovery: (id: string, callId: string) => void
   hideConversation: (id: string) => Promise<void>
   send: (id: string, text?: string) => Promise<void>
@@ -253,7 +261,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (hydratePromise) return hydratePromise
     hydratePromise = (async () => {
       const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
-      const [stored, storedTasks, lockState] = await Promise.all([getAllAgentConversations(), getAllTasks(), locks?.query()])
+      // 运行前要能读到导入的技能
+      const [stored, storedTasks, lockState] = await Promise.all([getAllAgentConversations(), getAllTasks(), locks?.query(), useSkillStore.getState().hydrate()])
       if (!isStorageScopeCurrent()) return
       const held = (lockState?.held ?? []).map((lock) => lock.name ?? '')
       const runningElsewhere = new Set(held.filter((name) => name.startsWith(AGENT_LOCK_PREFIX)).map((name) => name.slice(AGENT_LOCK_PREFIX.length)))
@@ -323,7 +332,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (recovered !== conversation) updateConversation(id, () => ({ messages: recovered.messages }))
     const controller = new AbortController()
     activeRuns.set(id, controller)
-    updateConversation(id, (item) => ({ modelId, title: item.messages.length ? item.title : prompt.slice(0, 32), status: 'running', error: undefined, draft: '', messages: [...item.messages, { id: crypto.randomUUID(), role: 'user', content: prompt, referenceImageIds: [...item.referenceImageIds], createdAt: Date.now() }] }))
+    const mentioned = findMentionedSkills(prompt, listAgentSkills())
+    updateConversation(id, (item) => ({ modelId, title: item.messages.length ? item.title : prompt.slice(0, 32), status: 'running', error: undefined, draft: '', ...(mentioned.length ? { skills: [...new Set([...item.skills || [], ...mentioned])].slice(0, MAX_ACTIVE_SKILLS) } : {}), messages: [...item.messages, { id: crypto.randomUUID(), role: 'user', content: prompt, referenceImageIds: [...item.referenceImageIds], createdAt: Date.now() }] }))
     try {
       await persistConversation(id)
     } catch (error) {

@@ -48,6 +48,8 @@ export interface AgentConversation {
   referenceImageIds: string[]
   // 输入框选择的每次生成张数，Agent 没有另行指定时按它提交；旧会话没有此字段，按 1 张
   imageCount?: number
+  // 本会话启用的 skill（内置记名称，导入的记文档 ID），正文固定在系统提示里，不随历史裁剪丢失
+  skills?: string[]
   status: AgentRunStatus
   error?: string
   createdAt: number

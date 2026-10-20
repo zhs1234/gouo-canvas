@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   dialog: null as null | { message?: string; action?: () => void; cancelAction?: () => void },
   models: vi.fn(),
   listeners: new Set<(state: { confirmDialog: unknown }) => void>(),
+  skills: [] as Skill[],
 }))
 vi.mock('../../store', () => ({
   useStore: {
@@ -30,8 +31,11 @@ vi.mock('../gouoBackend', () => ({ getImageModels: mocks.models, getMaxTaskImage
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))
+vi.mock('../skills/catalog', async (importOriginal) => ({ ...await importOriginal<typeof import('../skills/catalog')>(), listAgentSkills: () => mocks.skills, MAX_ACTIVE_SKILLS: 2 }))
 
-import { executeAgentTool, parseToolArguments } from './tools'
+import { SKILL_CATALOG_LIMIT } from '../skills/catalog'
+import { executeAgentTool, getAgentToolDefinitions, parseToolArguments } from './tools'
+import type { Skill } from '../skills/types'
 import { applyCanvasAgentOps } from '../canvas/agentOps'
 import type { CanvasAgentSnapshot } from '../canvas/agentOps'
 
@@ -263,5 +267,53 @@ describe('Agent tool boundary', () => {
     })
     const output = await run('add_task_output', { taskId: 'task' }, { ...conversation, messages: [{ id: 'm', role: 'tool', content: '{}', createdAt: 1, taskIds: ['task'] }] })
     expect(JSON.parse(output.result).added).toBe(1)
+  })
+})
+
+describe('Agent skill 工具', () => {
+  const skill = (name: string): Skill => ({ key: name, name, title: name, description: '用途', body: '正文', files: [{ path: 'references/long.md', content: 'a'.repeat(25_000) }], builtin: true })
+
+  it('没有可用 skill 时不提供 skill 工具，有时 name 限定为已有名称', () => {
+    expect(getAgentToolDefinitions([]).map((tool) => tool.function.name)).not.toContain('activate_skill')
+    const tools = getAgentToolDefinitions([skill('poster-design'), skill('logo-brand')])
+    const activate = tools.find((tool) => tool.function.name === 'activate_skill')!
+    expect((activate.function.parameters.properties as Record<string, { enum?: string[] }>).name.enum).toEqual(['poster-design', 'logo-brand'])
+  })
+
+  it('技能很多时工具定义只列出目录里的名称，已启用的仍保留', () => {
+    const many = Array.from({ length: 80 }, (_, idx) => ({ ...skill(`skill-${String(idx).padStart(2, '0')}${'n'.repeat(56)}`), description: '描'.repeat(300) }))
+    const enumOf = (tools: ReturnType<typeof getAgentToolDefinitions>, name: string) => (tools.find((tool) => tool.function.name === name)!.function.parameters.properties as Record<string, { enum?: string[] }>).name.enum || []
+    const tools = getAgentToolDefinitions(many)
+    const activate = enumOf(tools, 'activate_skill')
+    const read = enumOf(tools, 'read_skill_file')
+    expect(activate).toEqual(read)
+    expect(activate).toContain(many[0].name)
+    expect(activate).not.toContain(many[79].name)
+    expect(activate.join(',').length).toBeLessThanOrEqual(SKILL_CATALOG_LIMIT)
+    expect(JSON.stringify(tools).length).toBeLessThan(SKILL_CATALOG_LIMIT * 2 + 20_000)
+    const withActive = enumOf(getAgentToolDefinitions(many, [many[79].name]), 'activate_skill')
+    expect(withActive).toContain(many[79].name)
+    expect(withActive).not.toContain(many[78].name)
+  })
+
+  it('启用 skill 返回新的启用列表，重复启用和超出上限不改变列表', async () => {
+    mocks.skills = [skill('a'), skill('b'), skill('c')]
+    await expect(run('activate_skill', { name: 'missing' })).rejects.toThrow('没有这个 skill')
+    expect(await run('activate_skill', { name: 'a' })).toMatchObject({ skills: ['a'] })
+    expect(await run('activate_skill', { name: 'a' }, { ...conversation, skills: ['a'] })).toEqual({ result: expect.stringContaining('already_active') })
+    // 已删除的 skill 不占用名额
+    expect(await run('activate_skill', { name: 'b' }, { ...conversation, skills: ['a', 'deleted'] })).toMatchObject({ skills: ['a', 'b'] })
+    await expect(run('activate_skill', { name: 'c' }, { ...conversation, skills: ['a', 'b'] })).rejects.toThrow('最多同时启用 2 个')
+  })
+
+  it('分段读取 skill 参考文件，只能读取 skill 列出的文件', async () => {
+    mocks.skills = [skill('a')]
+    const first = JSON.parse((await run('read_skill_file', { name: 'a', path: 'references/long.md' })).result)
+    expect(first.content).toHaveLength(20_000)
+    expect(first.nextOffset).toBe(20_000)
+    const rest = JSON.parse((await run('read_skill_file', { name: 'a', path: 'references/long.md', offset: 20_000 })).result)
+    expect(rest.content).toHaveLength(5_000)
+    expect(rest.nextOffset).toBeUndefined()
+    await expect(run('read_skill_file', { name: 'a', path: '../SKILL.md' })).rejects.toThrow('没有参考文件')
   })
 })

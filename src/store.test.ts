@@ -3,6 +3,7 @@ import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_PARAMS } from './types'
 import { DEFAULT_SETTINGS, normalizeSettings } from './lib/settings'
 import type { ExportData, StoredImage, StoredImageThumbnail, TaskRecord } from './types'
+import type { SkillDocument } from './lib/skills/types'
 import { getSelectedImageMentionLabel } from './lib/promptImageMentions'
 vi.mock('./lib/db', () => {
   const tasks = new Map<string, TaskRecord>()
@@ -13,6 +14,8 @@ vi.mock('./lib/db', () => {
   return {
     CURRENT_THUMBNAIL_VERSION: 2,
     getAllTasks: async () => [...tasks.values()],
+    getAllSkills: async () => [],
+    putSkill: async () => {},
     putTask: async (task: TaskRecord) => {
       tasks.set(task.id, task)
       return task.id
@@ -99,7 +102,8 @@ vi.mock('./lib/transparentImage', () => ({
 }))
 import { clearImages, clearTasks, getAllTasks, getImage, importTaskData, putImage, putTask as putDbTask } from './lib/db'
 import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
-import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, useStore } from './store'
+import { refreshBackendStatus } from './lib/gouoBackend'
+import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, toggleTaskFavorite, useStore } from './store'
 
 const imageA = { id: 'image-a', dataUrl: 'data:image/png;base64,a' }
 const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
@@ -140,6 +144,27 @@ describe('product model task snapshots', () => {
     expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
     expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
+  })
+
+  it('refuses prompts longer than the server limit before creating a task', async () => {
+    useStore.setState({ prompt: '猫'.repeat(32001) })
+    await submitTask()
+    const { callImageApi } = await import('./lib/api')
+    expect(useStore.getState().showToast).toHaveBeenCalledWith('提示词不能超过 32000 字，请精简后再生成', 'error')
+    expect(useStore.getState().tasks).toHaveLength(0)
+    expect(callImageApi).not.toHaveBeenCalled()
+    const { submitImageTask } = await import('./lib/imageTasks')
+    await expect(submitImageTask({ prompt: '猫'.repeat(32001), source: { kind: 'generate' } })).rejects.toThrow('提示词不能超过 32000 字')
+  })
+
+  it('accepts a non-BMP prompt that is within 32000 code points', async () => {
+    const prompt = `${'a'.repeat(31999)}😀`
+    expect(prompt.length).toBeGreaterThan(32000)
+    useStore.setState({ prompt })
+    await submitTask()
+    expect(useStore.getState().showToast).not.toHaveBeenCalledWith('提示词不能超过 32000 字，请精简后再生成', 'error')
+    expect(useStore.getState().tasks).toHaveLength(1)
+    expect(useStore.getState().tasks[0].prompt).toBe(prompt)
   })
 
   it('blocks duplicate submissions until task creation and then permits the next task', async () => {
@@ -524,6 +549,49 @@ describe('favorite collection deletion', () => {
       favoriteCollectionIds: [collectionB.id],
     })
     expect((await getAllTasks()).map((item) => item.id)).toEqual([sharedTask.id])
+  })
+})
+
+describe('one-step favorite', () => {
+  const collectionA = { id: 'collection-a', name: '收藏夹 A', createdAt: 1, updatedAt: 1 }
+  const collectionB = { id: 'collection-b', name: '收藏夹 B', createdAt: 1, updatedAt: 1 }
+
+  beforeEach(async () => {
+    await clearTasks()
+    useStore.setState({
+      tasks: [task({ id: 'fav-task' })],
+      favoriteCollections: [collectionA, collectionB],
+      defaultFavoriteCollectionId: collectionB.id,
+      favoritePickerTaskIds: null,
+      selectedTaskIds: ['other-task'],
+      showToast: vi.fn(),
+    })
+  })
+
+  it('favorites into the default collection without opening the picker, then unfavorites on the next click', async () => {
+    await toggleTaskFavorite('fav-task')
+    let state = useStore.getState()
+    expect(state.tasks[0]).toMatchObject({ isFavorite: true, favoriteCollectionIds: [collectionB.id] })
+    expect(state.favoritePickerTaskIds).toBeNull()
+    expect(state.selectedTaskIds).toEqual(['other-task'])
+    expect((await getAllTasks())[0]).toMatchObject({ isFavorite: true, favoriteCollectionIds: [collectionB.id] })
+    const [message, type, action] = vi.mocked(state.showToast).mock.calls[0]
+    expect(message).toBe('已收藏到「收藏夹 B」')
+    expect(type).toBe('success')
+    expect(action?.label).toBe('移动到…')
+    action?.onClick()
+    expect(useStore.getState().favoritePickerTaskIds).toEqual(['fav-task'])
+
+    await toggleTaskFavorite('fav-task')
+    state = useStore.getState()
+    expect(state.tasks[0]).toMatchObject({ isFavorite: false, favoriteCollectionIds: [] })
+    expect(vi.mocked(state.showToast).mock.calls[1]).toEqual(['已取消收藏', 'success'])
+  })
+
+  it('falls back to the first collection when no default collection is set', async () => {
+    useStore.setState({ defaultFavoriteCollectionId: null })
+    await toggleTaskFavorite('fav-task')
+    expect(useStore.getState().tasks[0].favoriteCollectionIds).toEqual([collectionA.id])
   })
 })
 
@@ -933,6 +1001,114 @@ describe('data import', () => {
     expect(await getAllTasks()).toHaveLength(2)
     // 重复导入的会话仍要指向之前导入的任务
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations?.[0].messages[0]).toMatchObject({ taskIds: ['imported-new'] })
+    vi.unstubAllGlobals()
+  })
+
+  it('imports backup skills with new IDs and skips names already taken', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    // 后台设置有缓存，拨快时钟让它重新读取
+    let clock = 0
+    const loadStatus = async (respond: () => Promise<Response>) => {
+      vi.stubGlobal('fetch', vi.fn(respond))
+      clock += 1
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + clock * 600_000 })
+      await refreshBackendStatus()
+      vi.useRealTimers()
+    }
+    const { BUILTIN_SKILLS } = await import('./lib/skills/builtin')
+    const skill = (name: string) => ({ id: `backup-${name}`, schemaVersion: 1 as const, name, title: name, description: '用途', body: '正文', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 7 })
+    const backup = (skills: unknown[]) => importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: skills as SkillDocument[] })
+    // 读不到后台设置（启动时或接口故障）时不恢复技能，避免绕过关闭的导入开关
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline') }))
+    expect(await importData(backup([skill('early-skill')]), { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    await loadStatus(async () => Response.json({ success: true, data: {} }))
+    // 会话里启用的导入技能按文档 ID 记录，恢复后要指向新 ID
+    const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1, skills: ['backup-my-skill', BUILTIN_SKILLS[0].name] }
+    expect(await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [conversation], skills: [skill('my-skill'), skill(BUILTIN_SKILLS[0].name), skill('my-skill'), { ...skill('broken'), body: '' }] as SkillDocument[] }), { importTasks: true })).toBe(true)
+    const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills
+    expect(imported).toEqual([
+      expect.objectContaining({ name: 'my-skill', id: 'imported-backup-my-skill', revision: 1, createdAt: 1 }),
+      expect.objectContaining({ name: BUILTIN_SKILLS[0].name, id: `imported-backup-${BUILTIN_SKILLS[0].name}` }),
+    ])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-backup-my-skill', BUILTIN_SKILLS[0].name])
+    expect(useStore.getState().showToast).toHaveBeenCalledWith('已导入 0 个任务，2 个技能', 'success')
+    // 运营方关闭技能导入后，备份里的技能不恢复
+    await loadStatus(async () => Response.json({ success: true, data: { gouo_skill_import: false } }))
+    expect(await importData(backup([skill('other-skill')]), { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps same-name skills from a backup and remaps each session to its own document', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data: {} })))
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 3_600_000 })
+    await refreshBackendStatus()
+    vi.useRealTimers()
+    const { useSkillStore } = await import('./stores/skillStore')
+    useSkillStore.setState({ skills: [], hydrated: true })
+    const skill = (id: string, createdAt: number, body: string) => ({ id, schemaVersion: 1 as const, name: 'dup', title: '同名', description: '用途', body, files: [], enabled: true, createdAt, updatedAt: createdAt, revision: 4 })
+    const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1, skills: ['skill-late', 'skill-early', 'skill-late'] }
+    const file = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [conversation], skills: [skill('skill-early', 1, '较早'), skill('skill-late', 2, '较晚')] as SkillDocument[] })
+    expect(await importData(file, { importTasks: true })).toBe(true)
+    const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills
+    expect(imported).toEqual([
+      expect.objectContaining({ id: 'imported-skill-early', name: 'dup', body: '较早', createdAt: 1 }),
+      expect.objectContaining({ id: 'imported-skill-late', name: 'dup', body: '较晚', createdAt: 2 }),
+    ])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-skill-late', 'imported-skill-early'])
+    // 再次导入同一份备份时认出已恢复的文档，不另建副本，会话仍指向它们
+    expect(await importData(file, { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-skill-late', 'imported-skill-early'])
+    // 备份里同时有 x 和 imported-x 两份不同的技能时各自恢复，再次导入时也各自认回
+    const pair = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: ['x', 'imported-x'] }], skills: [skill('x', 1, '原件'), skill('imported-x', 2, '另一份')] as SkillDocument[] })
+    useSkillStore.setState({ skills: [], hydrated: true })
+    expect(await importData(pair, { importTasks: true })).toBe(true)
+    const pairDocs = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
+    expect(pairDocs.map((doc) => [doc.id, doc.body])).toEqual([['imported-x', '原件'], ['imported-imported-x', '另一份']])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
+    useSkillStore.setState({ skills: pairDocs, hydrated: true })
+    expect(await importData(pair, { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
+    // 本地同时有原件 x 和恢复副本 imported-x 时，两种备份顺序都认回各自的 ID，不再多复制一份
+    const both = [skill('x', 1, '原件'), skill('imported-x', 2, '另一份')]
+    for (const order of [both, [...both].reverse()]) {
+      useSkillStore.setState({ skills: both, hydrated: true })
+      const again = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: ['x', 'imported-x'] }], skills: order as SkillDocument[] })
+      expect(await importData(again, { importTasks: true })).toBe(true)
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['x', 'imported-x'])
+    }
+    // 本地只有 imported-x 和 imported-imported-x 时，备份里 imported-x 排在 x 前面也要接上链条
+    const chain = [skill('imported-x', 1, '第一份'), skill('imported-imported-x', 2, '第二份')]
+    for (const order of [[skill('imported-x', 2, '另一份'), skill('x', 1, '原件')], [skill('x', 1, '原件'), skill('imported-x', 2, '另一份')]]) {
+      useSkillStore.setState({ skills: chain, hydrated: true })
+      const again = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: ['x', 'imported-x'] }], skills: order as SkillDocument[] })
+      expect(await importData(again, { importTasks: true })).toBe(true)
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+      expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual(['imported-x', 'imported-imported-x'])
+    }
+    // imported- 前缀叠到超过服务端 128 字节时改用原 ID 的散列，会话指向这份新技能，再次导入时认回
+    const longId = 'b'.repeat(120)
+    useSkillStore.setState({ skills: [], hydrated: true })
+    const longFile = importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], agentConversations: [{ ...conversation, skills: [longId] }], skills: [skill(longId, 1, '很长')] as SkillDocument[] })
+    expect(await importData(longFile, { importTasks: true })).toBe(true)
+    const longDocs = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
+    expect(longDocs.map((doc) => doc.id)).toEqual([expect.stringMatching(/^imported-h[0-9a-f]{16}$/)])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([longDocs[0].id])
+    expect(await importData(longFile, { importTasks: true })).toBe(true)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.skills).toEqual([])
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([longDocs[0].id])
+    // 恢复后又删除的技能仍留着记录：再次导入换新 ID，不能与它撞 ID 导致整个导入失败
+    useSkillStore.setState({ skills: imported!.map((doc) => ({ ...doc, hiddenAt: 5 })), hydrated: true })
+    expect(await importData(file, { importTasks: true })).toBe(true)
+    const again = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
+    expect(again.map((doc) => doc.body)).toEqual(['较早', '较晚'])
+    expect(again.some((doc) => doc.id.startsWith('imported-'))).toBe(false)
+    expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([again[1].id, again[0].id])
     vi.unstubAllGlobals()
   })
 

@@ -3,6 +3,7 @@ import type { GouoUser } from '../../lib/gouoBackend'
 import { redeemCode } from '../../lib/gouoBackend'
 import { copyTextToClipboard } from '../../lib/clipboard'
 import { formatPoints } from '../../lib/accountUsage'
+import { useImageModels } from '../../hooks/useImageModels'
 import type { UserCenterServiceStatus } from '../UserCenterModal'
 
 export default function TopupSection({ user, status, onRedeemed }: { user: GouoUser; status: UserCenterServiceStatus; onRedeemed: () => Promise<void> }) {
@@ -11,6 +12,7 @@ export default function TopupSection({ user, status, onRedeemed }: { user: GouoU
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const models = useImageModels()
   let supportUrl = ''
   try {
     const url = new URL(status.supportContact)
@@ -50,6 +52,21 @@ export default function TopupSection({ user, status, onRedeemed }: { user: GouoU
         </form>
         {message && <p className="mt-3 text-sm font-medium text-emerald-600 dark:text-emerald-400">{message}</p>}
         {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      </section>
+
+      <section className="rounded-2xl border border-gray-100 p-5 text-sm dark:border-white/[0.08]" aria-label="图片模型价格">
+        <p className="font-semibold text-gray-900 dark:text-white">图片模型价格</p>
+        <p className="mt-1 text-xs text-gray-400">按成功生成的张数计费，没有返回图片的请求自动退回积分。</p>
+        {models.length ? (
+          <ul className="mt-3 divide-y divide-gray-100 dark:divide-white/[0.06]">
+            {models.map((model) => (
+              <li key={model.id} className="flex items-center justify-between gap-4 py-2">
+                <span className="min-w-0 truncate text-gray-700 dark:text-gray-200">{model.name}</span>
+                <span className="shrink-0 tabular-nums text-gray-500 dark:text-gray-400">{formatPoints(model.price_cny)}/张</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-3 text-gray-400">正在读取模型价格…</p>}
       </section>
 
       <section className="rounded-2xl border border-gray-100 p-5 text-sm dark:border-white/[0.08]" aria-label="充值与账务帮助">

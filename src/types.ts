@@ -15,6 +15,8 @@ export interface AppSettings {
   referenceImageEditAction: ReferenceImageEditAction
   // 批量下载多张图片时打包为 ZIP；关闭时逐张下载
   zipBatchDownload: boolean
+  // 用户停用的内置技能名称
+  disabledSkills: string[]
 }
 
 // ===== 任务参数 =====
@@ -173,6 +175,7 @@ export interface ImageApiResponse {
 export interface ExportData {
   canvasProjects?: import('./lib/canvas/types').CanvasProject[]
   agentConversations?: import('./lib/agent/types').AgentConversation[]
+  skills?: import('./lib/skills/types').SkillDocument[]
   version: number
   exportedAt: string
   settings?: AppSettings

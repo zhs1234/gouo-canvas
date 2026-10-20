@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest'
 import { DEFAULT_PARAMS, type TaskRecord } from '../types'
 import TaskGrid from './TaskGrid'
 
-const state = vi.hoisted(() => ({ tasks: [] as TaskRecord[], searchQuery: '', filterStatus: 'all', filterFavorite: false, activeFavoriteCollectionId: null, selectedTaskIds: [], clearSelection: () => {} }))
+const state = vi.hoisted(() => ({ tasks: [] as TaskRecord[], searchQuery: '', filterStatus: 'all', filterFavorite: false, sortOrder: 'newest', filterModel: '', activeFavoriteCollectionId: null, selectedTaskIds: [], clearSelection: () => {} }))
 vi.mock('../store', () => ({ useStore: (select: (value: typeof state) => unknown) => select(state), ALL_FAVORITES_COLLECTION_ID: 'all', getTaskFavoriteCollectionIds: () => [], reuseConfig: vi.fn(), editOutputs: vi.fn(), removeTask: vi.fn() }))
 vi.mock('../lib/serverLibrary', () => ({ restoreServerTask: vi.fn() }))
 vi.mock('./TaskCard', () => ({ default: ({ task }: { task: TaskRecord }) => <span>{task.prompt}</span> }))

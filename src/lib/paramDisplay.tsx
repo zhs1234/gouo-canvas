@@ -63,6 +63,29 @@ export function ActualValueBadge({ value, className = '', variant = 'highlight' 
   )
 }
 
+const PARAM_VALUE_LABELS: Partial<Record<ParamKey, Record<string, string>>> = {
+  quality: { auto: '自动', low: '低', medium: '中', high: '高', standard: '标准', hd: '高清' },
+  output_format: { png: 'PNG', jpeg: 'JPEG', jpg: 'JPEG', webp: 'WebP' },
+  moderation: { auto: '自动', low: '宽松' },
+}
+
+// 把接口里的原始参数值转成界面文案，未知值原样显示
+export function formatParamValue(paramKey: ParamKey, value: unknown) {
+  if (value === undefined || value === null || value === '') return '未设置'
+  const text = String(value)
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (paramKey === 'size') return text === 'auto' ? '自动' : text.replace(/^(\d+)\s*[x×*]\s*(\d+)$/i, '$1×$2')
+  if (paramKey === 'output_compression') return `${text}%`
+  return PARAM_VALUE_LABELS[paramKey]?.[text.toLowerCase()] ?? text
+}
+
+// 部分上游会把请求参数以英文句子拼进 revised_prompt（如「Requested output image size: 1024x1024.」），展示前去掉
+const INTERNAL_PROMPT_SENTENCE = /(^|\s)Requested output image [a-z ]+:[^\n]*?(?:\.(?=\s|$)|$)/gim
+
+export function stripInternalPromptText(prompt: string) {
+  return prompt.replace(INTERNAL_PROMPT_SENTENCE, '$1').replace(/[ \t]+\n/g, '\n').trim()
+}
+
 export function getParamDisplay(task: TaskRecord, paramKey: ParamKey, actualParams = task.actualParams) {
   const requestedValue = task.params[paramKey]
   const actualValue = actualParams?.[paramKey]
@@ -71,13 +94,13 @@ export function getParamDisplay(task: TaskRecord, paramKey: ParamKey, actualPara
   const isMismatch =
     hasActualValue &&
     requestedValue !== 'auto' &&
-    String(actualValue) !== String(requestedValue)
+    formatParamValue(paramKey, actualValue) !== formatParamValue(paramKey, requestedValue)
 
   return {
-    displayValue: String(displayValue),
+    displayValue: formatParamValue(paramKey, displayValue),
     isMismatch,
-    requestedValue: String(requestedValue),
-    isAutoResolved: hasActualValue && requestedValue === 'auto' && String(actualValue) !== String(requestedValue),
+    requestedValue: formatParamValue(paramKey, requestedValue),
+    isAutoResolved: hasActualValue && requestedValue === 'auto' && String(actualValue) !== 'auto',
   }
 }
 

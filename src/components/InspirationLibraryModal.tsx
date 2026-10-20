@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { INSPIRATION_CATEGORIES, INSPIRATION_PROMPTS, INSPIRATION_SOURCE, type InspirationCategory, type InspirationPrompt } from '../lib/inspirationPrompts'
 import { copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
+import { appendPrompt } from '../lib/inputValidation'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { useStore } from '../store'
@@ -27,12 +28,30 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
   const [failedPreviews, setFailedPreviews] = useState<string[]>([])
   const libraryRef = useRef<HTMLDivElement>(null)
   const detailRef = useRef<HTMLDivElement>(null)
+  const tabsRef = useRef<HTMLDivElement>(null)
+  // 分类栏左右是否还有可滚动的内容，决定渐隐遮罩和箭头的显示
+  const [tabEdges, setTabEdges] = useState({ start: false, end: false })
   const setPrompt = useStore((s) => s.setPrompt)
   const showToast = useStore((s) => s.showToast)
 
   useCloseOnEscape(!page || Boolean(selected), selected ? () => setSelected(null) : () => onClose?.())
   usePreventBackgroundScroll(!page, [libraryRef, detailRef])
   useEffect(() => { if (page && selected) detailRef.current?.focus() }, [page, selected])
+
+  const updateTabEdges = () => {
+    const el = tabsRef.current
+    if (!el) return
+    const start = el.scrollLeft > 1
+    const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+    setTabEdges((prev) => prev.start === start && prev.end === end ? prev : { start, end })
+  }
+  // 详情页返回列表时分类栏重新显示，需要重新测量
+  useEffect(() => {
+    updateTabEdges()
+    window.addEventListener('resize', updateTabEdges)
+    return () => window.removeEventListener('resize', updateTabEdges)
+  }, [selected])
+  const scrollTabs = (dir: number) => tabsRef.current?.scrollBy({ left: dir * tabsRef.current.clientWidth * 0.6, behavior: 'smooth' })
 
   const prompts = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase('zh-CN')
@@ -45,7 +64,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
 
   const applyPrompt = (item: InspirationPrompt, append = false) => {
     const current = useStore.getState().prompt
-    setPrompt(append && current.trim() ? `${current.trimEnd()}\n\n${item.prompt}` : item.prompt)
+    setPrompt(append ? appendPrompt(current, item.prompt) : item.prompt)
     showToast(`已填入「${item.title}」，请替换占位内容${item.referenceCount ? '并上传参考图' : ''}`, 'success')
     if (page) onApply?.()
     else onClose?.()
@@ -103,12 +122,16 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
               </svg>
               <input autoFocus={!page} aria-label="搜索灵感" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模板、风格、场景或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
             </div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1 lg:max-w-[66%] lg:pb-0">
-              {INSPIRATION_CATEGORIES.map((item) => (
-                <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition ${category === item ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.09]'}`}>
-                  {item}
-                </button>
-              ))}
+            <div className={`inspiration-tabs relative min-w-0 lg:max-w-[66%]${tabEdges.start ? ' has-start' : ''}${tabEdges.end ? ' has-end' : ''}`}>
+              <div ref={tabsRef} data-inspiration-tabs onScroll={updateTabEdges} className="hide-scrollbar flex gap-1.5 overflow-x-auto">
+                {INSPIRATION_CATEGORIES.map((item) => (
+                  <button key={item} type="button" aria-pressed={category === item} onClick={() => setCategory(item)} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-medium transition ${category === item ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.09]'}`}>
+                    {item}
+                  </button>
+                ))}
+              </div>
+              <button type="button" data-inspiration-tabs-arrow hidden={!tabEdges.start} onClick={() => scrollTabs(-1)} className="inspiration-tabs-arrow left-0" aria-label="向左滚动分类"><ChevronLeftIcon className="h-4 w-4" /></button>
+              <button type="button" data-inspiration-tabs-arrow hidden={!tabEdges.end} onClick={() => scrollTabs(1)} className="inspiration-tabs-arrow right-0" aria-label="向右滚动分类"><ChevronLeftIcon className="h-4 w-4 rotate-180" /></button>
             </div>
           </div>
         </header>
@@ -133,14 +156,14 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                     <div className="p-4">
                       <h3 className="font-semibold text-gray-900 dark:text-white">{item.title}</h3>
                       <p className="mt-1.5 line-clamp-2 min-h-10 text-xs leading-5 text-gray-500 dark:text-gray-400">{item.description}</p>
-                      {item.referenceCount > 0 && <p className="mt-2 text-[11px] font-medium text-amber-600 dark:text-amber-400">需上传 {item.referenceCount} 张参考图</p>}
+                      {item.referenceCount > 0 && <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">需上传 {item.referenceCount} 张参考图</p>}
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        {item.tags.slice(0, 3).map((tag) => <span key={tag} className="rounded-md bg-gray-100 px-2 py-1 text-[10px] text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{tag}</span>)}
+                        {item.tags.slice(0, 3).map((tag) => <span key={tag} className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">{tag}</span>)}
                       </div>
                     </div>
                   </button>
                   <div className="flex gap-2 border-t border-gray-100 p-3 dark:border-white/[0.06]">
-                    <button type="button" onClick={() => void copyPrompt(item)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-400 transition hover:border-blue-200 hover:text-blue-600 dark:border-white/10" aria-label={`复制${item.title}提示词`}><CopyIcon className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => void copyPrompt(item)} className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs text-gray-500 transition hover:border-blue-200 hover:text-blue-600 dark:border-white/10 dark:text-gray-400" aria-label={`复制${item.title}提示词`}><CopyIcon className="h-4 w-4" />复制</button>
                     <button type="button" onClick={() => usePrompt(item)} className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 dark:bg-white dark:text-gray-950 dark:hover:bg-blue-500 dark:hover:text-white">填入提示词</button>
                   </div>
                 </article>
@@ -154,7 +177,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
           )}
         </div>
 
-        <footer hidden={page && Boolean(selected)} className={page ? 'inspiration-page-footer' : 'flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-5 py-3 text-[11px] text-gray-400 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7'}>
+        <footer hidden={page && Boolean(selected)} className={page ? 'inspiration-page-footer' : 'flex items-center justify-between gap-4 border-t border-gray-200 bg-white px-5 py-3 text-xs text-gray-400 dark:border-white/[0.08] dark:bg-gray-950 sm:px-7'}>
           <span>来源：{INSPIRATION_SOURCE.author} · <a href={`${import.meta.env.BASE_URL}inspiration-license.txt`} target="_blank" rel="noreferrer" className="underline hover:text-blue-600">许可与图片署名</a></span>
           <a href={INSPIRATION_SOURCE.url} target="_blank" rel="noreferrer" className="shrink-0 transition hover:text-blue-600">更多案例 ↗</a>
         </footer>
@@ -177,7 +200,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                 <img src={`${import.meta.env.BASE_URL}${selected.previewImage}`} alt={`${selected.title}风格示例`} decoding="async" onError={() => setFailedPreviews((ids) => [...ids, selected.id])} className="max-h-80 w-full rounded-xl object-contain" />
               </a>
             )}
-            <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">示例图：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.exampleUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原案例 ↗</a>。仅展示风格，非本模板生成记录；商用请核对原作者许可。</p>
+            <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">示例图：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.exampleUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原案例 ↗</a>。仅展示风格，非本模板生成记录；商用请核对原作者许可。</p>
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
               <a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原始模板 · {INSPIRATION_SOURCE.author} ↗</a>
               <span>版本 {INSPIRATION_SOURCE.revision.slice(0, 7)}</span>

@@ -19,6 +19,7 @@ import {
   getAllTasks,
   getAllCanvasProjects,
   getAllAgentConversations,
+  getAllSkills,
   putTask as dbPutTask,
   deleteTask as dbDeleteTask,
   clearTasks as dbClearTasks,
@@ -39,12 +40,13 @@ import { callImageApi } from './lib/api'
 import { showBrowserNotification } from './lib/browserNotification'
 import { normalizeTaskParams } from './lib/paramCompatibility'
 import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
-import { blobToDataUrl, fileToDataUrl } from './lib/dataUrl'
-import { getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError } from './lib/gouoBackend'
+import { blobToDataUrl } from './lib/dataUrl'
+import { readReferenceImageFile } from './lib/inputValidation'
+import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
+import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
-import { buildExportZip, MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } from './lib/exportZip'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
-import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus } from './lib/taskFilters'
+import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus, type TaskSortOrder } from './lib/taskFilters'
 import { isRecord, normalizeInputImages, normalizeMaskDraft } from './lib/storeInputNormalization'
 import { getLoadedStorageName } from './lib/storageScope'
 import { getDocumentImageIds } from './lib/documentAssets'
@@ -83,6 +85,7 @@ const TASK_LOCK_PREFIX = 'gouo-task:'
 const TAB_LOCK = 'gouo-tab'
 const ERROR_TOAST_MAX_LENGTH = 80
 type ToastType = 'info' | 'success' | 'error'
+type ToastAction = { label: string; onClick: () => void }
 
 export function getErrorToastMessage(message: string): string {
   const text = message.trim()
@@ -107,7 +110,7 @@ function isErrorToastTitle(title: string): boolean {
   return /(?:失败|错误|异常|报错|无法|不能|超时|中断|断开|请先|请输入|已达上限|不存在|已丢失)$/.test(title)
 }
 
-export type SettingsTab = 'general' | 'data' | 'about'
+export type SettingsTab = 'general' | 'skills' | 'data' | 'about'
 
 export function getCachedImage(id: string): string | undefined {
   const dataUrl = imageCache.get(id)
@@ -551,6 +554,10 @@ interface AppState {
   setFilterStatus: (status: AppState['filterStatus']) => void
   filterFavorite: boolean
   setFilterFavorite: (f: boolean) => void
+  sortOrder: TaskSortOrder
+  setSortOrder: (order: TaskSortOrder) => void
+  filterModel: string
+  setFilterModel: (model: string) => void
 
   // 多选
   selectedTaskIds: string[]
@@ -564,7 +571,9 @@ interface AppState {
 
   // UI
   detailTaskId: string | null
-  setDetailTaskId: (id: string | null) => void
+  /** 打开详情时所在列表的任务 id，用于在详情弹窗里左右切换 */
+  detailTaskList: string[]
+  setDetailTaskId: (id: string | null, list?: string[]) => void
   lightboxImageId: string | null
   lightboxImageList: string[]
   setLightboxImageId: (id: string | null, list?: string[]) => void
@@ -578,8 +587,8 @@ interface AppState {
   dismissSupportPrompt: () => void
 
   // Toast
-  toast: { message: string; type: ToastType } | null
-  showToast: (message: string, type?: ToastType) => void
+  toast: { message: string; type: ToastType; action?: ToastAction } | null
+  showToast: (message: string, type?: ToastType, action?: ToastAction) => void
 
   // Confirm dialog
   confirmDialog: {
@@ -781,6 +790,10 @@ export const useStore = create<AppState>()(
       setFilterStatus: (filterStatus) => set({ filterStatus }),
       filterFavorite: false,
       setFilterFavorite: (filterFavorite) => set(filterFavorite ? { filterFavorite, selectedTaskIds: [], selectedFavoriteCollectionIds: [] } : { filterFavorite, activeFavoriteCollectionId: null, selectedTaskIds: [], selectedFavoriteCollectionIds: [] }),
+      sortOrder: 'newest',
+      setSortOrder: (sortOrder) => set({ sortOrder }),
+      filterModel: '',
+      setFilterModel: (filterModel) => set({ filterModel }),
 
       // Selection
       selectedTaskIds: [],
@@ -816,9 +829,10 @@ export const useStore = create<AppState>()(
 
       // UI
       detailTaskId: null,
-      setDetailTaskId: (detailTaskId) => {
+      detailTaskList: [],
+      setDetailTaskId: (detailTaskId, list) => {
         if (detailTaskId) dismissAllTooltips()
-        set({ detailTaskId })
+        set({ detailTaskId, detailTaskList: detailTaskId ? list ?? [] : [] })
       },
       lightboxImageId: null,
       lightboxImageList: [],
@@ -844,13 +858,14 @@ export const useStore = create<AppState>()(
 
       // Toast
       toast: null,
-      showToast: (message, type = 'info') => {
+      showToast: (message, type = 'info', action) => {
         const toastMessage = getToastMessage(message, type)
-        const toast = { message: toastMessage, type }
+        const toast = { message: toastMessage, type, action }
         set({ toast })
+        // 带操作按钮的提示多留一会儿，给用户点按的时间
         setTimeout(() => {
           set((s) => (s.toast === toast ? { toast: null } : s))
-        }, 3000)
+        }, action ? 5000 : 3000)
       },
 
       // Confirm
@@ -1453,12 +1468,9 @@ export function renameFavoriteCollection(collectionId: string, name: string) {
   showToast('收藏夹名称已更新', 'success')
 }
 
-export async function updateTasksFavoriteCollections(taskIds: string[], collectionIds: string[]) {
-  const ids = normalizeFavoriteCollectionIds(collectionIds)
-  const uniqueTaskIds = Array.from(new Set(taskIds)).filter(Boolean)
-  if (!uniqueTaskIds.length) return
-  const { tasks, setTasks, clearSelection, showToast } = useStore.getState()
-  const idSet = new Set(uniqueTaskIds)
+async function saveTasksFavoriteCollections(taskIds: string[], ids: string[]) {
+  const { tasks, setTasks } = useStore.getState()
+  const idSet = new Set(taskIds)
   const changedTaskIds = new Set<string>()
   const updated = tasks.map((task) => {
     if (!idSet.has(task.id)) return task
@@ -1466,14 +1478,42 @@ export async function updateTasksFavoriteCollections(taskIds: string[], collecti
     changedTaskIds.add(task.id)
     return { ...task, favoriteCollectionIds: ids, isFavorite: ids.length > 0 }
   })
-  if (!changedTaskIds.size) {
-    clearSelection()
-    return
-  }
+  if (!changedTaskIds.size) return 0
   setTasks(updated)
   await Promise.all(updated.filter((task) => changedTaskIds.has(task.id)).map((task) => putTask(task)))
+  return changedTaskIds.size
+}
+
+export async function updateTasksFavoriteCollections(taskIds: string[], collectionIds: string[]) {
+  const ids = normalizeFavoriteCollectionIds(collectionIds)
+  const uniqueTaskIds = Array.from(new Set(taskIds)).filter(Boolean)
+  if (!uniqueTaskIds.length) return
+  const changed = await saveTasksFavoriteCollections(uniqueTaskIds, ids)
+  const { clearSelection, showToast } = useStore.getState()
   clearSelection()
-  showToast(ids.length ? '收藏夹已更新' : '已取消收藏', 'success')
+  if (changed) showToast(ids.length ? '收藏夹已更新' : '已取消收藏', 'success')
+}
+
+// 单个作品一键收藏：未收藏时直接放进默认收藏夹（未设默认时用第一个），已收藏时取消收藏
+export async function toggleTaskFavorite(taskId: string) {
+  const state = useStore.getState()
+  const task = state.tasks.find((t) => t.id === taskId)
+  if (!task) return
+  if (task.isFavorite) {
+    await saveTasksFavoriteCollections([taskId], [])
+    state.showToast('已取消收藏', 'success')
+    return
+  }
+  const collectionId = state.defaultFavoriteCollectionId ?? state.favoriteCollections[0]?.id
+  if (!collectionId) {
+    state.openFavoritePicker([taskId])
+    return
+  }
+  await saveTasksFavoriteCollections([taskId], [collectionId])
+  state.showToast(`已收藏到「${getFavoriteCollectionTitle(collectionId)}」`, 'success', {
+    label: '移动到…',
+    onClick: () => useStore.getState().openFavoritePicker([taskId]),
+  })
 }
 
 export async function deleteFavoriteCollection(collectionId: string, deleteTasks = false) {
@@ -1829,6 +1869,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
     const tasks = options.exportTasks ? (await getAllTasks()).filter((task) => !isLegacyAgentTask(task)) : []
     const canvasProjects = options.exportTasks ? await getAllCanvasProjects() : []
     const agentConversations = options.exportTasks ? await getAllAgentConversations() : []
+    const skills = options.exportTasks ? (await getAllSkills()).filter((skill) => !skill.hiddenAt) : []
     const requiredImages = new Set<string>(getDocumentImageIds([...canvasProjects, ...agentConversations]))
     for (const task of tasks) addTaskReferencedImageIds(requiredImages, task)
     for (const id of requiredImages) {
@@ -1854,6 +1895,8 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
       }
     }
 
+    // 压缩库只在备份时用到，不放进首包
+    const { buildExportZip } = await import('./lib/exportZip')
     const { bytes: zipped } = buildExportZip({
       options,
       exportedAt,
@@ -1863,6 +1906,7 @@ export async function exportData(options: ExportOptions = { exportConfig: true, 
       thumbnailsByImageId,
       canvasProjects,
       agentConversations,
+      skills,
       favoriteCollections,
       defaultFavoriteCollectionId,
     })
@@ -1895,6 +1939,7 @@ interface ImportOptions {
 /** 导入 ZIP 数据 */
 export async function importData(file: File, options: ImportOptions = { importConfig: true, importTasks: true }): Promise<boolean> {
   try {
+    const { MAX_BACKUP_FILE_BYTES, readExportZip, readExportZipFileAsDataUrl } = await import('./lib/exportZip')
     if (file.size > MAX_BACKUP_FILE_BYTES) throw new Error(`备份文件不能超过 ${MAX_BACKUP_FILE_BYTES / 1024 / 1024} MB`)
     const buffer = await file.arrayBuffer()
     const { manifest: data, files } = readExportZip(new Uint8Array(buffer))
@@ -1902,6 +1947,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
     const settings = options.importConfig && data.settings ? normalizeSettings({ ...useStore.getState().settings, ...data.settings }) : undefined
     let importedCount = 0
     let skippedCount = 0
+    let importedSkillCount = 0
     if (options.importTasks && data.tasks) {
       const existingIds = new Set((await getAllTasks()).map((task) => task.id))
       // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
@@ -1926,6 +1972,36 @@ export async function importData(file: File, options: ImportOptions = { importCo
       }))
       importedCount = importedTasks.length
       skippedCount = data.tasks.length - importedCount
+      // 同名技能都保留：同步冲突会留下多份同名文档，目录按导入先后加后缀区分。
+      // 换成固定的新 ID，避免覆盖另一台设备尚未拉取的文档，再次导入同一份备份时也能认出；本地已有的沿用那份。
+      // 运营方关闭技能或技能导入时不恢复，否则可以借备份绕过开关；读不到后台设置时同样不恢复
+      if (data.skills?.length) await refreshBackendStatus()
+      const restoreSkills = getCachedBackendStatus() !== null && isSkillsEnabled() && isSkillImportEnabled()
+      const { useSkillStore, normalizeSkillDocument } = await import('./stores/skillStore')
+      await useSkillStore.getState().hydrate()
+      // 只和导入前就有的技能比对。每份最多两个候选（原 ID、imported-<原 ID>），本批内做最大匹配，原 ID 优先；
+      // 按备份顺序贪心认领时，x 与 imported-x 谁先出现都会在一种本地组合下认错并多复制一份
+      const localIds = new Set(useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.id))
+      // 删除的技能仍留着记录，同 ID 写入会让整个导入事务失败，所以这类换新 UUID
+      const takenIds = new Set(useSkillStore.getState().skills.map((skill) => skill.id))
+      const docs = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
+        const doc = normalizeSkillDocument(value)
+        return doc && !doc.hiddenAt ? [doc] : []
+      }).filter((doc, index, list) => list.findIndex((item) => item.id === doc.id) === index)
+      const matched = matchRestoredSkillIds(docs.map((doc) => doc.id), localIds)
+      // 会话按导入技能的文档 ID 记录启用状态，恢复后逐个指向新 ID 或本地已有的那份
+      const skillIds = new Map<string, string>()
+      const skills = docs.flatMap((doc) => {
+        const existingId = matched.get(doc.id)
+        if (existingId) {
+          skillIds.set(doc.id, existingId)
+          return []
+        }
+        const id = restoredSkillId(doc.id, takenIds)
+        skillIds.set(doc.id, id)
+        takenIds.add(id)
+        return [{ ...doc, id, revision: 1, updatedAt: Date.now() }]
+      })
       // 导入文档使用新 ID，避免覆盖另一个设备尚未拉取的项目。
       const canvasIds = new Map((data.canvasProjects ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
       const conversationIds = new Map((data.agentConversations ?? []).map((doc) => [doc.id, crypto.randomUUID()]))
@@ -1936,6 +2012,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
         if (key === 'taskIds' && Array.isArray(value)) return value.map((id) => taskIds.get(id) ?? id)
         if (key === 'projectId') return canvasIds.get(value) ?? value
         if (key === 'conversationId') return conversationIds.get(value) ?? value
+        if (key === 'skills' && Array.isArray(value)) return [...new Set(value.map((id) => skillIds.get(id) ?? id))]
         return value
       })) as T
       const canvases = (data.canvasProjects ?? []).map((doc) => ({ ...remapDocument(doc), id: canvasIds.get(doc.id)! }))
@@ -1966,8 +2043,10 @@ export async function importData(file: File, options: ImportOptions = { importCo
         ? resolveDefaultFavoriteCollectionId(favoriteCollections, data.defaultFavoriteCollectionId)
         : state.defaultFavoriteCollectionId
       const normalizedFavorites = normalizeLoadedFavoriteState(importedTasks, favoriteCollections, defaultFavoriteCollectionId)
-      await importTaskData(normalizedFavorites.tasks, images, thumbnails, { canvases, conversations })
-      if (canvases.length || conversations.length) {
+      importedSkillCount = skills.length
+      await importTaskData(normalizedFavorites.tasks, images, thumbnails, { canvases, conversations, skills })
+      if (skills.length) useSkillStore.setState((state) => ({ skills: [...state.skills, ...skills] }))
+      if (canvases.length || conversations.length || skills.length) {
         window.dispatchEvent(new Event('gouo:documents-changed'))
         const [{ useCanvasStore, markCanvasPersisted }, { useAgentStore, markAgentPersisted }] = await Promise.all([import('./stores/canvasStore'), import('./stores/agentStore')])
         for (const project of canvases) markCanvasPersisted(project)
@@ -1990,7 +2069,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
 
     let msg = '数据已成功导入'
     if (options.importTasks && data.tasks) {
-      msg = `已导入 ${importedCount} 个任务${skippedCount ? `，保留 ${skippedCount} 个同 ID 的现有任务` : ''}`
+      msg = `已导入 ${importedCount} 个任务${skippedCount ? `，保留 ${skippedCount} 个同 ID 的现有任务` : ''}${importedSkillCount ? `，${importedSkillCount} 个技能` : ''}`
     } else if (options.importConfig && data.settings) {
       msg = '配置已成功导入'
     }
@@ -2012,14 +2091,12 @@ export async function importData(file: File, options: ImportOptions = { importCo
 
 /** 添加图片到输入（文件上传） */
 export async function addImageFromFile(file: File): Promise<void> {
-  const image = await createInputImageFromFile(file)
-  if (!image) return
-  useStore.getState().addInputImage(image)
+  useStore.getState().addInputImage(await createInputImageFromFile(file))
 }
 
-export async function createInputImageFromFile(file: File): Promise<InputImage | null> {
-  if (!file.type.startsWith('image/')) return null
-  const dataUrl = await fileToDataUrl(file)
+// 格式、大小或解码不通过时抛出可直接展示的错误
+export async function createInputImageFromFile(file: File): Promise<InputImage> {
+  const dataUrl = await readReferenceImageFile(file)
   const id = await storeImage(dataUrl, 'upload')
   cacheImage(id, dataUrl)
   return { id, dataUrl }

@@ -1,11 +1,11 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useStore, getCachedImage, ensureImageCached, reuseConfig, editOutputs, removeTask, retryTask, executeTask } from '../store'
+import { useStore, getCachedImage, ensureImageCached, reuseConfig, editOutputs, removeTask, retryTask, executeTask, toggleTaskFavorite } from '../store'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
 import { useTooltip } from '../hooks/useTooltip'
 import { useImageModels } from '../hooks/useImageModels'
 import { formatImageRatio } from '../lib/size'
-import { ActualValueBadge, DetailParamValue } from '../lib/paramDisplay'
+import { ActualValueBadge, DetailParamValue, formatParamValue, stripInternalPromptText } from '../lib/paramDisplay'
 import { copyImageSourceToClipboard, copyTextToClipboard, getClipboardFailureMessage } from '../lib/clipboard'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { dismissAllTooltips } from '../lib/tooltipDismiss'
@@ -18,11 +18,11 @@ import ViewportTooltip from './ViewportTooltip'
 export default function DetailModal() {
   const tasks = useStore((s) => s.tasks)
   const detailTaskId = useStore((s) => s.detailTaskId)
+  const detailTaskList = useStore((s) => s.detailTaskList)
   const setDetailTaskId = useStore((s) => s.setDetailTaskId)
   const setLightboxImageId = useStore((s) => s.setLightboxImageId)
   const setConfirmDialog = useStore((s) => s.setConfirmDialog)
   const showToast = useStore((s) => s.showToast)
-  const openFavoritePicker = useStore((s) => s.openFavoritePicker)
   const settings = useStore((s) => s.settings)
   const imageModels = useImageModels()
 
@@ -65,6 +65,33 @@ export default function DetailModal() {
       : 0
     if (count > 0 && imageIndex >= count) setImageIndex(count - 1)
   }, [imageIndex, task])
+
+  const navTaskIds = useMemo(() => {
+    const existing = new Set(tasks.map((t) => t.id))
+    return detailTaskList.filter((id) => existing.has(id))
+  }, [tasks, detailTaskList])
+  const navIndex = detailTaskId ? navTaskIds.indexOf(detailTaskId) : -1
+  const prevTaskId = navIndex > 0 ? navTaskIds[navIndex - 1] : null
+  const nextTaskId = navIndex >= 0 && navIndex < navTaskIds.length - 1 ? navTaskIds[navIndex + 1] : null
+
+  useEffect(() => {
+    if (navIndex < 0) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      // 灯箱、确认框等上层弹窗打开时，方向键交给它们处理
+      const state = useStore.getState()
+      if (state.lightboxImageId || state.confirmDialog || state.favoritePickerTaskIds || showRawUrlsModal || showRawResponseModal) return
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+      const id = e.key === 'ArrowLeft' ? prevTaskId : nextTaskId
+      if (!id) return
+      e.preventDefault()
+      setDetailTaskId(id, detailTaskList)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navIndex, prevTaskId, nextTaskId, detailTaskList, setDetailTaskId, showRawUrlsModal, showRawResponseModal])
 
   useCloseOnEscape(Boolean(task), () => setDetailTaskId(null))
   usePreventBackgroundScroll(Boolean(task), [modalRef, rawUrlsModalRef, rawResponseModalRef])
@@ -209,22 +236,24 @@ export default function DetailModal() {
   const baseActualParams = currentOutputImageId
     ? task.actualParamsByImage?.[currentOutputImageId] ?? task.actualParams
     : task.actualParams
-  const currentActualParams = (baseActualParams?.size || !currentImageSize)
-    ? baseActualParams
-    : { ...(baseActualParams ?? {}), size: currentImageSize.replace('×', 'x') }
-  const currentRevisedPrompt = currentOutputImageId ? task.revisedPromptByImage?.[currentOutputImageId]?.trim() : ''
+  // 有图片时以实际像素尺寸为准，接口回报的 size 可能只是请求档位
+  const currentActualParams = currentImageSize
+    ? { ...(baseActualParams ?? {}), size: currentImageSize.replace('×', 'x') }
+    : baseActualParams
+  const currentRevisedPrompt = currentOutputImageId ? stripInternalPromptText(task.revisedPromptByImage?.[currentOutputImageId] ?? '') : ''
   // 将 @图N 等 mention 标记和透明背景追加提示词都按实际请求内容比较，
   // 避免仅由本地请求预处理导致的不一致被当作“API 改写”。
+  // 展示仍用未清理的用户原文；比较时请求侧也去掉同样的内部句子，否则原文里已有这类句子、上游原样返回时会被当成改写。
   const requestPrompt = task.transparentOutput && task.transparentPrompt
     ? task.transparentPrompt
     : task.prompt
-  const promptSentToApi = replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length).trim()
-  const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== promptSentToApi)
+  const promptSentToApi = replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length)
+  const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== stripInternalPromptText(promptSentToApi))
   const rawImageUrls = task.rawImageUrls ?? []
   const isPngOutput = task.params.output_format === 'png'
-  const transparentOutputText = task.transparentOutput || task.params.transparent_output ? 'true' : 'false'
+  const transparentOutputText = formatParamValue('transparent_output', Boolean(task.transparentOutput || task.params.transparent_output))
   const currentTransparentOutputFailed = Boolean(currentOutputImageId && task.transparentOutput && task.transparentOriginalImages?.[currentOutputImageIndex] === '')
-  const outputCompressionText = task.params.output_compression == null ? '未设置' : String(task.params.output_compression)
+  const outputCompressionText = formatParamValue('output_compression', task.params.output_compression)
 
   const formatTime = (ts: number | null) => {
     if (!ts) return ''
@@ -265,7 +294,7 @@ export default function DetailModal() {
   }
 
   const handleToggleFavorite = () => {
-    openFavoritePicker([task.id])
+    void toggleTaskFavorite(task.id)
   }
 
   const handleCopyError = async () => {
@@ -372,19 +401,72 @@ export default function DetailModal() {
   return (
     <div
       data-no-drag-select
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:px-16"
       onClick={() => setDetailTaskId(null)}
     >
       <div className="absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-md animate-overlay-in" />
+      {navIndex >= 0 && navTaskIds.length > 1 && (
+        <>
+          <button
+            type="button"
+            disabled={!prevTaskId}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (prevTaskId) setDetailTaskId(prevTaskId, detailTaskList)
+            }}
+            className="absolute left-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/60 disabled:opacity-30 md:flex"
+            aria-label="上一个作品"
+            title="上一个作品（←）"
+          >
+            <ChevronIcon direction="left" className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
+            disabled={!nextTaskId}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (nextTaskId) setDetailTaskId(nextTaskId, detailTaskList)
+            }}
+            className="absolute right-3 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition hover:bg-black/60 disabled:opacity-30 md:flex"
+            aria-label="下一个作品"
+            title="下一个作品（→）"
+          >
+            <ChevronIcon direction="right" className="h-6 w-6" />
+          </button>
+        </>
+      )}
       <div
         ref={modalRef}
-        className="relative bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/50 dark:border-white/[0.08] rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col md:flex-row z-10 ring-1 ring-black/5 dark:ring-white/10 animate-modal-in"
+        className="relative bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border border-white/50 dark:border-white/[0.08] rounded-3xl shadow-[0_8px_40px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_40px_rgb(0,0,0,0.4)] max-w-6xl w-full max-h-[92vh] md:h-[min(90vh,960px)] overflow-hidden flex flex-col md:flex-row z-10 ring-1 ring-black/5 dark:ring-white/10 animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex h-14 items-center justify-end px-4 md:hidden">
+        <div className="flex h-14 flex-shrink-0 items-center justify-end gap-1 px-2 md:hidden">
+          {navIndex >= 0 && navTaskIds.length > 1 && (
+            <div className="mr-auto flex items-center gap-1">
+              <button
+                type="button"
+                disabled={!prevTaskId}
+                onClick={() => prevTaskId && setDetailTaskId(prevTaskId, detailTaskList)}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 disabled:opacity-30 dark:text-gray-400 dark:hover:bg-white/[0.06]"
+                aria-label="上一个作品"
+              >
+                <ChevronIcon direction="left" className="h-5 w-5" />
+              </button>
+              <span className="min-w-[3.5rem] text-center text-xs tabular-nums text-gray-500 dark:text-gray-400">{navIndex + 1} / {navTaskIds.length}</span>
+              <button
+                type="button"
+                disabled={!nextTaskId}
+                onClick={() => nextTaskId && setDetailTaskId(nextTaskId, detailTaskList)}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 disabled:opacity-30 dark:text-gray-400 dark:hover:bg-white/[0.06]"
+                aria-label="下一个作品"
+              >
+                <ChevronIcon direction="right" className="h-5 w-5" />
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setDetailTaskId(null)}
-            className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/[0.06] transition text-gray-400"
+            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-white/[0.06] transition text-gray-400"
             aria-label="关闭"
           >
             <CloseIcon className="w-6 h-6" />
@@ -392,9 +474,23 @@ export default function DetailModal() {
         </div>
 
         {/* 左侧：图片 */}
-        <div className="md:w-1/2 w-full h-64 md:h-auto bg-gray-100 dark:bg-black/20 relative flex items-center justify-center flex-shrink-0 min-h-[16rem]">
+        <div className="w-full h-[46vh] min-h-[16rem] md:h-auto md:min-w-0 md:flex-1 bg-gray-100 dark:bg-black/20 relative flex items-center justify-center flex-shrink-0">
           {task.status === 'done' && outputLen > 0 && (currentOutputImageId || task.outputImages.length > 0) && (
             <div className="absolute right-3 top-[15px] z-20 flex items-center gap-1.5">
+              {currentOutputImageId && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxImageId(currentOutputImageId, task.outputImages)}
+                  className="flex items-center justify-center gap-1 px-1.5 py-0.5 bg-black/50 text-white rounded backdrop-blur-sm hover:bg-black/70 transition focus:outline-none focus:ring-1 focus:ring-white/50 text-xs"
+                  aria-label="全屏查看"
+                  title="全屏查看：滚轮或双指缩放，拖动平移，双击复位"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
+                  </svg>
+                  全屏
+                </button>
+              )}
               {currentOutputImageId && (
                 <div className="relative group flex">
                   <button
@@ -427,7 +523,7 @@ export default function DetailModal() {
                     aria-label="下载全部"
                   >
                     <DownloadIcon className="h-4 w-4" />
-                    <span className="text-[9px] font-bold leading-none mt-[1px]">ALL</span>
+                    <span className="text-[10px] font-bold leading-none mt-[1px]">全部</span>
                   </button>
                   <ViewportTooltip visible={downloadAllTooltip.visible} className="whitespace-nowrap">
                     下载全部
@@ -441,7 +537,7 @@ export default function DetailModal() {
               <img
                 src={currentOutputPreviewSrc}
                 data-image-id={currentOutputImageId}
-                className="saveable-image max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] object-contain cursor-pointer"
+                className="saveable-image absolute inset-0 h-full w-full object-contain px-4 pt-12 pb-10 md:px-8 cursor-zoom-in"
                 onLoad={(e) => {
                   const image = e.currentTarget
                   if (currentOutputImageId && image.naturalWidth > 0 && image.naturalHeight > 0) {
@@ -523,7 +619,7 @@ export default function DetailModal() {
                     aria-label="下载原图"
                   >
                     <DownloadIcon className="h-4 w-4" />
-                    <span className="text-[9px] font-bold leading-none mt-[1px] uppercase">orig</span>
+                    <span className="text-[10px] font-bold leading-none mt-[1px]">原图</span>
                   </button>
                   <ViewportTooltip visible={downloadOriginalImageTooltip.visible} className="whitespace-nowrap">
                     下载原图
@@ -704,7 +800,7 @@ export default function DetailModal() {
         </div>
 
         {/* 右侧：信息 */}
-        <div className="md:w-1/2 w-full p-5 overflow-y-auto overscroll-contain flex flex-col">
+        <div className="w-full min-h-0 md:w-[380px] md:flex-none p-5 overflow-y-auto overscroll-contain flex flex-col">
           <button
             onClick={() => setDetailTaskId(null)}
             className="absolute top-3 right-3 hidden p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/[0.06] transition text-gray-400 z-10 md:block"
@@ -729,10 +825,12 @@ export default function DetailModal() {
               )}
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap mb-4">
+              {/* 用户原文原样展示；内部句子清理只用于上游 revised_prompt，否则正文里的相似说法会被截断，和复制结果不一致 */}
               {task.prompt || '(无提示词)'}
             </p>
             {showRevisedPrompt && currentRevisedPrompt && (
               <div className="mb-4">
+                <div className="mb-1 text-xs text-gray-400 dark:text-gray-500">模型改写后的提示词</div>
                 <ActualValueBadge
                   value={currentRevisedPrompt}
                   className="max-w-full rounded px-2 py-1 text-left text-xs leading-relaxed whitespace-pre-wrap"
@@ -781,7 +879,7 @@ export default function DetailModal() {
                               )}
                               {isMaskTarget && (
                                 <span className="absolute left-1 top-1 rounded bg-blue-500/90 px-1.5 py-0.5 text-[8px] leading-none text-white font-bold tracking-wider backdrop-blur-sm z-10 pointer-events-none">
-                                  MASK
+                                  遮罩
                                 </span>
                               )}
                             </div>
@@ -839,7 +937,7 @@ export default function DetailModal() {
                     <span className="font-medium text-gray-700 dark:text-gray-300">{transparentOutputText}</span>
                     {currentTransparentOutputFailed && (
                       <span className="ml-1.5 rounded bg-red-50 px-1 py-0.5 text-[10px] font-medium uppercase leading-none text-red-600 dark:bg-red-500/10 dark:text-red-400">
-                        failed
+                        失败
                       </span>
                     )}
                   </div>
@@ -877,7 +975,7 @@ export default function DetailModal() {
           </div>
 
           {/* 操作按钮 */}
-          <div className="grid grid-cols-4 sm:flex gap-2 pt-4 border-t border-gray-100 dark:border-white/[0.08]">
+          <div className="grid grid-cols-4 sm:flex md:grid gap-2 pt-4 border-t border-gray-100 dark:border-white/[0.08]">
             <button
               onClick={handleReuse}
               className="col-span-2 sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition text-sm font-medium whitespace-nowrap"
@@ -904,12 +1002,14 @@ export default function DetailModal() {
             </button>
             <button
               onClick={handleToggleFavorite}
-              className={`col-span-1 sm:flex-none sm:w-11 w-full flex items-center justify-center rounded-xl transition ${
+              className={`col-span-1 sm:flex-none sm:w-11 md:w-full w-full min-h-[40px] flex items-center justify-center rounded-xl transition ${
                 task.isFavorite
                   ? 'bg-yellow-50 text-yellow-500 hover:bg-yellow-100 dark:bg-yellow-500/10 dark:hover:bg-yellow-500/20'
                   : 'bg-gray-50 text-gray-400 hover:bg-yellow-50 hover:text-yellow-500 dark:bg-white/[0.04] dark:hover:bg-yellow-500/10'
               }`}
-              title={task.isFavorite ? '编辑收藏夹' : '收藏任务'}
+              title={task.isFavorite ? '取消收藏' : '收藏'}
+              aria-label={task.isFavorite ? '取消收藏' : '收藏'}
+              aria-pressed={Boolean(task.isFavorite)}
             >
               <svg className="w-5 h-5" fill={task.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
@@ -1051,5 +1151,13 @@ export default function DetailModal() {
         </div>
       )}
     </div>
+  )
+}
+
+function ChevronIcon({ direction, className }: { direction: 'left' | 'right'; className: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={direction === 'left' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
+    </svg>
   )
 }

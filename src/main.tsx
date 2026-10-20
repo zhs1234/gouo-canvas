@@ -7,6 +7,11 @@ import { installMobileViewportGuards } from './lib/viewport'
 
 installMobileViewportGuards()
 
+// 服务端邮件和支付回跳的充值链接是 <客户端地址>/topup，哈希路由看不到这个路径，转成 #/topup 才能打开充值页
+if (/\/topup\/?$/.test(window.location.pathname)) {
+  window.history.replaceState(null, '', `${window.location.pathname.replace(/topup\/?$/, '')}${window.location.search}#/topup`)
+}
+
 // 纯 HTTP 局域网访问不是安全上下文，没有 randomUUID；getRandomValues 不受此限制。
 if (!crypto.randomUUID) {
   crypto.randomUUID = () => {
@@ -38,6 +43,7 @@ createRoot(rootElement, {
   // 渲染出错时 React 会卸载整棵树，页面只剩背景色；改为显示错误信息和刷新入口，便于反馈定位
   onUncaughtError: (error, info) => {
     console.error(error, info.componentStack)
+    document.getElementById('boot-skeleton')?.remove()
     const panel = document.createElement('div')
     panel.style.cssText = 'max-width:760px;margin:12vh auto;padding:24px;font:14px/1.7 system-ui,sans-serif;color:#eee;background:#1a1a1a;border:1px solid #333;border-radius:16px'
     const title = document.createElement('p')

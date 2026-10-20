@@ -1,7 +1,6 @@
 import { type ReactElement, type ReactNode, isValidElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import BackendAuthGate from './BackendAuthGate'
-import LandingPage from './landing/LandingPage'
 import AccountSection from './userCenter/AccountSection'
 
 // 直接驱动组件事件与 hook 状态，检查真实 JSX 的禁用条件；不发送网络请求或模拟验证码。
@@ -117,7 +116,7 @@ describe('account email and password forms', () => {
     render(draw)
     await flush()
     // 未登录先显示首页，由首页的注册入口进入表单。
-    const landing = elements(render(draw)).find((element) => element.type === LandingPage)
+    const landing = elements(render(draw)).find((element) => typeof element.props.onRegister === 'function')
     if (!landing) throw new Error('Missing landing page')
     ;(landing.props.onRegister as () => void)()
     fire(field(render(draw), 'type', 'email'), 'onChange', 'first@example.invalid')
@@ -141,7 +140,7 @@ describe('account email and password forms', () => {
     const draw = () => BackendAuthGate({ children: null })
     render(draw)
     await flush()
-    const landing = elements(render(draw)).find((element) => element.type === LandingPage)
+    const landing = elements(render(draw)).find((element) => typeof element.props.onRegister === 'function')
     if (!landing) throw new Error('Missing landing page')
     // 首页文案不变，点“免费注册”后说明未开放，不显示注册表单
     ;(landing.props.onRegister as () => void)()

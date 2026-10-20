@@ -1,12 +1,13 @@
 // 基于 basketikun/infinite-canvas (MIT)，来源及适配说明见 UPSTREAM.md。
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from 'lucide-react'
-import { Button, Dropdown, Modal, Tooltip } from 'antd'
+import { BookOpen, Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Redo2, Trash2, Undo2, Upload } from 'lucide-react'
+import { Button, Dropdown, Modal } from 'antd'
 import { useTranslation } from '../../lib/canvas/i18n'
 
 import { canvasThemes } from '../../lib/canvas/theme'
 import { useCanvasSidePanelStore } from '../../lib/canvas/uiStore'
 import { useThemeStore } from '../../lib/canvas/uiStore'
+import { TooltipButton } from '../TooltipButton'
 const DOCS_URL = 'https://github.com/basketikun/infinite-canvas'
 
 export function CanvasTopBar({
@@ -70,19 +71,16 @@ export function CanvasTopBar({
 
   return (
     <>
-      <div className="pointer-events-none absolute left-0 right-0 top-0 z-50 flex h-16 items-center justify-between pl-1 pr-4">
+      <div className="pointer-events-none absolute left-0 right-0 top-0 z-50 flex h-16 items-center justify-between gap-2 pl-1 pr-3 sm:pr-4">
         <div className="pointer-events-auto flex min-w-0 items-center gap-2">
-          <Tooltip title={sidePanelOpen ? t('canvas.collapsePanel') : t('canvas.expandPanel')}>
-            <button
-              type="button"
-              onClick={toggleSidePanel}
-              aria-label={sidePanelOpen ? t('canvas.collapsePanel') : t('canvas.expandPanel')}
-              className="grid size-7 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
-              style={{ color: theme.node.text }}
-            >
-              {sidePanelOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
-            </button>
-          </Tooltip>
+          {/* 点击后提示随即收起，避免窄屏抽屉展开后提示残留在面板上 */}
+          <TooltipButton
+            tooltip={sidePanelOpen ? t('canvas.collapsePanel') : t('canvas.expandPanel')}
+            onClick={toggleSidePanel}
+            className="grid size-7 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            {sidePanelOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+          </TooltipButton>
           <Dropdown
             trigger={['click']}
             menu={{
@@ -137,33 +135,36 @@ export function CanvasTopBar({
                 aria-label="画布标题（最多 200 个字符）"
                 aria-invalid={[...titleDraft.trim()].length > 200}
                 title={`标题最多 200 个字符，当前 ${[...titleDraft.trim()].length} 个`}
+                onFocus={(event) => event.target.select()}
                 onChange={(event) => onTitleDraftChange(event.target.value)}
                 onBlur={onFinishTitleEditing}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') onFinishTitleEditing()
                   if (event.key === 'Escape') onCancelTitleEditing()
                 }}
-                className="max-w-[280px] bg-transparent p-0 text-left text-lg font-semibold tracking-normal outline-none"
+                className="w-[280px] min-w-0 max-w-full border-b border-dashed border-current bg-transparent p-0 text-left text-lg font-semibold tracking-normal outline-none"
                 style={{ color: theme.node.text }}
               />
             ) : (
               <button
                 type="button"
-                className="max-w-[280px] truncate border-b border-dashed border-transparent text-left text-lg font-semibold tracking-normal transition hover:border-current"
-                onDoubleClick={onStartTitleEditing}
+                className="group/title flex min-w-0 max-w-[280px] items-center gap-1.5 text-left text-lg font-semibold tracking-normal"
+                onClick={onStartTitleEditing}
                 title={t('canvas.renameHint')}
               >
-                {title}
+                <span className="truncate border-b border-dashed border-transparent transition group-hover/title:border-current">{title}</span>
+                <Pencil className="size-3.5 shrink-0 opacity-40 transition group-hover/title:opacity-80" aria-hidden />
               </button>
             )}
           </div>
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-1.5">
-          <Button type="text" onClick={() => setShortcutsOpen(true)}>
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+          {/* 窄屏空间不够，快捷键说明仍可从缩放条的问号按钮打开 */}
+          <Button type="text" className="max-sm:!hidden" onClick={() => setShortcutsOpen(true)}>
             快捷键
           </Button>
-          {onToggleAgent && <span className="h-6 w-px" style={{ background: theme.toolbar.border }} />}
+          {onToggleAgent && <span className="h-6 w-px max-sm:hidden" style={{ background: theme.toolbar.border }} />}
           {onToggleAgent && <Button
             type="text"
             className="!h-10 !rounded-xl !px-3 !font-medium"
@@ -173,9 +174,10 @@ export function CanvasTopBar({
               boxShadow: '0 10px 30px rgba(28,25,23,.10)',
             }}
             icon={<Bot className="size-4" />}
+            aria-label="Agent"
             onClick={onToggleAgent}
           >
-            Agent
+            <span className="max-sm:hidden">Agent</span>
           </Button>}
         </div>
       </div>

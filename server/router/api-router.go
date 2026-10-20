@@ -203,7 +203,7 @@ func SetApiRouter(router *gin.Engine) {
 			gouoRoute.GET("/storage", controller.GetGouoStorage)
 			gouoRoute.GET("/models", controller.GetGouoModels)
 			gouoRoute.GET("/agent/models", controller.GetGouoAgentModels)
-			for _, path := range []string{"/canvases", "/conversations"} {
+			for _, path := range []string{"/canvases", "/conversations", "/skills"} {
 				gouoRoute.GET(path, controller.ListGouoDocuments)
 				gouoRoute.GET(path+"/:id", controller.GetGouoDocument)
 				gouoRoute.PUT(path+"/:id", controller.PutGouoDocument)

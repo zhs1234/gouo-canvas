@@ -1,4 +1,5 @@
 import type { FavoriteCollection, StoredImage, TaskParams, TaskRecord } from '../types'
+import { serverLibraryGate } from './serverLibraryGate'
 import { cacheImage, purgeLocalTasks, useStore } from '../store'
 import {
   deleteCloudAssetMapItems,
@@ -33,9 +34,9 @@ import {
   type GouoCloudTaskAsset,
 } from './gouoBackend'
 import { isStorageScopeCurrent } from './storageScope'
+import { useCanvasStore } from '../stores/canvasStore'
 
 // 作品以服务端为准：图片在生成时由服务端直接保存，浏览器只缓存，不再排队上传或双向合并。
-let enabled = false
 let refreshing: Promise<void> | null = null
 let lastRefreshAt = 0
 // 清空本地任务时递增；按旧游标进行中的读取不再写回游标
@@ -45,7 +46,7 @@ let refreshingGeneration = 0
 let applyingServer = false
 
 export function isServerLibraryEnabled() {
-  return enabled
+  return serverLibraryGate.enabled
 }
 
 function showError(message: string, err: unknown) {
@@ -274,7 +275,7 @@ export async function resetServerTaskCursors() {
 }
 
 export function refreshServerLibrary(): Promise<void> {
-  if (!enabled) return Promise.resolve()
+  if (!serverLibraryGate.enabled) return Promise.resolve()
   // 进行中的读取用的是重置前的游标，结束后再从头读一次
   if (refreshing) return refreshingGeneration === cursorGeneration ? refreshing : refreshing.then(() => refreshServerLibrary())
   lastRefreshAt = Date.now()
@@ -340,19 +341,23 @@ function installSubscriptions() {
 // 启动时可能被调用两次（开发模式下 effect 会执行两遍）；共用同一次启动，避免并发拉取文档互相冲突
 let starting: Promise<void> | undefined
 export function startServerLibrary() {
-  starting ??= startOnce().finally(() => { if (!enabled) starting = undefined })
+  starting ??= startOnce().finally(() => {
+    // 未启用云同步或启动失败时不会再拉取文档，画布页不必继续等待
+    useCanvasStore.setState({ documentsPulled: true })
+    if (!serverLibraryGate.enabled) starting = undefined
+  })
   return starting
 }
 
 async function startOnce() {
-  if (enabled) return
+  if (serverLibraryGate.enabled) return
   try {
     if (!(await getCloudStorage()).enabled) return
   } catch (err) {
     showError('无法读取云端作品库状态', err)
     return
   }
-  enabled = true
+  serverLibraryGate.enabled = true
   installSubscriptions()
   await refreshServerLibrary()
   const { startServerDocuments } = await import('./serverDocuments')
@@ -410,7 +415,7 @@ function markSaved(taskId: string, cloud: GouoCloudTask) {
 
 // 生成完成后补充服务端无法得知的信息；服务端未能保存图片时由浏览器整条上传兜底。
 export async function recordServerTask(taskId: string) {
-  if (!enabled) return
+  if (!serverLibraryGate.enabled) return
   for (let attempt = 0; attempt < 3; attempt++) {
     const task = useStore.getState().tasks.find((item) => item.id === taskId)
     if (!task || task.status !== 'done' || !task.outputImages.length || !isStorageScopeCurrent()) return
