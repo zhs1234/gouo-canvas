@@ -79,18 +79,21 @@ func PurgeGouoTrash(now time.Time) error {
 // 没有挂在任何作品上的旧图片（从画布或会话里删掉的、上传后没用上的）也要清理，否则一直占着空间，而用户看不到也删不掉。
 // 文档引用存在 JSON 列里查询排除不了，这里先比对一遍：旧图片都被文档引用的账号清理了也删不掉什么，不必每次都加锁整套扫描
 func gouoOrphanAssetUsers(cutoff int64) ([]int, error) {
-	var orphans []GouoAsset
-	if err := DB.Model(&GouoAsset{}).Select("id", "user_id").Where("updated_at < ?", cutoff).
-		Where("NOT EXISTS (SELECT 1 FROM gouo_task_assets WHERE gouo_task_assets.asset_id = gouo_assets.id)").
-		Find(&orphans).Error; err != nil {
+	orphans := func() *gorm.DB {
+		return DB.Model(&GouoAsset{}).Where("updated_at < ?", cutoff).
+			Where("NOT EXISTS (SELECT 1 FROM gouo_task_assets WHERE gouo_task_assets.asset_id = gouo_assets.id)")
+	}
+	// 先只取账号，再逐个账号读图片 ID，内存占用只和单个账号的图片数有关
+	var candidates []int
+	if err := orphans().Distinct("user_id").Pluck("user_id", &candidates).Error; err != nil {
 		return nil, err
 	}
-	byUser := map[int][]string{}
-	for _, asset := range orphans {
-		byUser[asset.UserID] = append(byUser[asset.UserID], asset.ID)
-	}
 	var users []int
-	for userID, ids := range byUser {
+	for _, userID := range candidates {
+		var ids []string
+		if err := orphans().Where("user_id = ?", userID).Pluck("id", &ids).Error; err != nil {
+			return nil, err
+		}
 		var docs []GouoDocument
 		if err := DB.Select("asset_ids").Where("user_id = ?", userID).Find(&docs).Error; err != nil {
 			return nil, err
