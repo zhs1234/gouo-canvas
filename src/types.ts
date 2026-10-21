@@ -7,7 +7,6 @@ export interface AppSettings {
   model: string
   gouoModelSelected?: boolean
   gouoPriceVersion?: string
-  clearInputAfterSubmit: boolean
   persistInputOnRestart: boolean
   alwaysShowRetryButton: boolean
   taskCompletionNotification: boolean

@@ -53,24 +53,6 @@ export default function GeneralSettingsTab({
         </div>
       </div>
       <div className="block">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="block text-sm text-gray-600 dark:text-gray-300">提交任务后清空输入框</span>
-          <button
-            type="button"
-            onClick={() => commitSettings({ clearInputAfterSubmit: !draft.clearInputAfterSubmit })}
-            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${draft.clearInputAfterSubmit ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-            role="switch"
-            aria-checked={draft.clearInputAfterSubmit}
-            aria-label="提交任务后清空输入框"
-          >
-            <span className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${draft.clearInputAfterSubmit ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
-          </button>
-        </div>
-        <div data-selectable-text className="text-xs text-gray-500 dark:text-gray-500">
-          开启后，提交成功创建任务时会清空提示词和参考图。
-        </div>
-      </div>
-      <div className="block">
         <div className="mb-1 flex items-center justify-between gap-3">
           <span className="block text-sm text-gray-600 dark:text-gray-300">参考图编辑按钮</span>
           <div className="w-28 shrink-0">

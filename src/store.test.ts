@@ -192,7 +192,6 @@ describe('product model task snapshots', () => {
   })
 
   it.each(['quote', 'save'])('unlocks submission and preserves the draft after a %s failure', async (failure) => {
-    useStore.getState().setSettings({ clearInputAfterSubmit: true })
     if (failure === 'quote') vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'))
     else {
       const db = await import('./lib/db')
@@ -212,7 +211,6 @@ describe('product model task snapshots', () => {
   })
 
   it.each(['prompt', 'images', 'mask'])('preserves the next draft when its %s changes during the quote', async (changed) => {
-    useStore.getState().setSettings({ clearInputAfterSubmit: true })
     await putImage(imageA)
     useStore.getState().setInputImages([imageA])
     let release!: () => void
@@ -236,7 +234,6 @@ describe('product model task snapshots', () => {
   })
 
   it('clears an unchanged draft only after the task is saved', async () => {
-    useStore.getState().setSettings({ clearInputAfterSubmit: true })
     await putImage(imageA)
     useStore.getState().setInputImages([imageA])
     await submitTask()

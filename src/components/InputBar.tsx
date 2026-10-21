@@ -8,7 +8,6 @@ import { getSizeTier, normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
 import { getMaxTaskImages } from '../lib/gouoBackend'
-import { formatPoints } from '../lib/accountUsage'
 import { getReferenceImageIssue, MAX_PROMPT_LENGTH, parseImageCount, promptCodePointLength, REFERENCE_IMAGE_TYPES } from '../lib/inputValidation'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import { useImageModels } from '../hooks/useImageModels'
@@ -455,9 +454,8 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const backendModel = imageModels.find((model) => model.id === settings.model)
   const maxInputImages = backendModel?.max_inputs || API_MAX_IMAGES
   // 与模型选择器的预估一致：按所选模型单价乘张数，模型或参数不可用时不显示数字
-  const estimate = backendModelReady && backendModel ? formatPoints(backendModel.price_cny * params.n) : ''
-  const submitLabel = `${maskDraft ? '遮罩编辑' : '生成图片'}${estimate ? ` · ${estimate}` : ''}`
-  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : `${maskDraft ? '遮罩编辑' : '生成图片'}${estimate ? `，预计消耗 ${estimate}` : ''}`
+  const submitLabel = maskDraft ? '遮罩编辑' : '生成图片'
+  const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : submitLabel
 
   // 所选模型不开放当前画质时，自动换成开放的最高画质，免得用户卡在提示上
   useEffect(() => {
@@ -1755,9 +1753,8 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
             <div className={`hidden sm:flex items-end justify-between gap-3${inline ? ' flex-wrap' : ''}`}>
               {inline ? (
                 <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 self-center text-xs text-gray-400">
-                  {!isMobile && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
-                  <button type="button" aria-expanded={showInlineParams} className="inline-flex items-center gap-1.5" onClick={() => setShowInlineParams(!showInlineParams)}><SettingsIcon className="h-4 w-4" />{showInlineParams ? '收起参数' : '自定义参数'}</button>
-                  <span>{params.size} · {params.n} 张</span>
+                  {!isMobile && <BackendModelSelector compact onReady={setBackendModelReady} />}
+                  <button type="button" aria-expanded={showInlineParams} className={`composer-chip${showInlineParams ? ' is-active' : ''}`} onClick={() => setShowInlineParams(!showInlineParams)}><SettingsIcon className="h-4 w-4" />参数<span>{params.size} · {params.n} 张</span></button>
                   <span>输入 @ 引用图片</span>
                 </div>
               ) : <div className="flex min-w-0 flex-1 items-end gap-2">{renderParams('grid-cols-6')}</div>}
@@ -1803,8 +1800,8 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
             {/* 移动端布局 */}
             <div className="sm:hidden flex flex-col gap-2">
               {inline && <div className="flex flex-wrap items-center gap-2">
-                {isMobile && <BackendModelSelector compact showEstimate onReady={setBackendModelReady} />}
-                <button type="button" aria-expanded={showInlineParams} onClick={() => setShowInlineParams(!showInlineParams)} className="flex items-center gap-2 self-start py-2 text-xs text-gray-400"><SettingsIcon className="h-4 w-4" />{showInlineParams ? '收起参数' : '自定义参数'}<span className="ml-2">{params.size} · {params.n} 张</span></button>
+                {isMobile && <BackendModelSelector compact onReady={setBackendModelReady} />}
+                <button type="button" aria-expanded={showInlineParams} onClick={() => setShowInlineParams(!showInlineParams)} className={`composer-chip${showInlineParams ? ' is-active' : ''}`}><SettingsIcon className="h-4 w-4" />参数<span>{params.size} · {params.n} 张</span></button>
               </div>}
               <div className={`collapse-section${inline ? (!showInlineParams ? ' collapsed' : '') : mobileCollapsed ? ' collapsed' : ''}`}>
                 <div className="collapse-inner">
