@@ -1,5 +1,19 @@
-import { describe, expect, it } from 'vitest'
-import { consumeChatStream } from './api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { consumeChatStream, getAgentModels, streamAgentCompletion } from './api'
+
+const backend = vi.hoisted(() => ({ refreshes: [] as boolean[] }))
+vi.mock('../gouoBackend', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../gouoBackend')>(),
+  createBackendSettings: async (refresh = false) => {
+    backend.refreshes.push(refresh)
+    return { baseUrl: 'https://gouo.test/v1', apiKey: refresh ? 'new-token' : 'old-token' }
+  },
+}))
+
+afterEach(() => {
+  backend.refreshes = []
+  vi.unstubAllGlobals()
+})
 
 function stream(text: string, size = 7) {
   const bytes = new TextEncoder().encode(text)
@@ -135,5 +149,22 @@ describe('Agent SSE', () => {
     })
     await expect(consumeChatStream(body, () => controller.abort(), controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
     expect(cancelled).toBe(true)
+  })
+
+  it('平台令牌失效时换新令牌重试一次 Agent 对话和模型目录', async () => {
+    const auth: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      const headers = init.headers as Record<string, string>
+      const token = headers.Authorization?.replace('Bearer ', '') ?? headers['X-Gouo-Token']
+      auth.push(token)
+      if (token === 'old-token') return Response.json({ success: false, message: '无效的令牌' }, { status: 401 })
+      if (url.endsWith('/chat/completions')) return new Response(stream(event({ content: '好的' }, 'stop') + 'data: [DONE]\n\n'))
+      return Response.json({ success: true, data: [{ id: 'm', name: '模型', tool_calls: true, vision: false }] })
+    }))
+    const result = await streamAgentCompletion({ model: 'm', messages: [], tools: [], signal: new AbortController().signal, onUpdate: () => {} })
+    expect(result.content).toBe('好的')
+    expect((await getAgentModels()).models.map((model) => model.id)).toEqual(['m'])
+    expect(auth).toEqual(['old-token', 'new-token', 'old-token', 'new-token'])
+    expect(backend.refreshes).toEqual([false, true, false, true])
   })
 })

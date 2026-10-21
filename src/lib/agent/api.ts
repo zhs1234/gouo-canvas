@@ -1,4 +1,4 @@
-import { createBackendSettings } from '../gouoBackend'
+import { createBackendSettings, isInvalidBackendTokenError } from '../gouoBackend'
 import type { AgentModel, AgentToolCall, AgentToolDefinition, ChatMessage } from './types'
 
 // 每条用户消息最多工具轮数、单条消息需确认的图片张数，由后台“光构设置”下发；读取目录前按后台默认值
@@ -10,14 +10,18 @@ export function getAgentLimits() {
 
 // 目录同时带回运营方在后台填写的附加提示词和 Agent 限制
 export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string }> {
-  const settings = await createBackendSettings()
-  const base = settings.baseUrl.replace(/\/v1\/?$/, '')
-  const response = await fetch(`${base}/api/gouo/agent/models`, {
-    credentials: 'include',
-    cache: 'no-store',
-    headers: { 'X-Gouo-Token': settings.apiKey },
-  })
-  const payload = await response.json()
+  const request = async (refresh: boolean) => {
+    const settings = await createBackendSettings(refresh)
+    const response = await fetch(`${settings.baseUrl.replace(/\/v1\/?$/, '')}/api/gouo/agent/models`, {
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'X-Gouo-Token': settings.apiKey },
+    })
+    return { response, payload: await response.json() }
+  }
+  // 平台令牌过期或被轮换时换新令牌重试一次，与图片接口一致
+  let { response, payload } = await request(false)
+  if (response.status === 401 || isInvalidBackendTokenError(payload.message)) ({ response, payload } = await request(true))
   if (!response.ok || payload.success !== true) throw new Error(payload.message || `加载 Agent 模型失败（HTTP ${response.status}）`)
   if (!Array.isArray(payload.data) || payload.data.some((entry: unknown) => {
     if (!entry || typeof entry !== 'object') return true
@@ -124,15 +128,20 @@ export async function streamAgentCompletion(input: {
   signal: AbortSignal
   onUpdate: (content: string, calls: AgentToolCall[]) => void
 }) {
-  const settings = await createBackendSettings()
-  input.signal.throwIfAborted()
-  const response = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
-    body: JSON.stringify({ model: input.model, messages: input.messages, tools: input.tools, stream: true, parallel_tool_calls: false }),
-    signal: input.signal,
-  })
+  const request = async (refresh: boolean) => {
+    const settings = await createBackendSettings(refresh)
+    input.signal.throwIfAborted()
+    return fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+      body: JSON.stringify({ model: input.model, messages: input.messages, tools: input.tools, stream: true, parallel_tool_calls: false }),
+      signal: input.signal,
+    })
+  }
+  // 401 时请求没有被处理也没有计费，换新令牌重试一次
+  let response = await request(false)
+  if (response.status === 401) response = await request(true)
   if (!response.ok) {
     let message = `Agent 请求失败（HTTP ${response.status}）`
     try {
