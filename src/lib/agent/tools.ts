@@ -8,14 +8,14 @@ import type { TaskParams } from '../../types'
 import type { AgentConversation, AgentToolDefinition } from './types'
 import { getAgentRequestId, getAgentTaskResult } from './taskRecovery'
 import { formatPoints } from '../accountUsage'
-import { getAgentLimits } from './api'
+import { getAgentLimits, getSiteGuide } from './api'
 import { listAgentSkills, listedSkillNames, MAX_ACTIVE_SKILLS } from '../skills/catalog'
 import type { Skill } from '../skills/types'
 
 // “继续对话”按钮发出的消息，统计本轮已提交的图片张数时不算作新的一轮
 export const AGENT_CONTINUE_PROMPT = '请继续完成上一个请求。已提交的图片任务不要重复提交；明确尚未执行、尚未提交的步骤请继续完成。结果待核对的原请求不要重新提交。'
 
-const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference', 'activate_skill', 'read_skill_file'] as const
+const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference', 'activate_skill', 'read_skill_file', 'read_site_guide'] as const
 // 单次读取 skill 参考文件的字数上限，更长的文件分段读取
 const SKILL_FILE_CHUNK = 20_000
 
@@ -96,15 +96,26 @@ const skillToolDefinitions: AgentToolDefinition[] = [
   },
 ]
 
+// 网站使用说明只在用户问到本站用法时读取，平时请求只带这条工具定义
+const siteGuideToolDefinition: AgentToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'read_site_guide',
+    description: '读取光构网站的使用说明：各功能入口、操作方法、积分与充值、云端保存和常见问题。用户询问本站怎么用时先调用再回答；说明里没有的不要编造，以界面实际显示为准。',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+  },
+}
+
 // 没有可用 skill 时不提供 skill 工具。name 只用目录里列得出的名称（再加上本会话已启用的），
 // 避免把近两千个技能名写进每次请求；没列入目录的仍可用 $名称 指定，执行时会再校验
 export function getAgentToolDefinitions(skills: Skill[], activeNames: string[] = []): AgentToolDefinition[] {
-  if (!skills.length) return agentToolDefinitions
+  const base = getSiteGuide() ? [...agentToolDefinitions, siteGuideToolDefinition] : agentToolDefinitions
+  if (!skills.length) return base
   const listed = new Set(listedSkillNames(skills))
   for (const name of activeNames) if (skills.some((skill) => skill.name === name)) listed.add(name)
   const names = [...new Set(skills.filter((skill) => listed.has(skill.name)).map((skill) => skill.name))]
   const nameSchema = names.length ? { type: 'string', enum: names } : { type: 'string' }
-  return [...agentToolDefinitions, ...skillToolDefinitions.map((tool) => ({ ...tool, function: { ...tool.function, parameters: { ...tool.function.parameters, properties: { ...tool.function.parameters.properties as Record<string, unknown>, name: nameSchema } } } }))]
+  return [...base, ...skillToolDefinitions.map((tool) => ({ ...tool, function: { ...tool.function, parameters: { ...tool.function.parameters, properties: { ...tool.function.parameters.properties as Record<string, unknown>, name: nameSchema } } } }))]
 }
 
 export function parseToolArguments(name: string, raw: string): Record<string, unknown> {
@@ -120,7 +131,7 @@ export function parseToolArguments(name: string, raw: string): Record<string, un
     for (const child of Object.values(item)) checkKeys(child, depth + 1)
   }
   checkKeys(value, 0)
-  const definition = [...agentToolDefinitions, ...skillToolDefinitions].find((tool) => tool.function.name === name)!.function.parameters
+  const definition = [...agentToolDefinitions, ...skillToolDefinitions, siteGuideToolDefinition].find((tool) => tool.function.name === name)!.function.parameters
   const allowed = Object.keys(definition.properties as Record<string, unknown>)
   if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error('工具参数包含不支持的字段')
   for (const key of (definition.required || []) as string[]) {
@@ -166,6 +177,7 @@ export async function executeAgentTool(input: {
   input.signal.throwIfAborted()
   const args = parseToolArguments(input.name, input.arguments)
   const conversation = input.conversation
+  if (input.name === 'read_site_guide') return { result: JSON.stringify({ guide: getSiteGuide() }) }
   if (input.name === 'activate_skill' || input.name === 'read_skill_file') {
     const skill = listAgentSkills().find((item) => item.name === args.name)
     if (!skill) throw new Error('没有这个 skill，只能使用可用 skill 列表中的名称')

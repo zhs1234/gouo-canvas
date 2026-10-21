@@ -13,6 +13,7 @@ const EMPTY = {
   GouoAgentEnabled: 'true',
   GouoAgentDefaultModel: '',
   GouoAgentSystemPrompt: '',
+  GouoAgentSiteGuide: '',
   GouoMaxImagesPerTask: '10',
   GouoAllowLowModeration: 'false',
   GouoAgentMaxRounds: '8',
@@ -255,6 +256,14 @@ export default function GouoSettings() {
           {...field('GouoAgentSystemPrompt')}
           inputProps={{ maxLength: 4000 }}
           helperText="附加在内置规则之后，用于补充语气、品牌或业务要求，最多 4000 字；不能放宽计费确认、工具和安全规则。在新的一轮对话中生效。"
+        />
+        <TextField
+          label="Agent 网站使用说明"
+          multiline
+          minRows={6}
+          {...field('GouoAgentSiteGuide')}
+          inputProps={{ maxLength: 8000 }}
+          helperText="用户问到本站怎么用时，Agent 按需读取这份说明再回答，不随每次对话发送；最多 8000 字。功能或入口变化后请同步修改。清空后 Agent 不再提供这项查询。在新的一轮对话中生效。"
         />
         <Divider textAlign="left">云端作品库</Divider>
         {toggle(

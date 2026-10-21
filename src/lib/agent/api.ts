@@ -8,6 +8,13 @@ export function getAgentLimits() {
   return agentLimits
 }
 
+// 后台维护的网站使用说明，Agent 需要时通过 read_site_guide 读取，不随每次请求发送
+let siteGuide = ''
+
+export function getSiteGuide() {
+  return siteGuide
+}
+
 // 目录同时带回运营方在后台填写的附加提示词和 Agent 限制
 export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string }> {
   const request = async (refresh: boolean) => {
@@ -28,6 +35,7 @@ export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPr
     const model = entry as Record<string, unknown>
     return typeof model.id !== 'string' || typeof model.name !== 'string' || typeof model.tool_calls !== 'boolean' || typeof model.vision !== 'boolean'
   })) throw new Error('Agent 模型目录格式无效')
+  siteGuide = typeof payload.site_guide === 'string' ? payload.site_guide.trim() : ''
   agentLimits = {
     maxRounds: Number.isInteger(payload.max_rounds) && payload.max_rounds >= 1 ? payload.max_rounds : agentLimits.maxRounds,
     confirmImages: Number.isInteger(payload.confirm_images) && payload.confirm_images >= 1 ? payload.confirm_images : agentLimits.confirmImages,
