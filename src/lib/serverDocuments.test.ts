@@ -164,7 +164,7 @@ describe('server documents', () => {
       const backend = await import('./gouoBackend')
       vi.mocked(backend.backendRequest).mockImplementation(async (path: string, init?: RequestInit) => {
         requests.push({ path })
-        if (init?.method === 'PUT') throw Object.assign(new backend.GouoConflictError('conflict'), { current: { client_id: 'conv', title: '远端', revision: 9, document: conversation({ title: '远端' }), assets: [] } })
+        if (init?.method === 'PUT') throw new backend.GouoConflictError('conflict', { client_id: 'conv', title: '远端', revision: 9, document: conversation({ title: '远端' }), assets: [] })
         return { items: [], next_cursor: '', has_more: false }
       })
       const docs = await import('./serverDocuments')
