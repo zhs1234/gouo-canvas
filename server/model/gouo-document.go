@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -89,7 +90,10 @@ func SaveGouoDocument(doc *GouoDocument, expected int64, hidden *bool) error {
 					return ErrGouoDocumentAssets
 				}
 			}
-			doc.ContentBytes = int64(len(doc.Document) + len(doc.Title))
+			// 图片关系两列最多各 2000 项，同样占用数据库空间，一并计入配额
+			ids, _ := json.Marshal(doc.AssetIDs)
+			links, _ := json.Marshal(doc.AssetLinks)
+			doc.ContentBytes = int64(len(doc.Document) + len(doc.Title) + len(ids) + len(links))
 			if err := checkGouoStorageQuota(tx, doc.UserID, doc.ContentBytes-old.ContentBytes); err != nil {
 				return err
 			}
