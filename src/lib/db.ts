@@ -120,9 +120,11 @@ export async function importTaskData(tasks: TaskRecord[], images: StoredImage[],
             tx.abort()
             return
           }
-          if (!req.result) store.add(image)
+          if (req.result) return
+          store.add(image)
+          // 只清新增图片可能残留的旧映射；本地已有的同一张图已上传过，映射仍然有效，清掉会导致重复上传
+          tx.objectStore(STORE_CLOUD_ASSET_MAP).delete(image.id)
         }
-        tx.objectStore(STORE_CLOUD_ASSET_MAP).delete(image.id)
       }
       for (const thumbnail of thumbnails) {
         const store = tx.objectStore(STORE_THUMBNAILS)

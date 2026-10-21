@@ -134,15 +134,16 @@ async function pushDocument(kind: Kind, id: string) {
       throw err
     })
   } catch (err) {
-    if (err instanceof GouoConflictError && err.current) {
-      await acceptRemote(kind, err.current as CloudDocument)
-      return
-    }
+    // 本地正在编辑或会话正在运行时暂不采用服务端版本，返回 false 让调用方稍后重试，否则本地改动一直传不上去
+    if (err instanceof GouoConflictError && err.current) return acceptRemote(kind, err.current as CloudDocument)
     // 服务端已清除的图片：忘掉本地记录的映射，下次重试时重新上传
     if (err instanceof GouoAssetMissingError) await deleteCloudAssetMapItems(assets.map((item) => item.imageId))
     throw err
   }
   if (Boolean(doc.hiddenAt) !== Boolean(remote.hidden_at)) {
+    // 先记下刚写入的版本号：隐藏或恢复失败时，重试会按这个版本提交，不会和自己刚写入的内容冲突；
+    // 指纹留空，保证下次一定重试隐藏或恢复
+    await putCloudMeta(metaKey(kind, doc.id), { revision: remote.revision, fingerprint: '' })
     remote = await backendRequest<CloudDocument>(`/api/gouo/${kind}/${encodeURIComponent(doc.id)}/${doc.hiddenAt ? 'hide' : 'restore'}`, {
       method: 'POST',
       body: JSON.stringify({ expected_revision: remote.revision }),
@@ -181,7 +182,7 @@ async function pushPending() {
       for (const doc of await readAll(kind)) {
         if (!isStorageScopeCurrent()) return
         try {
-          await pushDocument(kind, doc.id)
+          if (await pushDocument(kind, doc.id) === false) failed = true
         } catch (err) {
           failed = true
           console.warn('文档保存到服务器失败', doc.id, err)

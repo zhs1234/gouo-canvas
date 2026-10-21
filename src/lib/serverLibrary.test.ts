@@ -195,6 +195,24 @@ describe('server library', () => {
     expect(meta.get('tasks:seen')).toBe(10)
   })
 
+  it('keeps a collection created while collections are being refreshed', async () => {
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.putCloudCollection).mockResolvedValue(undefined as never)
+    const library = await import('./serverLibrary')
+    await library.startServerLibrary()
+    let release: (() => void) | undefined
+    vi.mocked(backend.listCloudCollections).mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => { release = resolve })
+      return []
+    })
+    const refresh = library.refreshServerLibrary()
+    await vi.waitFor(() => expect(release).toBeDefined())
+    state.setFavoriteCollections([{ id: 'during', name: '刷新时新建', createdAt: 1, updatedAt: 1 }])
+    release!()
+    await refresh
+    expect(state.favoriteCollections.map((item) => item.id)).toEqual(['during'])
+  })
+
   it('does not recreate a collection this device uploaded after it was purged elsewhere', async () => {
     const backend = await import('./gouoBackend')
     vi.mocked(backend.putCloudCollection).mockResolvedValue(undefined as never)

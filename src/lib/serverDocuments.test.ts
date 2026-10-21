@@ -134,6 +134,50 @@ describe('server documents', () => {
     expect(requests.filter((request) => request.body)).toHaveLength(1)
   })
 
+  it('记下已写入的版本号，隐藏请求失败后重试不会和自己冲突', async () => {
+    stored.set('conv', conversation({ hiddenAt: 5 }))
+    const backend = await import('./gouoBackend')
+    vi.mocked(backend.backendRequest).mockImplementation(async (path: string, init?: RequestInit) => {
+      requests.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      if (path.endsWith('/hide')) throw new Error('offline')
+      return { client_id: 'conv', title: '会话', revision: 3, document: {}, assets: [] }
+    })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const docs = await import('./serverDocuments')
+    await docs.pushDocuments()
+    expect(meta.get('document:conversations:conv')).toEqual({ revision: 3, fingerprint: '' })
+    vi.mocked(backend.backendRequest).mockImplementation(async (path: string, init?: RequestInit) => {
+      requests.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      return { client_id: 'conv', title: '会话', revision: path.endsWith('/hide') ? 5 : 4, hidden_at: path.endsWith('/hide') ? 9 : undefined, document: {}, assets: [] }
+    })
+    await docs.pushDocuments()
+    expect(requests.filter((request) => request.body?.expected_revision !== undefined).map((request) => request.body?.expected_revision)).toEqual([0, 3, 3, 4])
+    expect(meta.get('document:conversations:conv')).toMatchObject({ revision: 5 })
+  })
+
+  it('稍后重试因本地正在运行而暂未采用服务端版本的冲突', async () => {
+    vi.useFakeTimers()
+    try {
+      const running = conversation({ status: 'running' })
+      stored.set('conv', conversation())
+      agentState.conversations = [running]
+      const backend = await import('./gouoBackend')
+      vi.mocked(backend.backendRequest).mockImplementation(async (path: string, init?: RequestInit) => {
+        requests.push({ path })
+        if (init?.method === 'PUT') throw new backend.GouoConflictError('conflict', { client_id: 'conv', title: '远端', revision: 9, document: conversation({ title: '远端' }), assets: [] })
+        return { items: [], next_cursor: '', has_more: false }
+      })
+      const docs = await import('./serverDocuments')
+      await docs.pushDocuments()
+      const puts = () => requests.filter((request) => request.path === '/api/gouo/conversations/conv').length
+      expect(puts()).toBe(1)
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(puts()).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('takes a newer server version and keeps unsaved local edits as a copy', async () => {
     const local = conversation({ title: '本地改动' })
     stored.set('conv', local)
