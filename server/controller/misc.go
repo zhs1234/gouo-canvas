@@ -31,6 +31,7 @@ func GetStatus(c *gin.Context) {
 			"gouo_cloud_library":        config.GouoCloudLibraryEnabled,
 			"gouo_redemption_help":      config.GouoRedemptionHelp,
 			"gouo_support_contact":      config.GouoSupportContact,
+			"gouo_topup_url":            config.GouoTopupUrl,
 			"gouo_notice":               config.GouoNotice,
 			"gouo_canvas_enabled":       config.GouoCanvasEnabled,
 			"gouo_agent_enabled":        config.GouoAgentEnabled,

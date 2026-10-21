@@ -21,6 +21,9 @@ var TopUpLink = ""
 var GouoRedemptionHelp = ""
 var GouoSupportContact = ""
 
+// 购买兑换码的链接（如卡网），充值页显示为按钮
+var GouoTopupUrl = ""
+
 // GouoNotice 是客户端创作页顶部的公告，留空时显示默认介绍
 var GouoNotice = ""
 

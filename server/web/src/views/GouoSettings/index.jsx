@@ -8,6 +8,7 @@ const EMPTY = {
   GouoNotice: '',
   GouoRedemptionHelp: '',
   GouoSupportContact: '',
+  GouoTopupUrl: '',
   GouoDefaultImageModel: '',
   GouoCanvasEnabled: 'true',
   GouoAgentEnabled: 'true',
@@ -158,7 +159,7 @@ export default function GouoSettings() {
           minRows={2}
           {...field('GouoRedemptionHelp')}
           inputProps={{ maxLength: 2000 }}
-          helperText="在用户中心的兑换页展示，可填写获取方式、发放条件或处理时间。留空时提示尚未配置。"
+          helperText="在用户中心的兑换页展示，可填写获取方式、发放条件、处理时间或活动公告。文字里的 http(s) 网址可直接点击；单独一行的图片网址显示为图片。"
         />
         <TextField
           label="客服联系方式"
@@ -166,7 +167,14 @@ export default function GouoSettings() {
           minRows={2}
           {...field('GouoSupportContact')}
           inputProps={{ maxLength: 2000 }}
-          helperText="在用户中心的“充值与账务帮助”展示，用户可复制；单独的 HTTP(S) 网址可直接打开。"
+          helperText="在用户中心充值页的「联系客服」展示，每行填一条联系方式（如 QQ、微信、客服网址），会分开显示。网址可直接点击；单独一行的图片网址（如微信、群二维码）显示为图片。"
+        />
+        <TextField
+          label="购买兑换码链接"
+          {...field('GouoTopupUrl')}
+          inputProps={{ maxLength: 500 }}
+          placeholder="https://"
+          helperText="填写卡网等购买兑换码的网址，充值页会显示「购买兑换码」按钮；留空则不显示。"
         />
         <Divider textAlign="left">功能与生成</Divider>
         {toggle('GouoCanvasEnabled', '开放画布', '关闭后客户端隐藏画布入口和“我的画布”；已保存的画布保留，重新开放后可继续使用。')}

@@ -89,6 +89,7 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterString("TopUpLink", &config.TopUpLink)
 	config.GlobalOption.RegisterString("GouoRedemptionHelp", &config.GouoRedemptionHelp)
 	config.GlobalOption.RegisterString("GouoSupportContact", &config.GouoSupportContact)
+	config.GlobalOption.RegisterString("GouoTopupUrl", &config.GouoTopupUrl)
 	config.GlobalOption.RegisterString("GouoDefaultImageModel", &config.GouoDefaultImageModel)
 	config.GlobalOption.RegisterString("GouoNotice", &config.GouoNotice)
 	config.GlobalOption.RegisterBool("GouoCanvasEnabled", &config.GouoCanvasEnabled)

@@ -18,6 +18,7 @@ export interface UserCenterServiceStatus {
   turnstileSiteKey: string
   redemptionHelp: string
   supportContact: string
+  topupUrl: string
   loading: boolean
   error: string
   reload: () => void
@@ -43,7 +44,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [loading, setLoading] = useState(true)
   const [userError, setUserError] = useState('')
   const [activeSection, setActiveSection] = useState<UserCenterSection>(initialSection)
-  const [status, setStatus] = useState({ emailService: false, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '' })
+  const [status, setStatus] = useState({ emailService: false, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '', topupUrl: '' })
   const [statusLoading, setStatusLoading] = useState(true)
   const [statusError, setStatusError] = useState('')
 
@@ -65,6 +66,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
       turnstileSiteKey: value.turnstile_site_key ?? '',
       redemptionHelp: typeof value.gouo_redemption_help === 'string' ? value.gouo_redemption_help : '',
       supportContact: typeof value.gouo_support_contact === 'string' ? value.gouo_support_contact : '',
+      topupUrl: typeof value.gouo_topup_url === 'string' ? value.gouo_topup_url : '',
     }), (err) => setStatusError(err instanceof Error ? err.message : String(err)), () => setStatusLoading(false))
   }, [])
 

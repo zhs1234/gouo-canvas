@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"one-api/common/config"
 	"one-api/model"
 	"sort"
@@ -14,7 +15,7 @@ import (
 )
 
 // 光构客户端相关的设置。系统设置接口只允许 root，这些设置普通管理员也需要日常维护
-var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoAgentSiteGuide", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays"}
+var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoTopupUrl", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoAgentSiteGuide", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays"}
 
 func normalizeGouoSetting(key, value string) (string, error) {
 	value = strings.TrimSpace(value)
@@ -28,6 +29,14 @@ func normalizeGouoSetting(key, value string) (string, error) {
 	case "GouoRedemptionHelp", "GouoSupportContact":
 		if utf8.RuneCountInString(value) > 2000 {
 			return "", errors.New("兑换码说明和客服信息不能超过 2000 个字符")
+		}
+	case "GouoTopupUrl":
+		if value == "" {
+			break
+		}
+		u, err := url.Parse(value)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || len(value) > 500 {
+			return "", errors.New("购买兑换码链接必须是 http(s) 网址，最长 500 个字符")
 		}
 	case "GouoDefaultImageModel", "GouoAgentDefaultModel":
 		if len(value) > 100 {
