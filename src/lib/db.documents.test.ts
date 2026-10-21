@@ -48,7 +48,7 @@ describe('画布数据升级和素材安全', () => {
     const db = await import('./db')
     const image = { id: 'same', dataUrl: 'data:image/png;base64,aA==', createdAt: 1, source: 'upload' as const }
     await db.putImage(image)
-    for (const id of ['same', 'fresh']) await db.putCloudAssetMapItem({ localImageId: id, cloudAssetId: `cloud-${id}`, contentUrl: '', sha256: '' })
+    for (const id of ['same', 'fresh']) await db.putCloudAssetMapItem({ localImageId: id, cloudAssetId: `cloud-${id}`, contentUrl: '', sha256: '', updatedAt: 1 })
     await db.importTaskData([], [image, { ...image, id: 'fresh' }], [])
     expect(await db.getCloudAssetMapItem('same')).toMatchObject({ cloudAssetId: 'cloud-same' })
     expect(await db.getCloudAssetMapItem('fresh')).toBeUndefined()
