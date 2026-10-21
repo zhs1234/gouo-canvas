@@ -208,7 +208,9 @@ async function callImagesSingle(opts: CallApiOptions, relay: Relay): Promise<Cal
 
       const imageBlobs: Blob[] = []
       for (const [i, dataUrl] of inputImageDataUrls.entries()) {
-        imageBlobs.push(opts.maskDataUrl && i === 0 ? await imageDataUrlToPngBlob(dataUrl) : await dataUrlToBlob(dataUrl))
+        const blob = await dataUrlToBlob(dataUrl)
+        // 服务端只收 PNG/JPEG/WebP，作品库里的 GIF/AVIF 等旧格式先转成 PNG
+        imageBlobs.push((opts.maskDataUrl && i === 0) || !['image/png', 'image/jpeg', 'image/webp'].includes(blob.type) ? await imageDataUrlToPngBlob(dataUrl) : blob)
       }
       const maskBlob = opts.maskDataUrl ? await maskDataUrlToPngBlob(opts.maskDataUrl) : null
       if (maskBlob) {
