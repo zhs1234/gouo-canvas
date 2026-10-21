@@ -38,7 +38,11 @@
 .agent-workspace .agent-send:disabled { background: var(--ws-raised-2); color: var(--ws-text-3); opacity: 1; }
 .agent-stop span { display: block; background: var(--ws-inverse-text); width: 11px; height: 11px; border-radius: 2px; }
 .agent-composer-note { color: var(--ws-text-4); font-size: 12px; text-align: center; margin: 10px 0 0; }
-.agent-image-model-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 5px 0; font-size: 12px; color: var(--ws-text-3); }
+/* 模型、张数和画布收在“设置”里，展开方式与技能、引用图片一致 */
+.agent-settings-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 20px; border-top: 1px solid var(--ws-line); margin-top: 15px; padding: 12px 0 2px; font-size: 12px; }
+.agent-settings-panel > * { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.agent-settings-panel > * > span:first-child { flex-shrink: 0; width: 56px; color: var(--ws-text-3); }
+.agent-settings-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ws-warn-text); }
 .agent-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 20px; }
 .agent-suggestions button { border: 1px solid var(--ws-line); background: var(--ws-panel); border-radius: 24px; color: var(--ws-text-2); padding: 10px 17px; font-size: 12px; }
 .agent-suggestions button:hover { background: var(--ws-raised); }
@@ -158,8 +162,6 @@
   .agent-composer-input { gap: 14px; }
   .agent-upload-tile { width: 34px; height: 48px; }
   .agent-composer textarea { font-size: 16px; }
-  .agent-canvas-select > span, .agent-count-select > span { display: none; }
-  .agent-canvas-select select { max-width: 90px; }
   .agent-mode { margin-right: 1px; }
   .agent-composer-footer { gap: 2px; }
   .agent-timeline { padding: 0 16px; }

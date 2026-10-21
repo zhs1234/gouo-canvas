@@ -221,11 +221,11 @@ body { background: var(--ws-bg); color: var(--ws-text); }
 }
 @media (prefers-reduced-motion: reduce) { .page-skeleton > span, .page-skeleton-grid > span { animation: none; } }
 
-/* 输入框下方的小工具：带边框的胶囊，一眼能看出可以点击 */
-.composer-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 30px; padding: 0 11px; border: 1px solid var(--ws-line-strong); border-radius: 999px; background: var(--ws-surface); color: var(--ws-text-2); font-size: 12px; white-space: nowrap; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
-.composer-chip:hover, .composer-chip.is-active, .composer-chip:focus-within { border-color: var(--ws-accent); background: var(--ws-raised); color: var(--ws-text); }
+/* 输入框下方的小工具：浅底圆角按钮，悬停加深，看得出可以点击 */
+.composer-chip { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--ws-raised); color: var(--ws-text-2); font-size: 12px; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
+.composer-chip:hover, .composer-chip.is-active, .composer-chip:focus-within { background: var(--ws-raised-2); color: var(--ws-text); }
 .composer-chip:disabled, .composer-chip:has(select:disabled) { opacity: .5; cursor: not-allowed; }
 .composer-chip:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: 2px; }
 .composer-chip > span { color: var(--ws-text-3); }
 .composer-chip select { min-width: 0; max-width: 170px; padding-right: 16px; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; text-overflow: ellipsis; appearance: none; cursor: inherit; }
-.composer-chip > svg:last-child { position: absolute; right: 9px; pointer-events: none; }
+.composer-chip select + svg { position: absolute; right: 9px; pointer-events: none; }

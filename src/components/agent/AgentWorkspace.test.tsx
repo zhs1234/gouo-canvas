@@ -57,7 +57,8 @@ it('shows an obsolete model as unselected and lets the sole available model actu
   mocks.modelProps!.onChange('available')
   expect(mocks.configure).toHaveBeenCalledWith('conversation', { modelId: 'available' })
   markup = render()
-  expect(markup).toContain('<option value="available" selected="">可用模型</option>')
+  // 选好可用模型后设置面板自动收起，不再提示模型不可用
+  expect(markup).not.toContain('原模型已不可用')
   expect(markup).not.toMatch(/aria-label="发送" disabled=""/)
   expect(mocks.tool).not.toHaveBeenCalled()
 })
