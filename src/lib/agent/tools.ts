@@ -177,11 +177,7 @@ export async function executeAgentTool(input: {
   input.signal.throwIfAborted()
   const args = parseToolArguments(input.name, input.arguments)
   const conversation = input.conversation
-  if (input.name === 'read_site_guide') {
-    const guide = getSiteGuide()
-    if (!guide) throw new Error('运营方没有提供网站使用说明')
-    return { result: JSON.stringify({ guide }) }
-  }
+  if (input.name === 'read_site_guide') return { result: JSON.stringify({ guide: getSiteGuide() }) }
   if (input.name === 'activate_skill' || input.name === 'read_skill_file') {
     const skill = listAgentSkills().find((item) => item.name === args.name)
     if (!skill) throw new Error('没有这个 skill，只能使用可用 skill 列表中的名称')

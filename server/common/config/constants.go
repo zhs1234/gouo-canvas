@@ -31,9 +31,7 @@ var GouoAgentDefaultModel = ""
 var GouoAgentSystemPrompt = ""
 
 // 内置的网站使用说明，用户问到本站用法时 Agent 通过 read_site_guide 工具按需读取；后台可修改，清空后不再提供
-var GouoAgentSiteGuide = DefaultGouoAgentSiteGuide
-
-const DefaultGouoAgentSiteGuide = `- 创作页顶部切换 Agent、生成图片、画布三种方式；运营方可能关闭画布或 Agent。
+var GouoAgentSiteGuide = `- 创作页顶部切换 Agent、生成图片、画布三种方式；运营方可能关闭画布或 Agent。
 - 生成图片：在输入框描述画面，选择图片模型，可在"自定义参数"设置尺寸、质量、格式和张数；输入框下方显示预计扣费，按成功张数计费。可上传、拖拽或粘贴参考图，输入 @ 引用参考图；点参考图的编辑入口选"添加遮罩"可局部修改，需所选模型支持。
 - 画布：在"我的画布"新建。底部工具栏添加文本、图片、生成配置和组节点；在生成配置节点点"生成图片"，结果连在右侧，连入的文本和图片作为补充提示词和参考图。画布右上角"Agent"打开关联当前画布的对话。
 - Agent：可选择对话模型和图片模型、关联画布、添加参考图；Enter 发送，Shift + Enter 换行，生成中可以停止。图片任务按图片模型价格计费，对话按文本用量计费；单条消息生成较多图片时会先请用户确认。点"技能"或在消息里写 $名称 启用技能，每个会话最多 4 个；"设置 → 技能"可查看、启停和导入技能。

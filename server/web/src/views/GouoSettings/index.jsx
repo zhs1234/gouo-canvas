@@ -32,7 +32,6 @@ export default function GouoSettings() {
   const [values, setValues] = useState(EMPTY);
   const [models, setModels] = useState([]);
   const [agentModels, setAgentModels] = useState([]);
-  const [siteGuideDefault, setSiteGuideDefault] = useState('');
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,7 +52,6 @@ export default function GouoSettings() {
       setValues(next);
       setModels((catalog.data.data?.models || []).filter((row) => row.gouo_enabled).map((row) => row.model));
       setAgentModels(settings.data.agent_models || []);
-      setSiteGuideDefault(settings.data.site_guide_default || '');
       setStatus(site.data.data || null);
     } catch (error) {
       showError(error.response?.data?.message || error.message || '读取光构设置失败');
@@ -267,11 +265,6 @@ export default function GouoSettings() {
           inputProps={{ maxLength: 8000 }}
           helperText="用户问到本站怎么用时，Agent 按需读取这份说明再回答，不随每次对话发送；最多 8000 字。功能或入口变化后请同步修改。清空后 Agent 不再提供这项查询。在新的一轮对话中生效。"
         />
-        <Box>
-          <Button size="small" disabled={!siteGuideDefault || values.GouoAgentSiteGuide === siteGuideDefault} onClick={() => setValues({ ...values, GouoAgentSiteGuide: siteGuideDefault })}>
-            恢复默认使用说明
-          </Button>
-        </Box>
         <Divider textAlign="left">云端作品库</Divider>
         {toggle(
           'GouoCloudLibraryEnabled',

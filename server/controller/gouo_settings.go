@@ -90,7 +90,7 @@ func GetGouoAdminSettings(c *gin.Context) {
 	}
 	model.PricingInstance.RUnlock()
 	sort.Strings(agentModels)
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": data, "agent_models": agentModels, "site_guide_default": config.DefaultGouoAgentSiteGuide})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": data, "agent_models": agentModels})
 }
 
 // UpdateGouoAdminSettings 只修改请求中出现的键；先全部校验，避免部分保存

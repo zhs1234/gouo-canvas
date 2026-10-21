@@ -106,7 +106,7 @@ func TestGouoAdminSettings(t *testing.T) {
 	require.Equal(t, "国庆活动 全场 8 折", config.GouoNotice)
 
 	// 网站使用说明默认是内置内容，可以修改，最多 8000 字
-	require.Equal(t, config.DefaultGouoAgentSiteGuide, config.GouoAgentSiteGuide)
+	require.Contains(t, config.GouoAgentSiteGuide, "兑换码")
 	code, _ = put(`{"GouoAgentSiteGuide":"充值请在用户中心输入兑换码"}`)
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, "充值请在用户中心输入兑换码", config.GouoAgentSiteGuide)
