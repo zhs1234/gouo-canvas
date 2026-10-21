@@ -32,10 +32,7 @@
 .agent-composer textarea:focus-visible { outline: 0; }
 .agent-composer-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 18px; font-size: 12px; }
 .agent-model-select { min-width: 0; max-width: 100%; }
-.agent-model-price { color: var(--ws-text-3); white-space: nowrap; }
 .agent-mode { color: var(--ws-accent); display: flex; gap: 5px; align-items: center; margin-right: 8px; }
-.agent-canvas-select, .agent-count-select { display: flex; gap: 6px; align-items: center; color: var(--ws-text-3); min-width: 0; }
-.agent-canvas-select select, .agent-count-select select { color: var(--ws-text-2); max-width: 170px; background: var(--ws-surface); border: 0; outline: 0; text-overflow: ellipsis; }
 .agent-composer-spacer { flex: 1; }
 .agent-send { background: var(--ws-inverse-bg); color: var(--ws-inverse-text); width: 34px; height: 34px; border: 0; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
 .agent-workspace .agent-send:disabled { background: var(--ws-raised-2); color: var(--ws-text-3); opacity: 1; }
