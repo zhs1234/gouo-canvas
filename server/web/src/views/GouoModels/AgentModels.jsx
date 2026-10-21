@@ -22,7 +22,7 @@ import {
   Typography
 } from '@mui/material';
 import { API } from 'utils/api';
-import { showError, showSuccess } from 'utils/common';
+import { formatPointsMoney, showError, showSuccess } from 'utils/common';
 
 const formatPoints = (value) => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 4 });
 const validPoints = (value) => value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1e7;
@@ -194,6 +194,12 @@ export default function AgentModels() {
                         <Typography variant="caption" display="block" color="text.secondary">
                           约 {formatPoints((TYPICAL_INPUT_TOKENS * row.input_points + TYPICAL_OUTPUT_TOKENS * row.output_points) / 1e6)}{' '}
                           积分/次请求
+                          {row.cached_points != null &&
+                            `，缓存命中八成时约 ${formatPoints(
+                              (TYPICAL_INPUT_TOKENS * (0.2 * row.input_points + 0.8 * row.cached_points) +
+                                TYPICAL_OUTPUT_TOKENS * row.output_points) /
+                                1e6
+                            )}`}
                         </Typography>
                       </>
                     )}
@@ -380,7 +386,9 @@ export default function AgentModels() {
                   inputProps={{ min: 0, max: 1e7, step: 'any' }}
                   error={editing.input_points !== '' && Number(editing.input_points) === 0}
                   helperText={
-                    Number(editing.input_points) === 0 && editing.input_points !== '' ? '填 0 表示输入免费' : '实际扣费还会乘以用户分组倍率'
+                    Number(editing.input_points) === 0 && editing.input_points !== ''
+                      ? '填 0 表示输入免费'
+                      : `${formatPointsMoney(editing.input_points)} · 实际扣费还会乘以用户分组倍率`
                   }
                 />
                 <TextField
@@ -394,7 +402,7 @@ export default function AgentModels() {
                   helperText={
                     Number(editing.output_points) === 0 && editing.output_points !== ''
                       ? '填 0 表示输出免费'
-                      : '实际扣费还会乘以用户分组倍率'
+                      : `${formatPointsMoney(editing.output_points)} · 实际扣费还会乘以用户分组倍率`
                   }
                 />
                 <TextField
@@ -407,7 +415,9 @@ export default function AgentModels() {
                   helperText={
                     editing.cached_points !== '' && Number(editing.cached_points) > Number(editing.input_points) && !keepTimes
                       ? '不能高于输入价格'
-                      : 'Agent 每次请求都会重发系统提示和工具定义，缓存命中率很高。按上游给缓存命中的折扣填写（例如官方价的 5%）；未设置时按输入全价计'
+                      : editing.cached_points !== ''
+                        ? formatPointsMoney(editing.cached_points)
+                        : 'Agent 每次请求都会重发系统提示和工具定义，缓存命中率很高。按上游给缓存命中的折扣填写（例如官方价的 5%）；未设置时按输入全价计'
                   }
                 />
                 <FormControlLabel

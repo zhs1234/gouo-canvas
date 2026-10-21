@@ -24,7 +24,7 @@ import {
   Typography
 } from '@mui/material';
 import { API } from 'utils/api';
-import { GOUO_POINTS_PER_CNY, renderGouoPoints, showError, showSuccess } from 'utils/common';
+import { formatPointsMoney, GOUO_POINTS_PER_CNY, renderGouoPoints, showError, showSuccess } from 'utils/common';
 import AgentModels from './AgentModels';
 
 const SIZE_TIERS = ['1K', '2K', '4K'];
@@ -344,7 +344,7 @@ function ImageModels() {
                   inputProps={{ min: 0.0001, max: 10000 * GOUO_POINTS_PER_CNY, step: 'any' }}
                   value={editing.gouo_points}
                   onChange={(event) => setEditing({ ...editing, gouo_points: event.target.value })}
-                  helperText={`1 元 = ${GOUO_POINTS_PER_CNY} 积分${Number(editing.gouo_points) > 0 ? `，折合 ¥${Number((editing.gouo_points / GOUO_POINTS_PER_CNY).toPrecision(12))}/张` : ''}`}
+                  helperText={`1 元 = ${GOUO_POINTS_PER_CNY} 积分${Number(editing.gouo_points) > 0 ? `，每张${formatPointsMoney(editing.gouo_points)}` : ''}`}
                 />
                 <TextField
                   required

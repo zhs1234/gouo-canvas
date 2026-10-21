@@ -527,15 +527,26 @@ export function timestamp2string(timestamp) {
   return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
 }
 
+function readSiteInfo() {
+  try {
+    return JSON.parse(localStorage.getItem('siteInfo') || '{}') || {};
+  } catch (e) {
+    return {};
+  }
+}
+
 // 积分制：额度 ÷ 每单位额度 × 支付汇率 = 人民币，1 元 = 100 积分。状态未加载时按后端默认值换算
 function pointsPerQuota() {
-  let info = {};
-  try {
-    info = JSON.parse(localStorage.getItem('siteInfo') || '{}') || {};
-  } catch (e) {
-    info = {};
-  }
+  const info = readSiteInfo();
   return ((Number(info.PaymentUSDRate) || 7.3) / (Number(info.quota_per_unit) || 500000)) * GOUO_POINTS_PER_CNY;
+}
+
+// 积分折合人民币和美元，方便对照上游的美元官方价填写；美元按后台的支付汇率换算
+export function formatPointsMoney(points) {
+  const cny = Number(points || 0) / GOUO_POINTS_PER_CNY;
+  const usd = cny / (Number(readSiteInfo().PaymentUSDRate) || 7.3);
+  const format = (value) => value.toLocaleString('zh-CN', { maximumFractionDigits: 4 });
+  return `约合 ¥${format(cny)} / $${format(usd)}`;
 }
 
 // 返回额度折合的积分数（字符串），图表和统计直接使用
