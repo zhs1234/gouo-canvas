@@ -85,7 +85,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 // 账户页的邮件与人机验证配置由用户中心弹窗读取后传入
-const accountStatus = { emailService: true, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '', loading: false, error: '', reload: () => {} }
+const accountStatus = { emailService: true, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '', topupUrl: '', loading: false, error: '', reload: () => {} }
 
 describe('account email and password forms', () => {
   it('restores the reset recipient and locks it while sending, then clears the old code on recipient change', async () => {

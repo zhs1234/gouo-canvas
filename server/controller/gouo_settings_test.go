@@ -37,6 +37,9 @@ func TestGouoAdminSettings(t *testing.T) {
 	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
 	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
 	config.GlobalOption.RegisterString("GouoAgentSiteGuide", &config.GouoAgentSiteGuide)
+	config.GlobalOption.RegisterString("GouoTopupUrl", &config.GouoTopupUrl)
+	oldTopup := config.GouoTopupUrl
+	t.Cleanup(func() { config.GouoTopupUrl = oldTopup })
 	oldAgent, oldMax, oldPrompt, oldGuide := config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt, config.GouoAgentSiteGuide
 	t.Cleanup(func() {
 		config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt, config.GouoAgentSiteGuide = oldAgent, oldMax, oldPrompt, oldGuide
@@ -112,6 +115,15 @@ func TestGouoAdminSettings(t *testing.T) {
 	require.Equal(t, "充值请在用户中心输入兑换码", config.GouoAgentSiteGuide)
 	code, _ = put(`{"GouoAgentSiteGuide":"` + strings.Repeat("长", 8001) + `"}`)
 	require.Equal(t, http.StatusBadRequest, code)
+
+	// 购买兑换码链接只收 http(s) 网址，可以清空
+	code, _ = put(`{"GouoTopupUrl":"https://shop.example/c/1"}`)
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, "https://shop.example/c/1", config.GouoTopupUrl)
+	code, _ = put(`{"GouoTopupUrl":"javascript:alert(1)"}`)
+	require.Equal(t, http.StatusBadRequest, code)
+	code, _ = put(`{"GouoTopupUrl":""}`)
+	require.Equal(t, http.StatusOK, code)
 
 	// 写库失败时报错，内存里的设置一项都不改
 	require.NoError(t, db.Migrator().DropTable(&model.Option{}))

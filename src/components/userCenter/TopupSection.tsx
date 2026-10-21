@@ -6,6 +6,16 @@ import { formatPoints } from '../../lib/accountUsage'
 import { useImageModels } from '../../hooks/useImageModels'
 import type { UserCenterServiceStatus } from '../UserCenterModal'
 
+// 运营方在后台填写的充值说明和客服信息：网址可点击，单独一行的图片网址显示为图片（如微信、群二维码）
+const URL_PATTERN = /(https?:\/\/[^\s，。；、）)】]+)/
+const IMAGE_LINE = /^https?:\/\/\S+\.(png|jpe?g|webp|gif)(\?\S*)?$/i
+
+function RichText({ text, className }: { text: string; className: string }) {
+  return <div data-selectable-text className={className}>{text.split('\n').map((line, idx) => IMAGE_LINE.test(line.trim())
+    ? <img key={idx} src={line.trim()} alt="" loading="lazy" className="my-2 max-h-48 rounded-lg" />
+    : <p key={idx} className="min-h-[1.25em] whitespace-pre-wrap break-words">{line.split(URL_PATTERN).map((part, partIdx) => partIdx % 2 ? <a key={partIdx} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline dark:text-blue-400">{part}</a> : part)}</p>)}</div>
+}
+
 export default function TopupSection({ user, status, onRedeemed }: { user: GouoUser; status: UserCenterServiceStatus; onRedeemed: () => Promise<void> }) {
   const [code, setCode] = useState('')
   const [redeeming, setRedeeming] = useState(false)
@@ -13,11 +23,6 @@ export default function TopupSection({ user, status, onRedeemed }: { user: GouoU
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const models = useImageModels()
-  let supportUrl = ''
-  try {
-    const url = new URL(status.supportContact)
-    if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) supportUrl = url.href
-  } catch { /* 非网址的邮箱、微信号按文字展示并提供复制。 */ }
 
   const handleRedeem = async (event: FormEvent) => {
     event.preventDefault()
@@ -43,7 +48,8 @@ export default function TopupSection({ user, status, onRedeemed }: { user: GouoU
       <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-blue-100/60 p-5 dark:border-blue-500/15 dark:from-blue-500/[0.08] dark:to-blue-700/[0.04]">
         <p className="font-semibold text-gray-900 dark:text-white">兑换码充值</p>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">积分充入当前账户，每个兑换码只能使用一次。</p>
-        {status.redemptionHelp && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{status.redemptionHelp}</p>}
+        {status.redemptionHelp && <RichText text={status.redemptionHelp} className="mt-3 text-sm text-gray-600 dark:text-gray-300" />}
+        {/^https?:\/\//.test(status.topupUrl) && <a href={status.topupUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 transition hover:border-blue-400 hover:bg-blue-50 dark:border-blue-500/30 dark:bg-white/[0.04] dark:text-blue-400">购买兑换码 →</a>}
         <form onSubmit={handleRedeem} className="mt-4 flex flex-col gap-3 sm:flex-row">
           <input value={code} onChange={(event) => setCode(event.target.value)} autoComplete="off" placeholder="请输入光构兑换码" className="min-w-0 flex-1 rounded-xl border border-blue-100 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 dark:border-white/10 dark:bg-gray-950/60 dark:text-white" />
           <button type="submit" disabled={redeeming || !code.trim()} className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-800 px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45">
@@ -77,10 +83,9 @@ export default function TopupSection({ user, status, onRedeemed }: { user: GouoU
             <button type="button" onClick={status.reload} disabled={status.loading} className="underline">重新加载</button>
           </div>
         ) : (
-          <p className="mt-2 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400">{status.loading ? '正在读取客服信息…' : status.supportContact || '客服联系方式暂未配置。'}</p>
+          status.supportContact ? <RichText text={status.supportContact} className="mt-2 text-gray-500 dark:text-gray-400" /> : <p className="mt-2 text-gray-500 dark:text-gray-400">{status.loading ? '正在读取客服信息…' : '客服联系方式暂未配置。'}</p>
         )}
         {status.supportContact && <div className="mt-3 flex flex-wrap items-center gap-4">
-          {supportUrl && <a href={supportUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline dark:text-blue-400">打开客服链接</a>}
           <button type="button" className="text-blue-600 underline dark:text-blue-400" onClick={async () => {
             try { await copyTextToClipboard(status.supportContact); setCopied(true) }
             catch { setError('复制失败，请手动选中并复制上方联系方式') }
