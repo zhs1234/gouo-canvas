@@ -13,6 +13,8 @@ type Usage struct {
 	TotalTokens             int                     `json:"total_tokens"`
 	PromptTokensDetails     PromptTokensDetails     `json:"prompt_tokens_details"`
 	CompletionTokensDetails CompletionTokensDetails `json:"completion_tokens_details"`
+	// DeepSeek 官方接口用这个字段返回缓存命中的输入 token，不一定带 prompt_tokens_details
+	PromptCacheHitTokens int `json:"prompt_cache_hit_tokens,omitempty"`
 
 	ExtraTokens  map[string]int          `json:"-"`
 	ExtraBilling map[string]ExtraBilling `json:"-"`
@@ -34,6 +36,9 @@ func (u *Usage) GetExtraTokens() map[string]int {
 	// 缓存数据
 	if u.PromptTokensDetails.CachedTokens > 0 && u.ExtraTokens[config.UsageExtraCache] == 0 {
 		u.ExtraTokens[config.UsageExtraCache] = u.PromptTokensDetails.CachedTokens
+	}
+	if u.PromptCacheHitTokens > 0 && u.ExtraTokens[config.UsageExtraCache] == 0 {
+		u.ExtraTokens[config.UsageExtraCache] = u.PromptCacheHitTokens
 	}
 
 	// 输入音频

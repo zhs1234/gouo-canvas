@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -52,10 +53,12 @@ type gouoAdminModel struct {
 }
 
 type gouoAdminAgentModel struct {
-	Model        string             `json:"model"`
-	Priced       bool               `json:"priced"`
-	InputPoints  float64            `json:"input_points"`
-	OutputPoints float64            `json:"output_points"`
+	Model        string  `json:"model"`
+	Priced       bool    `json:"priced"`
+	InputPoints  float64 `json:"input_points"`
+	OutputPoints float64 `json:"output_points"`
+	// 缓存命中的输入价格；没有单独设置时为空，按输入全价计费
+	CachedPoints *float64           `json:"cached_points"`
 	Name         string             `json:"name"`
 	Description  string             `json:"description"`
 	Sort         int                `json:"gouo_sort"`
@@ -433,6 +436,12 @@ func ListGouoAdminAgentModels(c *gin.Context) {
 		}
 		item := &gouoAdminAgentModel{Model: id, Priced: true, Sort: price.GouoSort, MaxTokens: price.GouoMaxTokens, Listed: model.GouoAgentListed(price.ModelInfo), Kind: gouoModelKind(id, price, price.ModelInfo)}
 		item.InputPoints, item.OutputPoints, item.PriceType = price.GetInput()*rate, price.GetOutput()*rate, price.Type
+		if price.ExtraRatios != nil {
+			if ratio, ok := price.ExtraRatios.Data()[config.UsageExtraCache]; ok {
+				cached := item.InputPoints * ratio
+				item.CachedPoints = &cached
+			}
+		}
 		if price.Type == model.TimesPriceType {
 			// 按次计费每次扣 1000 × Input 额度，不能按每百万 token 换算
 			item.InputPoints, item.OutputPoints = price.GetInput()*rate/1000, 0
@@ -509,6 +518,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		Vision       *bool    `json:"vision"`
 		InputPoints  *float64 `json:"input_points"`
 		OutputPoints *float64 `json:"output_points"`
+		CachedPoints *float64 `json:"cached_points"`
 		MaxTokens    *int     `json:"gouo_max_tokens"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil || strings.TrimSpace(input.Model) == "" || len(input.Model) > 100 {
@@ -528,7 +538,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "invalid_max_tokens", "单次回复最多输出 token 必须在 0 到 100 万之间，0 表示不限")
 		return
 	}
-	for _, points := range []*float64{input.InputPoints, input.OutputPoints} {
+	for _, points := range []*float64{input.InputPoints, input.OutputPoints, input.CachedPoints} {
 		if points != nil && (math.IsNaN(*points) || math.IsInf(*points, 0) || *points < 0 || *points > 1e7) {
 			gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "价格必须在 0 到 1000 万积分/百万 token 之间")
 			return
@@ -556,7 +566,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		return
 	}
 	// 价格相关的校验都要在写入模型资料之前做完，否则校验失败时模型已经被标成上架
-	pointsSet := input.InputPoints != nil || input.OutputPoints != nil
+	pointsSet := input.InputPoints != nil || input.OutputPoints != nil || input.CachedPoints != nil
 	// 按次计费改成按 token 时两个价格都要重新填，否则另一个沿用按次计费的数值
 	if priced && price.Type == model.TimesPriceType && pointsSet && (input.InputPoints == nil || input.OutputPoints == nil) {
 		gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "该模型当前按次计费，改为按 token 计费需同时填写输入和输出价格")
@@ -572,6 +582,21 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	for _, points := range []*float64{input.InputPoints, input.OutputPoints} {
 		if points != nil && math.IsInf(*points/rate, 0) {
 			gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "支付汇率或额度单位设置异常，换算后的价格超出范围")
+			return
+		}
+	}
+	// 缓存命中价按输入价折算成倍率，输入价必须是按 token 计费的正数
+	if input.CachedPoints != nil {
+		inputPoints := price.GetInput() * rate
+		if input.InputPoints != nil {
+			inputPoints = *input.InputPoints
+		}
+		if (price.Type == model.TimesPriceType && input.InputPoints == nil) || inputPoints <= 0 {
+			gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "请先设置按 token 计费的输入价格，再设置缓存命中价格")
+			return
+		}
+		if *input.CachedPoints > inputPoints {
+			gouoFail(c, http.StatusBadRequest, "invalid_agent_price", "缓存命中价格不能高于输入价格")
 			return
 		}
 	}
@@ -592,7 +617,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		gouoFail(c, http.StatusInternalServerError, "model_info_save_failed", "保存模型能力失败")
 		return
 	}
-	changed := input.Sort != nil || input.InputPoints != nil || input.OutputPoints != nil || input.MaxTokens != nil
+	changed := input.Sort != nil || pointsSet || input.MaxTokens != nil
 	if !changed {
 		// 只改了模型详情（例如下架），不动价格记录，免得把上游同步来的价格锁定
 		if err := model.PricingInstance.Init(); err != nil {
@@ -610,6 +635,18 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 	}
 	if input.OutputPoints != nil {
 		price.Type, price.Output = model.TokensPriceType, *input.OutputPoints/rate
+	}
+	// 缓存命中价存成相对输入价的倍率，计费时按 cached_tokens 倍率折算；其他额外倍率保持不变
+	if input.CachedPoints != nil {
+		ratios := map[string]float64{}
+		if price.ExtraRatios != nil {
+			for key, value := range price.ExtraRatios.Data() {
+				ratios[key] = value
+			}
+		}
+		ratios[config.UsageExtraCache] = *input.CachedPoints / (price.GetInput() * rate)
+		extra := datatypes.NewJSONType(ratios)
+		price.ExtraRatios = &extra
 	}
 	if input.Sort != nil {
 		price.GouoSort = *input.Sort
