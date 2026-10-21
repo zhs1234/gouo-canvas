@@ -160,7 +160,6 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
   const showReferences = panel === 'references'
   const showSkills = panel === 'skills'
   const skills = useAgentSkills()
-  const [, setImageModelReady] = useState(false)
   const creating = useRef<Promise<AgentConversation> | null>(null)
   const creatingForProject = useRef(projectId)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -282,13 +281,13 @@ export default function AgentWorkspace({ conversationId, onOpenConversation, onC
         <span className="agent-mode"><SparklesIcon width={16} height={16} /> Agent</span>
         <button type="button" className={`composer-chip${showReferences ? ' is-active' : ''}`} aria-label="选择已有图片作为参考" aria-expanded={showReferences} disabled={running || !conversation} onClick={() => setPanel(showReferences ? '' : 'references')}>@ 引用图片</button>
         {skills.length > 0 && <button type="button" className={`composer-chip${showSkills ? ' is-active' : ''}`} aria-label="选择技能" aria-expanded={showSkills} disabled={running || !conversation} onClick={() => setPanel(showSkills ? '' : 'skills')}>技能{activeSkills.length ? ` ${activeSkills.length}` : ''}</button>}
-        <button type="button" className={`composer-chip${showSettings ? ' is-active' : ''}`} aria-label="模型、张数与画布设置" aria-expanded={showSettings} disabled={!conversation} onClick={() => setPanel(showSettings ? '' : 'settings')}><SettingsIcon width={15} height={15} />设置{unavailableModel && <span className="agent-settings-dot" aria-hidden="true" />}</button>
+        <button type="button" className={`composer-chip${showSettings ? ' is-active' : ''}`} aria-label="模型、张数与画布设置" aria-expanded={showSettings} disabled={!conversation} onClick={() => setPanel(showSettings ? '' : 'settings')}><SettingsIcon width={15} height={15} />设置</button>
         <span className="agent-composer-spacer" />
         {running ? <button type="button" className="agent-send agent-stop" aria-label="停止 Agent" title="停止对话；已提交的图片继续生成" onClick={() => useAgentStore.getState().stop(id)}><span /></button> : <button className="agent-send" type="submit" aria-label="发送" disabled={!conversation?.draft.trim() || uploading || !model || modelsLoading}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M12 19V5m-6 6 6-6 6 6" /></svg></button>}
       </div>
       {showSettings && <div className="agent-settings-panel">
         <label title={model ? model.vision ? '可理解上传的参考图片' : '附件可用于图片生成，此对话模型不直接识图' : undefined}><span>对话模型</span><ModelSelect compact label="Agent 模型" models={models} value={conversation?.modelId || ''} disabled={running || modelsLoading || !conversation} placeholder={modelsLoading ? '正在加载…' : unavailableModel ? '原模型已不可用，请重新选择' : !models.length ? '暂无可用模型' : undefined} onChange={(modelId) => useAgentStore.getState().configureConversation(id, { modelId })} /></label>
-        <div><span>图片模型</span><BackendModelSelector compact onReady={setImageModelReady} /></div>
+        <div><span>图片模型</span><BackendModelSelector compact onReady={() => {}} /></div>
         <label title="Agent 生成图片时默认每次的张数；在消息里写明张数时以消息为准"><span>每次张数</span><span className="composer-chip"><select aria-label="每次生成张数" value={Math.min(conversation?.imageCount ?? 1, getMaxTaskImages())} disabled={running || !conversation} onChange={(event) => useAgentStore.getState().configureConversation(id, { imageCount: Number(event.target.value) })}>{Array.from({ length: getMaxTaskImages() }, (_, idx) => <option key={idx} value={idx + 1}>{idx + 1} 张</option>)}</select><ChevronDownIcon aria-hidden="true" width={14} height={14} /></span></label>
         <label className="agent-canvas-select"><span>关联画布</span><span className="composer-chip"><select aria-label="关联画布" value={conversation?.projectId || ''} disabled={running || !conversation} onChange={(event) => useAgentStore.getState().configureConversation(id, { projectId: event.target.value || undefined })}><option value="">未关联</option>{conversation?.projectId && !linkedProject && <option value={conversation.projectId} disabled>原画布已不可用</option>}{projects.filter((project) => !project.hiddenAt).map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><ChevronDownIcon aria-hidden="true" width={14} height={14} /></span></label>
       </div>}

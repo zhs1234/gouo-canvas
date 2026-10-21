@@ -42,7 +42,6 @@
 .agent-settings-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 20px; border-top: 1px solid var(--ws-line); margin-top: 15px; padding: 12px 0 2px; font-size: 12px; }
 .agent-settings-panel > * { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .agent-settings-panel > * > span:first-child { flex-shrink: 0; width: 56px; color: var(--ws-text-3); }
-.agent-settings-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ws-warn-text); }
 .agent-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 20px; }
 .agent-suggestions button { border: 1px solid var(--ws-line); background: var(--ws-panel); border-radius: 24px; color: var(--ws-text-2); padding: 10px 17px; font-size: 12px; }
 .agent-suggestions button:hover { background: var(--ws-raised); }

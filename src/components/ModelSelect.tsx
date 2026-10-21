@@ -21,7 +21,7 @@ export default function ModelSelect({ label, value, models, disabled = false, co
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         className={compact
-          ? 'max-w-[220px]'
+          ? ''
           : 'max-w-[260px] rounded-lg border border-gray-200 bg-white px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-400 dark:border-white/10 dark:bg-gray-800'}
       >
         {!selected && <option value="">{placeholder}</option>}
