@@ -251,17 +251,20 @@ async function loadTasks(hidden: boolean) {
 }
 
 async function loadCollections() {
+  // 在读取服务端列表之前取已同步记录：读取期间新建并刚写到服务端的收藏夹不在这份列表里，
+  // 若用之后的记录判断，会被当成其他设备已彻底删除而丢掉
+  const synced = new Set(await getCloudMeta<string[]>('collections:seen') || [])
   const remote = await listCloudCollections()
   const remoteIds = new Set(remote.map((item) => item.id))
   const visible: FavoriteCollection[] = remote.filter((item) => !item.hidden_at).map((item) => ({ id: item.id, name: item.name, createdAt: item.created_at, updatedAt: item.updated_at }))
   // 只在本地创建、尚未写到服务端的收藏夹补交上去；上次同步时服务端有、现在没有的，是在其他设备删除后已被彻底清除，不能重新创建
-  const synced = new Set(await getCloudMeta<string[]>('collections:seen') || [])
   const localOnly = useStore.getState().favoriteCollections.filter((item) => !remoteIds.has(item.id) && !synced.has(item.id))
   for (const item of localOnly) await putCloudCollection(item.id, item.name)
   await putCloudMeta('collections:seen', [...remoteIds, ...localOnly.map((item) => item.id)])
   applyingServer = true
   try {
-    useStore.getState().setFavoriteCollections([...visible, ...localOnly])
+    // 重新读取本地列表：等待网络期间新建的收藏夹也不在服务端，不能用开头的快照把它覆盖掉
+    useStore.getState().setFavoriteCollections([...visible, ...useStore.getState().favoriteCollections.filter((item) => !remoteIds.has(item.id) && !synced.has(item.id))])
   } finally {
     applyingServer = false
   }
