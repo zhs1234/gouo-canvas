@@ -192,12 +192,10 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
     useStore.getState().showToast(input ? '任务已提交，可在「我的作品」查看进度' : '任务已提交，生成结果会显示在输入框下方', 'success')
 
     const latest = useStore.getState()
-    // 等待报价或保存期间编辑的新草稿不能随旧任务一起清空。
+    // 提交成功后清空输入框；等待报价或保存期间编辑的新草稿不能随旧任务一起清空。
     if (!input && latest.prompt === prompt && latest.inputImages === inputImages && latest.maskDraft === maskDraft) {
-      if (settings.clearInputAfterSubmit) {
-        latest.setPrompt('')
-        latest.clearInputImages()
-      }
+      latest.setPrompt('')
+      latest.clearInputImages()
     }
 
     // 异步调用 API

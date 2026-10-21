@@ -9,7 +9,6 @@ export function normalizeSettings(input: unknown): AppSettings {
     model: typeof record.model === 'string' && record.model.trim() ? record.model : 'gpt-image-2',
     gouoModelSelected: record.gouoModelSelected === true,
     gouoPriceVersion: typeof record.gouoPriceVersion === 'string' ? record.gouoPriceVersion : undefined,
-    clearInputAfterSubmit: flag('clearInputAfterSubmit', false),
     persistInputOnRestart: flag('persistInputOnRestart', true),
     alwaysShowRetryButton: flag('alwaysShowRetryButton', false),
     taskCompletionNotification: flag('taskCompletionNotification', false),
