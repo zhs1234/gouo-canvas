@@ -7,12 +7,17 @@ import ImageContextMenu from './components/ImageContextMenu'
 import OverlayLayer from './components/OverlayLayer'
 import { useGlobalClickSuppression } from './lib/clickSuppression'
 import { startServerLibrary } from './lib/serverLibrary'
+import { useCanvasStore } from './stores/canvasStore'
 
 export default function App() {
   useGlobalClickSuppression()
 
   useEffect(() => {
-    void initStore().then(() => startServerLibrary())
+    void initStore().then(() => startServerLibrary(), (err) => {
+      // 本地数据库打不开时不会再拉取云端文档，画布页不必一直等待
+      console.error('初始化本地数据失败', err)
+      useCanvasStore.setState({ documentsPulled: true })
+    })
   }, [])
 
   useEffect(() => {
