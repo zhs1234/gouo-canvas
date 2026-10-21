@@ -15,6 +15,7 @@ vi.mock('./lib/db', () => {
     CURRENT_THUMBNAIL_VERSION: 2,
     getAllTasks: async () => [...tasks.values()],
     getAllSkills: async () => [],
+    getAllSkillIds: vi.fn(async () => []),
     putSkill: async () => {},
     putTask: async (task: TaskRecord) => {
       tasks.set(task.id, task)
@@ -1109,6 +1110,24 @@ describe('data import', () => {
     expect(again.map((doc) => doc.body)).toEqual(['较早', '较晚'])
     expect(again.some((doc) => doc.id.startsWith('imported-'))).toBe(false)
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations[0].skills).toEqual([again[1].id, again[0].id])
+    vi.unstubAllGlobals()
+  })
+
+  it('does not reuse a skill ID that exists in IndexedDB but failed to load', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data: {} })))
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 3_600_000 })
+    await refreshBackendStatus()
+    vi.useRealTimers()
+    const { useSkillStore } = await import('./stores/skillStore')
+    useSkillStore.setState({ skills: [], hydrated: true })
+    const db = await import('./lib/db')
+    vi.mocked(db.getAllSkillIds).mockResolvedValueOnce(['imported-broken'])
+    const skill = { id: 'broken', schemaVersion: 1 as const, name: 'broken', title: '坏', description: '', body: '正文', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 1 }
+    expect(await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: [skill] as SkillDocument[] }), { importTasks: true })).toBe(true)
+    const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
+    expect(imported).toHaveLength(1)
+    expect(imported[0].id).not.toBe('imported-broken')
     vi.unstubAllGlobals()
   })
 

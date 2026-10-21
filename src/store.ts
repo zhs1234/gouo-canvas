@@ -20,6 +20,7 @@ import {
   getAllCanvasProjects,
   getAllAgentConversations,
   getAllSkills,
+  getAllSkillIds,
   putTask as dbPutTask,
   deleteTask as dbDeleteTask,
   clearTasks as dbClearTasks,
@@ -1983,7 +1984,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
       // 按备份顺序贪心认领时，x 与 imported-x 谁先出现都会在一种本地组合下认错并多复制一份
       const localIds = new Set(useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.id))
       // 删除的技能仍留着记录，同 ID 写入会让整个导入事务失败，所以这类换新 UUID
-      const takenIds = new Set(useSkillStore.getState().skills.map((skill) => skill.id))
+      const takenIds = new Set([...useSkillStore.getState().skills.map((skill) => skill.id), ...await getAllSkillIds()])
       const docs = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
         const doc = normalizeSkillDocument(value)
         return doc && !doc.hiddenAt ? [doc] : []

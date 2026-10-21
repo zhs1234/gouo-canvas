@@ -347,6 +347,11 @@ export async function getAllSkills(): Promise<SkillDocument[]> {
   return records.filter((item) => item.schemaVersion === 1)
 }
 
+// 包括没通过校验、不会载入界面的记录：恢复备份时要避开这些 ID，否则写入冲突会让整个导入失败
+export function getAllSkillIds() {
+  return dbTransaction(STORE_SKILLS, 'readonly', (s) => s.getAllKeys()) as Promise<string[]>
+}
+
 export function getSkill(id: string): Promise<SkillDocument | undefined> {
   return dbTransaction(STORE_SKILLS, 'readonly', (s) => s.get(id))
 }
