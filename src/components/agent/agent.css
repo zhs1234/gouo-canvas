@@ -92,7 +92,8 @@
 .agent-reference img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; }
 .agent-reference > span { font-size: 10px; color: var(--ws-text-4); margin: auto; }
 .agent-reference button { position: absolute; top: -5px; right: -5px; border: 1px solid var(--ws-line-strong); background: var(--ws-raised-2); color: var(--ws-text); border-radius: 50%; padding: 3px; }
-.agent-task { border: 1px solid var(--ws-line); border-radius: 13px; padding: 15px; max-width: 680px; margin: 10px 0 22px; background: var(--ws-panel); }
+/* 生成结果直接放在对话流里，不套卡片 */
+.agent-task { max-width: 680px; margin: 10px 0 22px; }
 .agent-task-heading { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ws-text-2); }
 .agent-result-images { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
 /* 会话里的图片可点开大图，悬停时显示下载按钮；触屏没有悬停，按钮常显 */
