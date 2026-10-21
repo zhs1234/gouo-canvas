@@ -15,6 +15,7 @@ let downloadAsset: ReturnType<typeof vi.fn>
 let storedSkills: Map<string, SkillDocument>
 let skillState: { skills: SkillDocument[]; hydrate: () => Promise<void> }
 let remoteSkills: unknown[]
+let backendStatus: Record<string, unknown> | null
 
 beforeEach(() => {
   vi.resetModules()
@@ -27,6 +28,7 @@ beforeEach(() => {
   storedSkills = new Map()
   skillState = { skills: [], hydrate: async () => {} }
   remoteSkills = []
+  backendStatus = null
   downloadAsset = vi.fn()
   vi.doMock('../store', () => ({ deleteImageIfUnreferenced: vi.fn(), useStore: { getState: () => ({ showToast: vi.fn() }) } }))
   vi.doMock('./storageScope', () => ({ isStorageScopeCurrent: () => true }))
@@ -66,6 +68,7 @@ beforeEach(() => {
   vi.doMock('./gouoBackend', () => ({
     getLoadedTrashRetentionMs: () => 3 * 24 * 60 * 60 * 1000,
     refreshBackendStatus: async () => {},
+    getCachedBackendStatus: () => backendStatus,
     GouoAssetMissingError: class extends Error {},
     GouoConflictError: class extends Error {},
     backendRequest: vi.fn(async (path: string, init?: RequestInit) => {
@@ -103,6 +106,20 @@ describe('server documents', () => {
     expect(requests.find((request) => request.path === '/api/gouo/skills/skill')?.body).toMatchObject({ client_id: 'skill', title: '海报', document: { name: 'poster', body: '正文' } })
     expect(storedSkills.get('remote-skill')).toMatchObject({ name: 'remote', revision: 4 })
     expect(skillState.skills.map((item) => item.id)).toEqual(['remote-skill'])
+  })
+
+  it('后台关闭 Agent 或技能时不推送对应文档，也不报错', async () => {
+    stored.set('conv', conversation())
+    storedSkills.set('skill', { id: 'skill', schemaVersion: 1, name: 'poster', title: '海报', description: '', body: '', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 1 })
+    backendStatus = { gouo_skills_enabled: false }
+    const docs = await import('./serverDocuments')
+    await docs.pushDocuments()
+    expect(requests.map((request) => request.path)).toEqual(['/api/gouo/conversations/conv'])
+    requests = []
+    meta.clear()
+    backendStatus = { gouo_agent_enabled: false }
+    await docs.pushDocuments()
+    expect(requests).toEqual([])
   })
 
   it('writes changed documents to the server once and skips unchanged ones', async () => {

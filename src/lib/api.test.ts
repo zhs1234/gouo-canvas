@@ -70,7 +70,7 @@ describe('callImageApi', () => {
     })
     expect(target).toHaveBeenCalledTimes(2)
     expect(target).toHaveBeenCalledWith('target-url')
-    expect(reference).toHaveBeenCalledTimes(2)
+    expect(reference).toHaveBeenCalledTimes(4)
     expect(reference).toHaveBeenCalledWith('reference-url')
     expect(mask).toHaveBeenCalledTimes(2)
     expect(mask).toHaveBeenCalledWith('mask-url')
@@ -88,6 +88,22 @@ describe('callImageApi', () => {
     expect(result.images).toEqual(['data:image/png;base64,aW1hZ2U='])
     expect(result.actualParams).toMatchObject({ n: 1 })
     expect(result.failedRequests).toEqual([{ requestIndex: 1, error: '生成失败' }])
+  })
+
+  it('converts reference images the server does not accept to PNG', async () => {
+    const canvasImage = await import('./canvasImage')
+    const png = vi.spyOn(canvasImage, 'imageDataUrlToPngBlob').mockResolvedValue(new Blob(['png'], { type: 'image/png' }))
+    vi.spyOn(canvasImage, 'dataUrlToBlob').mockImplementation(async (url) => new Blob([url], { type: url === 'gif-url' ? 'image/gif' : 'image/webp' }))
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'product-token' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 }))
+    const { createBackendSettings } = await import('./gouoBackend')
+    await createBackendSettings(true)
+    await callImageApi({ model: 'gpt-image-2', prompt: '参考', params: DEFAULT_PARAMS, inputImageDataUrls: ['gif-url', 'webp-url'], requestId: 'gif-ref' })
+    expect(png).toHaveBeenCalledTimes(1)
+    expect(png).toHaveBeenCalledWith('gif-url')
+    const form = fetchMock.mock.calls[1][1]!.body as FormData
+    expect(await Promise.all((form.getAll('image[]') as Blob[]).map((blob) => blob.text()))).toEqual(['png', 'webp-url'])
   })
 
   it('preserves product child request IDs when refreshing an expired token', async () => {

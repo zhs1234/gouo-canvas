@@ -25,7 +25,8 @@ function shortName(name: string) {
 }
 
 export function getReferenceImageIssue(file: Pick<File, 'name' | 'type' | 'size'>) {
-  if (!REFERENCE_IMAGE_TYPES.includes(file.type)) return `「${shortName(file.name)}」格式不支持，请上传 PNG、JPEG 或 WebP 图片`
+  // 部分安卓选择器和拖拽来源不带类型，留给读取时按文件头判断
+  if (file.type && !REFERENCE_IMAGE_TYPES.includes(file.type)) return `「${shortName(file.name)}」格式不支持，请上传 PNG、JPEG 或 WebP 图片`
   const max = getReferenceImageMaxBytes()
   if (file.size > max) return `「${shortName(file.name)}」超过 ${Math.floor(max / 1024 / 1024)} MB，请压缩后再上传`
   return ''
@@ -43,15 +44,15 @@ export function sniffReferenceImageType(bytes: Uint8Array) {
 export async function readReferenceImageFile(file: File) {
   const issue = getReferenceImageIssue(file)
   if (issue) throw new Error(issue)
-  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer())
-  if (!sniffReferenceImageType(header)) throw new Error(`「${shortName(file.name)}」格式不支持，请上传 PNG、JPEG 或 WebP 图片`)
+  const type = sniffReferenceImageType(new Uint8Array(await file.slice(0, 12).arrayBuffer()))
+  if (!type) throw new Error(`「${shortName(file.name)}」格式不支持，请上传 PNG、JPEG 或 WebP 图片`)
   try {
     const bitmap = await createImageBitmap(file)
     bitmap.close()
   } catch {
     throw new Error(`「${shortName(file.name)}」无法识别为图片，请重新上传`)
   }
-  return fileToDataUrl(file)
+  return fileToDataUrl(new File([file], file.name, { type }))
 }
 
 // 数量输入框的草稿只在是 1 到上限的整数时才写入参数

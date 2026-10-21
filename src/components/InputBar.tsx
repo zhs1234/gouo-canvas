@@ -762,12 +762,17 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       if (issue) errors.push(issue)
       return !issue
     })
-    const toAdd = accepted.slice(0, maxInputImages - currentCount)
-    const discarded = accepted.length - toAdd.length
-
-    for (const file of toAdd) {
+    // 名额按实际添加成功的数量计，读取失败的文件不占位
+    let added = 0
+    let discarded = 0
+    for (const file of accepted) {
+      if (currentCount + added >= maxInputImages) {
+        discarded++
+        continue
+      }
       try {
         await addImageFromFile(file)
+        added++
       } catch (err) {
         console.warn('添加参考图失败', err)
         errors.push(err instanceof Error ? err.message : String(err))

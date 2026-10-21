@@ -27,6 +27,9 @@ describe('reference image upload checks', () => {
     await expect(readReferenceImageFile(new File(['hello'], 'notes.txt', { type: 'text/plain' }))).rejects.toThrow('格式不支持')
     expect(decode).toHaveBeenCalledTimes(1)
     await expect(readReferenceImageFile(new File([png], 'ok.png', { type: 'image/png' }))).resolves.toBe('data:image/png;base64,iVBORw0KGgo=')
+    // 不带类型的文件按文件头识别，存成正确的类型
+    expect(getReferenceImageIssue({ name: 'IMG_1', type: '', size: 10 })).toBe('')
+    await expect(readReferenceImageFile(new File([png], 'IMG_1'))).resolves.toBe('data:image/png;base64,iVBORw0KGgo=')
     expect(close).toHaveBeenCalled()
   })
 
@@ -41,7 +44,7 @@ describe('reference image upload checks', () => {
     vi.stubGlobal('createImageBitmap', decode)
     await expect(readReferenceImageFile(new File([gif], 'anim.png', { type: 'image/png' }))).rejects.toThrow('「anim.png」格式不支持，请上传 PNG、JPEG 或 WebP 图片')
     expect(decode).not.toHaveBeenCalled()
-    await expect(readReferenceImageFile(new File([jpeg], 'photo.png', { type: 'image/png' }))).resolves.toMatch(/^data:image\/png;base64,/)
+    await expect(readReferenceImageFile(new File([jpeg], 'photo.png', { type: 'image/png' }))).resolves.toMatch(/^data:image\/jpeg;base64,/)
     await expect(readReferenceImageFile(new File([webp], 'photo.webp', { type: 'image/webp' }))).resolves.toMatch(/^data:image\/webp;base64,/)
   })
 })

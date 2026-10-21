@@ -186,6 +186,11 @@ func PutGouoDocument(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "invalid_document", "文档 ID、标题或版本无效")
 		return
 	}
+	// 版本号为 0 是新建；关闭导入后只允许修改和隐藏已有技能，不能绕过客户端直接写入新技能
+	if gouoDocumentKind(c) == "skill" && *input.ExpectedRevision == 0 && !config.GouoSkillImportEnabled {
+		gouoFail(c, http.StatusForbidden, "skill_import_disabled", "运营方已关闭技能导入")
+		return
+	}
 	var document map[string]any
 	if err := json.Unmarshal(input.Document, &document); err != nil || document["schemaVersion"] != float64(1) {
 		gouoFail(c, http.StatusBadRequest, "unsupported_schema", "不支持的文档数据版本")

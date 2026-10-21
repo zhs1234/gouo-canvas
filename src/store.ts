@@ -20,6 +20,7 @@ import {
   getAllCanvasProjects,
   getAllAgentConversations,
   getAllSkills,
+  getAllSkillIds,
   putTask as dbPutTask,
   deleteTask as dbDeleteTask,
   clearTasks as dbClearTasks,
@@ -43,7 +44,7 @@ import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBa
 import { blobToDataUrl } from './lib/dataUrl'
 import { readReferenceImageFile } from './lib/inputValidation'
 import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
-import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
+import { matchRestoredSkillIds, prefixedSkillId, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
 import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus, type TaskSortOrder } from './lib/taskFilters'
@@ -1951,8 +1952,8 @@ export async function importData(file: File, options: ImportOptions = { importCo
     if (options.importTasks && data.tasks) {
       const existingIds = new Set((await getAllTasks()).map((task) => task.id))
       // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
-      // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过
-      const importedId = (id: string) => `imported-${id}`
+      // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过；与技能共用规则，多次导出导入后不超过服务端 128 字节上限
+      const importedId = prefixedSkillId
       // 本地已有 imported-x 而备份里的 x 也需要换 ID 时，它是之前导入 x 生成的，不是本地原有的同 ID 任务；
       // 前缀可能多层嵌套，按长度从短到长判断，上一层总先判定
       const remappedIds = new Set<string>()
@@ -1983,7 +1984,7 @@ export async function importData(file: File, options: ImportOptions = { importCo
       // 按备份顺序贪心认领时，x 与 imported-x 谁先出现都会在一种本地组合下认错并多复制一份
       const localIds = new Set(useSkillStore.getState().skills.filter((skill) => !skill.hiddenAt).map((skill) => skill.id))
       // 删除的技能仍留着记录，同 ID 写入会让整个导入事务失败，所以这类换新 UUID
-      const takenIds = new Set(useSkillStore.getState().skills.map((skill) => skill.id))
+      const takenIds = new Set([...useSkillStore.getState().skills.map((skill) => skill.id), ...await getAllSkillIds()])
       const docs = (restoreSkills ? data.skills ?? [] : []).flatMap((value) => {
         const doc = normalizeSkillDocument(value)
         return doc && !doc.hiddenAt ? [doc] : []

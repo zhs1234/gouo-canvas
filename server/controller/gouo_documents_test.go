@@ -131,10 +131,10 @@ func TestGouoSkillDocumentsFollowSkillSwitch(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoDocument{}, &model.GouoAsset{}, &model.GouoTask{}, &model.GouoStorageQuota{}))
-	oldDB, oldEnabled, oldAgent, oldSkills := model.DB, config.GouoCloudLibraryEnabled, config.GouoAgentEnabled, config.GouoSkillsEnabled
+	oldDB, oldEnabled, oldAgent, oldSkills, oldImport := model.DB, config.GouoCloudLibraryEnabled, config.GouoAgentEnabled, config.GouoSkillsEnabled, config.GouoSkillImportEnabled
 	model.DB, config.GouoCloudLibraryEnabled = db, true
 	t.Cleanup(func() {
-		model.DB, config.GouoCloudLibraryEnabled, config.GouoAgentEnabled, config.GouoSkillsEnabled = oldDB, oldEnabled, oldAgent, oldSkills
+		model.DB, config.GouoCloudLibraryEnabled, config.GouoAgentEnabled, config.GouoSkillsEnabled, config.GouoSkillImportEnabled = oldDB, oldEnabled, oldAgent, oldSkills, oldImport
 	})
 	require.NoError(t, db.Create(&model.User{Id: 1, Username: "skill-user", AccessToken: "skill-token", AffCode: "skill-aff"}).Error)
 	router := gin.New()
@@ -156,11 +156,18 @@ func TestGouoSkillDocumentsFollowSkillSwitch(t *testing.T) {
 	require.Equal(t, http.StatusOK, request("PUT", "/skills/skill", input).Code)
 	require.Equal(t, http.StatusNotFound, request("GET", "/conversations/skill", nil).Code)
 	require.Equal(t, http.StatusOK, request("GET", "/skills/skill", nil).Code)
-	config.GouoSkillsEnabled = false
+	// 关闭导入后不能新建技能，已有技能仍可修改
+	config.GouoSkillImportEnabled = false
+	other := map[string]any{"client_id": "other", "title": "新技能", "expected_revision": 0, "document": map[string]any{"schemaVersion": 1, "name": "other", "body": "正文"}}
+	require.Contains(t, request("PUT", "/skills/other", other).Body.String(), "skill_import_disabled")
 	input["expected_revision"] = 1
-	require.Contains(t, request("PUT", "/skills/skill", input).Body.String(), "skills_disabled")
-	require.Equal(t, http.StatusOK, request("POST", "/skills/skill/hide", map[string]int{"expected_revision": 1}).Code)
-	config.GouoSkillsEnabled, config.GouoAgentEnabled = true, false
+	require.Equal(t, http.StatusOK, request("PUT", "/skills/skill", input).Code)
+	config.GouoSkillImportEnabled = true
+	config.GouoSkillsEnabled = false
 	input["expected_revision"] = 2
+	require.Contains(t, request("PUT", "/skills/skill", input).Body.String(), "skills_disabled")
+	require.Equal(t, http.StatusOK, request("POST", "/skills/skill/hide", map[string]int{"expected_revision": 2}).Code)
+	config.GouoSkillsEnabled, config.GouoAgentEnabled = true, false
+	input["expected_revision"] = 3
 	require.Contains(t, request("PUT", "/skills/skill", input).Body.String(), "agent_disabled")
 }

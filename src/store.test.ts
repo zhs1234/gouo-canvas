@@ -15,6 +15,7 @@ vi.mock('./lib/db', () => {
     CURRENT_THUMBNAIL_VERSION: 2,
     getAllTasks: async () => [...tasks.values()],
     getAllSkills: async () => [],
+    getAllSkillIds: vi.fn(async () => []),
     putSkill: async () => {},
     putTask: async (task: TaskRecord) => {
       tasks.set(task.id, task)
@@ -1112,6 +1113,24 @@ describe('data import', () => {
     vi.unstubAllGlobals()
   })
 
+  it('does not reuse a skill ID that exists in IndexedDB but failed to load', async () => {
+    vi.stubGlobal('window', new EventTarget())
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ success: true, data: {} })))
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 3_600_000 })
+    await refreshBackendStatus()
+    vi.useRealTimers()
+    const { useSkillStore } = await import('./stores/skillStore')
+    useSkillStore.setState({ skills: [], hydrated: true })
+    const db = await import('./lib/db')
+    vi.mocked(db.getAllSkillIds).mockResolvedValueOnce(['imported-broken'])
+    const skill = { id: 'broken', schemaVersion: 1 as const, name: 'broken', title: '坏', description: '', body: '正文', files: [], enabled: true, createdAt: 1, updatedAt: 1, revision: 1 }
+    expect(await importData(importFile({ version: 4, exportedAt: new Date().toISOString(), tasks: [], skills: [skill] as SkillDocument[] }), { importTasks: true })).toBe(true)
+    const imported = vi.mocked(importTaskData).mock.lastCall?.[3]?.skills ?? []
+    expect(imported).toHaveLength(1)
+    expect(imported[0].id).not.toBe('imported-broken')
+    vi.unstubAllGlobals()
+  })
+
   it('keeps document references on the right task when a backup already contains imported IDs', async () => {
     vi.stubGlobal('window', new EventTarget())
     const conversation = { id: 'conv', schemaVersion: 1 as const, title: '会话', modelId: 'm', messages: [{ id: 'msg', role: 'assistant' as const, content: '', taskIds: ['x', 'imported-x', 'imported-imported-x'], createdAt: 1 }], draft: '', referenceImageIds: [], status: 'idle' as const, createdAt: 1, updatedAt: 1, revision: 1 }
@@ -1121,6 +1140,15 @@ describe('data import', () => {
     expect((await getAllTasks()).map((item) => item.id).sort()).toEqual(['imported-imported-imported-x', 'imported-imported-x', 'imported-x'])
     expect(vi.mocked(importTaskData).mock.lastCall?.[3]?.conversations?.[0].messages[0]).toMatchObject({ taskIds: ['imported-x', 'imported-imported-x', 'imported-imported-imported-x'] })
     vi.unstubAllGlobals()
+  })
+
+  it('keeps imported task IDs within the server limit after many export/import hops', async () => {
+    const long = `${'imported-'.repeat(11)}${'a'.repeat(36)}`
+    expect(await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: long })] }), { importTasks: true })).toBe(true)
+    const ids = (await getAllTasks()).map((item) => item.id)
+    expect(ids).toEqual([expect.stringMatching(/^imported-h[0-9a-f]{16}$/)])
+    expect(await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: long })] }), { importTasks: true })).toBe(true)
+    expect((await getAllTasks()).map((item) => item.id)).toEqual(ids)
   })
 
   it('does not change UI data or configuration when the import transaction fails', async () => {
