@@ -40,12 +40,8 @@ func PurgeGouoTrash(now time.Time) error {
 			users[id] = true
 		}
 	}
-	// 没有挂在任何作品上的旧图片（从画布或会话里删掉的、上传后没用上的）也要清理，否则一直占着空间，
-	// 而用户看不到也删不掉；只被文档引用的图片会在逐个账号清理时保留下来
-	var orphanUsers []int
-	if err := DB.Model(&GouoAsset{}).Where("updated_at < ?", cutoff).
-		Where("NOT EXISTS (SELECT 1 FROM gouo_task_assets WHERE gouo_task_assets.asset_id = gouo_assets.id)").
-		Distinct("user_id").Pluck("user_id", &orphanUsers).Error; err != nil {
+	orphanUsers, err := gouoOrphanAssetUsers(cutoff)
+	if err != nil {
 		return err
 	}
 	for _, id := range orphanUsers {
@@ -78,6 +74,41 @@ func PurgeGouoTrash(now time.Time) error {
 		}
 	}
 	return firstErr
+}
+
+// 没有挂在任何作品上的旧图片（从画布或会话里删掉的、上传后没用上的）也要清理，否则一直占着空间，而用户看不到也删不掉。
+// 文档引用存在 JSON 列里查询排除不了，这里先比对一遍：旧图片都被文档引用的账号清理了也删不掉什么，不必每次都加锁整套扫描
+func gouoOrphanAssetUsers(cutoff int64) ([]int, error) {
+	var orphans []GouoAsset
+	if err := DB.Model(&GouoAsset{}).Select("id", "user_id").Where("updated_at < ?", cutoff).
+		Where("NOT EXISTS (SELECT 1 FROM gouo_task_assets WHERE gouo_task_assets.asset_id = gouo_assets.id)").
+		Find(&orphans).Error; err != nil {
+		return nil, err
+	}
+	byUser := map[int][]string{}
+	for _, asset := range orphans {
+		byUser[asset.UserID] = append(byUser[asset.UserID], asset.ID)
+	}
+	var users []int
+	for userID, ids := range byUser {
+		var docs []GouoDocument
+		if err := DB.Select("asset_ids").Where("user_id = ?", userID).Find(&docs).Error; err != nil {
+			return nil, err
+		}
+		referenced := map[string]bool{}
+		for _, doc := range docs {
+			for _, id := range doc.AssetIDs {
+				referenced[id] = true
+			}
+		}
+		for _, id := range ids {
+			if !referenced[id] {
+				users = append(users, userID)
+				break
+			}
+		}
+	}
+	return users, nil
 }
 
 // purgeGouoUserTrash 删除一个账号过期的回收站记录及不再被引用的图片文件；all 表示账号已删除，清除全部云端数据。
