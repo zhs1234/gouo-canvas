@@ -1123,6 +1123,15 @@ describe('data import', () => {
     vi.unstubAllGlobals()
   })
 
+  it('keeps imported task IDs within the server limit after many export/import hops', async () => {
+    const long = `${'imported-'.repeat(11)}${'a'.repeat(36)}`
+    expect(await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: long })] }), { importTasks: true })).toBe(true)
+    const ids = (await getAllTasks()).map((item) => item.id)
+    expect(ids).toEqual([expect.stringMatching(/^imported-h[0-9a-f]{16}$/)])
+    expect(await importData(importFile({ version: 3, exportedAt: new Date().toISOString(), tasks: [task({ id: long })] }), { importTasks: true })).toBe(true)
+    expect((await getAllTasks()).map((item) => item.id)).toEqual(ids)
+  })
+
   it('does not change UI data or configuration when the import transaction fails', async () => {
     const db = await import('./lib/db')
     vi.mocked(db.importTaskData).mockRejectedValueOnce(new DOMException('storage full', 'QuotaExceededError'))

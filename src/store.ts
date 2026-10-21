@@ -43,7 +43,7 @@ import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBa
 import { blobToDataUrl } from './lib/dataUrl'
 import { readReferenceImageFile } from './lib/inputValidation'
 import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
-import { matchRestoredSkillIds, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
+import { matchRestoredSkillIds, prefixedSkillId, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
 import { taskHasOutputErrors, taskMatchesFilterStatus, type TaskFilterStatus, type TaskSortOrder } from './lib/taskFilters'
@@ -1951,8 +1951,8 @@ export async function importData(file: File, options: ImportOptions = { importCo
     if (options.importTasks && data.tasks) {
       const existingIds = new Set((await getAllTasks()).map((task) => task.id))
       // 云端可能还有未拉取的同 ID 作品，导入副本不能回写覆盖它，所以换成由备份 ID 推出的固定 ID；
-      // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过
-      const importedId = (id: string) => `imported-${id}`
+      // 固定而不是随机，再次导入同一份备份时才能认出已导入过而跳过；与技能共用规则，多次导出导入后不超过服务端 128 字节上限
+      const importedId = prefixedSkillId
       // 本地已有 imported-x 而备份里的 x 也需要换 ID 时，它是之前导入 x 生成的，不是本地原有的同 ID 任务；
       // 前缀可能多层嵌套，按长度从短到长判断，上一层总先判定
       const remappedIds = new Set<string>()
