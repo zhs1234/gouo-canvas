@@ -95,6 +95,7 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterBool("GouoAgentEnabled", &config.GouoAgentEnabled)
 	config.GlobalOption.RegisterString("GouoAgentDefaultModel", &config.GouoAgentDefaultModel)
 	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
+	config.GlobalOption.RegisterString("GouoAgentSiteGuide", &config.GouoAgentSiteGuide)
 	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
 	config.GlobalOption.RegisterBool("GouoAllowLowModeration", &config.GouoAllowLowModeration)
 	config.GlobalOption.RegisterInt("GouoAgentMaxRounds", &config.GouoAgentMaxRounds)

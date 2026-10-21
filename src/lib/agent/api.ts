@@ -9,7 +9,7 @@ export function getAgentLimits() {
 }
 
 // 目录同时带回运营方在后台填写的附加提示词和 Agent 限制
-export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string }> {
+export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPrompt: string; siteGuide: string }> {
   const request = async (refresh: boolean) => {
     const settings = await createBackendSettings(refresh)
     const response = await fetch(`${settings.baseUrl.replace(/\/v1\/?$/, '')}/api/gouo/agent/models`, {
@@ -32,7 +32,7 @@ export async function getAgentModels(): Promise<{ models: AgentModel[]; systemPr
     maxRounds: Number.isInteger(payload.max_rounds) && payload.max_rounds >= 1 ? payload.max_rounds : agentLimits.maxRounds,
     confirmImages: Number.isInteger(payload.confirm_images) && payload.confirm_images >= 1 ? payload.confirm_images : agentLimits.confirmImages,
   }
-  return { models: payload.data.filter((model: AgentModel) => model.tool_calls), systemPrompt: typeof payload.system_prompt === 'string' ? payload.system_prompt.trim() : '' }
+  return { models: payload.data.filter((model: AgentModel) => model.tool_calls), systemPrompt: typeof payload.system_prompt === 'string' ? payload.system_prompt.trim() : '', siteGuide: typeof payload.site_guide === 'string' ? payload.site_guide.trim() : '' }
 }
 
 // SSE 的分片可能切在中文字符、CRLF 或 tool arguments 中间，统一按完整事件消费。

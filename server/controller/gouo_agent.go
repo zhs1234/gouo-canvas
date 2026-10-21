@@ -93,5 +93,5 @@ func GetGouoAgentModels(c *gin.Context) {
 	if defaultIndex >= 0 {
 		data[defaultIndex].Default = true
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "agent_enabled": true, "system_prompt": config.GouoAgentSystemPrompt, "max_rounds": config.GouoAgentMaxRounds, "confirm_images": config.GouoAgentConfirmImages, "billing_unit": "platform_text_usage", "configuration_hint": "Agent 模型需在模型信息中配置 output_modalities: [\"text\"] 与 tags: [\"tools\"]，并启用支持流式工具调用的渠道。"})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "message": "", "agent_enabled": true, "system_prompt": config.GouoAgentSystemPrompt, "site_guide": config.GouoAgentSiteGuide, "max_rounds": config.GouoAgentMaxRounds, "confirm_images": config.GouoAgentConfirmImages, "billing_unit": "platform_text_usage", "configuration_hint": "Agent 模型需在模型信息中配置 output_modalities: [\"text\"] 与 tags: [\"tools\"]，并启用支持流式工具调用的渠道。"})
 }

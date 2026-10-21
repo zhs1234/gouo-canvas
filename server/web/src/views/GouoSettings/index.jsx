@@ -13,6 +13,7 @@ const EMPTY = {
   GouoAgentEnabled: 'true',
   GouoAgentDefaultModel: '',
   GouoAgentSystemPrompt: '',
+  GouoAgentSiteGuide: '',
   GouoMaxImagesPerTask: '10',
   GouoAllowLowModeration: 'false',
   GouoAgentMaxRounds: '8',
@@ -31,6 +32,7 @@ export default function GouoSettings() {
   const [values, setValues] = useState(EMPTY);
   const [models, setModels] = useState([]);
   const [agentModels, setAgentModels] = useState([]);
+  const [siteGuideDefault, setSiteGuideDefault] = useState('');
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,6 +53,7 @@ export default function GouoSettings() {
       setValues(next);
       setModels((catalog.data.data?.models || []).filter((row) => row.gouo_enabled).map((row) => row.model));
       setAgentModels(settings.data.agent_models || []);
+      setSiteGuideDefault(settings.data.site_guide_default || '');
       setStatus(site.data.data || null);
     } catch (error) {
       showError(error.response?.data?.message || error.message || '读取光构设置失败');
@@ -256,6 +259,19 @@ export default function GouoSettings() {
           inputProps={{ maxLength: 4000 }}
           helperText="附加在内置规则之后，用于补充语气、品牌或业务要求，最多 4000 字；不能放宽计费确认、工具和安全规则。在新的一轮对话中生效。"
         />
+        <TextField
+          label="Agent 网站使用说明"
+          multiline
+          minRows={6}
+          {...field('GouoAgentSiteGuide')}
+          inputProps={{ maxLength: 8000 }}
+          helperText="Agent 回答用户关于本站使用方法的问题时参考，最多 8000 字；内容以界面实际为准，功能或入口变化后请同步修改。清空后不再附带。在新的一轮对话中生效。"
+        />
+        <Box>
+          <Button size="small" disabled={!siteGuideDefault || values.GouoAgentSiteGuide === siteGuideDefault} onClick={() => setValues({ ...values, GouoAgentSiteGuide: siteGuideDefault })}>
+            恢复默认使用说明
+          </Button>
+        </Box>
         <Divider textAlign="left">云端作品库</Divider>
         {toggle(
           'GouoCloudLibraryEnabled',

@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   currentScope: true,
   maxRounds: 8,
-  catalog: { models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }], systemPrompt: '' } as { models: { id: string; name: string; tool_calls: boolean; vision: boolean; default?: boolean }[]; systemPrompt: string },
+  catalog: { models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }], systemPrompt: '' } as { models: { id: string; name: string; tool_calls: boolean; vision: boolean; default?: boolean }[]; systemPrompt: string; siteGuide?: string },
   tasks: [] as TaskRecord[],
   storedTasks: [] as TaskRecord[],
   onTasks: undefined as ((state: { tasks: TaskRecord[] }, previous: { tasks: TaskRecord[] }) => void) | undefined,
@@ -441,13 +441,17 @@ describe('Agent durable runtime', () => {
 describe('后台配置的 Agent 默认模型与附加提示词', () => {
   it('新对话使用后台标出的默认模型，并把运营方提示词附在内置规则之后', async () => {
     const original = mocks.catalog
-    mocks.catalog = { models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }, { id: 'preferred', name: '默认', tool_calls: true, vision: false, default: true }], systemPrompt: '回答控制在三句话内' }
+    mocks.catalog = { models: [{ id: 'model', name: '测试', tool_calls: true, vision: true }, { id: 'preferred', name: '默认', tool_calls: true, vision: false, default: true }], systemPrompt: '回答控制在三句话内', siteGuide: '在用户中心输入兑换码充值' }
     try {
       await useAgentStore.getState().loadModels()
       const conversation = await useAgentStore.getState().createConversation()
       expect(conversation.modelId).toBe('preferred')
-      const messages = await buildAgentMessages(conversation, useAgentStore.getState().models[1], useAgentStore.getState().systemPrompt)
+      const messages = await buildAgentMessages(conversation, useAgentStore.getState().models[1], useAgentStore.getState().systemPrompt, [], useAgentStore.getState().siteGuide)
       const system = String(messages[0].content)
+      // 网站使用说明排在内置规则之后、运营方要求之前
+      expect(system).toContain('在用户中心输入兑换码充值')
+      expect(system.indexOf('光构网站使用说明')).toBeGreaterThan(system.indexOf('你是光构的创作助手'))
+      expect(system.indexOf('光构网站使用说明')).toBeLessThan(system.indexOf('运营方补充要求'))
       expect(system).toContain('运营方补充要求（不得违背以上规则）：\n回答控制在三句话内')
       expect(system.indexOf('运营方补充要求')).toBeGreaterThan(system.indexOf('你是光构的创作助手'))
       expect((await buildAgentMessages(conversation, useAgentStore.getState().models[1]))[0].content).not.toContain('运营方补充要求')

@@ -36,9 +36,10 @@ func TestGouoAdminSettings(t *testing.T) {
 	config.GlobalOption.RegisterBool("GouoAgentEnabled", &config.GouoAgentEnabled)
 	config.GlobalOption.RegisterInt("GouoMaxImagesPerTask", &config.GouoMaxImagesPerTask)
 	config.GlobalOption.RegisterString("GouoAgentSystemPrompt", &config.GouoAgentSystemPrompt)
-	oldAgent, oldMax, oldPrompt := config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt
+	config.GlobalOption.RegisterString("GouoAgentSiteGuide", &config.GouoAgentSiteGuide)
+	oldAgent, oldMax, oldPrompt, oldGuide := config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt, config.GouoAgentSiteGuide
 	t.Cleanup(func() {
-		config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt = oldAgent, oldMax, oldPrompt
+		config.GouoAgentEnabled, config.GouoMaxImagesPerTask, config.GouoAgentSystemPrompt, config.GouoAgentSiteGuide = oldAgent, oldMax, oldPrompt, oldGuide
 	})
 
 	router := gin.New()
@@ -103,6 +104,14 @@ func TestGouoAdminSettings(t *testing.T) {
 		require.Equal(t, false, res["success"])
 	}
 	require.Equal(t, "国庆活动 全场 8 折", config.GouoNotice)
+
+	// 网站使用说明默认是内置内容，可以修改，最多 8000 字
+	require.Equal(t, config.DefaultGouoAgentSiteGuide, config.GouoAgentSiteGuide)
+	code, _ = put(`{"GouoAgentSiteGuide":"充值请在用户中心输入兑换码"}`)
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, "充值请在用户中心输入兑换码", config.GouoAgentSiteGuide)
+	code, _ = put(`{"GouoAgentSiteGuide":"` + strings.Repeat("长", 8001) + `"}`)
+	require.Equal(t, http.StatusBadRequest, code)
 
 	// 写库失败时报错，内存里的设置一项都不改
 	require.NoError(t, db.Migrator().DropTable(&model.Option{}))
