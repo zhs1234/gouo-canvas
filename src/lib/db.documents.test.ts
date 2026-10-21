@@ -44,6 +44,16 @@ describe('画布数据升级和素材安全', () => {
     expect((await db.getCanvasProject('canvas'))?.title).toBe('更新')
   })
 
+  it('备份恢复只清除新增图片的云端映射，本地已有的同一张图保留映射', async () => {
+    const db = await import('./db')
+    const image = { id: 'same', dataUrl: 'data:image/png;base64,aA==', createdAt: 1, source: 'upload' as const }
+    await db.putImage(image)
+    for (const id of ['same', 'fresh']) await db.putCloudAssetMapItem({ localImageId: id, cloudAssetId: `cloud-${id}`, contentUrl: '', sha256: '' })
+    await db.importTaskData([], [image, { ...image, id: 'fresh' }], [])
+    expect(await db.getCloudAssetMapItem('same')).toMatchObject({ cloudAssetId: 'cloud-same' })
+    expect(await db.getCloudAssetMapItem('fresh')).toBeUndefined()
+  })
+
   it('备份恢复发生图片冲突时原子回滚画布、会话及任务', async () => {
     const db = await import('./db')
     await db.putImage({ id: 'duplicate', dataUrl: 'data:image/png;base64,aA==', createdAt: 1, source: 'upload' })
