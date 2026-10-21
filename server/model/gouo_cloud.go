@@ -324,7 +324,8 @@ func ListGouoTasks(userID int, hidden bool, beforeUpdatedAt int64, beforeID stri
 func ListGouoAdminTasks(userID, page, size int) ([]GouoTask, int64, error) {
 	var tasks []GouoTask
 	var count int64
-	query := DB.Model(&GouoTask{}).Where("user_id = ?", userID)
+	// Session 让 Count 和 Find 各自从这个条件重新开始，不会把 Count 留下的状态带进列表查询
+	query := DB.Model(&GouoTask{}).Where("user_id = ?", userID).Session(&gorm.Session{})
 	if err := query.Count(&count).Error; err != nil {
 		return nil, 0, err
 	}
