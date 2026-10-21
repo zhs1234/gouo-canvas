@@ -436,6 +436,11 @@ export function getUsageLogs(page = 1, size = 20, filters?: { model?: string; ty
   return backendRequest<GouoUsageLogPage>(`/api/log/self?${params}`)
 }
 
+// 起始时间之后的消费额度合计；退款记为系统日志，不计入
+export function getUsageStat(start: number): Promise<{ quota: number }> {
+  return backendRequest<{ quota: number }>(`/api/log/self/stat?start_timestamp=${start}`)
+}
+
 export async function register(input: RegisterInput): Promise<void> {
   await backendAction(`/api/user/register${input.turnstileToken ? `?turnstile=${encodeURIComponent(input.turnstileToken)}` : ''}`, {
     username: input.username.trim(),
