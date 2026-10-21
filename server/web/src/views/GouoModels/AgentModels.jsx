@@ -26,6 +26,9 @@ import { showError, showSuccess } from 'utils/common';
 
 const formatPoints = (value) => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 4 });
 const validPoints = (value) => value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1e7;
+// 按典型的一次 Agent 请求估算花费：系统提示、工具定义和历史合计约 6000 输入 token，回复约 200 输出 token
+const TYPICAL_INPUT_TOKENS = 6000;
+const TYPICAL_OUTPUT_TOKENS = 200;
 
 export default function AgentModels() {
   const [rows, setRows] = useState([]);
@@ -100,7 +103,9 @@ export default function AgentModels() {
     Number(editing.gouo_max_tokens || 0) <= 1000000 &&
     editing.name.trim().length <= 40 &&
     editing.description.trim().length <= 100 &&
-    Number.isInteger(Number(editing.gouo_sort || 0));
+    Number.isInteger(Number(editing.gouo_sort || 0)) &&
+    (editing.cached_points === '' ||
+      (validPoints(editing.cached_points) && (keepTimes || Number(editing.cached_points) <= Number(editing.input_points))));
 
   return (
     <Box>
@@ -179,6 +184,17 @@ export default function AgentModels() {
                       <>
                         <Typography variant="body2">输入 {formatPoints(row.input_points)}</Typography>
                         <Typography variant="body2">输出 {formatPoints(row.output_points)}</Typography>
+                        {row.cached_points == null ? (
+                          <Typography variant="caption" display="block" color="warning.main">
+                            缓存命中未设置，按输入全价计
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2">缓存命中 {formatPoints(row.cached_points)}</Typography>
+                        )}
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          约 {formatPoints((TYPICAL_INPUT_TOKENS * row.input_points + TYPICAL_OUTPUT_TOKENS * row.output_points) / 1e6)}{' '}
+                          积分/次请求
+                        </Typography>
                       </>
                     )}
                     {row.price_warning && (
@@ -242,6 +258,8 @@ export default function AgentModels() {
                             times_points: row.price_type === 'times' ? row.input_points : null,
                             input_points: points ? points[0] : '',
                             output_points: points ? points[1] : '',
+                            cached_points: row.cached_points == null ? '' : Number(Number(row.cached_points).toPrecision(12)),
+                            initial_cached: row.cached_points == null ? '' : Number(Number(row.cached_points).toPrecision(12)),
                             // 记下打开时的价格：没改价格就不提交，后端只在填写价格时才锁定，免得上游同步的价格被锁住
                             initial_points: points,
                             // 排序和回复上限也只在改动时提交，都没改时后端不重写价格记录
@@ -312,7 +330,11 @@ export default function AgentModels() {
                   (editing.initial_points?.[0] === Number(editing.input_points) &&
                     editing.initial_points?.[1] === Number(editing.output_points))
                     ? {}
-                    : { input_points: Number(editing.input_points), output_points: Number(editing.output_points) })
+                    : { input_points: Number(editing.input_points), output_points: Number(editing.output_points) }),
+                  // 缓存命中价只在填写且改动时提交；留空表示沿用现有设置
+                  ...(editing.cached_points === '' || Number(editing.cached_points) === editing.initial_cached
+                    ? {}
+                    : { cached_points: Number(editing.cached_points) })
                 },
                 `${editing.model} 已保存并上架`
               );
@@ -373,6 +395,19 @@ export default function AgentModels() {
                     Number(editing.output_points) === 0 && editing.output_points !== ''
                       ? '填 0 表示输出免费'
                       : '实际扣费还会乘以用户分组倍率'
+                  }
+                />
+                <TextField
+                  label="缓存命中输入价格（积分/百万 token）"
+                  type="number"
+                  value={editing.cached_points}
+                  onChange={(event) => setEditing({ ...editing, cached_points: event.target.value })}
+                  inputProps={{ min: 0, max: 1e7, step: 'any' }}
+                  error={editing.cached_points !== '' && Number(editing.cached_points) > Number(editing.input_points) && !keepTimes}
+                  helperText={
+                    editing.cached_points !== '' && Number(editing.cached_points) > Number(editing.input_points) && !keepTimes
+                      ? '不能高于输入价格'
+                      : 'Agent 每次请求都会重发系统提示和工具定义，缓存命中率很高。按上游给缓存命中的折扣填写（例如官方价的 5%）；未设置时按输入全价计'
                   }
                 />
                 <FormControlLabel

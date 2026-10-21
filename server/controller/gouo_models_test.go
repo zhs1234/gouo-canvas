@@ -512,3 +512,60 @@ func TestGouoAdminModelSaveKeepsFallbackPrice(t *testing.T) {
 		require.Equal(t, model.DefaultPrice, price.Output, id)
 	}
 }
+
+func TestGouoAdminAgentCachedPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Price{}, &model.ModelInfo{}, &model.Channel{}))
+	oldDB, oldPricing, oldRate, oldUnit := model.DB, model.PricingInstance, config.PaymentUSDRate, config.QuotaPerUnit
+	oldGroups := model.GlobalUserGroupRatio.UserGroup
+	model.DB, config.PaymentUSDRate, config.QuotaPerUnit = db, 7.3, 500000
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{}}
+	model.GlobalUserGroupRatio.UserGroup = map[string]*model.UserGroup{"default": {Symbol: "default", Ratio: 1}}
+	t.Cleanup(func() {
+		model.DB, model.PricingInstance, config.PaymentUSDRate, config.QuotaPerUnit = oldDB, oldPricing, oldRate, oldUnit
+		model.GlobalUserGroupRatio.UserGroup = oldGroups
+	})
+	require.NoError(t, db.Create(&model.Channel{Name: "文本", Status: 1, Models: "chat-a,chat-new", Group: "default"}).Error)
+	extra := datatypes.NewJSONType(map[string]float64{"reasoning_tokens": 2})
+	require.NoError(t, db.Create(&model.Price{Model: "chat-a", Type: model.TokensPriceType, Input: 1, Output: 5, ExtraRatios: &extra}).Error)
+	require.NoError(t, model.PricingInstance.Init())
+
+	router := gin.New()
+	router.GET("/agent-models", ListGouoAdminAgentModels)
+	router.PUT("/agent-models", UpdateGouoAdminAgentModel)
+	put := func(body string) int {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest("PUT", "/agent-models", strings.NewReader(body)))
+		return res.Code
+	}
+	cached := func(id string) any {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest("GET", "/agent-models", nil))
+		var body struct {
+			Data struct {
+				Models []map[string]any `json:"models"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &body))
+		for _, item := range body.Data.Models {
+			if item["model"] == id {
+				return item["cached_points"]
+			}
+		}
+		return "missing"
+	}
+
+	// 没设过缓存命中价时返回空，界面提示按输入全价计
+	require.Nil(t, cached("chat-a"))
+	// 输入 1460 积分时缓存命中填 73，按 0.05 倍率存，其他额外倍率保留
+	require.Equal(t, http.StatusOK, put(`{"model":"chat-a","listed":false,"cached_points":73}`))
+	ratios := model.PricingInstance.GetPrice("chat-a").ExtraRatios.Data()
+	require.InDelta(t, 0.05, ratios["cached_tokens"], 1e-9)
+	require.Equal(t, 2.0, ratios["reasoning_tokens"])
+	require.InDelta(t, 73, cached("chat-a").(float64), 1e-6)
+	// 缓存价不能高于输入价，也不能在没有输入价时单独设置
+	require.Equal(t, http.StatusBadRequest, put(`{"model":"chat-a","listed":false,"cached_points":2000}`))
+	require.Equal(t, http.StatusBadRequest, put(`{"model":"chat-new","listed":false,"cached_points":10}`))
+}
