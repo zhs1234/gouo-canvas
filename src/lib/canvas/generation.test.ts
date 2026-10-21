@@ -195,6 +195,25 @@ describe('画布生成任务闭环', () => {
     expect(state.getReferencedImageIds()).toContain('result-b')
   })
 
+  it('任务已提交后画布保存失败，节点保持生成中并按 requestId 回填结果', async () => {
+    const state = useCanvasStore.getState()
+    const project = await state.createProject()
+    await state.applyOperations(project.id, [{ type: 'add_node', id: 'config', nodeType: 'config', metadata: { prompt: '测试' } }])
+    mocks.submit.mockResolvedValueOnce('task-1')
+    mocks.beforeSave = (saved) => {
+      if (saved.nodes.some((node) => node.metadata?.taskId)) throw new Error('storage full')
+    }
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await expect(generateCanvasNode(project.id, 'config')).resolves.toBe('task-1')
+    const output = state.getSnapshot(project.id).nodes.find((node) => node.id !== 'config')!
+    expect(output.metadata?.status).toBe('loading')
+    mocks.beforeSave = undefined
+    const requestId = mocks.submit.mock.calls[0][0].requestId
+    useStore.setState({ tasks: [{ id: 'task-1', requestId, status: 'done', outputImages: ['out'], params: { output_format: 'png' } } as unknown as TaskRecord] })
+    await reconcileCanvasTasks()
+    expect(state.getSnapshot(project.id).nodes.find((node) => node.id === output.id)?.metadata).toMatchObject({ status: 'success', taskId: 'task-1', imageId: 'out' })
+  })
+
   it('任务提交失败保留错误节点，既不假装生成成功也不自动重试', async () => {
     const state = useCanvasStore.getState()
     const project = await state.createProject()

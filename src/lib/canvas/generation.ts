@@ -77,8 +77,9 @@ export function generateCanvasNode(projectId: string, nodeId: string, prompt?: s
       { nodes: [...project.nodes, output], connections: [...project.connections, { id: crypto.randomUUID(), fromNodeId: nodeId, toNodeId: output.id }] },
       { expectedRevision: project.revision },
     )
+    let taskId: string
     try {
-      const taskId = await submitImageTask({
+      taskId = await submitImageTask({
         model: node.metadata?.model,
         priceVersion,
         maskImageId: node.metadata?.maskImageId,
@@ -90,14 +91,6 @@ export function generateCanvasNode(projectId: string, nodeId: string, prompt?: s
         source: { kind: 'canvas', projectId, nodeId: output.id },
         requestId,
       })
-      const latest = store.getSnapshot(projectId)
-      await store.updateProject(
-        projectId,
-        { nodes: latest.nodes.map((item) => (item.id === output.id ? { ...item, metadata: { ...item.metadata, taskId } } : item)) },
-        { history: false },
-      )
-      await reconcileCanvasTasks()
-      return taskId
     } catch (err) {
       const latest = store.getSnapshot(projectId)
       await store.updateProject(
@@ -113,6 +106,20 @@ export function generateCanvasNode(projectId: string, nodeId: string, prompt?: s
       )
       throw err
     }
+    // 任务已提交计费，之后保存失败不能把节点标成失败：用户会以为没生成而重新付费；
+    // 节点保持生成中，回填时按 requestId 找到任务
+    try {
+      const latest = store.getSnapshot(projectId)
+      await store.updateProject(
+        projectId,
+        { nodes: latest.nodes.map((item) => (item.id === output.id ? { ...item, metadata: { ...item.metadata, taskId } } : item)) },
+        { history: false },
+      )
+    } catch (err) {
+      console.warn('记录画布生成任务失败', err)
+    }
+    await reconcileCanvasTasks()
+    return taskId
   })()
   pending.set(key, run)
   void run.finally(() => pending.delete(key)).catch(() => {})
