@@ -3,7 +3,7 @@ import type { SkillDocument } from './skills/types'
 import { deleteImageIfUnreferenced, useStore } from '../store'
 import { deleteCloudAssetMapItems, deleteDocuments, getAllAgentConversations, getAllCanvasProjects, getAllSkills, getAgentConversation, getCanvasProject, getCloudMeta, getDocumentWithCloudMeta, getSkill, putAgentConversation, putCanvasProject, putCloudMeta, putSkill } from './db'
 import { getDocumentImageIds } from './documentAssets'
-import { backendRequest, getLoadedTrashRetentionMs, GouoAssetMissingError, GouoConflictError, refreshBackendStatus, type GouoCloudAsset } from './gouoBackend'
+import { backendRequest, getCachedBackendStatus, getLoadedTrashRetentionMs, GouoAssetMissingError, GouoConflictError, refreshBackendStatus, type GouoCloudAsset } from './gouoBackend'
 import { downloadAsset, uploadImage } from './serverLibrary'
 import { isStorageScopeCurrent } from './storageScope'
 import { serializeCanvasProject, validateCanvasProject } from './canvas/document'
@@ -168,9 +168,16 @@ export function pushDocuments(): Promise<void> {
 
 async function pushPending() {
   let failed = false
+  await refreshBackendStatus()
   do {
     pushAgain = false
     for (const kind of KINDS) {
+      // 后台关闭画布、Agent 或技能时服务端拒绝写入；先保留在本地，重新开启后由重试补上
+      const status = getCachedBackendStatus()
+      if (kind === 'canvases' ? status?.gouo_canvas_enabled === false : status?.gouo_agent_enabled === false || (kind === 'skills' && status?.gouo_skills_enabled === false)) {
+        failed = true
+        continue
+      }
       for (const doc of await readAll(kind)) {
         if (!isStorageScopeCurrent()) return
         try {
