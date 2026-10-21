@@ -17,6 +17,9 @@ describe('parseSkillMarkdown', () => {
   it('支持块文本 description，值里未加引号的冒号保留原样', () => {
     expect(parseSkillMarkdown('---\nname: a\ndescription: >-\n  第一行\n  第二行\n---\n正文').description).toBe('第一行 第二行')
     expect(parseSkillMarkdown('---\nname: a\ndescription: |\n  第一行\n  第二行\n---\n正文').description).toBe('第一行\n第二行')
+    // 普通值换行续写也是合法 YAML，后续缩进行要接上
+    expect(parseSkillMarkdown('---\nname: a\ndescription: Use this skill when\n  the user wants a poster\nlicense: MIT\n---\n正文')).toMatchObject({ description: 'Use this skill when the user wants a poster', license: 'MIT' })
+    expect(parseSkillMarkdown('---\nname: a\ndescription: "第一行\n  第二行"\n---\n正文').description).toBe('第一行 第二行')
     expect(parseSkillMarkdown('---\nname: a\ndescription: 用途: 生成海报\n---\n正文').description).toBe('用途: 生成海报')
   })
 

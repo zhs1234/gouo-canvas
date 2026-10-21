@@ -44,8 +44,9 @@ function parseFrontmatter(text: string) {
       fields[match[1]] = (value.startsWith('|') ? block.join('\n') : block.join(' ').replace(/\s+/g, ' ')).trim()
       continue
     }
+    // 值后面的缩进行是 YAML 多行写法的续行，按 YAML 规则用空格接上，不能只取第一行
     if (value || !indented.length) {
-      fields[match[1]] = unquote(value)
+      fields[match[1]] = unquote([value, ...indented.map((item) => item.trim())].filter(Boolean).join(' '))
       continue
     }
     const map: Record<string, string> = {}

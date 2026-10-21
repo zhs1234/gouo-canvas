@@ -332,8 +332,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (recovered !== conversation) updateConversation(id, () => ({ messages: recovered.messages }))
     const controller = new AbortController()
     activeRuns.set(id, controller)
-    const mentioned = findMentionedSkills(prompt, listAgentSkills())
-    updateConversation(id, (item) => ({ modelId, title: item.messages.length ? item.title : prompt.slice(0, 32), status: 'running', error: undefined, draft: '', ...(mentioned.length ? { skills: [...new Set([...item.skills || [], ...mentioned])].slice(0, MAX_ACTIVE_SKILLS) } : {}), messages: [...item.messages, { id: crypto.randomUUID(), role: 'user', content: prompt, referenceImageIds: [...item.referenceImageIds], createdAt: Date.now() }] }))
+    const available = listAgentSkills()
+    const mentioned = findMentionedSkills(prompt, available)
+    // 已删除或停用的技能不再生效，也不能占着名额把这次提到的技能挤掉
+    const skills = [...new Set([...(conversation.skills || []).filter((key) => available.some((skill) => skill.key === key)), ...mentioned])]
+    if (skills.length > MAX_ACTIVE_SKILLS) {
+      const dropped = skills.slice(MAX_ACTIVE_SKILLS).map((key) => `$${available.find((skill) => skill.key === key)!.name}`)
+      useAppStore.getState().showToast(`最多同时启用 ${MAX_ACTIVE_SKILLS} 个技能，${dropped.join('、')} 未启用`, 'info')
+    }
+    updateConversation(id, (item) => ({ modelId, title: item.messages.length ? item.title : prompt.slice(0, 32), status: 'running', error: undefined, draft: '', ...(mentioned.length ? { skills: skills.slice(0, MAX_ACTIVE_SKILLS) } : {}), messages: [...item.messages, { id: crypto.randomUUID(), role: 'user', content: prompt, referenceImageIds: [...item.referenceImageIds], createdAt: Date.now() }] }))
     try {
       await persistConversation(id)
     } catch (error) {
