@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Option struct {
@@ -181,6 +183,27 @@ func SyncOptions(frequency int) {
 		logger.SysLog("syncing options from database")
 		loadOptionsFromDatabase()
 	}
+}
+
+// UpdateOptions 在一个事务里写入多项设置，写库成功后才更新内存，不会只生效一部分
+func UpdateOptions(values map[string]string) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		for key, value := range values {
+			if err := tx.Save(&Option{Key: key, Value: value}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for key, value := range values {
+		if err := config.GlobalOption.Set(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func UpdateOption(key string, value string) error {

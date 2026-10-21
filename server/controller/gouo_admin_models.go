@@ -328,7 +328,7 @@ func UpdateGouoAdminModel(c *gin.Context) {
 	}
 	model.PricingInstance.RUnlock()
 	if !ok {
-		price = model.Price{Model: id, Type: model.TimesPriceType, ChannelType: config.ChannelTypeUnknown}
+		price = gouoNewPriceRecord(id)
 	}
 	if input.Enabled && !price.GouoEnabled {
 		err := model.CheckGouoImageExclusive(id)
@@ -603,7 +603,7 @@ func UpdateGouoAdminAgentModel(c *gin.Context) {
 		return
 	}
 	if !priced {
-		price = model.Price{Model: id, Type: model.TokensPriceType, ChannelType: config.ChannelTypeUnknown}
+		price = gouoNewPriceRecord(id)
 	}
 	if input.InputPoints != nil {
 		price.Type, price.Input = model.TokensPriceType, *input.InputPoints/rate
@@ -642,4 +642,11 @@ func splitTrimmed(value string) []string {
 		}
 	}
 	return items
+}
+
+// 模型没有自己的价格记录时按通配符或默认价计费。新建记录要沿用这个价格，
+// 否则单价为 0 的记录会顶替它，其他接口按 0 计费
+func gouoNewPriceRecord(id string) model.Price {
+	fallback := model.PricingInstance.GetPrice(id)
+	return model.Price{Model: id, Type: fallback.Type, ChannelType: fallback.ChannelType, Input: fallback.Input, Output: fallback.Output}
 }

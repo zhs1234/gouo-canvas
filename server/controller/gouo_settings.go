@@ -105,11 +105,9 @@ func UpdateGouoAdminSettings(c *gin.Context) {
 		}
 		values[key] = normalized
 	}
-	for key, value := range values {
-		if err := model.UpdateOption(key, value); err != nil {
-			gouoFail(c, http.StatusInternalServerError, "settings_save_failed", "保存设置失败")
-			return
-		}
+	if err := model.UpdateOptions(values); err != nil {
+		gouoFail(c, http.StatusInternalServerError, "settings_save_failed", "保存设置失败")
+		return
 	}
 	GetGouoAdminSettings(c)
 }

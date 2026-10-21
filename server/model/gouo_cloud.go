@@ -324,7 +324,8 @@ func ListGouoTasks(userID int, hidden bool, beforeUpdatedAt int64, beforeID stri
 func ListGouoAdminTasks(userID, page, size int) ([]GouoTask, int64, error) {
 	var tasks []GouoTask
 	var count int64
-	query := DB.Model(&GouoTask{}).Where("user_id = ?", userID)
+	// Session 让 Count 和 Find 各自从这个条件重新开始，不会把 Count 留下的状态带进列表查询
+	query := DB.Model(&GouoTask{}).Where("user_id = ?", userID).Session(&gorm.Session{})
 	if err := query.Count(&count).Error; err != nil {
 		return nil, 0, err
 	}
@@ -379,15 +380,6 @@ func ListGouoCollections(userID int, includeHidden bool) ([]GouoFavoriteCollecti
 func CountGouoCollections(userID int) (int64, error) {
 	var count int64
 	err := DB.Model(&GouoFavoriteCollection{}).Where("user_id = ?", userID).Count(&count).Error
-	return count, err
-}
-
-func CountOwnedGouoCollections(userID int, ids []string) (int64, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	var count int64
-	err := DB.Model(&GouoFavoriteCollection{}).Where("user_id = ? AND id IN ? AND hidden_at = 0", userID, ids).Count(&count).Error
 	return count, err
 }
 

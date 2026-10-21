@@ -19,6 +19,8 @@ func TestGouoDocumentRevisionOwnershipAndCursor(t *testing.T) {
 	doc := GouoDocument{ID: "document-a", UserID: 1, Kind: "canvas", ClientID: "project-a", Title: "原稿", Document: datatypes.JSON(`{"schemaVersion":1}`), AssetIDs: datatypes.NewJSONSlice([]string{})}
 	require.NoError(t, SaveGouoDocument(&doc, 0, nil))
 	require.Equal(t, int64(1), doc.Revision)
+	// 图片关系也计入占用空间
+	require.Equal(t, int64(len(doc.Document)+len(doc.Title)+len(`[]`)+len(`null`)), doc.ContentBytes)
 	require.ErrorIs(t, SaveGouoDocument(&doc, 0, nil), ErrGouoDocumentConflict)
 	other, err := GetGouoDocument(2, "canvas", "project-a")
 	require.NoError(t, err)

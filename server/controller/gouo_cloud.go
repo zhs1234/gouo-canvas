@@ -355,15 +355,19 @@ func PutGouoTask(c *gin.Context) {
 		gouoFail(c, http.StatusBadRequest, "output_required", "成功任务至少需要一张输出图片")
 		return
 	}
+	// 查询出错不能报成图片不属于当前用户：客户端收到 asset_not_owned 会清掉本地记录的云端图片映射
 	ownedAssets, err := model.CountOwnedGouoAssets(c.GetInt("id"), assetIDs)
-	if err != nil || ownedAssets != int64(len(assetIDs)) {
+	if err != nil {
+		gouoFail(c, http.StatusInternalServerError, "asset_query_failed", "读取图片失败")
+		return
+	}
+	if ownedAssets != int64(len(assetIDs)) {
 		gouoFail(c, http.StatusForbidden, "asset_not_owned", "任务引用了不属于当前用户的图片")
 		return
 	}
-	collectionIDs := uniqueStrings(input.CollectionIDs)
-	ownedCollections, err := model.CountOwnedGouoCollections(c.GetInt("id"), collectionIDs)
-	if err != nil || ownedCollections != int64(len(collectionIDs)) {
-		gouoFail(c, http.StatusForbidden, "collection_not_owned", "任务引用了无效收藏夹")
+	collectionIDs, err := visibleGouoCollectionIDs(c.GetInt("id"), input.CollectionIDs)
+	if err != nil {
+		gouoFail(c, http.StatusInternalServerError, "collection_query_failed", "读取收藏夹失败")
 		return
 	}
 	now := time.Now().UnixMilli()
@@ -406,6 +410,25 @@ func PutGouoTask(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gouoTaskToResponse(*saved, collectionIDs)})
+}
+
+// 其他设备已删除的收藏夹直接忽略，不能让整个作品保存失败；不属于当前用户的同样忽略
+func visibleGouoCollectionIDs(userID int, ids []string) ([]string, error) {
+	collections, err := model.ListGouoCollections(userID, false)
+	if err != nil {
+		return nil, err
+	}
+	visible := map[string]bool{}
+	for _, collection := range collections {
+		visible[collection.ID] = collection.HiddenAt == 0
+	}
+	result := []string{}
+	for _, id := range uniqueStrings(ids) {
+		if visible[id] {
+			result = append(result, id)
+		}
+	}
+	return result, nil
 }
 
 func uniqueStrings(items []string) []string {
@@ -557,13 +580,27 @@ func PutGouoCollection(c *gin.Context) {
 	}
 	now := time.Now().UnixMilli()
 	collection := model.GouoFavoriteCollection{ID: c.Param("id"), UserID: c.GetInt("id"), Name: input.Name, CreatedAt: now, UpdatedAt: now}
-	if existing, _ := model.GetGouoCollection(c.GetInt("id"), c.Param("id")); existing != nil {
+	// 查询出错不能当作不存在：已有收藏夹会被当成新建，返回错误的创建时间和隐藏状态
+	existing, err := model.GetGouoCollection(c.GetInt("id"), c.Param("id"))
+	if err != nil {
+		gouoFail(c, http.StatusInternalServerError, "collection_query_failed", "读取收藏夹失败")
+		return
+	}
+	if existing != nil {
 		collection.CreatedAt = existing.CreatedAt
 		collection.HiddenAt = existing.HiddenAt
-	} else if count, err := model.CountGouoCollections(c.GetInt("id")); err != nil || count >= gouoMaxCollections {
-		// 收藏夹和收藏关系不计入云端空间，限制数量避免无限写入
-		gouoFail(c, http.StatusBadRequest, "collection_limit", fmt.Sprintf("收藏夹最多 %d 个，请先删除不用的收藏夹", gouoMaxCollections))
-		return
+	} else {
+		count, err := model.CountGouoCollections(c.GetInt("id"))
+		if err != nil {
+			gouoFail(c, http.StatusInternalServerError, "collection_query_failed", "读取收藏夹失败")
+			return
+		}
+		// 收藏夹和收藏关系不计入云端空间，限制数量避免无限写入；
+		// ponytail: 计数不在事务里，并发新建可能略超上限，只防无限写入时够用
+		if count >= gouoMaxCollections {
+			gouoFail(c, http.StatusBadRequest, "collection_limit", fmt.Sprintf("收藏夹最多 %d 个，请先删除不用的收藏夹", gouoMaxCollections))
+			return
+		}
 	}
 	if err := model.UpsertGouoCollection(&collection); err != nil {
 		gouoFail(c, http.StatusInternalServerError, "collection_save_failed", "保存云端收藏夹失败")
@@ -674,21 +711,10 @@ func PatchGouoTaskMeta(c *gin.Context) {
 	}
 	var collectionIDs []string
 	if input.CollectionIDs != nil {
-		// 其他设备已删除的收藏夹直接忽略，不能让整条作品信息保存失败。
-		collections, err := model.ListGouoCollections(c.GetInt("id"), false)
-		if err != nil {
+		var err error
+		if collectionIDs, err = visibleGouoCollectionIDs(c.GetInt("id"), input.CollectionIDs); err != nil {
 			gouoFail(c, http.StatusInternalServerError, "collection_query_failed", "读取收藏夹失败")
 			return
-		}
-		visible := map[string]bool{}
-		for _, collection := range collections {
-			visible[collection.ID] = collection.HiddenAt == 0
-		}
-		collectionIDs = []string{}
-		for _, id := range uniqueStrings(input.CollectionIDs) {
-			if visible[id] {
-				collectionIDs = append(collectionIDs, id)
-			}
 		}
 	}
 	task, err := model.UpdateGouoTaskMeta(c.GetInt("id"), c.Param("clientTaskId"), model.GouoTaskMeta{

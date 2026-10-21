@@ -103,6 +103,12 @@ func TestGouoAdminSettings(t *testing.T) {
 		require.Equal(t, false, res["success"])
 	}
 	require.Equal(t, "国庆活动 全场 8 折", config.GouoNotice)
+
+	// 写库失败时报错，内存里的设置一项都不改
+	require.NoError(t, db.Migrator().DropTable(&model.Option{}))
+	code, _ = put(`{"GouoNotice":"写不进去","GouoMaxImagesPerTask":"2"}`)
+	require.Equal(t, http.StatusInternalServerError, code)
+	require.Equal(t, "国庆活动 全场 8 折", config.GouoNotice)
 }
 
 func TestNormalizeGouoModelPolicySettings(t *testing.T) {

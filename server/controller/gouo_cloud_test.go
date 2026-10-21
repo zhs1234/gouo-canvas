@@ -175,3 +175,32 @@ func TestGouoCollectionCountLimit(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, put("new-one"))
 	require.Equal(t, http.StatusOK, put("c1"))
 }
+
+func TestPutGouoTaskIgnoresHiddenCollections(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.GouoAsset{}, &model.GouoStorageQuota{}, &model.GouoTask{}, &model.GouoTaskAsset{}, &model.GouoDocument{}, &model.GouoFavoriteCollection{}, &model.GouoFavoriteItem{}))
+	oldDB, oldEnabled := model.DB, config.GouoCloudLibraryEnabled
+	model.DB, config.GouoCloudLibraryEnabled = db, true
+	t.Cleanup(func() { model.DB, config.GouoCloudLibraryEnabled = oldDB, oldEnabled })
+	require.NoError(t, db.Create(&model.User{Id: 1, Username: "task-user", AccessToken: "task-token", AffCode: "task-aff"}).Error)
+	require.NoError(t, db.Create(&model.GouoFavoriteCollection{ID: "kept", UserID: 1, Name: "保留"}).Error)
+	require.NoError(t, db.Create(&model.GouoFavoriteCollection{ID: "deleted", UserID: 1, Name: "已删除", HiddenAt: 1}).Error)
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("id", 1) })
+	router.PUT("/tasks/:clientTaskId", PutGouoTask)
+	// 其他设备已删除收藏夹、这台设备还没刷新时，作品照常保存，只忽略已删除的收藏夹
+	body := `{"schema_version":1,"status":"error","operation":"generation","params":{},"result_meta":{},"collection_ids":["kept","deleted","other-user"]}`
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/tasks/task-1", strings.NewReader(body)))
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	var saved struct {
+		Data struct {
+			FavoriteCollectionIDs []string `json:"favorite_collection_ids"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &saved))
+	require.Equal(t, []string{"kept"}, saved.Data.FavoriteCollectionIDs)
+}
