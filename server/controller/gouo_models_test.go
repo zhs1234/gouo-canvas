@@ -476,3 +476,39 @@ func TestGouoAdminAgentPriceKeepsBilling(t *testing.T) {
 		require.False(t, model.GouoAgentListed(stored.ToResponse()))
 	}
 }
+
+func TestGouoAdminModelSaveKeepsFallbackPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Price{}, &model.ModelInfo{}, &model.Channel{}))
+	oldDB, oldPricing := model.DB, model.PricingInstance
+	oldGroups := model.GlobalUserGroupRatio.UserGroup
+	model.DB = db
+	model.PricingInstance = &model.Pricing{Prices: map[string]*model.Price{}}
+	model.GlobalUserGroupRatio.UserGroup = map[string]*model.UserGroup{"default": {Symbol: "default", Ratio: 1}}
+	t.Cleanup(func() {
+		model.DB, model.PricingInstance = oldDB, oldPricing
+		model.GlobalUserGroupRatio.UserGroup = oldGroups
+	})
+	require.NoError(t, db.Create(&model.Channel{Name: "上游", Status: 1, Models: "image-new,chat-new", Group: "default"}).Error)
+	require.NoError(t, db.Create(&model.ModelInfo{Model: "chat-new", OutputModalities: `["text"]`, Tags: `["tools"]`}).Error)
+	require.NoError(t, model.PricingInstance.Init())
+
+	router := gin.New()
+	router.PUT("/models", UpdateGouoAdminModel)
+	router.PUT("/agent-models", UpdateGouoAdminAgentModel)
+	put := func(path, body string) {
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest("PUT", path, strings.NewReader(body)))
+		require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	}
+	// 没有价格记录的模型保存光构设置后，其他接口仍按默认价计费，不能变成 0
+	put("/models", `{"model":"image-new","gouo_enabled":false,"name":"新图片"}`)
+	put("/agent-models", `{"model":"chat-new","gouo_sort":3}`)
+	for _, id := range []string{"image-new", "chat-new"} {
+		price := model.PricingInstance.GetPrice(id)
+		require.Equal(t, model.DefaultPrice, price.Input, id)
+		require.Equal(t, model.DefaultPrice, price.Output, id)
+	}
+}
