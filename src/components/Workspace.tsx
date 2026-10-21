@@ -221,12 +221,18 @@ export default function Workspace() {
     const state = useStore.getState()
     state.setFilterFavorite(favorite)
     state.setSearchQuery('')
-    state.setFilterStatus('all')
+    // 用户中心的“回收站”入口带上筛选，直接打开作品页的回收站
+    state.setFilterStatus((location.state as { filter?: 'hidden' } | null)?.filter ?? 'all')
   }, [favorite, location.key])
   useEffect(() => {
     const openCreation = () => navigate('/generate', { state: { mode: 'generate' } })
+    const openTrash = () => navigate('/works', { state: { filter: 'hidden' } })
     window.addEventListener('gouo:open-creation', openCreation)
-    return () => window.removeEventListener('gouo:open-creation', openCreation)
+    window.addEventListener('gouo:open-trash', openTrash)
+    return () => {
+      window.removeEventListener('gouo:open-creation', openCreation)
+      window.removeEventListener('gouo:open-trash', openTrash)
+    }
   }, [navigate])
   useEffect(() => {
     let active = true
