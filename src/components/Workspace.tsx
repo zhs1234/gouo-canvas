@@ -94,11 +94,12 @@ function GenerateWorkspace({ mode, setMode }: { mode: string; setMode: (mode: st
   const [agentProjectId, setAgentProjectId] = useState<string>()
   const [conversationId, setConversationId] = useState<string>()
   const rememberConversation = useCallback((id: string) => setConversationId((current) => current || id), [])
+  // 默认进入 Agent；复用配置、编辑输出、填入提示词等把内容填进生成图片输入框的跳转带上 mode，停在生成图片
   useLayoutEffect(() => {
-    setMode('generate')
+    setMode((location.state as { mode?: string } | null)?.mode ?? 'agent')
     window.scrollTo(0, 0)
   }, [location.key, setMode])
-  // 后台关闭了当前模式时回到生成图片
+  // 后台关闭了当前模式（含默认的 Agent）时回到生成图片
   const modeIds = creationModes.map((item) => item.id).join()
   useEffect(() => {
     if (!modeIds.split(',').includes(mode)) setMode('generate')
@@ -223,7 +224,7 @@ export default function Workspace() {
     state.setFilterStatus('all')
   }, [favorite, location.key])
   useEffect(() => {
-    const openCreation = () => navigate('/generate')
+    const openCreation = () => navigate('/generate', { state: { mode: 'generate' } })
     window.addEventListener('gouo:open-creation', openCreation)
     return () => window.removeEventListener('gouo:open-creation', openCreation)
   }, [navigate])
@@ -265,7 +266,7 @@ export default function Workspace() {
       <Route path="/works" element={<WorksWorkspace />} />
       <Route path="/favorites" element={<FavoritesWorkspace />} />
       <Route path="/topup" element={<TopupRoute />} />
-      <Route path="/inspiration" element={<InspirationLibraryPage onApply={() => navigate('/generate')} />} />
+      <Route path="/inspiration" element={<InspirationLibraryPage onApply={() => navigate('/generate', { state: { mode: 'generate' } })} />} />
       {canvasEnabled && <Route path="/canvas/:id?" element={<CanvasRoute />} />}
       {agentEnabled && <Route path="/agent/:id?" element={<AgentRoute />} />}
       <Route path="*" element={<NotFoundPage />} />
