@@ -30,7 +30,7 @@ var GouoAgentEnabled = true
 var GouoAgentDefaultModel = ""
 var GouoAgentSystemPrompt = ""
 
-// 内置的网站使用说明，Agent 回答用户关于本站使用方法的问题时参考；后台可修改，清空后不再附带
+// 内置的网站使用说明，用户问到本站用法时 Agent 通过 read_site_guide 工具按需读取；后台可修改，清空后不再提供
 var GouoAgentSiteGuide = DefaultGouoAgentSiteGuide
 
 const DefaultGouoAgentSiteGuide = `- 创作页顶部切换 Agent、生成图片、画布三种方式；运营方可能关闭画布或 Agent。

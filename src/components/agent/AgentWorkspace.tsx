@@ -26,6 +26,7 @@ const toolLabels: Record<string, string> = {
   select_reference: '选择参考图',
   activate_skill: '启用技能',
   read_skill_file: '读取技能资料',
+  read_site_guide: '查看使用说明',
 }
 
 // gallery 为点开大图时可左右切换的图片；只在会话消息里传，输入框附件和参考图选择器里不可点开

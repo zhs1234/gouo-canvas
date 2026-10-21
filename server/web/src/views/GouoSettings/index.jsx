@@ -265,7 +265,7 @@ export default function GouoSettings() {
           minRows={6}
           {...field('GouoAgentSiteGuide')}
           inputProps={{ maxLength: 8000 }}
-          helperText="Agent 回答用户关于本站使用方法的问题时参考，最多 8000 字；内容以界面实际为准，功能或入口变化后请同步修改。清空后不再附带。在新的一轮对话中生效。"
+          helperText="用户问到本站怎么用时，Agent 按需读取这份说明再回答，不随每次对话发送；最多 8000 字。功能或入口变化后请同步修改。清空后 Agent 不再提供这项查询。在新的一轮对话中生效。"
         />
         <Box>
           <Button size="small" disabled={!siteGuideDefault || values.GouoAgentSiteGuide === siteGuideDefault} onClick={() => setValues({ ...values, GouoAgentSiteGuide: siteGuideDefault })}>

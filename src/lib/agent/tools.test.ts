@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   models: vi.fn(),
   listeners: new Set<(state: { confirmDialog: unknown }) => void>(),
   skills: [] as Skill[],
+  siteGuide: '',
 }))
 vi.mock('../../store', () => ({
   useStore: {
@@ -31,6 +32,7 @@ vi.mock('../gouoBackend', () => ({ getImageModels: mocks.models, getMaxTaskImage
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))
+vi.mock('./api', async (importOriginal) => ({ ...await importOriginal<typeof import('./api')>(), getSiteGuide: () => mocks.siteGuide }))
 vi.mock('../skills/catalog', async (importOriginal) => ({ ...await importOriginal<typeof import('../skills/catalog')>(), listAgentSkills: () => mocks.skills, MAX_ACTIVE_SKILLS: 2 }))
 
 import { SKILL_CATALOG_LIMIT } from '../skills/catalog'
@@ -44,6 +46,7 @@ const run = (name: string, args: unknown, item = conversation) => executeAgentTo
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.siteGuide = ''
   mocks.tasks = []
   mocks.dialog = null
   mocks.projects = [{ id: 'canvas', nodes: [{ id: 'canvas-image', type: 'image', title: '参考图', position: { x: 0, y: 0 }, width: 100, height: 100, metadata: { imageId: 'canvas-reference' } }] }]
@@ -315,5 +318,14 @@ describe('Agent skill 工具', () => {
     expect(rest.content).toHaveLength(5_000)
     expect(rest.nextOffset).toBeUndefined()
     await expect(run('read_skill_file', { name: 'a', path: '../SKILL.md' })).rejects.toThrow('没有参考文件')
+  })
+})
+
+describe('网站使用说明工具', () => {
+  it('后台有说明时才提供 read_site_guide，调用后返回说明全文', async () => {
+    expect(getAgentToolDefinitions([]).some((tool) => tool.function.name === 'read_site_guide')).toBe(false)
+    mocks.siteGuide = '在用户中心输入兑换码充值'
+    expect(getAgentToolDefinitions([]).some((tool) => tool.function.name === 'read_site_guide')).toBe(true)
+    expect(JSON.parse((await run('read_site_guide', {})).result)).toEqual({ guide: '在用户中心输入兑换码充值' })
   })
 })
