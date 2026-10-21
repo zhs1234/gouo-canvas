@@ -216,7 +216,7 @@ body { background: var(--ws-bg); color: var(--ws-text); }
   .page-skeleton { padding: 12px 16px 40px; }
   .page-skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 }
-@media (max-width: 359px) {
+@media (max-width: 379px) {
   .workspace-header-logo span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .page-skeleton > span, .page-skeleton-grid > span { animation: none; } }
