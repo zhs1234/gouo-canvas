@@ -167,7 +167,7 @@ export default function GouoSettings() {
           minRows={2}
           {...field('GouoSupportContact')}
           inputProps={{ maxLength: 2000 }}
-          helperText="在用户中心的“充值与账务帮助”展示，用户可复制。文字里的 http(s) 网址可直接点击；单独一行的图片网址（如微信、群二维码）显示为图片。"
+          helperText="在用户中心充值页的「联系客服」展示，每行填一条联系方式（如 QQ、微信、客服网址），会分开显示。网址可直接点击；单独一行的图片网址（如微信、群二维码）显示为图片。"
         />
         <TextField
           label="购买兑换码链接"
