@@ -114,6 +114,20 @@ func TestPurgeGouoTrashRemovesOrphanAssetsWithoutTrash(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+func TestGouoOrphanAssetUsersSkipsAssetsOnlyInDocuments(t *testing.T) {
+	setupGouoCloudTestDB(t)
+	old := time.Now().Add(-GouoTrashRetention() - time.Hour).UnixMilli()
+	for userID, id := range map[int]string{1: "in-document", 2: "orphan"} {
+		require.NoError(t, DB.Create(&GouoAsset{ID: id, UserID: userID, SHA256: id, StoragePath: id, MimeType: "image/png", FileSize: 1, CreatedAt: old, UpdatedAt: old}).Error)
+	}
+	require.NoError(t, DB.Create(&GouoDocument{ID: "doc", UserID: 1, Kind: "canvases", ClientID: "doc", Document: datatypes.JSON(`{}`), AssetIDs: datatypes.NewJSONSlice([]string{"in-document"})}).Error)
+
+	// 用户 1 的旧图片只被文档引用，清理也删不掉，不必每次都整套扫描
+	users, err := gouoOrphanAssetUsers(time.Now().Add(-GouoTrashRetention()).UnixMilli())
+	require.NoError(t, err)
+	require.Equal(t, []int{2}, users)
+}
+
 func TestPurgeGouoTrashKeepsReuploadedAsset(t *testing.T) {
 	setupGouoCloudTestDB(t)
 	oldDir := config.GouoAssetDir
