@@ -95,6 +95,7 @@ export default function AgentModels() {
   );
   // 按次计费的模型两个价格都留空时保持按次计费，只保存其他字段
   const keepTimes = editing && editing.times_points !== null && editing.input_points === '' && editing.output_points === '';
+  const cachedTooHigh = !keepTimes && editing?.cached_points !== '' && Number(editing?.cached_points) > Number(editing?.input_points);
   const valid =
     editing &&
     (keepTimes || (validPoints(editing.input_points) && validPoints(editing.output_points))) &&
@@ -104,8 +105,7 @@ export default function AgentModels() {
     editing.name.trim().length <= 40 &&
     editing.description.trim().length <= 100 &&
     Number.isInteger(Number(editing.gouo_sort || 0)) &&
-    (editing.cached_points === '' ||
-      (validPoints(editing.cached_points) && (keepTimes || Number(editing.cached_points) <= Number(editing.input_points))));
+    (editing.cached_points === '' || (validPoints(editing.cached_points) && !cachedTooHigh));
 
   return (
     <Box>
@@ -253,6 +253,7 @@ export default function AgentModels() {
                             row.priced && row.price_type !== 'times'
                               ? [row.input_points, row.output_points].map((value) => Number(Number(value).toPrecision(12)))
                               : null;
+                          const cached = row.cached_points == null ? '' : Number(Number(row.cached_points).toPrecision(12));
                           setEditing({
                             model: row.model,
                             listed: row.listed,
@@ -264,8 +265,8 @@ export default function AgentModels() {
                             times_points: row.price_type === 'times' ? row.input_points : null,
                             input_points: points ? points[0] : '',
                             output_points: points ? points[1] : '',
-                            cached_points: row.cached_points == null ? '' : Number(Number(row.cached_points).toPrecision(12)),
-                            initial_cached: row.cached_points == null ? '' : Number(Number(row.cached_points).toPrecision(12)),
+                            cached_points: cached,
+                            initial_cached: cached,
                             // 记下打开时的价格：没改价格就不提交，后端只在填写价格时才锁定，免得上游同步的价格被锁住
                             initial_points: points,
                             // 排序和回复上限也只在改动时提交，都没改时后端不重写价格记录
@@ -411,9 +412,9 @@ export default function AgentModels() {
                   value={editing.cached_points}
                   onChange={(event) => setEditing({ ...editing, cached_points: event.target.value })}
                   inputProps={{ min: 0, max: 1e7, step: 'any' }}
-                  error={editing.cached_points !== '' && Number(editing.cached_points) > Number(editing.input_points) && !keepTimes}
+                  error={cachedTooHigh}
                   helperText={
-                    editing.cached_points !== '' && Number(editing.cached_points) > Number(editing.input_points) && !keepTimes
+                    cachedTooHigh
                       ? '不能高于输入价格'
                       : editing.cached_points !== ''
                         ? formatPointsMoney(editing.cached_points)
