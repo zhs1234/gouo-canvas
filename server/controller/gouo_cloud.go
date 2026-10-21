@@ -580,13 +580,27 @@ func PutGouoCollection(c *gin.Context) {
 	}
 	now := time.Now().UnixMilli()
 	collection := model.GouoFavoriteCollection{ID: c.Param("id"), UserID: c.GetInt("id"), Name: input.Name, CreatedAt: now, UpdatedAt: now}
-	if existing, _ := model.GetGouoCollection(c.GetInt("id"), c.Param("id")); existing != nil {
+	// 查询出错不能当作不存在：已有收藏夹会被当成新建，返回错误的创建时间和隐藏状态
+	existing, err := model.GetGouoCollection(c.GetInt("id"), c.Param("id"))
+	if err != nil {
+		gouoFail(c, http.StatusInternalServerError, "collection_query_failed", "读取收藏夹失败")
+		return
+	}
+	if existing != nil {
 		collection.CreatedAt = existing.CreatedAt
 		collection.HiddenAt = existing.HiddenAt
-	} else if count, err := model.CountGouoCollections(c.GetInt("id")); err != nil || count >= gouoMaxCollections {
-		// 收藏夹和收藏关系不计入云端空间，限制数量避免无限写入
-		gouoFail(c, http.StatusBadRequest, "collection_limit", fmt.Sprintf("收藏夹最多 %d 个，请先删除不用的收藏夹", gouoMaxCollections))
-		return
+	} else {
+		count, err := model.CountGouoCollections(c.GetInt("id"))
+		if err != nil {
+			gouoFail(c, http.StatusInternalServerError, "collection_query_failed", "读取收藏夹失败")
+			return
+		}
+		// 收藏夹和收藏关系不计入云端空间，限制数量避免无限写入；
+		// ponytail: 计数不在事务里，并发新建可能略超上限，只防无限写入时够用
+		if count >= gouoMaxCollections {
+			gouoFail(c, http.StatusBadRequest, "collection_limit", fmt.Sprintf("收藏夹最多 %d 个，请先删除不用的收藏夹", gouoMaxCollections))
+			return
+		}
 	}
 	if err := model.UpsertGouoCollection(&collection); err != nil {
 		gouoFail(c, http.StatusInternalServerError, "collection_save_failed", "保存云端收藏夹失败")
