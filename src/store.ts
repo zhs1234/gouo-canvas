@@ -1219,7 +1219,16 @@ export function executeTask(taskId: string, recoverOnly = false) {
   // 执行期间持有任务锁，其他标签页启动时据此判断任务仍在执行
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
   if (!locks) return runTask(taskId, recoverOnly)
-  return locks.request(TASK_LOCK_PREFIX + taskId, { ifAvailable: true }, () => runTask(taskId, recoverOnly))
+  // 拿不到锁也照常执行：看门狗超时后本页旧的执行仍持有锁，取回结果要能继续；本页内的新旧执行由 taskExecutions 区分
+  return locks.request(TASK_LOCK_PREFIX + taskId, { ifAvailable: true }, async () => {
+    try {
+      await runTask(taskId, recoverOnly)
+    } finally {
+      // 最后一次状态更新的写库没有等待；释放锁前写完，等锁的标签页才不会读到旧的 running 记录并标成中断
+      const task = useStore.getState().tasks.find((item) => item.id === taskId)
+      if (task) await dbPutTask(task).catch((err) => console.warn('保存任务失败', err))
+    }
+  })
 }
 
 async function runTask(taskId: string, recoverOnly: boolean) {
