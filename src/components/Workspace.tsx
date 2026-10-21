@@ -34,7 +34,7 @@ function useCreationFeatures() {
   const status = useBackendStatus()
   const canvasEnabled = canvasBuildEnabled && status?.gouo_canvas_enabled !== false
   const agentEnabled = agentBuildEnabled && status?.gouo_agent_enabled !== false
-  const creationModes = [{ id: 'generate', label: '生成图片', enabled: true }, { id: 'canvas', label: '画布', enabled: canvasEnabled }, { id: 'agent', label: 'Agent', enabled: agentEnabled }].filter((item) => item.enabled)
+  const creationModes = [{ id: 'agent', label: 'Agent', enabled: agentEnabled }, { id: 'generate', label: '生成图片', enabled: true }, { id: 'canvas', label: '画布', enabled: canvasEnabled }].filter((item) => item.enabled)
   return { canvasEnabled, agentEnabled, creationModes }
 }
 const NOTICE_DISMISSED_KEY = 'gouo-canvas.notice-dismissed'
