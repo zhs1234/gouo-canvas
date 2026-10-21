@@ -382,15 +382,6 @@ func CountGouoCollections(userID int) (int64, error) {
 	return count, err
 }
 
-func CountOwnedGouoCollections(userID int, ids []string) (int64, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	var count int64
-	err := DB.Model(&GouoFavoriteCollection{}).Where("user_id = ? AND id IN ? AND hidden_at = 0", userID, ids).Count(&count).Error
-	return count, err
-}
-
 func GetGouoCollection(userID int, id string) (*GouoFavoriteCollection, error) {
 	var collection GouoFavoriteCollection
 	err := DB.Where("user_id = ? AND id = ?", userID, id).First(&collection).Error
