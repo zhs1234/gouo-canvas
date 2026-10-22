@@ -1,13 +1,8 @@
-import type { TaskParams } from '../types'
+import type { TaskParams, TaskRecord } from '../types'
 import { loadImage } from './canvasImage'
 
 export const GREEN_KEY_COLOR = '#00FF00'
 export const MAGENTA_KEY_COLOR = '#FF00FF'
-
-interface TransparentOutputMeta {
-  transparentOutput: true
-  effectivePrompt: string
-}
 
 const KEY_COLOR_RGB = {
   [GREEN_KEY_COLOR]: { r: 0, g: 255, b: 0 },
@@ -35,11 +30,13 @@ export function getTransparentRequestParams(params: TaskParams): TaskParams {
   }
 }
 
-export function createTransparentOutputMeta(prompt: string): TransparentOutputMeta {
-  return {
-    transparentOutput: true,
-    effectivePrompt: buildTransparentPrompt(prompt),
-  }
+// 模型原生支持透明背景时直接请求透明输出（PNG 或 WebP），不追加纯色背景提示词、不做客户端抠图；
+// 否则只有 PNG 能用纯色背景提示词加客户端抠图，其他格式关闭透明背景
+export function getTransparentTaskFields(params: TaskParams, prompt: string, native: boolean): Pick<TaskRecord, 'params' | 'transparentOutput' | 'transparentPrompt' | 'nativeTransparent'> {
+  if (!params.transparent_output) return { params }
+  if (native && params.output_format !== 'jpeg') return { params, nativeTransparent: true }
+  if (params.output_format !== 'png') return { params: { ...params, transparent_output: false } }
+  return { params: getTransparentRequestParams(params), transparentOutput: true, transparentPrompt: buildTransparentPrompt(prompt) }
 }
 
 export async function removeKeyedBackgroundFromDataUrl(dataUrl: string, keyColor?: string): Promise<string> {

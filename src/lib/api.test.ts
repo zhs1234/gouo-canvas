@@ -26,6 +26,30 @@ describe('callImageApi', () => {
     expect(fetchMock.mock.calls[3][1]?.headers).toMatchObject({ Authorization: 'Bearer new-token' })
   })
 
+  it('sends background transparent only when the task uses native transparency', async () => {
+    const dataUrlToBlob = vi.spyOn(await import('./canvasImage'), 'dataUrlToBlob').mockResolvedValue(new Blob(['reference'], { type: 'image/png' }))
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, data: 'token' }), { status: 200 }))
+      .mockImplementation(async () => new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 }))
+    const { createBackendSettings } = await import('./gouoBackend')
+    await createBackendSettings(true)
+    const params = { ...DEFAULT_PARAMS, output_format: 'webp' as const, transparent_output: true, quality: 'xhigh' as const }
+    await callImageApi({ model: 'image-native', prompt: '贴纸', params, inputImageDataUrls: [], background: 'transparent' })
+    await callImageApi({ model: 'image-native', prompt: '贴纸', params, inputImageDataUrls: ['reference-url'], background: 'transparent' })
+    await callImageApi({ model: 'image-keyed', prompt: '贴纸', params: { ...DEFAULT_PARAMS, transparent_output: true }, inputImageDataUrls: [] })
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]!.body))).toMatchObject({ prompt: '贴纸', background: 'transparent', output_format: 'webp', quality: 'xhigh' })
+    const form = fetchMock.mock.calls[2][1]!.body as FormData
+    expect(form.get('background')).toBe('transparent')
+    expect(form.get('output_format')).toBe('webp')
+    expect(dataUrlToBlob).toHaveBeenCalledWith('reference-url')
+    const keyed = JSON.parse(String(fetchMock.mock.calls[3][1]!.body))
+    expect(keyed).not.toHaveProperty('background')
+    // 不发送上游不支持的参数
+    for (const body of [JSON.parse(String(fetchMock.mock.calls[1][1]!.body)), keyed]) {
+      for (const key of ['input_fidelity', 'response_format', 'style', 'transparent_output']) expect(body).not.toHaveProperty(key)
+    }
+  })
+
   it('starts product image requests concurrently with separate IDs and unchanged quality', async () => {
     const requests: Array<{ init: RequestInit; resolve: (response: Response) => void }> = []
     vi.spyOn(globalThis, 'fetch')

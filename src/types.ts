@@ -79,6 +79,8 @@ export interface TaskRecord {
   transparentOutput?: boolean
   /** 实际发送给 API 的透明背景辅助提示词 */
   transparentPrompt?: string
+  /** 透明背景由模型原生生成（请求带 background: transparent），没有提示词追加和客户端抠图 */
+  nativeTransparent?: boolean
   /** 透明背景后处理前的原始输出图片 id，顺序对应 outputImages */
   transparentOriginalImages?: string[]
   /** 输入图片的 image store id 列表 */

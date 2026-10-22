@@ -40,7 +40,7 @@ import { addTaskReferencedImageIds } from './lib/taskImages'
 import { callImageApi } from './lib/api'
 import { showBrowserNotification } from './lib/browserNotification'
 import { normalizeTaskParams } from './lib/paramCompatibility'
-import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
+import { getTransparentTaskFields, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl } from './lib/dataUrl'
 import { readReferenceImageFile } from './lib/inputValidation'
 import { getCachedBackendStatus, getImageModelQuote, getImagePrice, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
@@ -1276,6 +1276,7 @@ async function runTask(taskId: string, recoverOnly: boolean) {
       model: task.apiModel || settings.model,
       prompt: replaceImageMentionsForApi(requestPrompt, inputDataUrls.length),
       params: task.params,
+      ...(task.nativeTransparent ? { background: 'transparent' as const } : {}),
       inputImageDataUrls: inputDataUrls,
       maskDataUrl,
       gouoPriceVersion: task.gouoPriceVersion,
@@ -1610,14 +1611,9 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
     })
     return
   }
-  const normalizedParams = normalizeTaskParams(task.params)
-  const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
-  const taskParams = shouldUseTransparentOutput
-    ? getTransparentRequestParams(normalizedParams)
-    : { ...normalizedParams, transparent_output: false }
-  const transparentMeta = taskParams.transparent_output
-    ? createTransparentOutputMeta(task.prompt.trim())
-    : null
+  // 沿用原任务的透明背景方式；原任务用原生透明但模型已不支持时改用客户端抠图
+  const transparent = getTransparentTaskFields(normalizeTaskParams(task.params), task.prompt.trim(), Boolean(task.nativeTransparent && quote.transparent))
+  const taskParams = transparent.params
   const taskId = crypto.randomUUID()
   const newTask: TaskRecord = {
     id: taskId,
@@ -1631,8 +1627,9 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
     inputImageIds: [...task.inputImageIds],
     maskTargetImageId: task.maskTargetImageId ?? null,
     maskImageId: task.maskImageId ?? null,
-    transparentOutput: transparentMeta?.transparentOutput,
-    transparentPrompt: transparentMeta?.effectivePrompt,
+    transparentOutput: transparent.transparentOutput,
+    transparentPrompt: transparent.transparentPrompt,
+    nativeTransparent: transparent.nativeTransparent,
     outputImages: [],
     status: 'running',
     error: null,

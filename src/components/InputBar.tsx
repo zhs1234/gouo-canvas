@@ -473,7 +473,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   }, [backendModel, params.size, setParams])
   const moderationDisabled = !backendStatus?.gouo_allow_low_moderation
   const transparentOutputAvailable = true
-  const showTransparentOutputControl = transparentOutputAvailable && params.output_format === 'png'
+  // 原生透明背景支持 PNG 和 WebP：WebP 下只在已开启透明时显示开关（关掉后恢复压缩率）；客户端抠图只支持 PNG
+  const transparentNative = Boolean(backendModel?.transparent)
+  const showTransparentOutputControl = transparentOutputAvailable && (params.output_format === 'png' || (transparentNative && params.output_format === 'webp' && params.transparent_output))
   const transparentOutputEnabled = transparentOutputAvailable && showTransparentOutputControl && params.transparent_output
   const compressionDisabled = params.output_format === 'png'
   const outputImageLimit = getMaxTaskImages()
@@ -1556,6 +1558,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       qualityOptions={qualityOptions}
       selectClass={selectClass}
       transparentOutputAvailable={transparentOutputAvailable}
+      transparentNative={transparentNative}
       showTransparentOutputControl={showTransparentOutputControl}
       transparentOutputEnabled={transparentOutputEnabled}
       transparentOutputHint={transparentOutputHint}

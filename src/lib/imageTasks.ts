@@ -6,7 +6,7 @@ import { orderInputImagesForMask } from './mask'
 import { validateMaskMatchesImage } from './canvasImage'
 import { getCurrentUser, getImageModelQuote, getImagePrice, getMaxTaskImages } from './gouoBackend'
 import { getChangedParams, normalizeTaskParams } from './paramCompatibility'
-import { getTransparentRequestParams, createTransparentOutputMeta } from './transparentImage'
+import { getTransparentTaskFields } from './transparentImage'
 import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
 import { isStorageScopeCurrent } from './storageScope'
 import { formatPoints } from './accountUsage'
@@ -148,14 +148,8 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       await storeImage(img.dataUrl)
     }
 
-    const normalizedParams = normalizeTaskParams(params)
-    const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
-    const taskParams = shouldUseTransparentOutput
-      ? getTransparentRequestParams(normalizedParams)
-      : { ...normalizedParams, transparent_output: false }
-    const transparentMeta = taskParams.transparent_output
-      ? createTransparentOutputMeta(prompt.trim())
-      : null
+    const transparent = getTransparentTaskFields(normalizeTaskParams(params), prompt.trim(), Boolean(quote.transparent))
+    const taskParams = transparent.params
     const normalizedParamPatch = getChangedParams(params, taskParams)
     if (!input && useStore.getState().params === params && Object.keys(normalizedParamPatch).length) {
       useStore.getState().setParams(normalizedParamPatch)
@@ -174,8 +168,9 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       inputImageIds: orderedInputImages.map((i) => i.id),
       maskTargetImageId,
       maskImageId,
-      transparentOutput: transparentMeta?.transparentOutput,
-      transparentPrompt: transparentMeta?.effectivePrompt,
+      transparentOutput: transparent.transparentOutput,
+      transparentPrompt: transparent.transparentPrompt,
+      nativeTransparent: transparent.nativeTransparent,
       outputImages: [],
       status: 'running',
       error: null,

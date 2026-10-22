@@ -86,23 +86,12 @@ vi.mock('./lib/api', () => ({
     revisedPrompts: [],
   })),
 }))
-vi.mock('./lib/transparentImage', () => ({
-  GREEN_KEY_COLOR: '#00FF00',
-  MAGENTA_KEY_COLOR: '#FF00FF',
-  createTransparentOutputMeta: vi.fn((prompt: string) => ({
-    transparentOutput: true,
-    effectivePrompt: `transparent:${prompt}`,
-  })),
-  getTransparentRequestParams: vi.fn((params: typeof DEFAULT_PARAMS) => ({
-    ...params,
-    output_format: 'png',
-    output_compression: null,
-    transparent_output: true,
-  })),
+vi.mock('./lib/transparentImage', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./lib/transparentImage')>(),
   removeKeyedBackgroundFromDataUrl: vi.fn(async (dataUrl: string) => `transparent:${dataUrl}`),
 }))
 import { clearImages, clearTasks, getAllTasks, getImage, importTaskData, putImage, putTask as putDbTask } from './lib/db'
-import { removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
+import { buildTransparentPrompt, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { refreshBackendStatus } from './lib/gouoBackend'
 import { clearFailedTasks, deleteFavoriteCollection, editOutputs, getErrorToastMessage, getPersistedState, importData, initStore, markInterruptedOpenAIRunningTasks, retryTask, reuseConfig, submitTask, taskMatchesFilterStatus, taskMatchesSearchQuery, toggleTaskFavorite, useStore } from './store'
 
@@ -112,7 +101,7 @@ const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
 const models = [
   { id: 'image-a', name: '图片 A', price_cny: 0.1, price_version: 'quote-a', reference: true, mask: true, max_outputs: 2, quota: 100, sizes: ['1K', '2K', '4K'] },
   { id: 'image-b', name: '图片 B', price_cny: 0.3, price_version: 'quote-b', reference: false, mask: false, max_outputs: 1, quota: 300, sizes: ['1K', '2K', '4K'] },
-  { id: 'image-c', name: '图片 C', price_cny: 0.1, price_version: 'quote-c', reference: true, mask: true, max_outputs: 1, quota: 100, sizes: ['1K', '2K', '4K'], qualities: ['low', 'medium', 'high', 'xhigh'], tier_ratios: { '2K': 2 }, quality_ratios: { xhigh: 3 } },
+  { id: 'image-c', name: '图片 C', price_cny: 0.1, price_version: 'quote-c', reference: true, mask: true, max_outputs: 1, quota: 100, sizes: ['1K', '2K', '4K'], qualities: ['low', 'medium', 'high', 'xhigh'], tier_ratios: { '2K': 2 }, quality_ratios: { xhigh: 3 }, transparent: true },
 ]
 
 // 后端令牌、模型目录和账号信息都返回同一份模型目录；账号信息里没有余额时由服务端判断
@@ -148,6 +137,33 @@ describe('product model task snapshots', () => {
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
   })
 
+  it('requests native transparent output without the keying prompt or post-processing', async () => {
+    const { callImageApi } = await import('./lib/api')
+    vi.mocked(removeKeyedBackgroundFromDataUrl).mockClear()
+    vi.mocked(callImageApi).mockResolvedValueOnce({ images: ['data:image/webp;base64,generated'], actualParams: {}, actualParamsList: [], revisedPrompts: [] })
+    useStore.getState().setSettings({ model: 'image-c', gouoPriceVersion: 'quote-c' })
+    useStore.setState({ params: { ...DEFAULT_PARAMS, output_format: 'webp', output_compression: 80, transparent_output: true } })
+    await submitTask()
+    await vi.waitFor(() => expect(useStore.getState().tasks[0].status).toBe('done'))
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ prompt: '图片', background: 'transparent', params: { output_format: 'webp', output_compression: 80, transparent_output: true } })
+    expect(removeKeyedBackgroundFromDataUrl).not.toHaveBeenCalled()
+    const [created] = useStore.getState().tasks
+    expect(created).toMatchObject({ nativeTransparent: true, outputImages: [expect.any(String)] })
+    expect(created.transparentOutput).toBeUndefined()
+    expect(created.transparentPrompt).toBeUndefined()
+    expect(created.transparentOriginalImages).toBeUndefined()
+  })
+
+  it('keeps client-side keying for models without native transparency', async () => {
+    useStore.setState({ params: { ...DEFAULT_PARAMS, transparent_output: true } })
+    await submitTask()
+    const { callImageApi } = await import('./lib/api')
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).not.toHaveProperty('background')
+    expect(vi.mocked(callImageApi).mock.calls[0][0].prompt).toBe(buildTransparentPrompt('图片'))
+    expect(useStore.getState().tasks[0]).toMatchObject({ transparentOutput: true })
+    expect(useStore.getState().tasks[0].nativeTransparent).toBeUndefined()
+  })
+
   it('prices tasks and retries by size tier and quality ratios', async () => {
     useStore.getState().setSettings({ model: 'image-c', gouoPriceVersion: 'quote-c' })
     useStore.setState({ params: { ...DEFAULT_PARAMS, size: '2048x2048', quality: 'xhigh', n: 2 } })
@@ -158,6 +174,18 @@ describe('product model task snapshots', () => {
     await retryTask({ ...created, status: 'error' })
     const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
     expect(confirmation?.message).toContain('全部成功预计扣费 120 积分')
+  })
+
+  it('retries with the transparent method the original task used', async () => {
+    const { callImageApi } = await import('./lib/api')
+    const params = { ...DEFAULT_PARAMS, transparent_output: true }
+    await retryTask(task({ apiModel: 'image-c', gouoPriceVersion: 'quote-c', params, nativeTransparent: true, status: 'error' }), true)
+    expect(useStore.getState().tasks[0]).toMatchObject({ nativeTransparent: true })
+    expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ prompt: 'prompt', background: 'transparent' })
+    // 旧任务用客户端抠图，换到支持原生透明的模型重试仍沿用抠图
+    await retryTask(task({ id: 'task-b', apiModel: 'image-c', gouoPriceVersion: 'quote-c', params, transparentOutput: true, status: 'error' }), true)
+    expect(useStore.getState().tasks[0]).toMatchObject({ transparentOutput: true, transparentPrompt: buildTransparentPrompt('prompt') })
+    expect(vi.mocked(callImageApi).mock.calls[1][0]).not.toHaveProperty('background')
   })
 
   it('refuses prompts longer than the server limit before creating a task', async () => {
@@ -741,7 +769,7 @@ describe('mask draft lifecycle in store actions', () => {
     }
 
     expect(callImageApi).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: 'transparent:单主体贴纸素材',
+      prompt: buildTransparentPrompt('单主体贴纸素材'),
       params: expect.objectContaining({
         output_format: 'png',
         output_compression: null,
@@ -753,7 +781,7 @@ describe('mask draft lifecycle in store actions', () => {
     expect(task).toMatchObject({
       prompt: '单主体贴纸素材',
       transparentOutput: true,
-      transparentPrompt: 'transparent:单主体贴纸素材',
+      transparentPrompt: buildTransparentPrompt('单主体贴纸素材'),
       status: 'done',
     })
     expect(task.transparentOriginalImages).toHaveLength(1)
