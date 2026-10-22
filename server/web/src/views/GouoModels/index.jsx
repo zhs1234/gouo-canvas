@@ -343,6 +343,8 @@ function ImageModels() {
         {editing && (
           <Box
             component="form"
+            // 表单包住标题、内容和按钮，要接上弹窗的纵向布局，内容过长时才会在弹窗内滚动
+            sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
             onSubmit={(event) => {
               event.preventDefault();
               if (valid) void save(editing);
