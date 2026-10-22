@@ -279,4 +279,55 @@ describe('gouoBackend', () => {
     // 后台未开放宽松审核
     expect(getImageParamIssue(base, { ...params, size: 'auto', moderation: 'low' }, 0)).toBe('运营方未开放宽松审核')
   })
+
+  it('only opens xhigh and max qualities when the backend lists them explicitly', async () => {
+    const { getImageParamIssue, getModelQualityOptions } = await import('./gouoBackend')
+    const base = { id: 'image-a', name: 'A', price_cny: 0.1, price_version: 'v', reference: true, mask: false, max_outputs: 1, quota: 1 }
+    const params = { size: 'auto', moderation: 'auto' as const }
+    // 不限画质时只等价于 low/medium/high
+    expect(getModelQualityOptions(base)).toEqual(['auto', 'low', 'medium', 'high'])
+    expect(getModelQualityOptions()).toEqual(['auto', 'low', 'medium', 'high'])
+    expect(getImageParamIssue(base, { ...params, quality: 'xhigh' }, 0)).toContain('不开放所选画质')
+    expect(getImageParamIssue(base, { ...params, quality: 'max' }, 0)).toContain('不开放所选画质')
+    const premium = { ...base, qualities: ['max', 'low', 'high', 'xhigh', 'medium'] }
+    expect(getModelQualityOptions(premium)).toEqual(['auto', 'low', 'medium', 'high', 'xhigh', 'max'])
+    expect(getImageParamIssue(premium, { ...params, quality: 'xhigh' }, 0)).toBe('')
+    expect(getImageParamIssue(premium, { ...params, quality: 'max' }, 0)).toBe('')
+    // 自动画质仍只在开放高画质时可用
+    const noHigh = { ...base, qualities: ['medium', 'xhigh'] }
+    expect(getModelQualityOptions(noHigh)).toEqual(['medium', 'xhigh'])
+    expect(getImageParamIssue(noHigh, { ...params, quality: 'auto' }, 0)).toContain('不开放自动画质')
+  })
+
+  it('prices a request by size tier and quality ratios', async () => {
+    const { getImagePrice } = await import('./gouoBackend')
+    const base = { id: 'image-a', name: 'A', price_cny: 0.2, price_version: 'v', reference: true, mask: false, max_outputs: 1, quota: 1 }
+    // 旧服务端没有系数：按基础单价乘张数
+    expect(getImagePrice(base, {})).toBe(0.2)
+    expect(getImagePrice(base, { size: '3840x2160', quality: 'low', n: 3 })).toBeCloseTo(0.6)
+    const model = { ...base, tier_ratios: { '1K': 0.5, '4K': 4 }, quality_ratios: { low: 0.25, high: 2, max: 10 } }
+    // 自动尺寸按 1K、自动画质按高画质
+    expect(getImagePrice(model, { size: 'auto', quality: 'auto' })).toBeCloseTo(0.2)
+    expect(getImagePrice(model, {})).toBeCloseTo(0.2)
+    expect(getImagePrice(model, { size: '1024x1024', quality: 'low', n: 2 })).toBeCloseTo(0.05)
+    // 缺省的键按 1
+    expect(getImagePrice(model, { size: '2048x2048', quality: 'medium' })).toBeCloseTo(0.2)
+    expect(getImagePrice(model, { size: '3840x2160', quality: 'max', n: 2 })).toBeCloseTo(16)
+  })
+
+  it('accepts price ratios and native transparency in the catalog while staying compatible with old responses', async () => {
+    const base = { id: 'image-b', name: '图片 B', price_cny: 0.2, price_version: 'version-b', reference: false, mask: false, max_outputs: 1, quota: 100 }
+    const load = async (models: unknown[]) => {
+      vi.resetModules()
+      vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => Promise.resolve(jsonResponse({ success: true, data: url.includes('/token/') ? 'user-token' : models }))))
+      const { getImageModels } = await import('./gouoBackend')
+      return getImageModels()
+    }
+    const full = { ...base, qualities: ['low', 'high', 'xhigh', 'max'], tier_ratios: { '1K': 1, '4K': 3.5 }, quality_ratios: { xhigh: 4, max: 8 }, transparent: true }
+    await expect(load([base, full])).resolves.toEqual([base, full])
+    await expect(load([{ ...base, tier_ratios: null, quality_ratios: null, transparent: null }])).resolves.toHaveLength(1)
+    for (const invalid of [{ tier_ratios: { '2K': 0 } }, { tier_ratios: [2] }, { quality_ratios: { max: '8' } }, { quality_ratios: { high: -1 } }, { tier_ratios: 2 }, { transparent: 'yes' }]) {
+      await expect(load([{ ...base, ...invalid }])).rejects.toThrow('图片模型目录格式无效')
+    }
+  })
 })

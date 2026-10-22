@@ -4,7 +4,7 @@ import { useStore, ensureImageCached, cacheImage, executeTask } from '../store'
 import { putTask, storeImage } from './db'
 import { orderInputImagesForMask } from './mask'
 import { validateMaskMatchesImage } from './canvasImage'
-import { getCurrentUser, getImageModelQuote, getMaxTaskImages } from './gouoBackend'
+import { getCurrentUser, getImageModelQuote, getImagePrice, getMaxTaskImages } from './gouoBackend'
 import { getChangedParams, normalizeTaskParams } from './paramCompatibility'
 import { getTransparentRequestParams, createTransparentOutputMeta } from './transparentImage'
 import { getActionableErrorMessage, requestUserCenter } from './userGuidance'
@@ -100,7 +100,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
     }
     // 余额明显不够时不建任务，免得先提示"已提交"再失败；读不到余额就交给服务端判断
     const user = await getCurrentUser().catch(() => null)
-    const cost = quote.price_cny * params.n
+    const cost = getImagePrice(quote, params)
     if (typeof user?.balance_cny === 'number' && user.balance_cny + 1e-9 < cost) {
       const message = `余额不足：本次预计 ${formatPoints(cost)}，当前余额 ${formatPoints(user.balance_cny)}`
       requestUserCenter('topup')
@@ -170,7 +170,7 @@ async function submitFromInput(options: SubmitOptions = {}, input?: ImageTaskInp
       params: taskParams,
       apiModel: model,
       gouoPriceVersion: quote.price_version,
-      gouoPriceCNY: quote.price_cny,
+      gouoPriceCNY: getImagePrice(quote, { ...taskParams, n: 1 }),
       inputImageIds: orderedInputImages.map((i) => i.id),
       maskTargetImageId,
       maskImageId,

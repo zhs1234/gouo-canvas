@@ -148,8 +148,8 @@ export function pickActualParams(source: unknown): Partial<TaskParams> {
   const actualParams: Partial<TaskParams> = {}
 
   if (typeof record.size === 'string') actualParams.size = record.size
-  if (record.quality === 'auto' || record.quality === 'low' || record.quality === 'medium' || record.quality === 'high') {
-    actualParams.quality = record.quality
+  if (['auto', 'low', 'medium', 'high', 'xhigh', 'max'].includes(record.quality as string)) {
+    actualParams.quality = record.quality as TaskParams['quality']
   }
   if (record.output_format === 'png' || record.output_format === 'jpeg' || record.output_format === 'webp') {
     actualParams.output_format = record.output_format

@@ -112,6 +112,7 @@ const imageB = { id: 'image-b', dataUrl: 'data:image/png;base64,b' }
 const models = [
   { id: 'image-a', name: '图片 A', price_cny: 0.1, price_version: 'quote-a', reference: true, mask: true, max_outputs: 2, quota: 100, sizes: ['1K', '2K', '4K'] },
   { id: 'image-b', name: '图片 B', price_cny: 0.3, price_version: 'quote-b', reference: false, mask: false, max_outputs: 1, quota: 300, sizes: ['1K', '2K', '4K'] },
+  { id: 'image-c', name: '图片 C', price_cny: 0.1, price_version: 'quote-c', reference: true, mask: true, max_outputs: 1, quota: 100, sizes: ['1K', '2K', '4K'], qualities: ['low', 'medium', 'high', 'xhigh'], tier_ratios: { '2K': 2 }, quality_ratios: { xhigh: 3 } },
 ]
 
 // 后端令牌、模型目录和账号信息都返回同一份模型目录；账号信息里没有余额时由服务端判断
@@ -145,6 +146,18 @@ describe('product model task snapshots', () => {
     expect(useStore.getState().tasks[0]).toMatchObject({ apiModel: 'image-a', gouoPriceVersion: 'quote-a', gouoPriceCNY: 0.1 })
     expect(vi.mocked(callImageApi).mock.calls[0][0]).toMatchObject({ model: 'image-a', gouoPriceVersion: 'quote-a' })
     expect(getPersistedState(useStore.getState()).settings).toMatchObject({ model: 'image-b', gouoPriceVersion: 'quote-b', gouoModelSelected: true })
+  })
+
+  it('prices tasks and retries by size tier and quality ratios', async () => {
+    useStore.getState().setSettings({ model: 'image-c', gouoPriceVersion: 'quote-c' })
+    useStore.setState({ params: { ...DEFAULT_PARAMS, size: '2048x2048', quality: 'xhigh', n: 2 } })
+    await submitTask()
+    const [created] = useStore.getState().tasks
+    expect(created.gouoPriceCNY).toBeCloseTo(0.6)
+    useStore.setState({ tasks: [] })
+    await retryTask({ ...created, status: 'error' })
+    const confirmation = vi.mocked(useStore.getState().setConfirmDialog).mock.calls.slice(-1)[0]?.[0]
+    expect(confirmation?.message).toContain('全部成功预计扣费 120 积分')
   })
 
   it('refuses prompts longer than the server limit before creating a task', async () => {

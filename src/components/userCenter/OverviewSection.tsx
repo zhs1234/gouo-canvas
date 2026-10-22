@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCachedImageModels, getCloudStorage, getImageModels, getUsageLogs, getUsageStat, type GouoCloudStorage, type GouoImageModel, type GouoUsageLog, type GouoUser } from '../../lib/gouoBackend'
+import { getCachedImageModels, getCloudStorage, getImageModels, getImagePrice, getUsageLogs, getUsageStat, type GouoCloudStorage, type GouoImageModel, type GouoUsageLog, type GouoUser } from '../../lib/gouoBackend'
 import type { UserCenterSection } from '../../lib/userGuidance'
 import { formatPoints, getUsageDisplay } from '../../lib/accountUsage'
 import { formatBytes } from '../../lib/canvas/imageStorage'
@@ -45,9 +45,10 @@ export default function OverviewSection({ user, loading, error, onRefresh, onNav
 
   const rate = user.quota_cny_rate
   const balanceKnown = typeof user.balance_cny === 'number' && Number.isFinite(user.balance_cny)
-  // 按当前选择的图片模型估算还能生成几张；不同模型价格不同，只作参考
+  // 按当前选择的图片模型在自动尺寸、自动画质下的单张价估算还能生成几张；尺寸和画质不同价格不同，只作参考
   const model = models.find((item) => item.id === selectedModel) ?? models.find((item) => item.default) ?? models[0]
-  const affordable = balanceKnown && model?.price_cny ? Math.floor(user.balance_cny! / model.price_cny) : null
+  const unitPrice = model ? getImagePrice(model, {}) : 0
+  const affordable = balanceKnown && unitPrice ? Math.floor(user.balance_cny! / unitPrice) : null
   const usedPercent = storage?.enabled && storage.quota_bytes > 0 ? Math.min(100, (storage.used_bytes / storage.quota_bytes) * 100) : 0
   const avatarText = (user.display_name || user.username || '光').trim().slice(0, 1).toUpperCase()
 

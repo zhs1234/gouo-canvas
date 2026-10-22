@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import type { GouoUser } from '../../lib/gouoBackend'
-import { redeemCode } from '../../lib/gouoBackend'
+import { getImagePrice, redeemCode } from '../../lib/gouoBackend'
 import { formatPoints } from '../../lib/accountUsage'
 import { useImageModels } from '../../hooks/useImageModels'
 import type { UserCenterServiceStatus } from '../UserCenterModal'
@@ -78,13 +78,16 @@ export default function TopupSection({ user, status, onRedeemed }: { user: GouoU
 
       <section className="rounded-2xl border border-gray-100 p-5 text-sm dark:border-white/[0.08]" aria-label="图片模型价格">
         <p className="font-semibold text-gray-900 dark:text-white">图片模型价格</p>
-        <p className="mt-1 text-xs text-gray-400">按成功生成的张数计费，没有返回图片的请求自动退回积分。</p>
+        <p className="mt-1 text-xs text-gray-400">按成功生成的张数计费，没有返回图片的请求自动退回积分。标注浮动的模型按所选尺寸和画质计价，这里显示自动尺寸、自动画质的单张价。</p>
         {models.length ? (
           <ul className="mt-3 divide-y divide-gray-100 dark:divide-white/[0.06]">
             {models.map((model) => (
               <li key={model.id} className="flex items-center justify-between gap-4 py-2">
                 <span className="min-w-0 truncate text-gray-700 dark:text-gray-200">{model.name}</span>
-                <span className="shrink-0 tabular-nums text-gray-500 dark:text-gray-400">{formatPoints(model.price_cny)}/张</span>
+                <span className="shrink-0 tabular-nums text-gray-500 dark:text-gray-400">
+                  {formatPoints(getImagePrice(model, {}))}/张
+                  {Object.values({ ...model.tier_ratios, ...model.quality_ratios }).some((ratio) => ratio !== 1) && <span className="ml-1 text-xs text-gray-400">按尺寸/画质浮动</span>}
+                </span>
               </li>
             ))}
           </ul>

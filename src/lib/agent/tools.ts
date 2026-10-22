@@ -2,7 +2,7 @@ import { useStore as useAppStore } from '../../store'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { getImage } from '../db'
 import { submitImageTask } from '../imageTasks'
-import { getImageModels, getMaxTaskImages } from '../gouoBackend'
+import { getCachedImageModels, getImageModels, getImagePrice, getMaxTaskImages, getModelQualityOptions } from '../gouoBackend'
 import { serializeCanvasProject } from '../canvas/document'
 import type { TaskParams } from '../../types'
 import type { AgentConversation, AgentToolDefinition } from './types'
@@ -18,6 +18,25 @@ export const AGENT_CONTINUE_PROMPT = '请继续完成上一个请求。已提交
 const AGENT_TOOL_NAMES = ['get_canvas', 'apply_canvas_operations', 'create_image_task', 'get_task_status', 'add_task_output', 'select_reference', 'activate_skill', 'read_skill_file', 'read_site_guide'] as const
 // 单次读取 skill 参考文件的字数上限，更长的文件分段读取
 const SKILL_FILE_CHUNK = 20_000
+
+// 画质枚举只列所选模型开放的，超高、极致需后台显式开放
+function createImageTaskTool(qualities: string[]): AgentToolDefinition {
+  return {
+    type: 'function',
+    function: {
+      name: 'create_image_task',
+      description: '按用户要求创建图片任务，使用用户当前选择的图片模型和显示的价格，会产生图片费用。仅用户明确要求生成或修改图片时调用；不要因为聊天、规划或工具错误擅自生成。单条用户消息内合计超过运营方设定的张数（各任务 n 之和）时，系统会先请用户确认；用户取消时不要重复提交。返回 taskId。每个请求只提交一次，查询状态不会重复扣费。inputImageIds 只能来自用户附件、画布或本会话生成图片。本次提交后全部任务已安排、且无需继续规划或操作画布时，设置 finishAfterSubmit:true，提交成功后直接回执并结束本轮，不再请求模型确认；它不表示图片已生成完成。有后续任务或画布操作时保持 false。',
+      parameters: {
+        type: 'object', properties: {
+          prompt: { type: 'string', minLength: 1, maxLength: 20000 },
+          finishAfterSubmit: { type: 'boolean', default: false, description: '仅当本次提交后已安排全部任务且无需后续规划或画布操作时设 true；只确认提交，图片仍由后台生成。' },
+          inputImageIds: { type: 'array', maxItems: 16, items: { type: 'string' } },
+          params: { type: 'object', properties: { size: { type: 'string' }, quality: { type: 'string', enum: qualities, ...(qualities.includes('xhigh') || qualities.includes('max') ? { description: 'xhigh（超高）、max（极致）成本远高于 high，仅在用户明确要求时使用' } : {}) }, n: { type: 'integer', minimum: 1, maximum: 10 }, output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'] } }, additionalProperties: false },
+        }, required: ['prompt'], additionalProperties: false,
+      },
+    },
+  }
+}
 
 export const agentToolDefinitions: AgentToolDefinition[] = [
   {
@@ -36,21 +55,7 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
       parameters: { type: 'object', properties: { expectedRevision: { type: 'integer', minimum: 0 }, operations: { type: 'array', minItems: 1, maxItems: 50, items: { type: 'object' } } }, required: ['expectedRevision', 'operations'], additionalProperties: false },
     },
   },
-  {
-    type: 'function',
-    function: {
-      name: 'create_image_task',
-      description: '按用户要求创建图片任务，使用用户当前选择的图片模型和显示的价格，会产生图片费用。仅用户明确要求生成或修改图片时调用；不要因为聊天、规划或工具错误擅自生成。单条用户消息内合计超过运营方设定的张数（各任务 n 之和）时，系统会先请用户确认；用户取消时不要重复提交。返回 taskId。每个请求只提交一次，查询状态不会重复扣费。inputImageIds 只能来自用户附件、画布或本会话生成图片。本次提交后全部任务已安排、且无需继续规划或操作画布时，设置 finishAfterSubmit:true，提交成功后直接回执并结束本轮，不再请求模型确认；它不表示图片已生成完成。有后续任务或画布操作时保持 false。',
-      parameters: {
-        type: 'object', properties: {
-          prompt: { type: 'string', minLength: 1, maxLength: 20000 },
-          finishAfterSubmit: { type: 'boolean', default: false, description: '仅当本次提交后已安排全部任务且无需后续规划或画布操作时设 true；只确认提交，图片仍由后台生成。' },
-          inputImageIds: { type: 'array', maxItems: 16, items: { type: 'string' } },
-          params: { type: 'object', properties: { size: { type: 'string' }, quality: { type: 'string', enum: ['auto', 'low', 'medium', 'high'] }, n: { type: 'integer', minimum: 1, maximum: 10 }, output_format: { type: 'string', enum: ['png', 'jpeg', 'webp'] } }, additionalProperties: false },
-        }, required: ['prompt'], additionalProperties: false,
-      },
-    },
-  },
+  createImageTaskTool(getModelQualityOptions()),
   {
     type: 'function',
     function: {
@@ -109,7 +114,9 @@ const siteGuideToolDefinition: AgentToolDefinition = {
 // 没有可用 skill 时不提供 skill 工具。name 只用目录里列得出的名称（再加上本会话已启用的），
 // 避免把近两千个技能名写进每次请求；没列入目录的仍可用 $名称 指定，执行时会再校验
 export function getAgentToolDefinitions(skills: Skill[], activeNames: string[] = []): AgentToolDefinition[] {
-  const base = getSiteGuide() ? [...agentToolDefinitions, siteGuideToolDefinition] : agentToolDefinitions
+  const model = getCachedImageModels().find((entry) => entry.id === useAppStore.getState().settings.model)
+  const tools = agentToolDefinitions.map((tool) => tool.function.name === 'create_image_task' ? createImageTaskTool(getModelQualityOptions(model)) : tool)
+  const base = getSiteGuide() ? [...tools, siteGuideToolDefinition] : tools
   if (!skills.length) return base
   const listed = new Set(listedSkillNames(skills))
   for (const name of activeNames) if (skills.some((skill) => skill.name === name)) listed.add(name)
@@ -242,7 +249,7 @@ export async function executeAgentTool(input: {
     const values = params as Record<string, unknown>
     if (Object.keys(values).some((key) => !['size', 'quality', 'n', 'output_format'].includes(key))) throw new Error('图片参数包含不支持的字段')
     if (values.size !== undefined && (typeof values.size !== 'string' || !/^(auto|\d{2,5}x\d{2,5})$/.test(values.size))) throw new Error('图片尺寸无效')
-    if (values.quality !== undefined && !['auto', 'low', 'medium', 'high'].includes(values.quality as string)) throw new Error('图片质量无效')
+    if (values.quality !== undefined && !['auto', 'low', 'medium', 'high', 'xhigh', 'max'].includes(values.quality as string)) throw new Error('图片质量无效')
     if (values.n !== undefined && (!Number.isInteger(values.n) || (values.n as number) < 1 || (values.n as number) > getMaxTaskImages())) throw new Error(`图片数量必须为 1 到 ${getMaxTaskImages()}`)
     if (values.output_format !== undefined && !['png', 'jpeg', 'webp'].includes(values.output_format as string)) throw new Error('图片格式无效')
     // 没有指定张数时按输入框选择的张数；运营方后来调低上限时按上限
@@ -264,8 +271,9 @@ export async function executeAgentTool(input: {
       let cost = '每张按所选图片模型的价格计费。'
       const model = useAppStore.getState().settings.model
       try {
-        const price = (await getImageModels()).find((entry) => entry.id === model)?.price_cny
-        if (price) cost = `模型「${model}」每张 ${formatPoints(price)}，这 ${requested} 张全部成功预计扣费 ${formatPoints(price * requested)}。`
+        const entry = (await getImageModels()).find((item) => item.id === model)
+        const price = { size: values.size as string | undefined, quality: values.quality as string | undefined }
+        if (entry) cost = `模型「${model}」按所选尺寸和画质每张 ${formatPoints(getImagePrice(entry, price))}，这 ${requested} 张全部成功预计扣费 ${formatPoints(getImagePrice(entry, { ...price, n: requested }))}。`
       } catch (err) {
         console.warn('读取图片模型价格失败', err)
       }
