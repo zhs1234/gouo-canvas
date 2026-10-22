@@ -1,10 +1,10 @@
-awesome-gpt-image-2 industrial prompt templates
+awesome-gpt-image-2 industrial prompt templates and featured cases
 Source: https://github.com/freestylefly/awesome-gpt-image-2
-Revision: 65a9c57a1968a13f2f1997c58409cac9aa146bc7
-Files: docs/templates.md, data/style-library.json
+Revision: 63e6176fa01be51c000108dacd72716d3e46784b
+Files: docs/templates.md, data/style-library.json, data/cases.json (featured cases)
 
-The MIT notice below covers repository software and documentation. Preview images are selected upstream case images, resized to WebP, and remain subject to original author rights. Commercial-use permission for third-party preview images has not been verified. See the upstream disclaimer:
-https://github.com/freestylefly/awesome-gpt-image-2/blob/65a9c57a1968a13f2f1997c58409cac9aa146bc7/docs/disclaimer.md
+The MIT notice below covers repository software and documentation. Featured case prompts and images are reproduced from the upstream gallery with credit to their original authors (listed below with links to the original posts); their rights remain with those authors and they are provided for learning and reference only. Preview images are selected upstream case images, resized to WebP, and remain subject to original author rights. Commercial-use permission for third-party preview images has not been verified. See the upstream disclaimer:
+https://github.com/freestylefly/awesome-gpt-image-2/blob/63e6176fa01be51c000108dacd72716d3e46784b/docs/disclaimer.md
 
 MIT License
 
@@ -29,7 +29,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Preview image attribution:
-case336.webp: 个人网页视觉设计 | 苍何原创实测 | https://github.com/freestylefly/awesome-gpt-image-2/blob/65a9c57a1968a13f2f1997c58409cac9aa146bc7/docs/gallery-part-2.md#case-336
+case336.webp: 个人网页视觉设计 | 苍何原创实测 | https://github.com/freestylefly/awesome-gpt-image-2/blob/63e6176fa01be51c000108dacd72716d3e46784b/docs/gallery-part-2.md#case-336
 case334.webp: RAG 技术详解图 | 苍何原创实测（公众号文章《我逆向了 329 条 GPT-Image2 提示词模板，全部开源！》） | https://github.com/freestylefly/awesome-gpt-image-2/blob/main/docs/gallery-part-2.md#case-334
 case380.webp: 冠状病毒尺度缩放科学信息图 | @Gdgtify | https://x.com/Gdgtify/status/2051288232613351571
 case345.webp: 法新浪潮撕纸电影海报 | @bananaprompts | https://x.com/bananaprompts/status/2048541390900994476
@@ -51,3 +51,14 @@ case204.webp: 智能动画分镜生成器 | @joshesye | https://x.com/joshesye/s
 case375.webp: 古希腊三哲时间轴城市图 | @ToroJushiAi | https://x.com/ToroJushiAi/status/2050713034503409874
 case222.webp: 精致模块化科普百科图鉴 | @MrLarus | https://x.com/MrLarus/status/2046231542817497392
 case370.webp: Crumple Chair 概念沙发研发板 | @ShamsAmin56 | https://x.com/ShamsAmin56/status/2050281206139461780
+case365.webp: 科学家收藏级玩具发布板 | @Gdgtify | https://x.com/Gdgtify/status/2049766203392921897
+case361.webp: 手机爆炸拆解图 | @Ankit_patel211 | https://x.com/Ankit_patel211/status/2048834306379075759
+case360.webp: 长发造型分析信息图 | @Gemalpha_88 | https://x.com/Gemalpha_88/status/2048918707343401034
+case344.webp: NOIR 街头服饰 Campaign | @Daniel_adsss | https://x.com/Daniel_adsss/status/2048542581638701446
+case341.webp: AP Calculus 学习表信息图 | @hqmank | https://x.com/hqmank/status/2048587150544028084
+case338.webp: 《赤壁怀古》长卷图 | 苍何原创实测（公众号文章《我逆向了 329 条 GPT-Image2 提示词模板，全部开源！》） | https://github.com/freestylefly/awesome-gpt-image-2/blob/63e6176fa01be51c000108dacd72716d3e46784b/docs/gallery-part-2.md#case-338
+case330.webp: 月下美女直播画面 | 苍何原创实测（公众号文章《我逆向了 329 条 GPT-Image2 提示词模板，全部开源！》） | https://github.com/freestylefly/awesome-gpt-image-2/blob/63e6176fa01be51c000108dacd72716d3e46784b/docs/gallery-part-2.md#case-330
+case310.webp: 零食品牌技术分解图 | @TechieBySA | https://x.com/TechieBySA/status/2031795709243019280
+case17.webp: 界面交互设计图 | @wory37303852 | https://x.com/wory37303852
+case6.webp: 插画艺术创作图 | 小红书号yi_xiao_jiu | https://github.com/freestylefly/awesome-gpt-image-2/blob/63e6176fa01be51c000108dacd72716d3e46784b/docs/gallery-part-1.md#case-6
+case1.webp: 信息图可视化设计 | 小红书号insight_express | https://github.com/freestylefly/awesome-gpt-image-2/blob/63e6176fa01be51c000108dacd72716d3e46784b/docs/gallery-part-1.md#case-1
