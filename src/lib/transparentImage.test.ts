@@ -6,6 +6,7 @@ import {
   buildTransparentPrompt,
   detectKeyColorFromPixels,
   getTransparentRequestParams,
+  getTransparentTaskFields,
   removeKeyedBackgroundFromPixels,
 } from './transparentImage'
 
@@ -36,6 +37,18 @@ describe('transparent image prompt and params', () => {
     })
     expect(params.output_format).toBe('jpeg')
     expect(params.output_compression).toBe(80)
+  })
+
+  it('uses native transparency for PNG or WebP and falls back to keying only for PNG', () => {
+    const webp = { ...DEFAULT_PARAMS, output_format: 'webp' as const, output_compression: 80, transparent_output: true }
+    expect(getTransparentTaskFields(webp, '贴纸', true)).toEqual({ params: webp, nativeTransparent: true })
+    const png = { ...DEFAULT_PARAMS, transparent_output: true }
+    expect(getTransparentTaskFields(png, '贴纸', true)).toEqual({ params: png, nativeTransparent: true })
+    expect(getTransparentTaskFields(png, '贴纸', false)).toEqual({ params: { ...png, output_compression: null }, transparentOutput: true, transparentPrompt: buildTransparentPrompt('贴纸') })
+    // JPEG 不支持透明；不支持原生透明时 WebP 也不做抠图
+    expect(getTransparentTaskFields({ ...webp, output_format: 'jpeg' }, '贴纸', true).params.transparent_output).toBe(false)
+    expect(getTransparentTaskFields(webp, '贴纸', false)).toEqual({ params: { ...webp, transparent_output: false } })
+    expect(getTransparentTaskFields(DEFAULT_PARAMS, '贴纸', true)).toEqual({ params: DEFAULT_PARAMS })
   })
 })
 

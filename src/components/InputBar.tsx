@@ -7,7 +7,7 @@ import { getAtImageQuery, getImageMentionLabel, getPromptIndexFromVisibleIndex, 
 import { getSizeTier, normalizeImageSize } from '../lib/size'
 import { createMaskPreviewDataUrl } from '../lib/canvasImage'
 import { getSafeBoundingClientRect } from '../lib/domRect'
-import { getMaxTaskImages } from '../lib/gouoBackend'
+import { getMaxTaskImages, getModelQualityOptions } from '../lib/gouoBackend'
 import { getReferenceImageIssue, MAX_PROMPT_LENGTH, parseImageCount, promptCodePointLength, REFERENCE_IMAGE_TYPES } from '../lib/inputValidation'
 import { useBackendStatus } from '../hooks/useBackendStatus'
 import { useImageModels } from '../hooks/useImageModels'
@@ -457,11 +457,14 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const submitLabel = maskDraft ? '遮罩编辑' : '生成图片'
   const submitButtonAriaLabel = isSubmitting ? '正在提交，请稍候' : submitLabel
 
-  // 所选模型不开放当前画质时，自动换成开放的最高画质，免得用户卡在提示上
+  // 自动画质可能由上游选成高画质，只有开放高画质时才提供；超高、极致需后台显式开放
+  const qualityOptions = getModelQualityOptions(backendModel).map((value) => ({ label: value, value }))
+  // 所选模型不开放当前画质时自动换一个开放的画质，免得用户卡在提示上；优先高画质，不主动换到更贵的超高、极致
   useEffect(() => {
-    const allowed = backendModel?.qualities
-    if (!allowed?.length || allowed.includes(params.quality === 'auto' ? 'high' : params.quality)) return
-    const next = (['high', 'medium', 'low'] as const).find((quality) => allowed.includes(quality))
+    if (!backendModel) return
+    const allowed = getModelQualityOptions(backendModel)
+    if (allowed.includes(params.quality)) return
+    const next = (['high', 'medium', 'low', 'xhigh', 'max'] as const).find((quality) => allowed.includes(quality))
     if (next) setParams({ quality: next })
   }, [backendModel, params.quality, setParams])
   // 所选模型没有开放当前分辨率时回到自动尺寸
@@ -470,7 +473,9 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   }, [backendModel, params.size, setParams])
   const moderationDisabled = !backendStatus?.gouo_allow_low_moderation
   const transparentOutputAvailable = true
-  const showTransparentOutputControl = transparentOutputAvailable && params.output_format === 'png'
+  // 原生透明背景支持 PNG 和 WebP：WebP 下只在已开启透明时显示开关（关掉后恢复压缩率）；客户端抠图只支持 PNG
+  const transparentNative = Boolean(backendModel?.transparent)
+  const showTransparentOutputControl = transparentOutputAvailable && (params.output_format === 'png' || (transparentNative && params.output_format === 'webp' && params.transparent_output))
   const transparentOutputEnabled = transparentOutputAvailable && showTransparentOutputControl && params.transparent_output
   const compressionDisabled = params.output_format === 'png'
   const outputImageLimit = getMaxTaskImages()
@@ -480,13 +485,6 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
   const nLimitHintText = parseImageCount(nInput, outputImageLimit) === null && !(nDraftValue > outputImageLimit) ? `数量必须是 1 到 ${outputImageLimit} 的整数` : `本次最多生成 ${outputImageLimit} 张图片`
   const displaySize = normalizeImageSize(params.size) || DEFAULT_PARAMS.size
 
-  // 自动画质可能由上游选成高画质，只有开放高画质时才提供
-  const qualityOptions = [
-    { label: 'auto', value: 'auto' },
-    { label: 'low', value: 'low' },
-    { label: 'medium', value: 'medium' },
-    { label: 'high', value: 'high' },
-  ].filter((option) => !backendModel?.qualities?.length || backendModel.qualities.includes(option.value === 'auto' ? 'high' : option.value))
   const atImageLimit = inputImages.length >= maxInputImages
   const uploadImageTooltipText = atImageLimit ? `参考图数量已达上限（${maxInputImages} 张），无法继续添加` : '上传图片'
   const transparentOutputHint = useHintTooltip()
@@ -1560,6 +1558,7 @@ export default function InputBar({ inline = false }: { inline?: boolean }) {
       qualityOptions={qualityOptions}
       selectClass={selectClass}
       transparentOutputAvailable={transparentOutputAvailable}
+      transparentNative={transparentNative}
       showTransparentOutputControl={showTransparentOutputControl}
       transparentOutputEnabled={transparentOutputEnabled}
       transparentOutputHint={transparentOutputHint}

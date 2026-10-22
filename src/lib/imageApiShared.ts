@@ -17,6 +17,8 @@ export interface CallApiOptions {
   /** 输入图片的 data URL 列表 */
   inputImageDataUrls: string[]
   maskDataUrl?: string
+  // 模型原生生成透明背景
+  background?: 'transparent'
   requestId?: string
   // 服务端按作品编号和批量序号保存生成结果
   taskId?: string
@@ -148,8 +150,8 @@ export function pickActualParams(source: unknown): Partial<TaskParams> {
   const actualParams: Partial<TaskParams> = {}
 
   if (typeof record.size === 'string') actualParams.size = record.size
-  if (record.quality === 'auto' || record.quality === 'low' || record.quality === 'medium' || record.quality === 'high') {
-    actualParams.quality = record.quality
+  if (['auto', 'low', 'medium', 'high', 'xhigh', 'max'].includes(record.quality as string)) {
+    actualParams.quality = record.quality as TaskParams['quality']
   }
   if (record.output_format === 'png' || record.output_format === 'jpeg' || record.output_format === 'webp') {
     actualParams.output_format = record.output_format
