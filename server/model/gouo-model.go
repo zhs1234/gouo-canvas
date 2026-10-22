@@ -5,12 +5,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"one-api/common/config"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -24,10 +27,14 @@ type GouoImageModel struct {
 	MaxOutputs int     `json:"max_outputs"`
 	Quota      int     `json:"quota"`
 	// 后台限定的分辨率档位、画质和参考图张数，参与价格版本；档位为空表示只能用自动尺寸，画质和张数不限时省略
-	Sizes        []string `json:"sizes,omitempty"`
-	Qualities    []string `json:"qualities,omitempty"`
-	MaxInputs    int      `json:"max_inputs,omitempty"`
-	PriceVersion string   `json:"price_version"`
+	Sizes     []string `json:"sizes,omitempty"`
+	Qualities []string `json:"qualities,omitempty"`
+	MaxInputs int      `json:"max_inputs,omitempty"`
+	// 档位和画质的价格系数（只列出不为 1 的键）、是否原生支持透明背景；未设置时省略，原有模型的价格版本不变
+	TierRatios    map[string]float64 `json:"tier_ratios,omitempty"`
+	QualityRatios map[string]float64 `json:"quality_ratios,omitempty"`
+	Transparent   bool               `json:"transparent,omitempty"`
+	PriceVersion  string             `json:"price_version"`
 	// 以下字段在价格版本算好后才设置，不参与版本计算：改名、改说明或调整顺序不会让用户重新确认价格
 	Default     bool   `json:"default,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -63,9 +70,9 @@ func GouoSizeList(price *Price) []string {
 	return list
 }
 
-var gouoQualityValues = []string{"low", "medium", "high"}
+var gouoQualityValues = []string{"low", "medium", "high", "xhigh", "max"}
 
-// GouoQualityList 返回后台限定的可选画质，空表示不限
+// GouoQualityList 返回后台限定的可选画质，空表示不限；但 xhigh 和 max 成本高得多，不限时也不开放，必须显式列出
 func GouoQualityList(price *Price) []string {
 	var list []string
 	for _, item := range strings.Split(price.GouoQualities, ",") {
@@ -127,7 +134,7 @@ func ValidateGouoPrice(price *Price) error {
 	}
 	for _, quality := range GouoQualityList(price) {
 		if !slices.Contains(gouoQualityValues, quality) {
-			return errors.New("画质只能是 low、medium、high")
+			return errors.New("画质只能是 low、medium、high、xhigh、max")
 		}
 	}
 	if strings.TrimSpace(price.GouoQualities) != "" && len(GouoQualityList(price)) == 0 {
@@ -136,7 +143,92 @@ func ValidateGouoPrice(price *Price) error {
 	if price.GouoMaxInputs < 0 || price.GouoMaxInputs > 16 {
 		return errors.New("最多参考图张数必须在 0 到 16 之间，0 表示不限")
 	}
+	if err := validateGouoRatios(GouoRatios(price.GouoTierRatios), GouoSizeTiers, "档位系数"); err != nil {
+		return err
+	}
+	return validateGouoRatios(GouoRatios(price.GouoQualityRatios), gouoQualityValues, "画质系数")
+}
+
+// GouoRatios 读出价格记录里的系数，未设置时返回 nil
+func GouoRatios(ratios *datatypes.JSONType[map[string]float64]) map[string]float64 {
+	if ratios == nil {
+		return nil
+	}
+	return ratios.Data()
+}
+
+func validateGouoRatios(ratios map[string]float64, keys []string, label string) error {
+	for key, value := range ratios {
+		if !slices.Contains(keys, key) {
+			return fmt.Errorf("%s只能设置 %s", label, strings.Join(keys, "、"))
+		}
+		if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 || value > 100 {
+			return fmt.Errorf("%s必须大于 0 且不超过 100", label)
+		}
+	}
 	return nil
+}
+
+// 下发给客户端的系数只保留不为 1 的键：系数全为 1 与没有设置等价，价格版本也保持一致
+func gouoEffectiveRatios(ratios map[string]float64) map[string]float64 {
+	var result map[string]float64
+	for key, value := range ratios {
+		if value == 1 {
+			continue
+		}
+		if result == nil {
+			result = map[string]float64{}
+		}
+		result[key] = value
+	}
+	return result
+}
+
+// 人民币价格换算成额度，与积分换算一致
+func gouoQuota(priceCNY float64) (int, error) {
+	if config.PaymentUSDRate <= 0 || math.IsNaN(config.PaymentUSDRate) || math.IsInf(config.PaymentUSDRate, 0) || config.QuotaPerUnit <= 0 || math.IsNaN(config.QuotaPerUnit) || math.IsInf(config.QuotaPerUnit, 0) {
+		return 0, errors.New("图片计费汇率配置无效")
+	}
+	quota := math.Ceil(priceCNY / config.PaymentUSDRate * config.QuotaPerUnit)
+	if math.IsNaN(quota) || math.IsInf(quota, 0) || quota > float64(math.MaxInt32) || quota < 1 {
+		return 0, errors.New("图片计费额度超出范围")
+	}
+	return int(quota), nil
+}
+
+// GouoImageRequestQuote 计算一次图片请求的价格（元）和额度：单张价 = 基础价 × 档位系数 × 画质系数，再乘张数。
+// 自动尺寸按 1K、自动画质按 high 计；客户端按同样的顺序计算，生成前显示的价格与实际扣费一致
+func GouoImageRequestQuote(entry *GouoImageModel, size, quality string, n int) (float64, int, error) {
+	tier := "1K"
+	if size = strings.ToLower(strings.TrimSpace(size)); size != "" && size != "auto" {
+		width, height, _ := strings.Cut(size, "x")
+		w, _ := strconv.Atoi(width)
+		h, _ := strconv.Atoi(height)
+		if tier = GouoSizeTier(w, h); tier == "" {
+			return 0, 0, errors.New("图片尺寸无效")
+		}
+	}
+	if quality = strings.ToLower(strings.TrimSpace(quality)); quality == "" || quality == "auto" {
+		quality = "high"
+	}
+	if n == 0 {
+		n = 1
+	}
+	if n < 0 {
+		return 0, 0, errors.New("图片张数无效")
+	}
+	ratio := func(ratios map[string]float64, key string) float64 {
+		if value, ok := ratios[key]; ok {
+			return value
+		}
+		return 1
+	}
+	price := entry.PriceCNY * ratio(entry.TierRatios, tier) * ratio(entry.QualityRatios, quality) * float64(n)
+	quota, err := gouoQuota(price)
+	if err != nil {
+		return 0, 0, err
+	}
+	return price, quota, nil
 }
 
 func (p *Pricing) GetGouoModel(id string) (*GouoImageModel, error) {
@@ -153,16 +245,14 @@ func (p *Pricing) GetGouoModel(id string) (*GouoImageModel, error) {
 	if err := ValidateGouoPrice(price); err != nil {
 		return nil, err
 	}
-	if config.PaymentUSDRate <= 0 || math.IsNaN(config.PaymentUSDRate) || math.IsInf(config.PaymentUSDRate, 0) || config.QuotaPerUnit <= 0 || math.IsNaN(config.QuotaPerUnit) || math.IsInf(config.QuotaPerUnit, 0) {
-		return nil, errors.New("图片计费汇率配置无效")
-	}
-	quota := math.Ceil(price.GouoPriceCNY / config.PaymentUSDRate * config.QuotaPerUnit)
-	if math.IsNaN(quota) || math.IsInf(quota, 0) || quota > float64(math.MaxInt32) || quota < 1 {
-		return nil, errors.New("图片计费额度超出范围")
+	quota, err := gouoQuota(price.GouoPriceCNY)
+	if err != nil {
+		return nil, err
 	}
 	result := &GouoImageModel{ID: id, Name: id, PriceCNY: price.GouoPriceCNY,
-		Reference: price.GouoReference, Mask: price.GouoMask, MaxOutputs: price.GouoMaxOutputs, Quota: int(quota),
-		Sizes: GouoSizeList(price), Qualities: GouoQualityList(price), MaxInputs: price.GouoMaxInputs}
+		Reference: price.GouoReference, Mask: price.GouoMask, MaxOutputs: price.GouoMaxOutputs, Quota: quota,
+		Sizes: GouoSizeList(price), Qualities: GouoQualityList(price), MaxInputs: price.GouoMaxInputs,
+		TierRatios: gouoEffectiveRatios(GouoRatios(price.GouoTierRatios)), QualityRatios: gouoEffectiveRatios(GouoRatios(price.GouoQualityRatios)), Transparent: price.GouoTransparent}
 	data, _ := json.Marshal(result)
 	hash := sha256.Sum256(data)
 	result.PriceVersion = hex.EncodeToString(hash[:])

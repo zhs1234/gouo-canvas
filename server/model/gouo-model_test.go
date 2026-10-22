@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -217,7 +218,9 @@ func TestPriceSyncKeepsGouoFields(t *testing.T) {
 		DB = db
 		require.NoError(t, db.Create(&Price{Model: "chat-a", Type: TokensPriceType, Input: 1, Output: 2, GouoSort: 3, GouoMaxTokens: 4000}).Error)
 		// 暂时停用的图片模型，单价和画质等配置留着以后重新启用
-		require.NoError(t, db.Create(&Price{Model: "image-off", Type: TimesPriceType, Input: 1, GouoPriceCNY: 0.2, GouoReference: true, GouoMaxOutputs: 4, GouoSizes: "1K,2K", GouoQualities: "low,high", GouoMaxInputs: 3}).Error)
+		tiers, qualities := datatypes.NewJSONType(map[string]float64{"2K": 2}), datatypes.NewJSONType(map[string]float64{"max": 30})
+		require.NoError(t, db.Create(&Price{Model: "image-off", Type: TimesPriceType, Input: 1, GouoPriceCNY: 0.2, GouoReference: true, GouoMaxOutputs: 4, GouoSizes: "1K,2K", GouoQualities: "low,high", GouoMaxInputs: 3,
+			GouoTierRatios: &tiers, GouoQualityRatios: &qualities, GouoTransparent: true}).Error)
 		p := &Pricing{Prices: map[string]*Price{}}
 		require.NoError(t, p.Init())
 		// 未锁定的价格随上游更新，但本地的光构配置保留
@@ -234,6 +237,17 @@ func TestPriceSyncKeepsGouoFields(t *testing.T) {
 		require.Equal(t, "1K,2K", image.GouoSizes, mode)
 		require.Equal(t, "low,high", image.GouoQualities, mode)
 		require.Equal(t, 3, image.GouoMaxInputs, mode)
+		require.Equal(t, map[string]float64{"2K": 2}, GouoRatios(image.GouoTierRatios), mode)
+		require.Equal(t, map[string]float64{"max": 30}, GouoRatios(image.GouoQualityRatios), mode)
+		require.True(t, image.GouoTransparent, mode)
+		// 价格管理的批量设置也不改光构配置
+		require.NoError(t, p.BatchSetPrices(&BatchPrices{Models: []string{"image-off"}, Price: Price{Type: TimesPriceType, Input: 9}}, []string{"image-off"}))
+		require.NoError(t, p.Init())
+		image = p.GetPrice("image-off")
+		require.InDelta(t, 9.0, image.Input, 1e-9, mode)
+		require.Equal(t, map[string]float64{"2K": 2}, GouoRatios(image.GouoTierRatios), mode)
+		require.Equal(t, map[string]float64{"max": 30}, GouoRatios(image.GouoQualityRatios), mode)
+		require.True(t, image.GouoTransparent, mode)
 		DB = oldDB
 	}
 }
@@ -255,4 +269,148 @@ func TestGouoSizeTiersMigration(t *testing.T) {
 		require.NoError(t, db.First(&price, "model = ?", model).Error)
 		require.Equal(t, sizes, price.GouoSizes, model)
 	}
+}
+
+func TestGouoImageRequestQuote(t *testing.T) {
+	oldRate, oldUnits := config.PaymentUSDRate, config.QuotaPerUnit
+	t.Cleanup(func() { config.PaymentUSDRate, config.QuotaPerUnit = oldRate, oldUnits })
+	config.PaymentUSDRate, config.QuotaPerUnit = 7.3, 500000
+	tiers := datatypes.NewJSONType(map[string]float64{"1K": 1, "2K": 2, "4K": 4})
+	qualities := datatypes.NewJSONType(map[string]float64{"low": 0.5, "high": 1, "max": 30})
+	p := &Pricing{Prices: map[string]*Price{
+		"image-a": {Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.1, GouoMaxOutputs: 4, GouoSizes: "1K,2K,4K", GouoQualities: "low,medium,high,xhigh,max",
+			GouoTierRatios: &tiers, GouoQualityRatios: &qualities, GouoTransparent: true},
+	}}
+	entry, err := p.GetGouoModel("image-a")
+	require.NoError(t, err)
+	// 系数为 1 的键不下发，缺省即按 1 计
+	require.Equal(t, map[string]float64{"2K": 2, "4K": 4}, entry.TierRatios)
+	require.Equal(t, map[string]float64{"low": 0.5, "max": 30}, entry.QualityRatios)
+	require.True(t, entry.Transparent)
+	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, entry.Qualities)
+	quote := func(size, quality string, n int) (float64, int) {
+		price, quota, err := GouoImageRequestQuote(entry, size, quality, n)
+		require.NoError(t, err, size, quality, n)
+		return price, quota
+	}
+	cases := []struct {
+		size, quality string
+		n             int
+		price         float64
+	}{
+		// 自动尺寸按 1K、自动画质按 high
+		{"", "", 0, 0.1},
+		{"auto", "auto", 1, 0.1},
+		{"1024x1024", "low", 1, 0.05},
+		{"2048x2048", "high", 1, 0.2},
+		{"3840x2160", "max", 1, 12},
+		// 没有设置系数的画质按 1 计
+		{"2048x2048", "medium", 1, 0.2},
+		{"1536x1024", "xhigh", 1, 0.1},
+		{" AUTO ", " Max ", 1, 3},
+		// 按张数乘
+		{"2048x2048", "low", 3, 0.3},
+		{"auto", "", 2, 0.2},
+	}
+	for _, tc := range cases {
+		price, quota := quote(tc.size, tc.quality, tc.n)
+		require.InDelta(t, tc.price, price, 1e-9, tc)
+		require.Equal(t, int(math.Ceil(price/7.3*500000)), quota, tc)
+	}
+	_, single := quote("2048x2048", "low", 1)
+	_, triple := quote("2048x2048", "low", 3)
+	require.Greater(t, triple, single*2)
+	for _, size := range []string{"4096x4096", "big"} {
+		_, _, err = GouoImageRequestQuote(entry, size, "low", 1)
+		require.Error(t, err, size)
+	}
+	_, _, err = GouoImageRequestQuote(entry, "auto", "low", -1)
+	require.Error(t, err)
+	// 没有任何系数的模型和原来一样按基础价计
+	plain := &GouoImageModel{PriceCNY: 0.1}
+	price, quota, err := GouoImageRequestQuote(plain, "3840x2160", "max", 1)
+	require.NoError(t, err)
+	require.InDelta(t, 0.1, price, 1e-9)
+	require.Equal(t, 6850, quota)
+	// 溢出额度范围时拒绝
+	_, _, err = GouoImageRequestQuote(&GouoImageModel{PriceCNY: 10000, TierRatios: map[string]float64{"4K": 100}, QualityRatios: map[string]float64{"max": 100}}, "3840x2160", "max", 10)
+	require.Error(t, err)
+}
+
+func TestGouoPriceVersionStableForOldModels(t *testing.T) {
+	oldRate, oldUnits := config.PaymentUSDRate, config.QuotaPerUnit
+	t.Cleanup(func() { config.PaymentUSDRate, config.QuotaPerUnit = oldRate, oldUnits })
+	config.PaymentUSDRate, config.QuotaPerUnit = 7.3, 500000
+	full := func() *Price {
+		return &Price{Model: "gpt-image-2", GouoEnabled: true, GouoPriceCNY: 0.3, GouoReference: true, GouoMask: true, GouoMaxOutputs: 4, GouoSizes: "1K,2K", GouoQualities: "low,medium,high", GouoMaxInputs: 16}
+	}
+	plain := &Price{Model: "image-b", GouoEnabled: true, GouoPriceCNY: 0.1, GouoMaxOutputs: 1}
+	p := &Pricing{Prices: map[string]*Price{"gpt-image-2": full(), "image-b": plain}}
+	// 期望值由加入系数和透明背景字段之前的版本算出：没有设置这些字段的模型，客户端不必重新确认价格
+	want := map[string]string{
+		"gpt-image-2": "7331364d95bfef54bff1905b55fae5ec6d8a073066516555d491a3d12a056b5d",
+		"image-b":     "5493bbf9f2bac0e45e4f539443ec4472ae295876a09886790fe88ed312fdc25e",
+	}
+	for id, version := range want {
+		entry, err := p.GetGouoModel(id)
+		require.NoError(t, err)
+		require.Equal(t, version, entry.PriceVersion, id)
+	}
+	// 系数全为 1 与没有设置等价
+	tierOnes, qualityOnes := datatypes.NewJSONType(map[string]float64{"1K": 1, "2K": 1}), datatypes.NewJSONType(map[string]float64{"high": 1})
+	price := full()
+	price.GouoTierRatios, price.GouoQualityRatios = &tierOnes, &qualityOnes
+	p.Prices["gpt-image-2"] = price
+	entry, err := p.GetGouoModel("gpt-image-2")
+	require.NoError(t, err)
+	require.Equal(t, want["gpt-image-2"], entry.PriceVersion)
+	// 系数、透明背景和超高画质都参与价格版本
+	tiers, qualities := datatypes.NewJSONType(map[string]float64{"2K": 2}), datatypes.NewJSONType(map[string]float64{"max": 30})
+	for _, edit := range []func(price *Price){
+		func(price *Price) { price.GouoTierRatios = &tiers },
+		func(price *Price) { price.GouoQualityRatios = &qualities },
+		func(price *Price) { price.GouoTransparent = true },
+		func(price *Price) { price.GouoQualities = "low,medium,high,xhigh" },
+	} {
+		price := full()
+		edit(price)
+		p.Prices["gpt-image-2"] = price
+		changed, err := p.GetGouoModel("gpt-image-2")
+		require.NoError(t, err)
+		require.NotEqual(t, want["gpt-image-2"], changed.PriceVersion)
+	}
+}
+
+func TestValidateGouoPriceRatios(t *testing.T) {
+	ratios := func(values map[string]float64) *datatypes.JSONType[map[string]float64] {
+		value := datatypes.NewJSONType(values)
+		return &value
+	}
+	base := func() *Price {
+		return &Price{Model: "image-a", GouoEnabled: true, GouoPriceCNY: 0.1, GouoMaxOutputs: 1}
+	}
+	valid := base()
+	valid.GouoTierRatios, valid.GouoQualityRatios = ratios(map[string]float64{"1K": 0.5, "2K": 1, "4K": 100}), ratios(map[string]float64{"low": 0.01, "medium": 1, "high": 2, "xhigh": 8, "max": 30})
+	valid.GouoQualities = "low,medium,high,xhigh,max"
+	require.NoError(t, ValidateGouoPrice(valid))
+	for name, edit := range map[string]func(price *Price){
+		"档位键非法":    func(price *Price) { price.GouoTierRatios = ratios(map[string]float64{"8K": 2}) },
+		"档位键大小写":   func(price *Price) { price.GouoTierRatios = ratios(map[string]float64{"2k": 2}) },
+		"画质键非法":    func(price *Price) { price.GouoQualityRatios = ratios(map[string]float64{"ultra": 2}) },
+		"系数为 0":    func(price *Price) { price.GouoTierRatios = ratios(map[string]float64{"1K": 0}) },
+		"系数为负":     func(price *Price) { price.GouoQualityRatios = ratios(map[string]float64{"low": -1}) },
+		"系数超过 100": func(price *Price) { price.GouoQualityRatios = ratios(map[string]float64{"max": 100.5}) },
+		"系数 NaN":   func(price *Price) { price.GouoTierRatios = ratios(map[string]float64{"4K": math.NaN()}) },
+		"系数 Inf":   func(price *Price) { price.GouoQualityRatios = ratios(map[string]float64{"max": math.Inf(1)}) },
+		"画质非法":     func(price *Price) { price.GouoQualities = "low,ultra" },
+	} {
+		price := base()
+		edit(price)
+		require.Error(t, ValidateGouoPrice(price), name)
+	}
+	// 未启用的价格记录不校验光构字段
+	disabled := base()
+	disabled.GouoEnabled = false
+	disabled.GouoTierRatios = ratios(map[string]float64{"8K": 0})
+	require.NoError(t, ValidateGouoPrice(disabled))
 }

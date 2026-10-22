@@ -427,6 +427,7 @@ func withLocalGouoFields(price, local *Price) *Price {
 	merged := *price
 	merged.GouoEnabled, merged.GouoPriceCNY, merged.GouoReference, merged.GouoMask, merged.GouoMaxOutputs = local.GouoEnabled, local.GouoPriceCNY, local.GouoReference, local.GouoMask, local.GouoMaxOutputs
 	merged.GouoSort, merged.GouoSizes, merged.GouoQualities, merged.GouoMaxInputs, merged.GouoMaxTokens = local.GouoSort, local.GouoSizes, local.GouoQualities, local.GouoMaxInputs, local.GouoMaxTokens
+	merged.GouoTierRatios, merged.GouoQualityRatios, merged.GouoTransparent = local.GouoTierRatios, local.GouoQualityRatios, local.GouoTransparent
 	return &merged
 }
 
