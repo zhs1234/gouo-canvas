@@ -146,8 +146,39 @@ func TestGouoAdminModelsListAndUpdate(t *testing.T) {
 	} {
 		require.Equal(t, http.StatusBadRequest, update(body).Code, body)
 	}
+	// 档位、画质系数和原生透明背景：保存后出现在目录和列表里，省略时保持原值，空对象清除
+	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_qualities":["low","medium","high","xhigh","max"],"gouo_tier_ratios":{"2K":2,"4K":4},"gouo_quality_ratios":{"low":0.5,"high":1,"max":30},"gouo_transparent":true}`).Code)
+	after, err = model.PricingInstance.GetGouoModel("image-new")
+	require.NoError(t, err)
+	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, after.Qualities)
+	require.Equal(t, map[string]float64{"2K": 2, "4K": 4}, after.TierRatios)
+	require.Equal(t, map[string]float64{"low": 0.5, "max": 30}, after.QualityRatios)
+	require.True(t, after.Transparent)
+	_, models = list()
+	require.Equal(t, map[string]any{"2K": float64(2), "4K": float64(4)}, models["image-new"]["gouo_tier_ratios"])
+	require.Equal(t, map[string]any{"low": 0.5, "high": float64(1), "max": float64(30)}, models["image-new"]["gouo_quality_ratios"])
+	require.Equal(t, true, models["image-new"]["gouo_transparent"])
+	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2}`).Code)
+	kept, err := model.PricingInstance.GetGouoModel("image-new")
+	require.NoError(t, err)
+	require.Equal(t, after.PriceVersion, kept.PriceVersion)
+	for body, message := range map[string]string{
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_tier_ratios":{"8K":2}}`:       "档位系数只能设置 1K、2K、4K",
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_quality_ratios":{"hd":2}}`:    "画质系数只能设置 low、medium、high、xhigh、max",
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_tier_ratios":{"1K":0}}`:       "档位系数必须大于 0 且不超过 100",
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_quality_ratios":{"max":101}}`: "画质系数必须大于 0 且不超过 100",
+		`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_max_outputs":1,"gouo_quality_ratios":{"max":-1}}`:  "画质系数必须大于 0 且不超过 100",
+	} {
+		res := update(body)
+		require.Equal(t, http.StatusBadRequest, res.Code, body)
+		require.Contains(t, res.Body.String(), message, body)
+	}
+	// 校验失败不改动已保存的配置
+	kept, err = model.PricingInstance.GetGouoModel("image-new")
+	require.NoError(t, err)
+	require.Equal(t, after.PriceVersion, kept.PriceVersion)
 	// 改回原样（不开放档位、画质和张数不限）：价格版本回到原值
-	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_sizes":[],"gouo_qualities":[],"gouo_max_inputs":0}`).Code)
+	require.Equal(t, http.StatusOK, update(`{"model":"image-new","gouo_enabled":true,"gouo_price_cny":0.3,"gouo_reference":true,"gouo_max_outputs":2,"gouo_sizes":[],"gouo_qualities":[],"gouo_max_inputs":0,"gouo_tier_ratios":{},"gouo_quality_ratios":{},"gouo_transparent":false}`).Code)
 	after, err = model.PricingInstance.GetGouoModel("image-new")
 	require.NoError(t, err)
 	require.Equal(t, before.PriceVersion, after.PriceVersion)
@@ -304,6 +335,9 @@ func TestGouoModelKind(t *testing.T) {
 		{"通义万相", "wan2.5-t2i-preview", nil, nil, "image"},
 		{"dall-e 即使按 token 计费也是图片模型", "dall-e-3", &model.Price{Type: model.TokensPriceType}, nil, "image"},
 		{"无法判断", "mystery", &model.Price{Type: model.TimesPriceType}, nil, ""},
+		{"gpt-image-2.5 系列", "gpt-image-2.5-flare", nil, nil, "image"},
+		{"gpt-image-2.5 日期快照", "gpt-image-2.5-sunburst-2026-09-08", nil, nil, "image"},
+		{"gpt-image-2.5 按 token 计费也是图片模型", "gpt-image-2.5-flare-2026-09-08", &model.Price{Type: model.TokensPriceType}, nil, "image"},
 	}
 	for _, tc := range cases {
 		require.Equal(t, tc.want, gouoModelKind(tc.id, tc.price, tc.info), tc.name)

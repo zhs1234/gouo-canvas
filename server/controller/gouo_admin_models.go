@@ -46,6 +46,10 @@ type gouoAdminModel struct {
 	MaxInputs   int                `json:"gouo_max_inputs"`
 	Error       string             `json:"error,omitempty"`
 	Channels    []gouoAdminChannel `json:"channels"`
+	// 档位和画质的价格系数，缺省的键按 1 计；Transparent 表示模型原生支持透明背景
+	TierRatios    map[string]float64 `json:"gouo_tier_ratios"`
+	QualityRatios map[string]float64 `json:"gouo_quality_ratios"`
+	Transparent   bool               `json:"gouo_transparent"`
 	// 有启用中的渠道支持、且是有效用户分组的分组，即客户端可能看到这个模型的分组
 	OpenGroups []string `json:"open_groups"`
 	// image / text / 空（无法判断），后台按此把图片模型和文本模型分到各自的标签页
@@ -224,6 +228,7 @@ func ListGouoAdminModels(c *gin.Context) {
 		item.Enabled, item.PriceCNY, item.Reference, item.Mask, item.MaxOutputs, item.Sort = price.GouoEnabled, price.GouoPriceCNY, price.GouoReference, price.GouoMask, price.GouoMaxOutputs, price.GouoSort
 		item.Name, item.Description = gouoModelText(price)
 		item.Sizes, item.Qualities, item.MaxInputs = model.GouoSizeList(price), model.GouoQualityList(price), price.GouoMaxInputs
+		item.TierRatios, item.QualityRatios, item.Transparent = model.GouoRatios(price.GouoTierRatios), model.GouoRatios(price.GouoQualityRatios), price.GouoTransparent
 	}
 	model.PricingInstance.RUnlock()
 	for id, channels := range channelsByModel {
@@ -313,6 +318,10 @@ func UpdateGouoAdminModel(c *gin.Context) {
 		Sizes     *[]string `json:"gouo_sizes"`
 		Qualities *[]string `json:"gouo_qualities"`
 		MaxInputs *int      `json:"gouo_max_inputs"`
+		// 系数和透明背景同样可以省略；系数传空对象表示全部按 1 计
+		TierRatios    *map[string]float64 `json:"gouo_tier_ratios"`
+		QualityRatios *map[string]float64 `json:"gouo_quality_ratios"`
+		Transparent   *bool               `json:"gouo_transparent"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil || strings.TrimSpace(input.Model) == "" || len(input.Model) > 100 {
 		gouoFail(c, http.StatusBadRequest, "invalid_model", "模型名称无效")
@@ -359,6 +368,21 @@ func UpdateGouoAdminModel(c *gin.Context) {
 	}
 	if input.MaxInputs != nil {
 		price.GouoMaxInputs = *input.MaxInputs
+	}
+	setRatios := func(target **datatypes.JSONType[map[string]float64], ratios *map[string]float64) {
+		if ratios == nil {
+			return
+		}
+		*target = nil
+		if len(*ratios) > 0 {
+			value := datatypes.NewJSONType(*ratios)
+			*target = &value
+		}
+	}
+	setRatios(&price.GouoTierRatios, input.TierRatios)
+	setRatios(&price.GouoQualityRatios, input.QualityRatios)
+	if input.Transparent != nil {
+		price.GouoTransparent = *input.Transparent
 	}
 	// 先校验价格，避免价格无效时模型详情已被改掉
 	if err := model.ValidateGouoPrice(&price); err != nil {
