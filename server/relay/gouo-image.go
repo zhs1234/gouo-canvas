@@ -193,16 +193,23 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	}
 	n, inputs := 1, 0
 	edit, mask := false, false
-	size, quality, moderation := "", "", ""
+	size, quality, moderation, background, format := "", "", "", "", ""
 	switch r := relay.(type) {
 	case *relayImageGenerations:
 		n, size, quality = r.request.N, r.request.Size, r.request.Quality
 		if r.request.Moderation != nil {
 			moderation = *r.request.Moderation
 		}
+		if r.request.Background != nil {
+			background = *r.request.Background
+		}
+		if r.request.OutputFormat != nil {
+			format = *r.request.OutputFormat
+		}
 	case *relayImageEdits:
-		// 编辑请求的画质和审核强度不在结构体里，从表单读取
+		// 编辑请求的画质、审核强度、背景和输出格式不在结构体里，从表单读取
 		n, size, quality, moderation = r.request.N, r.request.Size, c.PostForm("quality"), c.PostForm("moderation")
+		background, format = c.PostForm("background"), c.PostForm("output_format")
 		edit = true
 	case *relayImageVariations:
 		n, size = r.request.N, r.request.Size
@@ -232,12 +239,49 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	if message := checkGouoImageParams(entry, size, quality, moderation, inputs); message != "" {
 		return common.StringErrorWrapperLocal(message, "image_param_unavailable", http.StatusBadRequest)
 	}
+	switch strings.ToLower(strings.TrimSpace(background)) {
+	case "transparent":
+		// 不支持的模型可能直接报错或返回不透明背景；透明通道只有 PNG 和 WebP 能保存
+		if !entry.Transparent {
+			return common.StringErrorWrapperLocal("该模型不支持透明背景", "image_background_unavailable", http.StatusBadRequest)
+		}
+		if format = strings.ToLower(strings.TrimSpace(format)); format != "" && format != "png" && format != "webp" {
+			return common.StringErrorWrapperLocal("透明背景需要 PNG 或 WebP 格式", "image_background_unavailable", http.StatusBadRequest)
+		}
+	case "", "opaque", "auto":
+	default:
+		return common.StringErrorWrapperLocal("背景参数无效", "image_background_unavailable", http.StatusBadRequest)
+	}
 	version := c.GetHeader("X-Gouo-Price-Version")
 	// 光构客户端必须确认目录价格；普通API用户可省略版本，仍使用请求开始时的快照。
 	if (c.GetString("token_name") == "sys_playground" || version != "") && version != entry.PriceVersion {
 		return common.StringErrorWrapperLocal("模型价格或能力已更新，请刷新模型列表并重新确认提交", "image_price_changed", http.StatusConflict)
 	}
-	c.Set("gouo_image_model", entry)
+	// 目录里是单张基础价；预扣、结算、退款和扣费记录都读这份副本，按本次请求的档位、画质和张数计价
+	priceCNY, quota, err := model.GouoImageRequestQuote(entry, size, quality, n)
+	if err != nil {
+		return common.ErrorWrapperLocal(err, "image_price_unavailable", http.StatusBadRequest)
+	}
+	quoted := *entry
+	quoted.PriceCNY, quoted.Quota = priceCNY, quota
+	// GPT image 模型只返回 b64_json，不支持 response_format 和旧版 style，部分上游会报未知参数；
+	// gpt-image-2 系列（含 2.5）传 input_fidelity 会报 400
+	switch r := relay.(type) {
+	case *relayImageGenerations:
+		r.request.ResponseFormat, r.request.Style = "", ""
+	case *relayImageEdits:
+		r.request.ResponseFormat = ""
+	case *relayImageVariations:
+		r.request.ResponseFormat = ""
+	}
+	if form != nil {
+		delete(form.Value, "response_format")
+		delete(form.Value, "style")
+		if strings.HasPrefix(relay.getOriginalModel(), "gpt-image-2") {
+			delete(form.Value, "input_fidelity")
+		}
+	}
+	c.Set("gouo_image_model", &quoted)
 	c.Set("skip_only_chat", true)
 	if taskID := c.GetHeader("X-Gouo-Task-Id"); taskID != "" && config.GouoCloudLibraryEnabled {
 		if len(taskID) > 128 || !gouoImageRequestID.MatchString(taskID) {
@@ -304,8 +348,12 @@ func checkGouoImageParams(entry *model.GouoImageModel, size, quality, moderation
 			return "此模型不支持该分辨率，请选择自动尺寸或已开放的分辨率"
 		}
 	}
+	quality = strings.ToLower(strings.TrimSpace(quality))
+	// 后台没有限定画质时不包括 xhigh、max：成本高得多，必须显式开放
+	if len(entry.Qualities) == 0 && (quality == "xhigh" || quality == "max") {
+		return "此模型不开放所选画质，请重新选择"
+	}
 	if len(entry.Qualities) > 0 {
-		quality = strings.ToLower(strings.TrimSpace(quality))
 		// 自动画质可能由上游选成高画质，只有开放高画质时才允许
 		if quality == "" || quality == "auto" {
 			if !slices.Contains(entry.Qualities, "high") {

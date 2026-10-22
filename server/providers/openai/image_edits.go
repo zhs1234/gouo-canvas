@@ -9,6 +9,7 @@ import (
 	"one-api/common/config"
 	"one-api/common/requester"
 	"one-api/types"
+	"strings"
 )
 
 func (p *OpenAIProvider) CreateImageEdits(request *types.ImageEditRequest) (*types.ImageResponse, *types.OpenAIErrorWithStatusCode) {
@@ -54,7 +55,13 @@ func (p *OpenAIProvider) getRequestImageBody(relayMode int, ModelName string, re
 	// 创建请求
 	var req *http.Request
 	var err error
-	if p.OriginalModel != request.Model {
+	// 光构图片请求在准入时剔除了上游不支持的参数，只能按表单重建，不能原样转发原始请求体
+	_, gouoImage := p.Context.Get("gouo_image_model")
+	// 渠道把模型映射到 gpt-image-2 系列时同样不能带 input_fidelity
+	if gouoImage && strings.HasPrefix(request.Model, "gpt-image-2") && p.Context.Request.MultipartForm != nil {
+		delete(p.Context.Request.MultipartForm.Value, "input_fidelity")
+	}
+	if p.OriginalModel != request.Model || gouoImage {
 		var formBody bytes.Buffer
 		builder := p.Requester.CreateFormBuilder(&formBody)
 		if err := imagesEditsMultipartForm(request, p.Context.Request.MultipartForm, builder); err != nil {
