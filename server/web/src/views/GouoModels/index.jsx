@@ -31,18 +31,29 @@ const SIZE_TIERS = ['1K', '2K', '4K'];
 const QUALITY_OPTIONS = [
   ['low', '低'],
   ['medium', '中'],
-  ['high', '高']
+  ['high', '高'],
+  ['xhigh', '超高 xhigh'],
+  ['max', '极致 max']
 ];
+// 画质“不限”只包括低、中、高，超高和极致必须显式开放
+const DEFAULT_QUALITIES = ['low', 'medium', 'high'];
+const QUALITY_KEYS = QUALITY_OPTIONS.map(([key]) => key);
+const qualityLabel = (value) => QUALITY_OPTIONS.find(([key]) => key === value)?.[1] || value;
+const ratioValid = (value) => Number(value) > 0 && Number(value) <= 100;
+// 系数缺省按 1 计，只提交不为 1 的键
+const ratioMap = (keys, values) => Object.fromEntries(keys.map((key) => [key, Number(values[key])]).filter(([, value]) => value !== 1));
 // 能力列里的成本相关限制，未设置的不显示
 const limitText = (row) =>
   [
     row.gouo_sizes?.length ? `分辨率 ${row.gouo_sizes.join('/')}` : '仅自动尺寸',
-    row.gouo_qualities?.length &&
-      `画质 ${row.gouo_qualities.map((value) => QUALITY_OPTIONS.find(([key]) => key === value)?.[1] || value).join('/')}`,
-    row.gouo_max_inputs > 0 && `参考图最多 ${row.gouo_max_inputs} 张`
+    row.gouo_qualities?.length && `画质 ${row.gouo_qualities.map(qualityLabel).join('/')}`,
+    row.gouo_max_inputs > 0 && `参考图最多 ${row.gouo_max_inputs} 张`,
+    row.gouo_transparent && '原生透明背景'
   ]
     .filter(Boolean)
     .join(' · ');
+const hasRatios = (row) =>
+  [row.gouo_tier_ratios, row.gouo_quality_ratios].some((ratios) => Object.values(ratios || {}).some((value) => value !== 1));
 
 // 客户端能看到的条件：开启光构、配置有效、至少一个启用中的渠道支持它且渠道分组是有效的用户分组（还需令牌未限制）
 const visibility = (row) => {
@@ -98,9 +109,15 @@ function ImageModels() {
           description: values.display_description,
           gouo_sort: Number(values.display_sort || 0),
           gouo_sizes: values.cap_sizes,
-          // 三种画质都开放即不限
-          gouo_qualities: values.cap_qualities.length === QUALITY_OPTIONS.length ? [] : values.cap_qualities,
-          gouo_max_inputs: Number(values.cap_inputs || 0)
+          // 恰好开放低、中、高即不限；勾了超高或极致必须显式提交列表
+          gouo_qualities:
+            values.cap_qualities.length === DEFAULT_QUALITIES.length && DEFAULT_QUALITIES.every((key) => values.cap_qualities.includes(key))
+              ? []
+              : values.cap_qualities,
+          gouo_max_inputs: Number(values.cap_inputs || 0),
+          gouo_tier_ratios: ratioMap(SIZE_TIERS, values.cap_tier_ratios),
+          gouo_quality_ratios: ratioMap(QUALITY_KEYS, values.cap_quality_ratios),
+          gouo_transparent: values.gouo_transparent
         })
       });
       if (!response) return; // 请求失败时 API 拦截器已经提示过，不再重复
@@ -148,7 +165,17 @@ function ImageModels() {
     editing.cap_qualities.length > 0 &&
     Number.isInteger(Number(editing.cap_inputs || 0)) &&
     Number(editing.cap_inputs || 0) >= 0 &&
-    Number(editing.cap_inputs || 0) <= 16;
+    Number(editing.cap_inputs || 0) <= 16 &&
+    SIZE_TIERS.every((key) => ratioValid(editing.cap_tier_ratios[key])) &&
+    QUALITY_KEYS.every((key) => ratioValid(editing.cap_quality_ratios[key]));
+  // 价格预览：自动尺寸按 1K、自动画质按 high 计，与服务端扣费一致
+  const previewTiers = editing ? [['自动尺寸', '1K'], ...editing.cap_sizes.map((tier) => [tier, tier])] : [];
+  const previewPrice = (tier, quality) =>
+    renderGouoPoints(
+      (Number(editing.gouo_points) / GOUO_POINTS_PER_CNY) *
+        Number(editing.cap_tier_ratios[tier]) *
+        Number(editing.cap_quality_ratios[quality])
+    );
 
   return (
     <Box>
@@ -212,7 +239,14 @@ function ImageModels() {
                       </Typography>
                     )}
                   </TableCell>
-                  <TableCell>{row.gouo_enabled ? `${renderGouoPoints(row.gouo_price_cny)}/张` : '—'}</TableCell>
+                  <TableCell>
+                    {row.gouo_enabled ? `${renderGouoPoints(row.gouo_price_cny)}/张` : '—'}
+                    {row.gouo_enabled && hasRatios(row) && (
+                      <Typography variant="caption" display="block" color="text.secondary">
+                        基础价，按档位 × 画质系数计价
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {row.gouo_enabled
                       ? `${row.gouo_reference ? '参考图' : '无参考图'} · ${row.gouo_mask ? '遮罩' : '无遮罩'} · 单次最多 ${row.gouo_max_outputs} 张`
@@ -262,8 +296,11 @@ function ImageModels() {
                             display_description: row.description || '',
                             display_sort: row.gouo_sort || 0,
                             cap_sizes: row.gouo_sizes || [],
-                            cap_qualities: row.gouo_qualities?.length ? row.gouo_qualities : QUALITY_OPTIONS.map(([value]) => value),
-                            cap_inputs: row.gouo_max_inputs || 0
+                            cap_qualities: row.gouo_qualities?.length ? row.gouo_qualities : DEFAULT_QUALITIES,
+                            cap_inputs: row.gouo_max_inputs || 0,
+                            cap_tier_ratios: Object.fromEntries(SIZE_TIERS.map((key) => [key, row.gouo_tier_ratios?.[key] ?? 1])),
+                            cap_quality_ratios: Object.fromEntries(QUALITY_KEYS.map((key) => [key, row.gouo_quality_ratios?.[key] ?? 1])),
+                            gouo_transparent: Boolean(row.gouo_transparent)
                           })
                         }
                       >
@@ -339,12 +376,12 @@ function ImageModels() {
                 />
                 <TextField
                   required
-                  label="售价（积分/张）"
+                  label="基础价（积分/张）"
                   type="number"
                   inputProps={{ min: 0.0001, max: 10000 * GOUO_POINTS_PER_CNY, step: 'any' }}
                   value={editing.gouo_points}
                   onChange={(event) => setEditing({ ...editing, gouo_points: event.target.value })}
-                  helperText={`1 元 = ${GOUO_POINTS_PER_CNY} 积分${Number(editing.gouo_points) > 0 ? `，每张${formatPointsMoney(editing.gouo_points)}` : ''}`}
+                  helperText={`1 元 = ${GOUO_POINTS_PER_CNY} 积分${Number(editing.gouo_points) > 0 ? `，每张${formatPointsMoney(editing.gouo_points)}` : ''}；实际单价再乘以下方的档位和画质系数`}
                 />
                 <TextField
                   required
@@ -380,8 +417,18 @@ function ImageModels() {
                   }
                   label="支持遮罩编辑（需同时支持参考图）"
                 />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={Boolean(editing.gouo_transparent)}
+                      onChange={(event) => setEditing({ ...editing, gouo_transparent: event.target.checked })}
+                    />
+                  }
+                  label="原生透明背景（输出需为 PNG 或 WebP）"
+                />
                 <Alert severity="warning">
-                  按张计价时，尺寸越大、画质越高、参考图越多，上游成本越高。以下限制由服务端校验，客户端只显示允许的选项。
+                  按张计价时，尺寸越大、画质越高、参考图越多，上游成本越高。以下限制由服务端校验，客户端只显示允许的选项。gpt-image-2.5
+                  系列支持超高/极致画质和原生透明背景；gpt-image-2 的透明背景仅为预览，可能报错。
                 </Alert>
                 <Box>
                   <Typography variant="body2">支持的分辨率</Typography>
@@ -432,10 +479,77 @@ function ImageModels() {
                   ))}
                   <Typography variant="caption" display="block" color={editing.cap_qualities.length ? 'text.secondary' : 'error'}>
                     {editing.cap_qualities.length
-                      ? '全选表示不限。“自动”画质可能被上游选成高画质，只在开放高画质时提供。'
+                      ? '只勾选低、中、高表示不限；超高和极致成本远高于高画质（极致约为低画质的 30 倍），必须勾选才开放。“自动”画质可能被上游选成高画质，只在开放高画质时提供。'
                       : '至少开放一种画质'}
                   </Typography>
                 </Box>
+                <Box>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    价格系数
+                  </Typography>
+                  <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1}>
+                    {SIZE_TIERS.map((key) => (
+                      <TextField
+                        key={key}
+                        size="small"
+                        type="number"
+                        label={`${key} 档位`}
+                        value={editing.cap_tier_ratios[key]}
+                        error={!ratioValid(editing.cap_tier_ratios[key])}
+                        onChange={(event) =>
+                          setEditing({ ...editing, cap_tier_ratios: { ...editing.cap_tier_ratios, [key]: event.target.value } })
+                        }
+                        inputProps={{ min: 0.01, max: 100, step: 'any' }}
+                        sx={{ width: 130 }}
+                      />
+                    ))}
+                  </Stack>
+                  <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1} sx={{ mt: 1 }}>
+                    {QUALITY_OPTIONS.map(([key, label]) => (
+                      <TextField
+                        key={key}
+                        size="small"
+                        type="number"
+                        label={`画质 ${label}`}
+                        value={editing.cap_quality_ratios[key]}
+                        error={!ratioValid(editing.cap_quality_ratios[key])}
+                        onChange={(event) =>
+                          setEditing({ ...editing, cap_quality_ratios: { ...editing.cap_quality_ratios, [key]: event.target.value } })
+                        }
+                        inputProps={{ min: 0.01, max: 100, step: 'any' }}
+                        sx={{ width: 130 }}
+                      />
+                    ))}
+                  </Stack>
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    实际单价 = 基础价 × 档位系数 × 画质系数；自动尺寸按 1K、自动画质按 high 计。系数大于 0、不超过 100，默认 1。
+                  </Typography>
+                </Box>
+                {Number(editing.gouo_points) > 0 && (
+                  <Box>
+                    <Typography variant="body2">价格预览（积分/张）</Typography>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>档位</TableCell>
+                          {editing.cap_qualities.map((quality) => (
+                            <TableCell key={quality}>{qualityLabel(quality)}</TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {previewTiers.map(([label, tier]) => (
+                          <TableRow key={label}>
+                            <TableCell>{label}</TableCell>
+                            {editing.cap_qualities.map((quality) => (
+                              <TableCell key={quality}>{previewPrice(tier, quality)}</TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Box>
+                )}
                 <TextField
                   label="最多参考图张数"
                   type="number"
