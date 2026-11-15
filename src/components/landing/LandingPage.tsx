@@ -140,7 +140,7 @@ function ProductPreview() {
     <div className="overflow-hidden rounded-[32px] border border-[var(--line)] bg-white/70 shadow-[0_40px_100px_rgb(66_49_37/0.12)]" aria-hidden="true">
       <div className="flex items-center gap-1.5 border-b border-[var(--line)] px-5 py-3.5">
         {['#ff5f57', '#febc2e', '#28c840'].map((color) => <span key={color} className="h-3 w-3 rounded-full" style={{ background: color }} />)}
-        <span className="ml-4 text-xs text-[#8a8a8d]">{BRAND.name} · 创作</span>
+        <span className="ml-4 text-xs text-[var(--ink-soft)]">{BRAND.name} · 创作</span>
       </div>
       <div className="grid md:grid-cols-[200px_1fr]">
         <div className="hidden border-r border-[var(--line)] p-4 md:block">
@@ -155,7 +155,7 @@ function ProductPreview() {
             <p className={`min-h-[3rem] text-[15px] leading-6 ${done ? '' : 'gouo-caret'}`}>{prompt.slice(0, typed)}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-soft)]">
               {['1024 × 1536', '高清', '4 张'].map((chip) => <span key={chip} className="rounded-lg border border-[var(--line)] px-2.5 py-1">{chip}</span>)}
-              <span className={`ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition ${done ? 'bg-[#171719]' : 'bg-[#a0a0a3]'}`}>
+              <span className={`ml-auto inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold text-white transition ${done ? 'bg-[#171719]' : 'bg-[var(--ink-soft)]'}`}>
                 {done && !finished ? '生成中…' : '生成'} <ArrowRight className="h-3.5 w-3.5" />
               </span>
             </div>
@@ -172,7 +172,7 @@ function ProductPreview() {
               </div>
             ))}
           </div>
-          <p className="mt-4 text-right text-xs text-[#8a8a8d]">{finished ? '生成完成，共 4 张 · 已保存到账户' : done ? '正在生成 4 张候选…' : ' '}</p>
+          <p className="mt-4 text-right text-xs text-[var(--ink-soft)]">{finished ? '生成完成，共 4 张 · 已保存到账户' : done ? '正在生成 4 张候选…' : ' '}</p>
         </div>
       </div>
     </div>
@@ -200,7 +200,7 @@ function WorkflowHub() {
           <span className="grid h-11 w-11 place-items-center rounded-2xl border border-white bg-white/90 shadow-[0_10px_24px_rgb(66_49_37/0.12)] sm:h-12 sm:w-12">
             <node.icon className="h-5 w-5 text-[#c26855]" strokeWidth={1.7} />
           </span>
-          <span className="whitespace-nowrap text-[11px] font-semibold text-[var(--ink-soft)]">{node.title}</span>
+          <span className="whitespace-nowrap text-xs font-semibold text-[var(--ink-soft)]">{node.title}</span>
         </div>
       ))}
     </div>
@@ -238,9 +238,9 @@ function InspirationGallery({ onRegister }: { onRegister: () => void }) {
             <img src={`${import.meta.env.BASE_URL}${item.previewImage}`} alt={`${item.title}示例`} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.04]" />
             <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent" />
             <figcaption className="gouo-glass-dark absolute inset-x-3 bottom-3 rounded-2xl px-4 py-3.5 text-white">
-              <span className="text-[11px] text-white/70">{item.category}</span>
+              <span className="text-xs text-white/70">{item.category}</span>
               <strong className="mt-0.5 block text-lg font-semibold tracking-[-0.02em]">{item.title}</strong>
-              <span className="mt-1 block truncate text-[10px] text-white/55">示例图来源：{item.previewSourceLabel}</span>
+              <span className="mt-1 block truncate text-xs text-white/55">示例图来源：{item.previewSourceLabel}</span>
             </figcaption>
           </figure>
         ))}
@@ -249,7 +249,7 @@ function InspirationGallery({ onRegister }: { onRegister: () => void }) {
         <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-[var(--line)]">
           <div className="h-full rounded-full bg-[#171719] transition-[width] duration-300" style={{ width: `${(current / GALLERY.length) * 100}%` }} />
         </div>
-        <span className="text-xs tabular-nums text-[#8a8a8d]">{String(current).padStart(2, '0')} / {String(GALLERY.length).padStart(2, '0')}</span>
+        <span className="text-xs tabular-nums text-[var(--ink-soft)]">{String(current).padStart(2, '0')} / {String(GALLERY.length).padStart(2, '0')}</span>
         <button type="button" onClick={onRegister} className="inline-flex items-center gap-1.5 text-sm font-semibold hover:underline">浏览全部模板 <ArrowRight className="h-4 w-4" /></button>
       </div>
     </>
@@ -279,7 +279,7 @@ function UseCases() {
       </div>
       <div key={active} role="tabpanel" className="gouo-fade-up grid gap-5 rounded-[28px] border border-[var(--line)] bg-white/70 p-6 sm:grid-cols-[minmax(0,1fr)_200px] sm:p-8" style={delay('0s')}>
         <div className="flex flex-col">
-          <span className="text-[11px] font-semibold tracking-[0.08em] text-[#8a8a8d]">提示词</span>
+          <span className="text-xs font-semibold tracking-[0.04em] text-[var(--ink-soft)]">提示词</span>
           <p className="mt-3 text-xl font-semibold leading-snug tracking-[-0.02em]">“{item.prompt}”</p>
           <div className="mt-5 flex flex-wrap gap-2">
             {item.chips.map((chip) => <span key={chip} className="rounded-lg border border-[var(--line)] bg-white px-2.5 py-1 text-xs text-[var(--ink-soft)]">{chip}</span>)}
@@ -324,6 +324,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
 
   return (
     <div ref={rootRef} className="gouo-public min-h-[100dvh] overflow-x-hidden">
+      <a className="skip-link" href="#preview">跳到主要内容</a>
       <section id="top" className="gouo-grainient m-2.5 flex min-h-[calc(100dvh-20px)] flex-col justify-between rounded-[28px] px-5 pb-10 pt-4 text-white sm:px-10 sm:pb-12">
         <div className="gouo-liquid" aria-hidden="true">{Array.from({ length: 7 }, (_, i) => <i key={i} />)}</div>
         <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
@@ -331,7 +332,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
             <div key={card.name} className={`gouo-fade-up absolute max-w-[240px] ${card.pos}`} style={{ rotate: card.rotate, ...delay(`${0.5 + i * 0.12}s`) }}>
               <div className="gouo-float relative overflow-hidden rounded-[20px] border-[5px] border-white/75 shadow-[0_30px_70px_rgb(90_40_25/0.3)]" style={delay(`${-i * 1.3}s`)}>
                 <img src={`${import.meta.env.BASE_URL}${card.item.previewImage}`} alt="" className={`block w-full object-cover ${card.aspect}`} />
-                {card.label && <span className="gouo-glass-dark absolute inset-x-2 bottom-2 rounded-xl px-3 py-2 text-[11px] font-semibold text-white">灵感库 · {card.item.title}</span>}
+                {card.label && <span className="gouo-glass-dark absolute inset-x-2 bottom-2 rounded-xl px-3 py-2 text-xs font-semibold text-white">灵感库 · {card.item.title}</span>}
               </div>
             </div>
           ))}
@@ -366,7 +367,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         </div>
 
         <div className="mx-auto w-full max-w-[1600px]">
-          <h1 className="text-[clamp(3.4rem,9vw,8.4rem)] font-semibold leading-[0.94] tracking-[-0.06em]">
+          <h1 className="text-[clamp(3.4rem,9vw,8.4rem)] font-semibold leading-[1.02] tracking-[-0.06em]">
             <span className="gouo-line-mask"><span className="gouo-line-text" style={delay('0.25s')}>把灵感</span></span>
             <span className="gouo-line-mask"><span className="gouo-line-text" style={delay('0.4s')}>构造成图像</span></span>
           </h1>
@@ -439,7 +440,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
               <div key={stat.title} className={`gouo-reveal grid min-h-[230px] content-between gap-10 sm:min-h-[340px] rounded-[28px] border border-white/80 bg-gradient-to-b ${stat.tone} p-7 shadow-[0_20px_50px_rgb(66_49_37/0.07)]`} style={delay(`${index * 0.08}s`)}>
                 <div className="flex items-baseline gap-2">
                   <strong className="text-[clamp(4rem,6vw,5.6rem)] font-semibold leading-[0.82] tracking-[-0.075em] tabular-nums">{stat.value}</strong>
-                  <span className="text-[clamp(1.2rem,1.8vw,1.8rem)] font-semibold text-[#a0a0a3]">{stat.unit}</span>
+                  <span className="text-[clamp(1.2rem,1.8vw,1.8rem)] font-semibold text-[var(--ink-soft)]">{stat.unit}</span>
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold tracking-[-0.02em]">{stat.title}</h3>
@@ -481,7 +482,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
                 <div className="flex h-[200px] items-center justify-center rounded-3xl border border-[var(--line)] bg-[#f8f8f5] p-6">
                   {index === 0 && (
                     <div className="w-full max-w-[240px] rounded-2xl border border-[var(--line)] bg-white p-4 text-left shadow-sm">
-                      <div className="text-[11px] font-semibold text-[var(--ink-soft)]">兑换码</div>
+                      <div className="text-xs font-semibold text-[var(--ink-soft)]">兑换码</div>
                       <div className="mt-2 rounded-xl border border-[var(--line)] px-3 py-2.5 font-mono text-sm tracking-[0.2em]">GOUO-••••-••••</div>
                       <div className="mt-3 rounded-xl bg-[#171719] py-2 text-center text-xs font-bold text-white">兑换额度</div>
                     </div>
@@ -554,7 +555,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
             {FAQS.map((item, index) => (
               <details key={item.q} className="gouo-faq border-b border-[var(--line)]">
                 <summary className="grid cursor-pointer grid-cols-[42px_1fr_32px] items-start gap-4 py-6">
-                  <span className="pt-1 text-xs text-[#a0a0a3]">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="pt-1 text-xs text-[var(--ink-soft)]">{String(index + 1).padStart(2, '0')}</span>
                   <strong className="text-[17px] font-semibold leading-snug">{item.q}</strong>
                   <Plus className="gouo-faq-icon h-5 w-5 transition-transform duration-300" />
                 </summary>
@@ -573,7 +574,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         >
           <span className="gouo-dots" />
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(310px,0.72fr)] lg:items-end">
-            <h2 className="text-[clamp(3rem,6.5vw,6.5rem)] font-semibold leading-[0.94] tracking-[-0.06em]">
+            <h2 className="text-[clamp(3rem,6.5vw,6.5rem)] font-semibold leading-[1.02] tracking-[-0.06em]">
               <span className="block whitespace-nowrap">从一句话</span>
               <span className="block whitespace-nowrap">开始。</span>
             </h2>
@@ -603,36 +604,36 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <div>
             <div className="flex items-center gap-2.5 font-semibold">
               <img src={BRAND.logoUrl} alt="" className="h-8 w-8 rounded-lg" />
-              {BRAND.name} <span className="font-normal text-[#8a8a8d]">{BRAND.nameEn}</span>
+              {BRAND.name} <span className="font-normal text-[var(--ink-soft)]">{BRAND.nameEn}</span>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-6 text-[var(--ink-soft)]">{BRAND.slogan}。{BRAND.description}。</p>
           </div>
           <div>
-            <h3 className="text-[11px] font-semibold tracking-[0.08em] text-[#8a8a8d]">产品</h3>
+            <h3 className="text-xs font-semibold tracking-[0.04em] text-[var(--ink-soft)]">产品</h3>
             <ul className="mt-4 grid gap-3 text-sm">
-              <li><button type="button" onClick={() => scrollToSection('preview')} className="text-[#2b2b2e] hover:text-[#8a8a8d]">产品预览</button></li>
-              <li><button type="button" onClick={() => scrollToSection('features')} className="text-[#2b2b2e] hover:text-[#8a8a8d]">能力</button></li>
-              <li><button type="button" onClick={() => scrollToSection('how')} className="text-[#2b2b2e] hover:text-[#8a8a8d]">使用流程</button></li>
-              <li><button type="button" onClick={() => scrollToSection('faq')} className="text-[#2b2b2e] hover:text-[#8a8a8d]">常见问题</button></li>
+              <li><button type="button" onClick={() => scrollToSection('preview')} className="text-[var(--ink)] underline-offset-4 hover:underline">产品预览</button></li>
+              <li><button type="button" onClick={() => scrollToSection('features')} className="text-[var(--ink)] underline-offset-4 hover:underline">能力</button></li>
+              <li><button type="button" onClick={() => scrollToSection('how')} className="text-[var(--ink)] underline-offset-4 hover:underline">使用流程</button></li>
+              <li><button type="button" onClick={() => scrollToSection('faq')} className="text-[var(--ink)] underline-offset-4 hover:underline">常见问题</button></li>
             </ul>
           </div>
           <div>
-            <h3 className="text-[11px] font-semibold tracking-[0.08em] text-[#8a8a8d]">账户</h3>
+            <h3 className="text-xs font-semibold tracking-[0.04em] text-[var(--ink-soft)]">账户</h3>
             <ul className="mt-4 grid gap-3 text-sm">
-              <li><button type="button" onClick={onLogin} className="text-[#2b2b2e] hover:text-[#8a8a8d]">登录</button></li>
-              <li><button type="button" onClick={onRegister} className="text-[#2b2b2e] hover:text-[#8a8a8d]">免费注册</button></li>
+              <li><button type="button" onClick={onLogin} className="text-[var(--ink)] underline-offset-4 hover:underline">登录</button></li>
+              <li><button type="button" onClick={onRegister} className="text-[var(--ink)] underline-offset-4 hover:underline">免费注册</button></li>
             </ul>
           </div>
           <div>
-            <h3 className="text-[11px] font-semibold tracking-[0.08em] text-[#8a8a8d]">关于</h3>
+            <h3 className="text-xs font-semibold tracking-[0.04em] text-[var(--ink-soft)]">关于</h3>
             <ul className="mt-4 grid gap-3 text-sm">
-              <li><a href={BRAND.repositoryUrl} target="_blank" rel="noreferrer" className="text-[#2b2b2e] hover:text-[#8a8a8d]">源代码</a></li>
-              <li><a href={BRAND.source.repositoryUrl} target="_blank" rel="noreferrer" className="text-[#2b2b2e] hover:text-[#8a8a8d]">基于 {BRAND.source.name}</a></li>
-              <li><a href="./third-party-notices.txt" target="_blank" rel="noreferrer" className="text-[#2b2b2e] hover:text-[#8a8a8d]">第三方声明</a></li>
+              <li><a href={BRAND.repositoryUrl} target="_blank" rel="noreferrer" className="text-[var(--ink)] underline-offset-4 hover:underline">源代码</a></li>
+              <li><a href={BRAND.source.repositoryUrl} target="_blank" rel="noreferrer" className="text-[var(--ink)] underline-offset-4 hover:underline">基于 {BRAND.source.name}</a></li>
+              <li><a href="./third-party-notices.txt" target="_blank" rel="noreferrer" className="text-[var(--ink)] underline-offset-4 hover:underline">第三方声明</a></li>
             </ul>
           </div>
         </div>
-        <div className="mx-auto mt-16 flex max-w-[1280px] flex-wrap justify-between gap-3 border-t border-[var(--line)] pt-6 text-xs text-[#8a8a8d]">
+        <div className="mx-auto mt-16 flex max-w-[1280px] flex-wrap justify-between gap-3 border-t border-[var(--line)] pt-6 text-xs text-[var(--ink-soft)]">
           <span>© {new Date().getFullYear()} {BRAND.name}</span>
           <span>Built by {BRAND.team}</span>
         </div>

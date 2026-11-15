@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
   --background: 43 50% 97%;
   --foreground: 240 4% 9%;
   --muted: 240 5% 96%;
@@ -15,6 +16,21 @@
   --sidebar-foreground: 240 10% 10%;
   --font-ui-sans: 'HarmonyOS Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-mono: 'Maple Mono', 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+  /* Utopia 思路的固定节奏：4px 间距网格，正文行高按中文阅读留到 1.6 */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 40px; --space-8: 48px; --space-9: 64px;
+  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 24px;
+  /* Emil Kowalski：界面动效宜短、ease-out，只动 transform / opacity 一类属性 */
+  --duration-fast: 120ms; --duration-base: 180ms; --duration-slow: 280ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 实心按钮用更深的橙，白字才能到 4.5:1；文字色另走一步，深色模式再提亮 */
+  --accent-solid: 186 82 32; --accent-solid-hover: 150 64 24;
+  --c-blue-text-400: 168 72 28; --c-blue-text-500: 150 62 24; --c-blue-text-600: 128 52 20;
+  --focus-ring: rgb(var(--c-blue-text-500));
+  /* 环境光 + 直射光两层，偏暖，避免纯黑阴影发脏 */
+  --shadow-sm: 0 1px 1px rgb(66 49 37 / 0.05), 0 2px 8px rgb(66 49 37 / 0.06);
+  --shadow-md: 0 1px 2px rgb(66 49 37 / 0.06), 0 12px 32px rgb(66 49 37 / 0.1);
+  --shadow-lg: 0 2px 6px rgb(66 49 37 / 0.08), 0 24px 56px rgb(66 49 37 / 0.14);
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
@@ -34,6 +50,8 @@ html {
 
 body {
   padding: 0;
+  line-height: 1.6;
+  text-rendering: optimizeLegibility;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -73,6 +91,7 @@ body.drag-selecting * {
 }
 
 :root.dark {
+  color-scheme: dark;
   --background: 240 10% 4%;
   --foreground: 0 0% 98%;
   --muted: 240 4% 16%;
@@ -89,6 +108,11 @@ body.drag-selecting * {
   --c-blue-800: 134 58 26; --c-blue-900: 108 48 24; --c-blue-950: 60 25 12;
   /* 深色下 dark:text-gray-500 常用于说明文字，原 zinc-500 只有约 3.4:1，提亮一些 */
   --c-text-gray-400: 161 161 170; --c-text-gray-500: 145 145 153;
+  --c-blue-text-400: 252 214 184; --c-blue-text-500: 246 196 160; --c-blue-text-600: 240 176 130;
+  --focus-ring: rgb(var(--c-blue-text-400));
+  --shadow-sm: 0 1px 1px rgb(0 0 0 / 0.35), 0 2px 8px rgb(0 0 0 / 0.32);
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.45), 0 24px 56px rgb(0 0 0 / 0.55);
 }
 
 .dark * {
@@ -249,14 +273,6 @@ input[type="number"] {
   min-height: 3.5rem;
 }
 
-@media (max-width: 640px) {
-  input,
-  textarea,
-  select {
-    font-size: 16px;
-  }
-}
-
 /* contentEditable 中的 @图N 胶囊 tag */
 .mention-tag {
   display: inline-flex;
@@ -275,7 +291,7 @@ input[type="number"] {
   vertical-align: baseline;
   user-select: all;
   cursor: default;
-  transition: all 0.15s ease;
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out), border-color 150ms var(--ease-out);
 }
 
 .mention-tag::selection,
@@ -334,4 +350,76 @@ input[type="number"] {
 .ios-rounded-scroll-fix {
   isolation: isolate;
   -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+
+/* Tailwind 的 transition-all 会把布局属性也动画化；只保留颜色、透明度和变形 */
+.transition-all {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, translate, scale;
+  transition-timing-function: var(--ease-out);
+}
+
+h1, h2, h3, h4 { scroll-margin-top: 72px; }
+
+a, button, summary, input, select, textarea, [role='button'], [role='tab'] {
+  touch-action: manipulation;
+}
+
+button:disabled, input:disabled, select:disabled, textarea:disabled {
+  cursor: not-allowed;
+}
+
+/* 白字落在中间档橙色上不到 4.5:1，实心按钮改用更深一档；禁用态仍走各自的灰色 */
+button.bg-blue-500:not(:disabled),
+a.bg-blue-500:not(:disabled) {
+  background-color: rgb(var(--accent-solid));
+}
+button.bg-blue-500:not(:disabled):hover,
+a.bg-blue-500:not(:disabled):hover {
+  background-color: rgb(var(--accent-solid-hover));
+}
+
+:is(a, button, input, select, textarea, summary, [role='button'], [role='tab'], [tabindex]):focus-visible,
+.focus\:outline-none:focus-visible,
+.outline-none:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+[role='dialog'] {
+  overscroll-behavior: contain;
+  box-shadow: var(--shadow-lg);
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: var(--space-3);
+  z-index: 300;
+  transform: translateY(-160%);
+  border-radius: var(--radius-md);
+  background: #171719;
+  color: #fff;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.skip-link:focus {
+  transform: none;
+}
+
+@media (max-width: 640px) {
+  /* 盖过组件上的 text-xs，避免 iOS 聚焦输入框时自动放大 */
+  input, textarea, select, [contenteditable='true'] {
+    font-size: 16px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

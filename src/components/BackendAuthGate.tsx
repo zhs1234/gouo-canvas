@@ -27,7 +27,7 @@ const AUTH_INTRO: Record<AuthMode, { lines: string[]; desc: string; panel: strin
   reset: { lines: ['找回账号'], desc: '输入邮件中的验证码，并设置新的登录密码。', panel: '重置密码' },
 }
 const LABEL_CLASS = 'block text-xs font-bold text-[var(--ink)]'
-const INPUT_CLASS = 'mt-2 min-h-[50px] w-full rounded-[14px] border border-[#171719]/[0.14] bg-white/[0.32] px-4 text-[13px] font-normal text-[var(--ink)] outline-none transition placeholder:text-[#171719]/35 hover:border-[#171719]/25 hover:bg-white/45 focus:border-[#171719]/60 focus:bg-white/55 focus:ring-[3px] focus:ring-white/50 disabled:cursor-not-allowed disabled:opacity-60'
+const INPUT_CLASS = 'mt-2 min-h-[50px] w-full rounded-[14px] border border-[#171719]/[0.14] bg-white/[0.32] px-4 text-base font-normal text-[var(--ink)] outline-none transition placeholder:text-[#171719]/45 hover:border-[#171719]/25 hover:bg-white/45 focus:border-[#171719]/60 focus:bg-white/55 focus:ring-[3px] focus:ring-white/50 disabled:cursor-not-allowed disabled:opacity-60'
 const SECONDARY_BUTTON_CLASS = 'shrink-0 rounded-[10px] border border-[#171719]/[0.14] bg-white/35 px-3 text-xs font-bold text-[var(--ink)] transition hover:bg-white/55 disabled:cursor-not-allowed disabled:opacity-50'
 
 async function initializeUser(user: GouoUser): Promise<GouoUser | null> {

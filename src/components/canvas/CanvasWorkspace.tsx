@@ -82,7 +82,7 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
     return (
       <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
         <h1 className="text-xl font-semibold">画布不存在或已删除</h1>
-        <p className="max-w-sm text-sm opacity-50">
+        <p className="max-w-sm text-sm text-[var(--ws-text-3)]">
           {projects.some((project) => project.id === projectId) ? '这张画布已移入回收站，可以在画布列表的回收站中恢复。' : '链接可能有误，或这张画布已被彻底删除。'}
         </p>
         <div className="mt-3 flex flex-wrap justify-center gap-2">
@@ -114,7 +114,7 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">{trash ? '画布回收站' : '我的画布'}</h1>
-            <p className="mt-2 text-sm opacity-45">用图片、文本和连接，把想法铺展开。</p>
+            <p className="mt-2 text-sm text-[var(--ws-text-3)]">用图片、文本和连接，把想法铺展开。</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -209,7 +209,7 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
                     onClick={() => (trash ? void perform(() => useCanvasStore.getState().hideProject(project.id, false)) : onOpenProject(project.id))}
                   >
                     <h2 className="truncate text-xl font-semibold">{project.title}</h2>
-                    <p className="mt-3 text-sm opacity-50">
+                    <p className="mt-3 text-sm text-[var(--ws-text-3)]">
                       {project.nodes.length} 个节点 · {project.connections.length} 条连接
                     </p>
                   </button>
@@ -253,7 +253,7 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
                   </div>
                 )}
                 <div className="mt-8 flex items-end justify-between gap-3">
-                  <p className="text-xs opacity-40">
+                  <p className="text-xs text-[var(--ws-text-3)]">
                     {new Date(project.updatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </p>
                   <div className="flex gap-1">
@@ -278,11 +278,11 @@ function CanvasContent({ projectId, onOpenProject, onOpenAgent }: CanvasWorkspac
           </div>
         ) : (
           <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-current/10">
-            <h2 className="text-xl font-medium opacity-70">{trash ? '回收站是空的' : query ? '没有找到这张画布' : '你的下一张画布，从这里开始'}</h2>
-            <p className="mt-3 text-sm opacity-40">{trash ? `移入回收站的画布可在 ${getTrashRetentionDays()} 天内恢复，之后彻底删除` : '创建项目，或者导入已导出的画布备份'}</p>
+            <h2 className="text-xl font-medium">{trash ? '回收站是空的' : query ? '没有找到这张画布' : '你的下一张画布，从这里开始'}</h2>
+            <p className="mt-3 text-sm text-[var(--ws-text-3)]">{trash ? `移入回收站的画布可在 ${getTrashRetentionDays()} 天内恢复，之后彻底删除` : '创建项目，或者导入已导出的画布备份'}</p>
           </div>
         )}
-        <div className="mt-10 text-xs opacity-35">
+        <div className="mt-10 text-xs text-[var(--ws-text-4)]">
           <a href="https://github.com/basketikun/infinite-canvas" target="_blank" rel="noreferrer">
             画布界面基于 Infinite Canvas · MIT
           </a>

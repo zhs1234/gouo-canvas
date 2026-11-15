@@ -17,6 +17,12 @@
 .canvas-workspace .node-element {
   touch-action: none;
 }
+.canvas-workspace .ant-btn-primary:not(:disabled) {
+  background: rgb(var(--accent-solid));
+}
+.canvas-workspace .ant-btn-primary:not(:disabled):hover {
+  background: rgb(var(--accent-solid-hover)) !important;
+}
 .canvas-workspace button:focus-visible,
 .canvas-workspace a:focus-visible,
 .canvas-workspace select:focus-visible {

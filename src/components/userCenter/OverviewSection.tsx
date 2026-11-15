@@ -53,7 +53,7 @@ export default function OverviewSection({ user, loading, error, onRefresh, onNav
 
   return <div className="space-y-4">
     <section className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-gray-50/70 p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
-      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-xl font-bold text-white">
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 text-xl font-bold text-white">
         {user.avatar_url ? <img src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : avatarText}
       </div>
       <div className="min-w-0 flex-1">
@@ -68,11 +68,11 @@ export default function OverviewSection({ user, loading, error, onRefresh, onNav
     {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400">刷新失败：{error}</div>}
 
     <section className="grid gap-4 sm:grid-cols-3">
-      <div className="rounded-2xl bg-gradient-to-br from-blue-600 to-blue-800 p-5 text-white shadow-lg shadow-blue-500/15">
-        <p className="text-sm text-white/70">账户余额</p>
-        <p className="mt-3 text-2xl font-bold tracking-tight">{formatPoints(user.balance_cny)}</p>
-        <p className="mt-1 text-xs text-white/70">{!balanceKnown ? '余额暂不可用，请刷新账户' : affordable !== null && model ? `约可生成 ${affordable.toLocaleString('zh-CN')} 张 ${model.name}` : ' '}</p>
-        {balanceKnown && <button type="button" onClick={() => onNavigate('topup')} className="mt-2 text-xs font-medium text-white/85 underline-offset-2 hover:text-white hover:underline">去充值 →</button>}
+      <div className="rounded-2xl bg-gradient-to-br from-blue-700 to-blue-900 p-5 text-white shadow-md">
+        <p className="text-sm text-white/90">账户余额</p>
+        <p className="mt-3 text-2xl font-bold tracking-tight tabular-nums">{formatPoints(user.balance_cny)}</p>
+        <p className="mt-1 text-xs text-white/90">{!balanceKnown ? '余额暂不可用，请刷新账户' : affordable !== null && model ? `约可生成 ${affordable.toLocaleString('zh-CN')} 张 ${model.name}` : ' '}</p>
+        {balanceKnown && <button type="button" onClick={() => onNavigate('topup')} className="mt-2 text-xs font-medium text-white underline-offset-2 hover:underline">去充值 →</button>}
       </div>
       <div className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
         <p className="text-sm text-gray-500 dark:text-gray-400">本月消费</p>
