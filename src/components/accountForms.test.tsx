@@ -88,6 +88,18 @@ afterEach(() => vi.unstubAllGlobals())
 const accountStatus = { emailService: true, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '', topupUrl: '', loading: false, error: '', reload: () => {} }
 
 describe('account email and password forms', () => {
+  it('opens the reset form with email and token from the query string', async () => {
+    window.location.pathname = '/user/reset'
+    window.location.search = '?email=creator%2Breset%40example.invalid&token=reset-code'
+    const draw = () => BackendAuthGate({ children: null })
+    render(draw)
+    await flush()
+    const tree = render(draw)
+    expect(text(tree)).toContain('重置密码')
+    expect(field(tree, 'type', 'email').props.value).toBe('creator+reset@example.invalid')
+    expect(field(tree, 'placeholder', '邮件验证码').props.value).toBe('reset-code')
+  })
+
   it('restores the reset recipient and locks it while sending, then clears the old code on recipient change', async () => {
     window.location.search = '?email=creator%2Breset%40example.invalid&token=reset-code'
     const draw = () => BackendAuthGate({ children: null })

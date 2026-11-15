@@ -27,6 +27,8 @@ jobs:
       - run: npm test
       - run: npx tsc --noEmit
       - run: npm run build
+      # 构建后再核对 dist/index.html：/user/reset 上的脚本和样式必须落到 /assets，而不是 /user/assets
+      - run: CHECK_BUILT_RESET_ASSETS=1 npx vitest run src/lib/resetLinkAssets.test.mjs
 
   admin:
     name: 后台面板

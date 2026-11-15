@@ -7,10 +7,11 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="光构" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- public 资源用根路径，构建才会按 base 改写。写 ./ 会原样留下，/user/reset 会到 /user/ 下取到 HTML。 -->
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="description" content="光构，面向创作者的 AI 图片生成与编辑平台" />
-    <link rel="apple-touch-icon" href="./gouo-logo-180.png" />
-    <link rel="icon" href="./gouo-logo-64.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/gouo-logo-180.png" />
+    <link rel="icon" href="/gouo-logo-64.png" type="image/png" />
     <title>光构 · Gouo Canvas</title>
     <!-- 网络字体不阻塞首屏：样式表加载完成前先用系统字体 -->
     <link rel="stylesheet" href="https://fontsapi.zeoseven.com/442/main/result.css" media="print" onload="this.media='all'" />
@@ -68,15 +69,15 @@
   <body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 min-h-screen">
     <div id="root"></div>
     <div id="boot-skeleton" role="status" aria-label="正在打开光构">
-      <div class="boot-side"><span class="boot-brand"><img src="./gouo-logo-192.png" alt="" />光构</span><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="boot-side"><span class="boot-brand"><img src="/gouo-logo-192.png" alt="" />光构</span><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="boot-main">
-        <div class="boot-bar"><img src="./gouo-logo-192.png" alt="" /><i></i></div>
+        <div class="boot-bar"><img src="/gouo-logo-192.png" alt="" /><i></i></div>
         <i class="boot-title"></i>
         <i class="boot-modes"></i>
         <i class="boot-input"></i>
         <div class="boot-chips"><i></i><i></i><i></i><i></i><i></i></div>
       </div>
-      <img class="boot-logo" src="./gouo-logo-192.png" alt="" />
+      <img class="boot-logo" src="/gouo-logo-192.png" alt="" />
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
