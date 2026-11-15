@@ -31,6 +31,8 @@ jobs:
       - run: npm run build
         env:
           VITE_GOUO_BACKEND_URL: ${{ vars.VITE_GOUO_BACKEND_URL }}
+          # 项目页在 /<repo>/ 下，保持相对资源路径；根域名部署使用默认的 /
+          VITE_BASE: ./
 
       - uses: actions/upload-pages-artifact@v3
         with:
