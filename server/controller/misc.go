@@ -20,6 +20,7 @@ func GetStatus(c *gin.Context) {
 	if telegram.TGEnabled {
 		telegramBot = telegram.TGBot.User.Username
 	}
+	topup, topupPackages, topupCustom := gouoTopupStatus()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -32,6 +33,9 @@ func GetStatus(c *gin.Context) {
 			"gouo_redemption_help":      config.GouoRedemptionHelp,
 			"gouo_support_contact":      config.GouoSupportContact,
 			"gouo_topup_url":            config.GouoTopupUrl,
+			"gouo_online_topup":         topup,
+			"gouo_topup_packages":       topupPackages,
+			"gouo_topup_custom":         topupCustom,
 			"gouo_notice":               config.GouoNotice,
 			"gouo_canvas_enabled":       config.GouoCanvasEnabled,
 			"gouo_agent_enabled":        config.GouoAgentEnabled,

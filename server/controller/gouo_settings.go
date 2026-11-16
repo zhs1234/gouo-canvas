@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -15,7 +16,7 @@ import (
 )
 
 // 光构客户端相关的设置。系统设置接口只允许 root，这些设置普通管理员也需要日常维护
-var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoTopupUrl", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoAgentSiteGuide", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays"}
+var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoTopupUrl", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoAgentSiteGuide", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays", "GouoOnlineTopup", "GouoTopupPackages", "GouoTopupCustom", "GouoTopupCustomMin", "GouoTopupCustomMax"}
 
 func normalizeGouoSetting(key, value string) (string, error) {
 	value = strings.TrimSpace(value)
@@ -50,7 +51,7 @@ func normalizeGouoSetting(key, value string) (string, error) {
 		if utf8.RuneCountInString(value) > 8000 {
 			return "", errors.New("网站使用说明不能超过 8000 个字符")
 		}
-	case "GouoCanvasEnabled", "GouoAgentEnabled", "GouoCloudLibraryEnabled", "GouoAllowLowModeration", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport":
+	case "GouoCanvasEnabled", "GouoAgentEnabled", "GouoCloudLibraryEnabled", "GouoAllowLowModeration", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoOnlineTopup", "GouoTopupCustom":
 		if value != "true" && value != "false" {
 			return "", errors.New("开关只能是 true 或 false")
 		}
@@ -65,6 +66,17 @@ func normalizeGouoSetting(key, value string) (string, error) {
 	case "GouoAgentConfirmImages":
 		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 10 {
 			return "", errors.New("Agent 需确认的图片张数必须是 1 到 10 的整数")
+		}
+	case "GouoTopupPackages":
+		packages, err := parseGouoTopupPackages(value)
+		if err != nil {
+			return "", err
+		}
+		raw, _ := json.Marshal(packages)
+		value = string(raw)
+	case "GouoTopupCustomMin", "GouoTopupCustomMax":
+		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 100000 {
+			return "", errors.New("自定义充值金额上下限必须是 1 到 100000 的整数（元）")
 		}
 	case "GouoTrashRetentionDays":
 		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 30 {
@@ -82,6 +94,21 @@ func normalizeGouoSetting(key, value string) (string, error) {
 		return "", errors.New("不支持的光构设置：" + key)
 	}
 	return value, nil
+}
+
+// 上下限可能分两次或一起保存，未提交的一项按当前值比较
+func checkGouoTopupCustomRange(values map[string]string) error {
+	low, high := config.GouoTopupCustomMin, config.GouoTopupCustomMax
+	if value, ok := values["GouoTopupCustomMin"]; ok {
+		low, _ = strconv.Atoi(value)
+	}
+	if value, ok := values["GouoTopupCustomMax"]; ok {
+		high, _ = strconv.Atoi(value)
+	}
+	if low > high {
+		return errors.New("自定义充值金额下限不能大于上限")
+	}
+	return nil
 }
 
 func GetGouoAdminSettings(c *gin.Context) {
@@ -117,6 +144,10 @@ func UpdateGouoAdminSettings(c *gin.Context) {
 			return
 		}
 		values[key] = normalized
+	}
+	if err := checkGouoTopupCustomRange(values); err != nil {
+		gouoFail(c, http.StatusBadRequest, "invalid_settings", err.Error())
+		return
 	}
 	if err := model.UpdateOptions(values); err != nil {
 		gouoFail(c, http.StatusInternalServerError, "settings_save_failed", "保存设置失败")

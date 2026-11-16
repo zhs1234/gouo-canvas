@@ -59,6 +59,10 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 		option.Value = value
+		if err := checkGouoTopupCustomRange(map[string]string{option.Key: value}); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+			return
+		}
 	}
 	switch option.Key {
 	case "GitHubOAuthEnabled":

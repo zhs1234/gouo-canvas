@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"one-api/common/config"
 	"one-api/common/logger"
 	"one-api/model"
@@ -59,11 +60,20 @@ func (s *PaymentService) CreatedPay() error {
 }
 
 func (s *PaymentService) Pay(tradeNo string, amount float64, user *model.User) (*types.PayRequest, error) {
+	return s.pay(tradeNo, amount, user, s.getReturnURL())
+}
+
+// PayGouoTopup 支付后回到客户端充值页并带上订单号，客户端据此查询到账结果
+func (s *PaymentService) PayGouoTopup(tradeNo string, amount float64, user *model.User) (*types.PayRequest, error) {
+	return s.pay(tradeNo, amount, user, s.getReturnURL()+"?trade_no="+url.QueryEscape(tradeNo))
+}
+
+func (s *PaymentService) pay(tradeNo string, amount float64, user *model.User, returnURL string) (*types.PayRequest, error) {
 	config := &types.PayConfig{
 		Money:     amount,
 		TradeNo:   tradeNo,
 		NotifyURL: s.getNotifyURL(),
-		ReturnURL: s.getReturnURL(),
+		ReturnURL: returnURL,
 		Currency:  s.Payment.Currency,
 		User:      user,
 	}
