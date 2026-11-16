@@ -24,6 +24,13 @@ var GouoSupportContact = ""
 // 购买兑换码的链接（如卡网），充值页显示为按钮
 var GouoTopupUrl = ""
 
+// 在线充值：积分包为 JSON 数组（price 元、points 积分、bonus 赠送积分），自定义金额为整数元、1 元 = 100 积分
+var GouoOnlineTopup = false
+var GouoTopupPackages = `[{"price":10,"points":1000,"bonus":0},{"price":30,"points":3000,"bonus":150},{"price":100,"points":10000,"bonus":1000}]`
+var GouoTopupCustom = true
+var GouoTopupCustomMin = 1
+var GouoTopupCustomMax = 5000
+
 // GouoNotice 是客户端创作页顶部的公告，留空时显示默认介绍
 var GouoNotice = ""
 

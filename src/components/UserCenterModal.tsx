@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { getBackendStatus, getCurrentUser, type GouoUser } from '../lib/gouoBackend'
+import { getTopupOptions, type TopupOptions } from '../lib/topup'
 import type { UserCenterSection } from '../lib/userGuidance'
 import { useCloseOnEscape } from '../hooks/useCloseOnEscape'
 import { usePreventBackgroundScroll } from '../hooks/usePreventBackgroundScroll'
@@ -19,6 +20,8 @@ export interface UserCenterServiceStatus {
   redemptionHelp: string
   supportContact: string
   topupUrl: string
+  // 在线充值未开放或旧后端时为 null
+  onlineTopup: TopupOptions | null
   loading: boolean
   error: string
   reload: () => void
@@ -44,7 +47,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
   const [loading, setLoading] = useState(true)
   const [userError, setUserError] = useState('')
   const [activeSection, setActiveSection] = useState<UserCenterSection>(initialSection)
-  const [status, setStatus] = useState({ emailService: false, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '', topupUrl: '' })
+  const [status, setStatus] = useState<Omit<UserCenterServiceStatus, 'loading' | 'error' | 'reload'>>({ emailService: false, turnstileEnabled: false, turnstileSiteKey: '', redemptionHelp: '', supportContact: '', topupUrl: '', onlineTopup: null })
   const [statusLoading, setStatusLoading] = useState(true)
   const [statusError, setStatusError] = useState('')
 
@@ -67,6 +70,7 @@ export default function UserCenterModal({ initialSection = 'overview', onClose }
       redemptionHelp: typeof value.gouo_redemption_help === 'string' ? value.gouo_redemption_help : '',
       supportContact: typeof value.gouo_support_contact === 'string' ? value.gouo_support_contact : '',
       topupUrl: typeof value.gouo_topup_url === 'string' ? value.gouo_topup_url : '',
+      onlineTopup: getTopupOptions(value),
     }), (err) => setStatusError(err instanceof Error ? err.message : String(err)), () => setStatusLoading(false))
   }, [])
 

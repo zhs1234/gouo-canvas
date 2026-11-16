@@ -1,5 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, Divider, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  FormControlLabel,
+  IconButton,
+  MenuItem,
+  Stack,
+  Switch,
+  TextField,
+  Typography
+} from '@mui/material';
+import { Icon } from '@iconify/react';
 import { API } from 'utils/api';
 import { showError, showSuccess } from 'utils/common';
 import ConfirmDialog from 'ui-component/confirm-dialog';
@@ -9,6 +23,12 @@ const EMPTY = {
   GouoRedemptionHelp: '',
   GouoSupportContact: '',
   GouoTopupUrl: '',
+  GouoOnlineTopup: 'false',
+  GouoTopupPackages:
+    '[{"price":10,"points":1000,"bonus":0},{"price":30,"points":3000,"bonus":150},{"price":100,"points":10000,"bonus":1000}]',
+  GouoTopupCustom: 'true',
+  GouoTopupCustomMin: '1',
+  GouoTopupCustomMax: '5000',
   GouoDefaultImageModel: '',
   GouoCanvasEnabled: 'true',
   GouoAgentEnabled: 'true',
@@ -28,9 +48,21 @@ const EMPTY = {
   GouoTrashRetentionDays: '3'
 };
 
+// 积分包按字符串编辑，避免输入中途被数字格式化打断；配置损坏时从空列表开始
+const toPackageRows = (raw) => {
+  try {
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => ({ price: String(item.price ?? ''), points: String(item.points ?? ''), bonus: String(item.bonus ?? 0) }));
+  } catch {
+    return [];
+  }
+};
+
 export default function GouoSettings() {
   const [saved, setSaved] = useState(EMPTY);
   const [values, setValues] = useState(EMPTY);
+  const [packages, setPackages] = useState(() => toPackageRows(EMPTY.GouoTopupPackages));
   const [models, setModels] = useState([]);
   const [agentModels, setAgentModels] = useState([]);
   const [status, setStatus] = useState(null);
@@ -51,6 +83,7 @@ export default function GouoSettings() {
       const next = { ...EMPTY, ...settings.data.data };
       setSaved(next);
       setValues(next);
+      setPackages(toPackageRows(next.GouoTopupPackages));
       setModels((catalog.data.data?.models || []).filter((row) => row.gouo_enabled).map((row) => row.model));
       setAgentModels(settings.data.agent_models || []);
       setStatus(site.data.data || null);
@@ -76,7 +109,11 @@ export default function GouoSettings() {
       const next = { ...EMPTY, ...response.data.data };
       setSaved(next);
       setValues(next);
+      setPackages(toPackageRows(next.GouoTopupPackages));
       showSuccess('已保存，客户端切回页面或刷新后生效');
+      // 在线充值是否对客户端开放取决于保存后的设置和网关，重新读取状态
+      const site = await API.get('/api/status');
+      if (site) setStatus(site.data.data || null);
     } catch (error) {
       showError(error.response?.data?.message || error.message || '保存失败');
     } finally {
@@ -96,6 +133,12 @@ export default function GouoSettings() {
     values.GouoAgentDefaultModel && !agentModels.includes(values.GouoAgentDefaultModel)
       ? [...agentModels, values.GouoAgentDefaultModel]
       : agentModels;
+  // 与服务端保存的格式一致，未改动时序列化结果与已保存的值相同
+  const updatePackages = (rows) => {
+    setPackages(rows);
+    const list = rows.map((row) => ({ price: Number(row.price), points: Number(row.points), bonus: Number(row.bonus || 0) }));
+    setValues({ ...values, GouoTopupPackages: JSON.stringify(list) });
+  };
   // 字节数按整数 GB / MB 填写，避免小数输入被换算打断
   const sizeField = (key, unit) => ({
     value: values[key] ? String(Math.round(Number(values[key]) / unit)) : '',
@@ -176,6 +219,101 @@ export default function GouoSettings() {
           placeholder="https://"
           helperText="填写卡网等购买兑换码的网址，充值页会显示「购买兑换码」按钮；留空则不显示。"
         />
+        <Divider textAlign="left">在线充值</Divider>
+        <Alert severity="info">
+          需先在「支付」菜单添加并启用支付网关。「服务器地址」（设置 → 系统设置）须填客户端的公网 HTTPS
+          地址，支付回调和支付后跳回都使用它，也可以在网关里单独填写回调域名
+          {status?.server_address ? `，当前为 ${status.server_address}` : ''}。客户支付后自动到账（1 元 = 100 积分），订单可在「支付 →
+          订单」查看。
+        </Alert>
+        {saved.GouoOnlineTopup === 'true' && status && !status.gouo_online_topup && (
+          <Alert severity="warning">在线充值已开启，但没有启用的支付网关，客户端暂不显示在线充值。</Alert>
+        )}
+        {toggle('GouoOnlineTopup', '开放在线充值', '开启后客户端充值页显示积分包和支付方式，用户付款后积分自动到账；兑换码充值不受影响。')}
+        <Box>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>
+            积分包
+          </Typography>
+          <Stack spacing={1.5}>
+            {packages.map((row, index) => {
+              const price = Number(row.price);
+              const total = Number(row.points) + Number(row.bonus || 0);
+              const set = (key) => (event) =>
+                updatePackages(packages.map((item, i) => (i === index ? { ...item, [key]: event.target.value } : item)));
+              return (
+                <Stack key={index} direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+                  <TextField
+                    label="价格（元）"
+                    type="number"
+                    size="small"
+                    value={row.price}
+                    onChange={set('price')}
+                    disabled={loading || saving}
+                    inputProps={{ min: 0.01, max: 100000, step: 0.01 }}
+                  />
+                  <TextField
+                    label="积分"
+                    type="number"
+                    size="small"
+                    value={row.points}
+                    onChange={set('points')}
+                    disabled={loading || saving}
+                    inputProps={{ min: 1, step: 1 }}
+                  />
+                  <TextField
+                    label="赠送积分"
+                    type="number"
+                    size="small"
+                    value={row.bonus}
+                    onChange={set('bonus')}
+                    disabled={loading || saving}
+                    inputProps={{ min: 0, step: 1 }}
+                  />
+                  <Typography variant="body2" color="text.secondary" sx={{ minWidth: 140 }}>
+                    {price > 0 && total > 0 ? `约合 ${Math.round((total / price) * 10) / 10} 积分/元` : '—'}
+                  </Typography>
+                  <IconButton
+                    aria-label="删除积分包"
+                    onClick={() => updatePackages(packages.filter((_, i) => i !== index))}
+                    disabled={loading || saving}
+                  >
+                    <Icon icon="solar:trash-bin-trash-bold-duotone" />
+                  </IconButton>
+                </Stack>
+              );
+            })}
+            <Box>
+              <Button
+                startIcon={<Icon icon="solar:add-circle-line-duotone" />}
+                onClick={() => updatePackages([...packages, { price: '10', points: '1000', bonus: '0' }])}
+                disabled={loading || saving || packages.length >= 12}
+              >
+                添加积分包
+              </Button>
+            </Box>
+            <Typography variant="caption" color="text.secondary">
+              最多 12 个。价格最多两位小数、不超过 100000 元；积分与赠送积分为整数，可以自由定价，标准为 1 元 = 100
+              积分。积分包不再叠加系统的充值折扣。
+            </Typography>
+          </Stack>
+        </Box>
+        {toggle('GouoTopupCustom', '允许自定义金额', '用户可输入整数金额充值，按 1 元 = 100 积分到账，没有赠送。')}
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <TextField
+            label="自定义金额下限（元）"
+            {...field('GouoTopupCustomMin')}
+            type="number"
+            inputProps={{ min: 1, max: 100000, step: 1 }}
+            helperText="1–100000 的整数，不能大于上限。"
+          />
+          <TextField
+            label="自定义金额上限（元）"
+            {...field('GouoTopupCustomMax')}
+            type="number"
+            inputProps={{ min: 1, max: 100000, step: 1 }}
+            helperText="1–100000 的整数。"
+          />
+        </Stack>
         <Divider textAlign="left">功能与生成</Divider>
         {toggle('GouoCanvasEnabled', '开放画布', '关闭后客户端隐藏画布入口和“我的画布”；已保存的画布保留，重新开放后可继续使用。')}
         {toggle(
