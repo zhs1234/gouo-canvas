@@ -29,6 +29,7 @@ const EMPTY = {
   GouoTopupCustom: 'true',
   GouoTopupCustomMin: '1',
   GouoTopupCustomMax: '5000',
+  GouoBalanceRemindPoints: '100',
   GouoDefaultImageModel: '',
   GouoCanvasEnabled: 'true',
   GouoAgentEnabled: 'true',
@@ -314,6 +315,13 @@ export default function GouoSettings() {
             helperText="1–100000 的整数。"
           />
         </Stack>
+        <TextField
+          label="余额提醒阈值（积分）"
+          {...field('GouoBalanceRemindPoints')}
+          type="number"
+          inputProps={{ min: 0, max: 1000000, step: 1 }}
+          helperText="余额低于这个值时，客户端顶栏标出余额不足，并在扣费跨过这个值时给有邮箱的用户发一次提醒邮件（需配置邮件服务）；余额用尽时也会提醒。填 0 表示不做即将用尽提醒。"
+        />
         <Divider textAlign="left">功能与生成</Divider>
         {toggle('GouoCanvasEnabled', '开放画布', '关闭后客户端隐藏画布入口和“我的画布”；已保存的画布保留，重新开放后可继续使用。')}
         {toggle(

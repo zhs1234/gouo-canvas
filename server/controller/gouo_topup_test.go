@@ -184,6 +184,8 @@ func TestGouoTopupStatus(t *testing.T) {
 
 	data := status()
 	require.Equal(t, true, data["gouo_online_topup"])
+	// 余额提醒阈值随状态下发，客户端据此标出余额不足
+	require.Equal(t, float64(config.GouoBalanceRemindPoints), data["gouo_balance_remind_points"])
 	require.Len(t, data["gouo_topup_packages"], 3)
 	require.Equal(t, map[string]any{"price": 30.0, "points": 3000.0, "bonus": 150.0}, data["gouo_topup_packages"].([]any)[1])
 	require.Equal(t, map[string]any{"min": 1.0, "max": 5000.0}, data["gouo_topup_custom"])

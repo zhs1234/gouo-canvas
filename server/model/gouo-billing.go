@@ -61,6 +61,8 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 		return errors.New("图片请求或额度无效")
 	}
 	var token Token
+	// 扣费后的余额，用于余额提醒
+	remaining := -1
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		// 先取得账号写锁，避免 SQLite 的并发读事务升级锁导致幂等检查竞态。
 		if err := tx.Model(&User{}).Where("id = ?", charge.UserID).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
@@ -79,6 +81,9 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 		if res.RowsAffected != 1 {
 			return errors.New("用户余额不足")
 		}
+		if err := tx.Model(&User{}).Where("id = ?", charge.UserID).Select("quota").Scan(&remaining).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("id = ? AND user_id = ? AND status = ? AND (expired_time = -1 OR expired_time >= ?)", charge.TokenID, charge.UserID, config.TokenStatusEnabled, utils.GetTimestamp()).First(&token).Error; err != nil {
 			return err
 		}
@@ -96,6 +101,7 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 	})
 	if err == nil {
 		invalidateGouoQuotaCache(charge.UserID, token.Key)
+		NotifyQuotaDrop(charge.UserID, remaining+charge.Quota, remaining)
 	} else {
 		// 并发首查都未命中时，主键冲突仍会回滚预扣，并统一返回可识别的幂等冲突。
 		var existing GouoImageCharge

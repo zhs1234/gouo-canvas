@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   dependencies: [] as unknown[],
   tasks: [] as { status: string }[],
   getCurrentUser: vi.fn(),
+  status: {} as { gouo_balance_remind_points?: number },
   setBalance: vi.fn(),
 }))
 
@@ -21,7 +22,7 @@ vi.mock('react', async (original) => ({
   },
 }))
 vi.mock('../store', () => ({ useStore: (select: (state: { tasks: typeof mocks.tasks }) => unknown) => select({ tasks: mocks.tasks }) }))
-vi.mock('../lib/gouoBackend', () => ({ getCurrentUser: mocks.getCurrentUser }))
+vi.mock('../lib/gouoBackend', () => ({ getCurrentUser: mocks.getCurrentUser, getCachedBackendStatus: () => mocks.status }))
 
 let cleanup: (() => void) | undefined
 let page: EventTarget & { visibilityState: string }
@@ -30,6 +31,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   mocks.balance = 'loading'
   mocks.tasks = []
+  mocks.status = {}
   mocks.getCurrentUser.mockReset()
   mocks.setBalance.mockReset().mockImplementation((value: number | string) => { mocks.balance = value })
   page = Object.assign(new EventTarget(), { visibilityState: 'visible' })
@@ -47,7 +49,7 @@ afterEach(() => {
 })
 
 it.each([
-  [0, '余额 0 积分'],
+  [0, '余额 0 积分 · 不足'],
   [9999, '余额 999,900 积分'],
   [undefined, '余额暂不可用'],
   [NaN, '余额暂不可用'],
@@ -63,6 +65,19 @@ it.each([
   expect(markup).toContain(expected)
   expect(markup).toContain(`aria-label="${expected}，去充值"`)
   expect(onClick).not.toHaveBeenCalled()
+})
+
+it.each([
+  [100, 0.5, '余额 50 积分 · 不足'],
+  [100, 1, '余额 100 积分'],
+  [0, 0.5, '余额 50 积分'],
+  [undefined, 0.5, '余额 50 积分'],
+])('marks low balance against remind threshold %s points', async (remind, balance, expected) => {
+  mocks.status = { gouo_balance_remind_points: remind }
+  mocks.balance = balance
+  const markup = renderToStaticMarkup(<AccountBalance onClick={() => {}} />)
+  expect(markup).toContain(`aria-label="${expected}，去充值"`)
+  expect(markup.includes('text-amber-700')).toBe(expected.endsWith('不足'))
 })
 
 it('replaces a previous balance with an unavailable message after refresh fails', async () => {

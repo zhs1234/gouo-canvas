@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"one-api/common"
 	"one-api/common/config"
 	"one-api/common/database"
@@ -457,11 +458,7 @@ func PreConsumeTokenQuota(tokenId int, quota int) (err error) {
 	if userQuota < quota {
 		return errors.New("用户额度不足")
 	}
-	quotaTooLow := userQuota >= config.QuotaRemindThreshold && userQuota-quota < config.QuotaRemindThreshold
-	noMoreQuota := userQuota-quota <= 0
-	if quotaTooLow || noMoreQuota {
-		go sendQuotaWarningEmail(token.UserId, userQuota, noMoreQuota)
-	}
+	NotifyQuotaDrop(token.UserId, userQuota, userQuota-quota)
 	if !token.UnlimitedQuota {
 		err = DecreaseTokenQuota(tokenId, quota)
 		if err != nil {
@@ -471,6 +468,27 @@ func PreConsumeTokenQuota(tokenId int, quota int) (err error) {
 	err = DecreaseUserQuota(token.UserId, quota)
 	return err
 }
+
+// gouoRemindQuota 把后台按积分设置的余额提醒阈值换算成额度；未设置（0）时不做即将用尽提醒
+func gouoRemindQuota() int {
+	if config.GouoBalanceRemindPoints <= 0 || config.PaymentUSDRate <= 0 {
+		return 0
+	}
+	return int(math.Round(float64(config.GouoBalanceRemindPoints) / 100 / config.PaymentUSDRate * config.QuotaPerUnit))
+}
+
+// NotifyQuotaDrop 在一次扣费让余额跨过提醒阈值或用尽时发提醒邮件；只在跨过的那一次发，避免每次扣费都打扰
+func NotifyQuotaDrop(userId, before, after int) {
+	threshold := gouoRemindQuota()
+	quotaTooLow := threshold > 0 && before >= threshold && after < threshold
+	noMoreQuota := before > 0 && after <= 0
+	if quotaTooLow || noMoreQuota {
+		go quotaWarningSender(userId, after, noMoreQuota)
+	}
+}
+
+// 测试替换成记录调用，避免真的发邮件
+var quotaWarningSender = sendQuotaWarningEmail
 
 func sendQuotaWarningEmail(userId int, userQuota int, noMoreQuota bool) {
 	user := User{Id: userId}
