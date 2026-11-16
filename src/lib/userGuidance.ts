@@ -21,7 +21,7 @@ export function isBalanceError(message: string) {
 export function getActionableErrorMessage(message: string, billedRequest = false) {
   const normalized = message.trim() || '请求失败'
   if (/下一步[:：]/.test(normalized)) return normalized
-  if (isBalanceError(normalized)) return `${normalized}\n下一步：打开用户中心兑换积分，然后点击任务上的“重试”。`
+  if (isBalanceError(normalized)) return `${normalized}\n下一步：打开用户中心充值积分，然后点击任务上的“重试”。`
   // 平台内容审查在扣费前拦截，不需要核对账务
   if (normalized.includes('提示词包含不允许的内容')) return `${normalized}\n下一步：修改提示词中不合适的描述后重新生成；这次请求已被拦下，没有扣费。`
   if (/安全系统|safety|sexual|violence|content policy|内容审核/i.test(normalized)) return `${normalized}\n下一步：删除可能涉及敏感内容的描述，明确人物为成年人且穿着完整，再重新生成。`

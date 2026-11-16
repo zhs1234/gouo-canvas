@@ -225,7 +225,7 @@ export default function BackendAuthGate({ children }: { children: ReactNode }) {
             ))}
           </h1>
           <p className="gouo-fade-up mt-6 max-w-[34rem] text-[17px] font-medium leading-[1.65] tracking-[-0.02em] text-[var(--ink-soft)]" style={{ '--delay': '0.3s' } as CSSProperties}>
-            {mode === 'register' ? `用户名最多 12 个字符，密码 8–20 位${emailVerification ? '，需验证邮箱' : ''}。注册后兑换积分即可开始创作。` : intro.desc}
+            {mode === 'register' ? `用户名最多 12 个字符，密码 8–20 位${emailVerification ? '，需验证邮箱' : ''}。注册后充值积分即可开始创作。` : intro.desc}
           </p>
         </section>
 
