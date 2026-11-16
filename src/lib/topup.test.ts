@@ -93,7 +93,7 @@ describe('支付接口', () => {
   it('实付金额按币种显示', () => {
     expect(formatPayAmount(10, 'CNY')).toBe('¥10')
     expect(formatPayAmount(10.064, '')).toBe('¥10.06')
-    expect(formatPayAmount(1.5, 'USD')).toBe('1.5 USD')
+    expect(formatPayAmount(1.5, 'USD')).toBe('1.50 USD')
   })
 })
 

@@ -108,7 +108,8 @@ export async function getTopupOrders(tradeNo?: string): Promise<TopupOrder[]> {
 }
 
 export function formatPayAmount(amount: number, currency: string) {
-  const value = amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  // 整数金额不带小数，其余按分显示两位
+  const value = amount.toLocaleString('zh-CN', { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })
   return !currency || currency.toUpperCase() === 'CNY' ? `¥${value}` : `${value} ${currency}`
 }
 
