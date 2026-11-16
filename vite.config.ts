@@ -29,7 +29,9 @@ export default defineConfig(({ command, mode }) => {
     test: {
       include: ['src/**/*.test.{ts,tsx,mjs}'],
     },
-    base: './',
+    // 资源从站点根引用。相对 './' 在 /user/reset 会解析成 /user/assets，
+    // SPA 回落成 HTML，密码重置邮件打开后白屏。GitHub Pages 子路径发布设置 VITE_BASE=./。
+    base: process.env.VITE_BASE?.trim() || '/',
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
