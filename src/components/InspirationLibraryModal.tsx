@@ -9,6 +9,10 @@ import { useStore } from '../store'
 import { ChevronLeftIcon, CloseIcon, CopyIcon } from './icons'
 import './inspirationLibrary.css'
 
+const CASE_COUNT = INSPIRATION_PROMPTS.filter((item) => item.kind === 'case').length
+// 模板都带方括号占位；案例多为原作者的完整提示词，只有带占位符的才需要替换
+const hasPlaceholders = (item: InspirationPrompt) => item.kind !== 'case' || /\[[^\]]+\]|\{[^}]+\}/.test(item.prompt)
+
 interface InspirationLibraryModalProps {
   onClose: () => void
 }
@@ -65,7 +69,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
   const applyPrompt = (item: InspirationPrompt, append = false) => {
     const current = useStore.getState().prompt
     setPrompt(append ? appendPrompt(current, item.prompt) : item.prompt)
-    showToast(`已填入「${item.title}」，请替换占位内容${item.referenceCount ? '并上传参考图' : ''}`, 'success')
+    showToast(`已填入「${item.title}」${hasPlaceholders(item) ? '，请替换占位内容' : ''}${item.referenceCount ? `${hasPlaceholders(item) ? '并' : '，请'}上传参考图` : ''}`, 'success')
     if (page) onApply?.()
     else onClose?.()
     window.setTimeout(() => document.querySelector<HTMLElement>('[data-input-bar] [contenteditable="true"]')?.focus(), 0)
@@ -108,7 +112,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
             <div>
               {!page && <p className="text-[11px] font-bold tracking-[0.2em] text-blue-600">GOUO INSPIRATION</p>}
               {page ? <h1 className="text-3xl font-semibold tracking-tight">灵感库</h1> : <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">灵感库</h2>}
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">来自 awesome-gpt-image-2 的 22 套工业模板。填入后替换方括号中的内容，再用当前模型创作。</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">来自 awesome-gpt-image-2 的 {INSPIRATION_PROMPTS.length - CASE_COUNT} 套工业模板和 {CASE_COUNT} 个精选案例。模板填入后替换方括号中的内容，案例可直接参考原作者的完整提示词。</p>
             </div>
             {!page && <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.06] dark:hover:text-white" aria-label="关闭灵感库">
               <CloseIcon className="h-5 w-5" />
@@ -120,7 +124,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                 <circle cx="11" cy="11" r="7" strokeWidth="2" />
                 <path d="m20 20-3.5-3.5" strokeWidth="2" strokeLinecap="round" />
               </svg>
-              <input autoFocus={!page} aria-label="搜索灵感" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模板、风格、场景或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
+              <input autoFocus={!page} aria-label="搜索灵感" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模板、案例、风格或用途…" className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:bg-white/[0.06]" />
             </div>
             <div className={`inspiration-tabs relative min-w-0 lg:max-w-[66%]${tabEdges.start ? ' has-start' : ''}${tabEdges.end ? ' has-end' : ''}`}>
               <div ref={tabsRef} data-inspiration-tabs onScroll={updateTabEdges} className="hide-scrollbar flex gap-1.5 overflow-x-auto">
@@ -139,7 +143,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
         <div className={page ? 'inspiration-page-results' : 'flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6'} hidden={page && Boolean(selected)}>
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{category === '全部' ? '全部灵感' : category}</p>
-            <p className="text-xs text-gray-400">{prompts.length} 个模板</p>
+            <p className="text-xs text-gray-400">{prompts.length} 个灵感</p>
           </div>
           {prompts.length ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -149,9 +153,9 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                     <div className="relative h-48 overflow-hidden bg-slate-900 text-slate-200">
                       {failedPreviews.includes(item.id)
                         ? <p className="p-4 pt-14 line-clamp-5 whitespace-pre-line font-mono text-[11px] leading-5 opacity-75">{item.prompt}</p>
-                        : <img src={`${import.meta.env.BASE_URL}${item.previewImage}`} alt={`${item.title}风格示例`} loading="lazy" decoding="async" onError={() => setFailedPreviews((ids) => [...ids, item.id])} className="h-full w-full object-cover" />}
+                        : <img src={`${import.meta.env.BASE_URL}${item.previewImage}`} alt={`${item.title}${item.kind === 'case' ? '原作效果' : '风格示例'}`} loading="lazy" decoding="async" onError={() => setFailedPreviews((ids) => [...ids, item.id])} className="h-full w-full object-cover" />}
                       <span className="absolute left-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-semibold text-white">{item.category}</span>
-                      <span className="absolute bottom-2 right-2 rounded-md bg-black/65 px-2 py-1 text-[10px] text-white">{failedPreviews.includes(item.id) ? '文字模板' : '风格示例'}</span>
+                      <span className="absolute bottom-2 right-2 rounded-md bg-black/65 px-2 py-1 text-[10px] text-white">{failedPreviews.includes(item.id) ? (item.kind === 'case' ? '文字提示词' : '文字模板') : item.kind === 'case' ? '原作效果' : '风格示例'}</span>
                     </div>
                     <div className="p-4">
                       <h3 className="font-semibold text-gray-900 dark:text-white">{item.title}</h3>
@@ -197,17 +201,19 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
             </div>
             {!failedPreviews.includes(selected.id) && (
               <a href={`${import.meta.env.BASE_URL}${selected.previewImage}`} target="_blank" rel="noreferrer" className="mt-4 block rounded-xl bg-gray-50 dark:bg-white/[0.035]" aria-label={`查看${selected.title}示例大图`}>
-                <img src={`${import.meta.env.BASE_URL}${selected.previewImage}`} alt={`${selected.title}风格示例`} decoding="async" onError={() => setFailedPreviews((ids) => [...ids, selected.id])} className="max-h-80 w-full rounded-xl object-contain" />
+                <img src={`${import.meta.env.BASE_URL}${selected.previewImage}`} alt={`${selected.title}${selected.kind === 'case' ? '原作效果' : '风格示例'}`} decoding="async" onError={() => setFailedPreviews((ids) => [...ids, selected.id])} className="max-h-80 w-full rounded-xl object-contain" />
               </a>
             )}
-            <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">示例图：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.exampleUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原案例 ↗</a>。仅展示风格，非本模板生成记录；商用请核对原作者许可。</p>
+            {selected.kind === 'case'
+              ? <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">图片与提示词：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原帖 ↗</a>。版权归原作者，仅供学习参考，商用请联系原作者。</p>
+              : <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">示例图：<a href={selected.previewSourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.previewSourceLabel}</a> · <a href={selected.exampleUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原案例 ↗</a>。仅展示风格，非本模板生成记录；商用请核对原作者许可。</p>}
             <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
-              <a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">原始模板 · {INSPIRATION_SOURCE.author} ↗</a>
+              <a href={selected.sourceUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selected.kind === 'case' ? '案例出处' : '原始模板'} · {INSPIRATION_SOURCE.author} ↗</a>
               <span>版本 {INSPIRATION_SOURCE.revision.slice(0, 7)}</span>
             </div>
-            <p className="mt-4 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">请替换方括号中的内容。{selected.referenceCount > 0 ? `此模板需要 ${selected.referenceCount} 张参考图，请在输入区上传。` : '可直接填写主体和场景。'}模板不会切换模型、修改参数或自动生成，不同模型的效果可能不同。</p>
+            <p className="mt-4 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{hasPlaceholders(selected) ? '请替换方括号中的内容。' : '这是原作者的完整提示词，可直接使用或按需修改。'}{selected.referenceCount > 0 ? `需要 ${selected.referenceCount} 张参考图，请在输入区上传。` : selected.kind === 'case' ? '' : '可直接填写主体和场景。'}{selected.kind === 'case' ? '原作者使用的模型和参数可能与当前不同，效果会有差异。' : '模板不会切换模型、修改参数或自动生成，不同模型的效果可能不同。'}</p>
             <div className="mt-4 whitespace-pre-wrap break-words rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-7 text-gray-700 dark:border-white/10 dark:bg-white/[0.035] dark:text-gray-300">{selected.prompt}</div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {(selected.guidance.length > 0 || selected.pitfalls.length > 0) && <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <section className="rounded-xl bg-gray-50 p-4 dark:bg-white/[0.035]">
                 <h4 className="text-xs font-semibold text-gray-900 dark:text-white">使用建议</h4>
                 <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-gray-500 dark:text-gray-400">{selected.guidance.map((line) => <li key={line}>{line}</li>)}</ul>
@@ -216,7 +222,7 @@ function InspirationLibrary({ page = false, onClose, onApply }: { page?: boolean
                 <h4 className="text-xs font-semibold text-gray-900 dark:text-white">注意事项</h4>
                 <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-gray-500 dark:text-gray-400">{selected.pitfalls.map((line) => <li key={line}>{line}</li>)}</ul>
               </section>
-            </div>
+            </div>}
             <div className="mt-5 flex gap-3">
               <button type="button" onClick={() => void copyPrompt(selected)} className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-600 transition hover:border-blue-300 hover:text-blue-600 dark:border-white/10 dark:text-gray-300"><CopyIcon className="h-4 w-4" />复制</button>
               <button type="button" onClick={() => usePrompt(selected)} className="flex-1 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700">填入提示词</button>
