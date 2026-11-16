@@ -95,6 +95,7 @@ func InitOptionMap() {
 	config.GlobalOption.RegisterBool("GouoTopupCustom", &config.GouoTopupCustom)
 	config.GlobalOption.RegisterInt("GouoTopupCustomMin", &config.GouoTopupCustomMin)
 	config.GlobalOption.RegisterInt("GouoTopupCustomMax", &config.GouoTopupCustomMax)
+	config.GlobalOption.RegisterInt("GouoBalanceRemindPoints", &config.GouoBalanceRemindPoints)
 	config.GlobalOption.RegisterString("GouoDefaultImageModel", &config.GouoDefaultImageModel)
 	config.GlobalOption.RegisterString("GouoNotice", &config.GouoNotice)
 	config.GlobalOption.RegisterBool("GouoCanvasEnabled", &config.GouoCanvasEnabled)

@@ -155,11 +155,11 @@ func SendQuotaWarningCodeEmail(userName, email string, quota int, noMoreQuota bo
 
 	contentTemp := `<p style="font-size: 30px">Hi <strong>%s,</strong></p>
 		<p>
-			%s，当前剩余 %s，为了不影响您的使用，请及时兑换积分。
+			%s，当前剩余 %s，为了不影响您的使用，请及时充值。
 		</p>
 		
 		<p style="text-align: center; font-size: 13px;">
-			<a target="__blank" href="%s" class="button" style="color: #ffffff;">前往兑换</a>
+			<a target="__blank" href="%s" class="button" style="color: #ffffff;">前往充值</a>
 		</p>
 		
 		<p style="color: #858585; padding-top: 15px;">

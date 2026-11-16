@@ -31,6 +31,9 @@ var GouoTopupCustom = true
 var GouoTopupCustomMin = 1
 var GouoTopupCustomMax = 5000
 
+// 余额低于这么多积分时发提醒邮件、客户端顶栏标出余额不足；0 表示不做即将用尽提醒（用尽时仍会提醒）
+var GouoBalanceRemindPoints = 100
+
 // GouoNotice 是客户端创作页顶部的公告，留空时显示默认介绍
 var GouoNotice = ""
 

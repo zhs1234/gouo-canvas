@@ -207,6 +207,8 @@ export interface GouoBackendStatus {
   gouo_trash_retention_days?: number
   gouo_max_upload_bytes?: number
   gouo_allow_low_moderation?: boolean
+  // 余额低于这么多积分时顶栏标出余额不足，0 表示只在用尽时标出
+  gouo_balance_remind_points?: number
   gouo_skills_enabled?: boolean
   gouo_skill_import?: boolean
   gouo_skill_github_import?: boolean

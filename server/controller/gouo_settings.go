@@ -16,7 +16,7 @@ import (
 )
 
 // 光构客户端相关的设置。系统设置接口只允许 root，这些设置普通管理员也需要日常维护
-var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoTopupUrl", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoAgentSiteGuide", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays", "GouoOnlineTopup", "GouoTopupPackages", "GouoTopupCustom", "GouoTopupCustomMin", "GouoTopupCustomMax"}
+var gouoSettingKeys = []string{"GouoNotice", "GouoRedemptionHelp", "GouoSupportContact", "GouoTopupUrl", "GouoDefaultImageModel", "GouoCanvasEnabled", "GouoAgentEnabled", "GouoAgentDefaultModel", "GouoAgentSystemPrompt", "GouoAgentSiteGuide", "GouoMaxImagesPerTask", "GouoAllowLowModeration", "GouoAgentMaxRounds", "GouoAgentConfirmImages", "GouoSkillsEnabled", "GouoSkillImportEnabled", "GouoSkillGithubImport", "GouoCloudLibraryEnabled", "GouoAssetUserQuotaBytes", "GouoAssetMaxFileBytes", "GouoTrashRetentionDays", "GouoOnlineTopup", "GouoTopupPackages", "GouoTopupCustom", "GouoTopupCustomMin", "GouoTopupCustomMax", "GouoBalanceRemindPoints"}
 
 func normalizeGouoSetting(key, value string) (string, error) {
 	value = strings.TrimSpace(value)
@@ -74,6 +74,10 @@ func normalizeGouoSetting(key, value string) (string, error) {
 		}
 		raw, _ := json.Marshal(packages)
 		value = string(raw)
+	case "GouoBalanceRemindPoints":
+		if n, err := strconv.Atoi(value); err != nil || n < 0 || n > 1000000 {
+			return "", errors.New("余额提醒阈值必须是 0 到 1000000 的整数（积分），0 表示不提醒")
+		}
 	case "GouoTopupCustomMin", "GouoTopupCustomMax":
 		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 100000 {
 			return "", errors.New("自定义充值金额上下限必须是 1 到 100000 的整数（元）")
