@@ -189,7 +189,7 @@ interface GouoUsageLogPage {
   total_count: number
 }
 
-interface GouoBackendStatus {
+export interface GouoBackendStatus {
   turnstile_check?: boolean
   turnstile_site_key?: string
   email_service?: boolean
@@ -210,6 +210,10 @@ interface GouoBackendStatus {
   gouo_skills_enabled?: boolean
   gouo_skill_import?: boolean
   gouo_skill_github_import?: boolean
+  // 在线充值：开关、积分包和自定义金额范围，由 lib/topup 校验后使用
+  gouo_online_topup?: boolean
+  gouo_topup_packages?: unknown
+  gouo_topup_custom?: unknown
 }
 
 export interface GouoCloudStorage {
