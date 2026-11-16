@@ -64,7 +64,7 @@ export function ActualValueBadge({ value, className = '', variant = 'highlight' 
 }
 
 const PARAM_VALUE_LABELS: Partial<Record<ParamKey, Record<string, string>>> = {
-  quality: { auto: '自动', low: '低', medium: '中', high: '高', standard: '标准', hd: '高清' },
+  quality: { auto: '自动', low: '低', medium: '中', high: '高', xhigh: '超高', max: '极致', standard: '标准', hd: '高清' },
   output_format: { png: 'PNG', jpeg: 'JPEG', jpg: 'JPEG', webp: 'WebP' },
   moderation: { auto: '自动', low: '宽松' },
 }

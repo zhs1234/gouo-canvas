@@ -40,10 +40,10 @@ import { addTaskReferencedImageIds } from './lib/taskImages'
 import { callImageApi } from './lib/api'
 import { showBrowserNotification } from './lib/browserNotification'
 import { normalizeTaskParams } from './lib/paramCompatibility'
-import { createTransparentOutputMeta, getTransparentRequestParams, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
+import { getTransparentTaskFields, removeKeyedBackgroundFromDataUrl } from './lib/transparentImage'
 import { blobToDataUrl } from './lib/dataUrl'
 import { readReferenceImageFile } from './lib/inputValidation'
-import { getCachedBackendStatus, getImageModelQuote, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
+import { getCachedBackendStatus, getImageModelQuote, getImagePrice, getTrashRetentionDays, GouoPriceChangedError, isSkillImportEnabled, isSkillsEnabled, refreshBackendStatus } from './lib/gouoBackend'
 import { matchRestoredSkillIds, prefixedSkillId, restoredSkillId } from './lib/skills/matchRestoredSkillIds'
 import { formatExportFileTime } from './lib/exportFileName'
 import { getActionableErrorMessage, isBalanceError, requestUserCenter } from './lib/userGuidance'
@@ -1276,6 +1276,7 @@ async function runTask(taskId: string, recoverOnly: boolean) {
       model: task.apiModel || settings.model,
       prompt: replaceImageMentionsForApi(requestPrompt, inputDataUrls.length),
       params: task.params,
+      ...(task.nativeTransparent ? { background: 'transparent' as const } : {}),
       inputImageDataUrls: inputDataUrls,
       maskDataUrl,
       gouoPriceVersion: task.gouoPriceVersion,
@@ -1592,9 +1593,9 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
     if (err instanceof GouoPriceChangedError) {
       useStore.getState().setConfirmDialog({
         title: '确认重试价格',
-        message: `模型「${err.quote.id}」当前价格为 ${formatPoints(err.quote.price_cny)}/张。重试会新建 ${task.params.n} 次单图请求，全部成功预计扣费 ${formatPoints(err.quote.price_cny * task.params.n)}。${task.outputImages.length > 0 && task.outputErrors?.length ? '本次会重新生成整组图片，包含已经成功的图片，不是仅补失败项。' : ''}原任务可能已扣费，请先在用户中心的使用记录核对。是否按此价格重试？`,
+        message: `模型「${err.quote.id}」按原参数当前价格为 ${formatPoints(getImagePrice(err.quote, { ...task.params, n: 1 }))}/张。重试会新建 ${task.params.n} 次单图请求，全部成功预计扣费 ${formatPoints(getImagePrice(err.quote, task.params))}。${task.outputImages.length > 0 && task.outputErrors?.length ? '本次会重新生成整组图片，包含已经成功的图片，不是仅补失败项。' : ''}原任务可能已扣费，请先在用户中心的使用记录核对。是否按此价格重试？`,
         confirmText: '按当前价格重试',
-        action: () => retryTask({ ...task, gouoPriceVersion: err.quote.price_version, gouoPriceCNY: err.quote.price_cny }, true),
+        action: () => retryTask({ ...task, gouoPriceVersion: err.quote.price_version }, true),
       })
       return
     }
@@ -1604,20 +1605,15 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
   if (!priceConfirmed) {
     useStore.getState().setConfirmDialog({
       title: '确认付费重试',
-      message: `将新建 ${task.params.n} 次单图请求，全部成功预计扣费 ${formatPoints(quote.price_cny * task.params.n)}。${task.outputImages.length > 0 && task.outputErrors?.length ? '本次会重新生成整组图片，包含已经成功的图片，不是仅补失败项。' : ''}原任务可能已扣费，请先在用户中心的使用记录核对；本次重试不会恢复原任务结果。`,
+      message: `将新建 ${task.params.n} 次单图请求，全部成功预计扣费 ${formatPoints(getImagePrice(quote, task.params))}。${task.outputImages.length > 0 && task.outputErrors?.length ? '本次会重新生成整组图片，包含已经成功的图片，不是仅补失败项。' : ''}原任务可能已扣费，请先在用户中心的使用记录核对；本次重试不会恢复原任务结果。`,
       confirmText: '新建付费请求',
       action: () => retryTask(task, true),
     })
     return
   }
-  const normalizedParams = normalizeTaskParams(task.params)
-  const shouldUseTransparentOutput = normalizedParams.output_format === 'png' && normalizedParams.transparent_output
-  const taskParams = shouldUseTransparentOutput
-    ? getTransparentRequestParams(normalizedParams)
-    : { ...normalizedParams, transparent_output: false }
-  const transparentMeta = taskParams.transparent_output
-    ? createTransparentOutputMeta(task.prompt.trim())
-    : null
+  // 沿用原任务的透明背景方式；原任务用原生透明但模型已不支持时改用客户端抠图
+  const transparent = getTransparentTaskFields(normalizeTaskParams(task.params), task.prompt.trim(), Boolean(task.nativeTransparent && quote.transparent))
+  const taskParams = transparent.params
   const taskId = crypto.randomUUID()
   const newTask: TaskRecord = {
     id: taskId,
@@ -1627,12 +1623,13 @@ export async function retryTask(task: TaskRecord, priceConfirmed = false) {
     params: taskParams,
     apiModel: model,
     gouoPriceVersion: quote.price_version,
-    gouoPriceCNY: quote.price_cny,
+    gouoPriceCNY: getImagePrice(quote, { ...taskParams, n: 1 }),
     inputImageIds: [...task.inputImageIds],
     maskTargetImageId: task.maskTargetImageId ?? null,
     maskImageId: task.maskImageId ?? null,
-    transparentOutput: transparentMeta?.transparentOutput,
-    transparentPrompt: transparentMeta?.effectivePrompt,
+    transparentOutput: transparent.transparentOutput,
+    transparentPrompt: transparent.transparentPrompt,
+    nativeTransparent: transparent.nativeTransparent,
     outputImages: [],
     status: 'running',
     error: null,

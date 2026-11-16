@@ -203,6 +203,7 @@ async function callImagesSingle(opts: CallApiOptions, relay: Relay): Promise<Cal
       formData.append('output_format', params.output_format)
       formData.append('moderation', params.moderation)
       formData.append('quality', params.quality)
+      if (opts.background) formData.append('background', opts.background)
       if (params.output_format !== 'png' && params.output_compression != null) formData.append('output_compression', String(params.output_compression))
       if (params.n > 1) formData.append('n', String(params.n))
 
@@ -232,6 +233,7 @@ async function callImagesSingle(opts: CallApiOptions, relay: Relay): Promise<Cal
         moderation: params.moderation,
         quality: params.quality,
       }
+      if (opts.background) body.background = opts.background
       if (params.output_format !== 'png' && params.output_compression != null) body.output_compression = params.output_compression
       if (params.n > 1) body.n = params.n
 

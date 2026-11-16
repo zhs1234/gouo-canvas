@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   initials: [] as unknown[],
   cached: [] as unknown[],
   effects: [] as (() => void | (() => void))[],
-  state: { settings: { model: 'image-b' } as { model: string; gouoModelSelected?: boolean }, params: { n: 1, size: 'auto' }, inputImages: [] as string[], maskDraft: null as object | null },
+  state: { settings: { model: 'image-b' } as { model: string; gouoModelSelected?: boolean }, params: { n: 1, size: 'auto', quality: 'auto' }, inputImages: [] as string[], maskDraft: null as object | null },
   setSettings: vi.fn(),
   getImageModels: vi.fn(),
   setters: [] as ReturnType<typeof vi.fn>[],
@@ -35,7 +35,7 @@ beforeEach(() => {
   mocks.setters = []
   mocks.effects = []
   mocks.setSettings.mockReset()
-  mocks.state = { settings: { model: 'image-b' }, params: { n: 1, size: 'auto' }, inputImages: [], maskDraft: null }
+  mocks.state = { settings: { model: 'image-b' }, params: { n: 1, size: 'auto', quality: 'auto' }, inputImages: [], maskDraft: null }
 })
 
 it.each([1, 2, 10])('allows %s total images with a single-image model and shows no price', (n) => {

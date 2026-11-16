@@ -5,7 +5,7 @@ import { App, Button, Modal } from 'antd'
 import { Brush, Crop, Download, ImagePlus, Play, Settings2 } from 'lucide-react'
 import { useCanvasStore } from '../../stores/canvasStore'
 import { useStore, ensureImageCached } from '../../store'
-import { getImageModels, getTrashRetentionDays, type GouoImageModel } from '../../lib/gouoBackend'
+import { getImageModels, getImagePrice, getTrashRetentionDays, type GouoImageModel } from '../../lib/gouoBackend'
 import { storeImage, storeImageWithSize } from '../../lib/db'
 import { loadImage } from '../../lib/canvasImage'
 import {
@@ -609,7 +609,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
       const count = target?.metadata?.count || 1
       modal.confirm({
         title: '确认重新生成？',
-        content: `将新建 ${count} 次单图请求${quote ? `，全部成功预计扣费 ${formatPoints(quote.price_cny * count)}` : ''}。原请求可能已扣费，请先在用户中心的使用记录核对。`,
+        content: `将新建 ${count} 次单图请求${quote ? `，全部成功预计扣费 ${formatPoints(getImagePrice(quote, { size: target?.metadata?.size, quality: target?.metadata?.quality, n: count }))}` : ''}。原请求可能已扣费，请先在用户中心的使用记录核对。`,
         okText: '重新生成',
         cancelText: '取消',
         onOk: () => run(submit()),
@@ -713,7 +713,7 @@ export function CanvasEditor({ project, onOpenProject, onOpenAgent }: Props) {
         ) : null}
         {models.find((model) => model.id === (config.model || settings.model)) && (
           <div className="mt-2 text-xs opacity-70">
-            本次预计 {formatPoints((models.find((model) => model.id === (config.model || settings.model))?.price_cny || 0) * (config.count || 1))}
+            本次预计 {formatPoints(getImagePrice(models.find((model) => model.id === (config.model || settings.model))!, { size: config.size, quality: config.quality, n: config.count || 1 }))}
           </div>
         )}
         <Button className="mt-3 w-full" type="primary" icon={<Play className="size-3.5" />} onClick={() => run(generate(node.id))}>

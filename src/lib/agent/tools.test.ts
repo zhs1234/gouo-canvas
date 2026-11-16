@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   tasks: [] as Array<{ id: string; status: string; outputImages: string[]; prompt: string; error: string | null; params: { n: number } }>,
   dialog: null as null | { message?: string; action?: () => void; cancelAction?: () => void },
   models: vi.fn(),
+  cachedModels: [] as unknown[],
   listeners: new Set<(state: { confirmDialog: unknown }) => void>(),
   skills: [] as Skill[],
   siteGuide: '',
@@ -28,7 +29,7 @@ vi.mock('../../store', () => ({
     },
   },
 }))
-vi.mock('../gouoBackend', () => ({ getImageModels: mocks.models, getMaxTaskImages: () => mocks.maxImages, isLowModerationAllowed: () => false }))
+vi.mock('../gouoBackend', async (importOriginal) => ({ ...await importOriginal<typeof import('../gouoBackend')>(), getImageModels: mocks.models, getCachedImageModels: () => mocks.cachedModels, getMaxTaskImages: () => mocks.maxImages, isLowModerationAllowed: () => false }))
 vi.mock('../../stores/canvasStore', () => ({ useCanvasStore: { getState: () => ({ projects: mocks.projects, hydrate: async () => {}, getSnapshot: mocks.snapshot, applyOperations: mocks.apply }) } }))
 vi.mock('../db', () => ({ getImage: mocks.getImage }))
 vi.mock('../imageTasks', () => ({ submitImageTask: mocks.submit }))
@@ -125,6 +126,33 @@ describe('Agent tool boundary', () => {
     mocks.dialog!.cancelAction!()
     await expect(fallback).rejects.toThrow('没有确认')
     expect(mocks.submit).toHaveBeenCalledTimes(1)
+  })
+
+  it('estimates the confirmation charge by the requested size tier and quality', async () => {
+    mocks.models.mockResolvedValue([{ id: 'gpt-image-2', price_cny: 0.1, tier_ratios: { '2K': 2 }, quality_ratios: { xhigh: 3 } }])
+    const pending = run('create_image_task', { prompt: '海报', params: { n: 5, size: '2048x2048', quality: 'xhigh' } })
+    await vi.waitFor(() => expect(mocks.dialog).not.toBeNull())
+    expect(mocks.dialog!.message).toContain('每张 60 积分')
+    expect(mocks.dialog!.message).toContain('预计扣费 300 积分')
+    mocks.dialog!.cancelAction!()
+    await expect(pending).rejects.toThrow('没有确认')
+    await expect(run('create_image_task', { prompt: '海报', params: { quality: 'ultra' } })).rejects.toThrow('图片质量无效')
+  })
+
+  it('lists only the qualities the selected model opens in the tool schema', () => {
+    const qualityOf = () => {
+      const tool = getAgentToolDefinitions([]).find((item) => item.function.name === 'create_image_task')!
+      return ((tool.function.parameters.properties as Record<string, { properties: Record<string, { enum: string[]; description?: string }> }>).params.properties.quality)
+    }
+    mocks.cachedModels = []
+    expect(qualityOf().enum).toEqual(['auto', 'low', 'medium', 'high'])
+    expect(qualityOf().description).toBeUndefined()
+    mocks.cachedModels = [{ id: 'gpt-image-2', qualities: ['low', 'high', 'xhigh', 'max'] }]
+    expect(qualityOf().enum).toEqual(['auto', 'low', 'high', 'xhigh', 'max'])
+    expect(qualityOf().description).toContain('仅在用户明确要求时使用')
+    mocks.cachedModels = [{ id: 'other', qualities: ['max'] }]
+    expect(qualityOf().enum).toEqual(['auto', 'low', 'medium', 'high'])
+    mocks.cachedModels = []
   })
 
   it('treats closing the confirmation without choosing as cancel', async () => {

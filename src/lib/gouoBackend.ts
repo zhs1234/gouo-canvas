@@ -63,6 +63,11 @@ export interface GouoImageModel {
   sizes?: SizeTier[]
   qualities?: string[]
   max_inputs?: number
+  // 价格系数：单张价 = price_cny × 档位系数 × 画质系数，缺省的键按 1；旧服务端不返回
+  tier_ratios?: Partial<Record<SizeTier, number>>
+  quality_ratios?: Partial<Record<string, number>>
+  // 模型原生支持透明背景，不需要客户端抠图
+  transparent?: boolean
 }
 
 export class GouoPriceChangedError extends Error {
@@ -86,6 +91,12 @@ function checkRateLimit(response: Response) {
   throw new GouoRateLimitError(Date.now() + Math.max(1000, delay))
 }
 
+// 价格系数缺省或为 null 时视为没有系数；有值时必须是对象且每个系数为正数
+function isRatioMap(value: unknown) {
+  if (value == null) return true
+  return typeof value === 'object' && !Array.isArray(value) && Object.values(value).every((ratio) => typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0)
+}
+
 export async function getImageModels(): Promise<GouoImageModel[]> {
   if (!backendToken) await createBackendSettings()
   let data: unknown
@@ -96,7 +107,7 @@ export async function getImageModels(): Promise<GouoImageModel[]> {
     await createBackendSettings(true)
     data = await backendRequest<unknown>('/api/gouo/models', { headers: { 'X-Gouo-Token': backendToken } })
   }
-  if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny <= 0 || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1)) {
+  if (!Array.isArray(data) || data.some((entry) => !entry || typeof entry.id !== 'string' || typeof entry.name !== 'string' || typeof entry.price_version !== 'string' || !Number.isFinite(entry.price_cny) || entry.price_cny <= 0 || typeof entry.reference !== 'boolean' || typeof entry.mask !== 'boolean' || !Number.isInteger(entry.max_outputs) || entry.max_outputs < 1 || !isRatioMap(entry.tier_ratios) || !isRatioMap(entry.quality_ratios) || (entry.transparent != null && typeof entry.transparent !== 'boolean'))) {
     throw new Error('图片模型目录格式无效')
   }
   cachedImageModels = data as GouoImageModel[]
@@ -121,10 +132,24 @@ export function isLowModerationAllowed() {
   return cachedStatus?.gouo_allow_low_moderation === true
 }
 
-// 与服务端的参数校验一致：图片按张计价，尺寸、画质和参考图张数不能超出后台为模型限定的范围
+// 模型可选的画质，从低到高排列。后台没限定画质时只开放 low/medium/high，超高和极致成本高，必须由后台显式开放；
+// 自动画质可能被上游选成高画质，只在开放高画质时提供
+export function getModelQualityOptions(model?: GouoImageModel): TaskParams['quality'][] {
+  const allowed = model?.qualities?.length ? model.qualities : ['low', 'medium', 'high']
+  return (['auto', 'low', 'medium', 'high', 'xhigh', 'max'] as const).filter((quality) => allowed.includes(quality === 'auto' ? 'high' : quality))
+}
+
+// 单次请求的预计价格，与服务端计费一致：自动尺寸按 1K 档、自动画质按高画质计，缺省的系数按 1
+export function getImagePrice(model: GouoImageModel, params: { size?: string; quality?: string; n?: number }) {
+  const tier = !params.size || params.size === 'auto' ? '1K' : getSizeTier(params.size)
+  const quality = !params.quality || params.quality === 'auto' ? 'high' : params.quality
+  return model.price_cny * ((tier && model.tier_ratios?.[tier]) || 1) * (model.quality_ratios?.[quality] || 1) * (params.n ?? 1)
+}
+
+// 与服务端的参数校验一致：尺寸、画质和参考图张数不能超出后台为模型限定的范围
 export function getImageParamIssue(model: GouoImageModel, params: Pick<TaskParams, 'size' | 'quality' | 'moderation'>, inputCount: number) {
   if (params.size !== 'auto' && !model.sizes?.includes(getSizeTier(params.size)!)) return '此模型不支持该分辨率，请选择自动尺寸或已开放的分辨率'
-  if (model.qualities?.length && (params.quality === 'auto' ? !model.qualities.includes('high') : !model.qualities.includes(params.quality))) {
+  if (!getModelQualityOptions(model).includes(params.quality)) {
     return params.quality === 'auto' ? '此模型不开放自动画质，请选择具体画质' : '此模型不开放所选画质，请重新选择'
   }
   if (params.moderation === 'low' && !isLowModerationAllowed()) return '运营方未开放宽松审核'

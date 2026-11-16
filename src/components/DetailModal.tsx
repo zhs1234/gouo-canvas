@@ -250,8 +250,9 @@ export default function DetailModal() {
   const promptSentToApi = replaceImageMentionsForApi(requestPrompt, task.inputImageIds.length)
   const showRevisedPrompt = Boolean(currentRevisedPrompt && currentRevisedPrompt !== stripInternalPromptText(promptSentToApi))
   const rawImageUrls = task.rawImageUrls ?? []
-  const isPngOutput = task.params.output_format === 'png'
-  const transparentOutputText = formatParamValue('transparent_output', Boolean(task.transparentOutput || task.params.transparent_output))
+  // 原生透明背景也可能是 WebP，同样显示透明背景而不是压缩率
+  const showTransparentParam = task.params.output_format === 'png' || Boolean(task.nativeTransparent)
+  const transparentOutputText = `${formatParamValue('transparent_output', Boolean(task.transparentOutput || task.params.transparent_output))}${task.nativeTransparent ? '（模型原生）' : task.transparentOutput ? '（后处理抠图）' : ''}`
   const currentTransparentOutputFailed = Boolean(currentOutputImageId && task.transparentOutput && task.transparentOriginalImages?.[currentOutputImageIndex] === '')
   const outputCompressionText = formatParamValue('output_compression', task.params.output_compression)
 
@@ -929,7 +930,7 @@ export default function DetailModal() {
                   <DetailParamValue task={task} paramKey="output_format" className="font-medium" actualParams={currentActualParams} />
                 </div>
               </div>
-              {isPngOutput ? (
+              {showTransparentParam ? (
                 <div className="bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2 min-w-0 overflow-hidden">
                   <span className="text-gray-400 dark:text-gray-500">透明背景</span>
                   <br />

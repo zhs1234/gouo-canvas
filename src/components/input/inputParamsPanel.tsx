@@ -19,6 +19,7 @@ export default function InputParamsPanel({
   qualityOptions,
   selectClass,
   transparentOutputAvailable,
+  transparentNative,
   showTransparentOutputControl,
   transparentOutputEnabled,
   transparentOutputHint,
@@ -50,6 +51,7 @@ export default function InputParamsPanel({
   qualityOptions: Array<{ label: string; value: string }>
   selectClass: string
   transparentOutputAvailable: boolean
+  transparentNative: boolean
   showTransparentOutputControl: boolean
   transparentOutputEnabled: boolean
   transparentOutputHint: HintTooltipState
@@ -103,7 +105,8 @@ export default function InputParamsPanel({
           onChange={(val) => {
             setParams({
               output_format: val as TaskParams['output_format'],
-              ...(val === 'png' ? { output_compression: null } : { transparent_output: false }),
+              // 原生透明背景切到 WebP 时保留透明；JPEG 不支持透明，切过去即关闭
+              ...(val === 'png' ? { output_compression: null } : val === 'webp' && transparentNative ? {} : { transparent_output: false }),
             })
           }}
           options={[
@@ -140,7 +143,7 @@ export default function InputParamsPanel({
           />
           <ButtonTooltip
             visible={transparentOutputHint.visible}
-            text="基于提示词与后处理，并非模型原生生成"
+            text={transparentNative ? '由模型原生生成透明背景，支持 PNG 和 WebP' : '基于提示词与后处理，并非模型原生生成'}
           />
         </label>
       ) : (

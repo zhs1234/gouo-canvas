@@ -249,6 +249,18 @@ func TestGouoImageParamLimits(t *testing.T) {
 	require.Contains(t, checkGouoImageParams(limited, "auto", "", "", 0), "不开放自动画质")
 	require.Empty(t, checkGouoImageParams(&model.GouoImageModel{Qualities: []string{"high"}}, "auto", "auto", "", 0))
 	require.Contains(t, checkGouoImageParams(limited, "auto", "low", "", 3), "最多使用 2 张参考图")
+	// 不限画质只包括 low、medium、high 等原有画质，超高和极致必须显式开放
+	for _, quality := range []string{"xhigh", "max", " MAX "} {
+		require.Contains(t, checkGouoImageParams(open, "auto", quality, "", 0), "不开放所选画质", quality)
+	}
+	for _, quality := range []string{"low", "medium", "high", "auto", "", "standard"} {
+		require.Empty(t, checkGouoImageParams(open, "auto", quality, "", 0), quality)
+	}
+	premium := &model.GouoImageModel{Qualities: []string{"high", "xhigh", "max"}}
+	require.Empty(t, checkGouoImageParams(premium, "auto", "xhigh", "", 0))
+	require.Empty(t, checkGouoImageParams(premium, "auto", "max", "", 0))
+	require.Empty(t, checkGouoImageParams(premium, "auto", "auto", "", 0))
+	require.Contains(t, checkGouoImageParams(premium, "auto", "low", "", 0), "不开放所选画质")
 	// 宽松审核默认不开放，开放后放行
 	require.Equal(t, "运营方未开放宽松审核", checkGouoImageParams(open, "auto", "", "low", 0))
 	config.GouoAllowLowModeration = true

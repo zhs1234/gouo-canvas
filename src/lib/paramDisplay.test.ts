@@ -22,6 +22,8 @@ describe('formatParamValue', () => {
     expect(formatParamValue('quality', 'low')).toBe('低')
     expect(formatParamValue('quality', 'medium')).toBe('中')
     expect(formatParamValue('quality', 'high')).toBe('高')
+    expect(formatParamValue('quality', 'xhigh')).toBe('超高')
+    expect(formatParamValue('quality', 'max')).toBe('极致')
     expect(formatParamValue('output_format', 'png')).toBe('PNG')
     expect(formatParamValue('output_format', 'webp')).toBe('WebP')
     expect(formatParamValue('moderation', 'low')).toBe('宽松')

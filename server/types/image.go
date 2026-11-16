@@ -26,6 +26,11 @@ type ImageResponse struct {
 	Created any                      `json:"created,omitempty"`
 	Data    []ImageResponseDataInner `json:"data,omitempty"`
 	Usage   *ResponsesUsage          `json:"usage,omitempty"`
+	// GPT image 系列在顶层回显实际使用的参数；自动尺寸或画质时客户端靠这些字段显示实际值
+	Size         string `json:"size,omitempty"`
+	Quality      string `json:"quality,omitempty"`
+	Background   string `json:"background,omitempty"`
+	OutputFormat string `json:"output_format,omitempty"`
 }
 
 type ImageResponseDataInner struct {

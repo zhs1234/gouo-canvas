@@ -86,6 +86,26 @@ func TestImageProviderSSECompleteResponse(t *testing.T) {
 	require.Equal(t, 5, usage.TotalTokens)
 }
 
+func TestImageProviderKeepsEchoedParams(t *testing.T) {
+	const echoed = `{"created":1,"size":"1536x1024","quality":"high","background":"transparent","output_format":"webp","data":[{"b64_json":"aGk="}]}`
+	for _, sse := range []bool{false, true} {
+		response, err, _ := callImageTestProvider(t, "generations", func(w http.ResponseWriter, r *http.Request) {
+			if sse {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprintf(w, "event: image_generation.completed\ndata: %s\n\n", strings.Replace(echoed, "{", `{"type":"image_generation.completed",`, 1))
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, echoed)
+		})
+		require.Nil(t, err)
+		require.Equal(t, "1536x1024", response.Size)
+		require.Equal(t, "high", response.Quality)
+		require.Equal(t, "transparent", response.Background)
+		require.Equal(t, "webp", response.OutputFormat)
+	}
+}
+
 // 默认不增加每次单测耗时；仅本地诊断时启用，仍只访问 httptest 的回环地址。
 func TestImageProviderFifteenSecondKeepalive(t *testing.T) {
 	if os.Getenv("GOUO_TEST_IMAGE_KEEPALIVE_15S") != "1" {

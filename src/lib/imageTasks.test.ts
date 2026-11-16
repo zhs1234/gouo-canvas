@@ -11,7 +11,7 @@ vi.mock('../store', () => ({
   executeTask: fixtures.execute,
 }))
 vi.mock('./db', () => ({ putTask: vi.fn(async (task: TaskRecord) => { fixtures.saved.push(task) }), storeImage: vi.fn(async () => 'image') }))
-vi.mock('./gouoBackend', () => ({ getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user, getMaxTaskImages: () => 10, isLowModerationAllowed: () => false }))
+vi.mock('./gouoBackend', async (importOriginal) => ({ getImagePrice: (await importOriginal<typeof import('./gouoBackend')>()).getImagePrice, getImageModelQuote: fixtures.quote, getCurrentUser: fixtures.user, getMaxTaskImages: () => 10, isLowModerationAllowed: () => false }))
 vi.mock('./userGuidance', () => ({ getActionableErrorMessage: (message: string) => message, requestUserCenter: vi.fn() }))
 vi.mock('./canvasImage', () => ({ validateMaskMatchesImage: vi.fn(async () => 'partial') }))
 
