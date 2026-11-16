@@ -57,8 +57,10 @@ PowerShell secret generation:
 
 ## 6. Credit and payments
 
-- [ ] Before a payment provider is fully configured, expose only manual credit or redemption codes.
+- [ ] Before a payment gateway is fully configured, keep **开放在线充值** (online top-up) off and use only redemption codes or admin point adjustments.
+- [ ] **服务器地址** (Server address) is the client's public HTTPS address; a small real payment credits the points configured for its package.
 - [ ] Verify every payment callback signature and require HTTPS.
+- [ ] Configure the email service and check the balance reminder threshold; users get a reminder when the balance crosses it and when it runs out.
 - [ ] Test success, failure, cancellation, duplicate notification, and delayed notification.
 - [ ] Reconcile order value, user credit, and provider transaction ID.
 - [ ] Publish prices, refunds, invoices, and support policy.

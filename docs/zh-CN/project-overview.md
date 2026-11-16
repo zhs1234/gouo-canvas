@@ -16,7 +16,7 @@
 | 收藏与数据 | 收藏夹、批量操作、ZIP 数据导入导出 | [favorites](../../src/components/favorites)、[DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
 | 画布 | 无限画布，文本、图片、生成配置和组节点，节点内生成并显示预计扣费，关联 Agent | [canvas](../../src/components/canvas)、[lib/canvas](../../src/lib/canvas) |
 | Agent | 对话式创作，调用图片生成和画布读写工具，模型由后台配置 | [agent](../../src/components/agent)、[lib/agent](../../src/lib/agent) |
-| 用户中心 | 积分余额、图片计费、兑换码、使用记录和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
+| 用户中心 | 积分余额、在线充值与兑换码、模型价格、使用记录和账户设置 | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | 云端作品库 | 任务及关联图片同步、空间用量、账号隔离 | [serverLibrary.ts](../../src/lib/serverLibrary.ts)、[gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | 管理后台 | 仅限管理员登录；用户、渠道、兑换码、日志等 One Hub 管理能力，以及光构设置、光构模型、图片账务和光构存储 | [server/web](../../server/web)、[api-router.go](../../server/router/api-router.go) |
 
@@ -151,7 +151,7 @@
 | Docker Linux/CGO 后端编译及 model/controller/relay/relay_util 包测试 | 通过 |
 | 隔离 SQLite/Redis 与模拟上游 HTTP 验收 | 模型目录、不同价格、映射、失败退款、内部重试、报价变更、有限令牌与并发余额检查通过 |
 | 桌面和 390px 手机界面 | 模型选择、账号选择记忆、数量/编辑能力限制、模拟生成和参考图编辑通过；后台价格加载、校验及保存通过 |
-| 真实收费上游、MySQL/PostgreSQL、生产迁移、跨设备同步、支付和 CSV 文件下载端到端 | 未验证 |
+| 真实收费上游、MySQL/PostgreSQL、生产迁移、跨设备同步、真实支付网关（在线充值仅用模拟易支付验证过下单、回调到账和重复通知）和 CSV 文件下载端到端 | 未验证 |
 
 根目录 npm 安装报告 17 项依赖漏洞，其中 12 项为 high。这是安装时的审计结果，不等于已证明存在可利用的线上漏洞；本次未执行自动修复或升级。前端构建还提示旧 Browserslist 数据和混合导入，管理后台提示 peer dependency、Tailwind 内容配置和较大分包，这些警告未阻止本次构建。
 

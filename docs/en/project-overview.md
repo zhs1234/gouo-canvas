@@ -16,7 +16,7 @@ This document helps maintainers and new contributors understand the product scop
 | Collections and data | Collections, batch actions, ZIP data import and export | [favorites](../../src/components/favorites), [DataSettingsTab.tsx](../../src/components/settings/DataSettingsTab.tsx) |
 | Canvas | Infinite canvas with text, image, generation-settings, and group nodes; in-node generation with estimated charge; linked Agent | [canvas](../../src/components/canvas), [lib/canvas](../../src/lib/canvas) |
 | Agent | Conversational creation that calls image-generation and canvas tools; models configured in the admin panel | [agent](../../src/components/agent), [lib/agent](../../src/lib/agent) |
-| User center | Points balance, image billing, redemption codes, usage history, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
+| User center | Points balance, online top-up and redemption codes, model prices, usage history, and account settings | [UserCenterModal.tsx](../../src/components/UserCenterModal.tsx) |
 | Cloud library | Server-saved artworks, storage usage, and account isolation | [serverLibrary.ts](../../src/lib/serverLibrary.ts), [gouo_cloud.go](../../server/controller/gouo_cloud.go) |
 | Admin panel | Administrators only; One Hub user, channel, redemption-code, and log administration, plus Gouo settings, Gouo models, image billing, and Gouo storage | [server/web](../../server/web), [api-router.go](../../server/router/api-router.go) |
 
@@ -151,7 +151,7 @@ These checks completed in a Linux workspace on 2026-10-13 using an isolated SQLi
 | Docker Linux/CGO backend compilation and model/controller/relay/relay_util package tests | Passed |
 | Isolated SQLite/Redis and mock-upstream HTTP checks | Catalog, model-specific prices, mappings, refunds, channel retries, quote changes, finite tokens, and concurrent balance checks passed |
 | Desktop and 390px mobile UI | Model choices, account choice retention, count/edit capability restrictions, mock generation and reference editing passed; admin price loading, validation, and saving passed |
-| Real paid upstream, MySQL/PostgreSQL, production migration, cross-device sync, payments, and CSV download end to end | Unverified |
+| Real paid upstream, MySQL/PostgreSQL, production migration, cross-device sync, real payment gateways (online top-up was verified only against a mock epay for ordering, callback crediting, and repeated notifications), and CSV download end to end | Unverified |
 
 Root npm installation reported 17 dependency vulnerabilities, including 12 rated high. This is the installation audit result, not proof of an exploitable production vulnerability. No automatic fix or upgrade was applied. Public frontend builds also warned about old Browserslist data and mixed imports. Admin checks warned about peer dependencies, Tailwind content configuration, and large chunks; these warnings did not prevent the builds.
 

@@ -77,7 +77,9 @@ Gouo-specific features live under the **光构** (Gouo) menu: 光构设置 (Gouo
 
 - **创作页公告** (announcement): a single line of up to 200 characters at the top of the client's creation page. When blank, the default introduction is shown. A dismissed announcement reappears when its text changes.
 - **默认图片模型** (default image model): chosen from enabled models; see [section 4](#4-model-specific-image-billing).
-- **兑换码获取说明** (redemption instructions) and **客服联系方式** (support contact): shown on the redemption screen and under "top-up and billing help" in the user center. Both default to blank, and the client says they are not configured yet.
+- **兑换码获取说明** (redemption instructions), **客服联系方式** (support contact), and **购买兑换码链接** (link to buy codes): shown on the user center's **充值/定价** (Top up / Pricing) page. The instructions appear below the code input; support contacts appear one per line under **联系客服** (Contact support); a purchase link (for example a card shop URL) adds a **购买兑换码** (Buy codes) button to the redemption card. http(s) URLs in the text are clickable, and an image URL on its own line (such as a WeChat QR code) is shown as an image. All three default to blank.
+- **在线充值** (online top-up): the on/off switch, points packages (up to 12, each with a price, points, and bonus points), and whether custom amounts are allowed with their minimum and maximum (whole CNY, 1–100000; a custom amount credits 100 points per CNY). See [section 3.4](#34-redemption-codes-and-online-top-up).
+- **余额提醒阈值（积分）** (balance reminder threshold, in points): 100 by default. Below this balance the client header marks the balance as low; when a charge takes the balance across it, or the balance runs out, users with a bound email get one reminder email (requires the email service). Set 0 to remind only when the balance runs out.
 - **开放画布** (canvas) and **开放 Agent** (Agent): when switched off, the client hides the corresponding entry points (the mode switch on the creation page, "My canvases" or "Agent conversations" in the sidebar, and the Agent button inside canvases), and visiting their addresses returns to the creation page. Saved canvases and conversations are kept. With Agent off, the Agent model catalog is empty. On text endpoints the client's platform token may only call `/v1/chat/completions` (Agent chat); other text endpoints are rejected so they cannot bypass a model's per-reply token limit. The build variables `VITE_CANVAS_ENABLED` and `VITE_AGENT_ENABLED` remain the upper limit: an entry disabled at build time cannot be turned on from the panel.
 - **一次最多生成张数** (max images per submission): 1–10. Limits how many images the client submits at once on the creation page, canvas, and Agent; each image is still billed as a single-image request. This is a client submission limit; the images per HTTP request are bounded by each model's "maximum images per request".
 - **默认 Agent 模型** (default Agent model): the chat model new conversations start with, chosen from models that qualify for the Agent (step 10 in 3.8). When unset or unavailable to the user, the first model in the catalog is used.
@@ -101,7 +103,18 @@ Agent model prices are entered in points per million tokens. Once you save a pri
 
 ![Editing a Gouo model](../images/screenshots/panel-gouo-model-edit.webp)
 
-The edit dialog takes the price per image in points (with the CNY equivalent shown below), the maximum images per request, and whether reference and mask edits are supported (mask edits require reference support). Withdrawing a model keeps its price. The single-model editor in the price management page offers the same Gouo fields.
+The edit dialog has these fields:
+
+- **基础价（积分/张）** (base price, points per image), with the CNY equivalent shown below.
+- **单次请求最多输出张数** (maximum images per request): limits `n` only for direct API calls; the Gouo client splits images into single-image requests.
+- **支持参考图编辑** (reference edits), **支持遮罩编辑** (mask edits, requires reference support), and **原生透明背景** (native transparent background; output must be PNG or WebP).
+- **支持的分辨率** (supported resolutions): tick the 1K/2K/4K tiers the upstream actually supports. The client shows only those tiers; with none ticked, only automatic size is available.
+- **开放的画质** (enabled quality levels): ticking only low, medium, and high means no restriction. Extra-high (xhigh) and maximum (max) cost far more than high and must be ticked to be offered. Auto quality is offered only when high is enabled.
+- **价格系数** (price factors): one factor per tier and per quality level (greater than 0, at most 100, default 1). Price per image = base price × tier factor × quality factor; see [section 4](#4-model-specific-image-billing).
+
+Withdrawing a model keeps its price. The single-model editor in the price management page offers the same Gouo fields.
+
+The Agent model dialog also has **缓存命中输入价格（积分/百万 token）** (cache-hit input price, points per million tokens). Every Agent request resends the system prompt and tool definitions, so cache hit rates are high. Enter the upstream cache-hit discount (for example 5% of the list price); when unset, cache hits are charged at the full input price. Cache-hit tokens reported by the upstream (including DeepSeek's `prompt_cache_hit_tokens`) are billed at this price.
 
 ### 3.3 Users and points
 
@@ -109,11 +122,19 @@ The edit dialog takes the price per image in points (with the CNY equivalent sho
 
 The user list shows balances and usage in points. **增减积分** (Adjust points) in a user's menu takes the change in points and shows the equivalent quota. Submitting writes a "管理员增减用户积分" (admin adjusted points) log that the user also sees in the client's usage records.
 
-### 3.4 Redemption codes
+### 3.4 Redemption codes and online top-up
 
 ![Creating redemption codes](../images/screenshots/panel-redemption.webp)
 
 Redemption codes can add points to any account, so only root can list, create, edit or delete them; the 兑换 (Redemption) menu is hidden from other admins. When creating codes, enter points in **按积分填写** (Enter in points); the quota is calculated automatically and rounded up so the credited balance is never below the entered points, and the quota field shows the approximate points. Up to 100 codes can be created at once; creating several downloads a text file. Redeemed points are credited immediately and logged as "兑换码 #ID 充值 N 积分" (code #ID added N points).
+
+Online top-up sells points packages priced in CNY and is separate from One Hub's original USD-unit top-up page:
+
+1. Under **支付设置 → 支付 → 网关设置** (Payment settings → Payment → Gateway settings, root only), add and enable a payment gateway (epay, Alipay, WeChat Pay, or Stripe; gateways other than Stripe must use CNY). Fill in the merchant details the gateway requires, and optionally set fees.
+2. Under **设置 → 系统设置**, set **服务器地址** (Server address) to the client's public HTTPS address. Payment callbacks and the return after payment use it; a gateway can also set its own callback domain.
+3. In **光构设置**, turn on **开放在线充值** (Enable online top-up) and configure packages. If the switch is on but no gateway is enabled, the panel warns and the client hides online top-up.
+
+The price and credited points of an order are computed only from the current server settings, and packages do not stack with the system top-up discount. After a callback passes signature verification, the points are credited and a top-up log is written; repeated notifications for the same order credit nothing more. Orders are listed under **支付设置 → 支付 → 订单列表** (Payment settings → Payment → Order list), and users see their own orders under **最近充值订单** (Recent top-up orders). Before opening it, verify callbacks, repeated notifications, failures, and reconciliation with a small real payment.
 
 ### 3.5 Image billing
 
@@ -138,11 +159,11 @@ The log page filters by type (top-up, consumption, management, system), user, mo
 1. Create a separate day-to-day administrator account.
 2. Add an OpenAI or compatible image channel. Store its API key only in the channel.
 3. Configure image models and channel mappings, then enable models in **光构模型** with a price in points, reference/mask support, and an output limit. The client shows the public model ID used in requests; there is no separate display name.
-4. In **光构设置**, set the default image model, redemption instructions, and support contact, and publish an announcement if needed.
+4. In **光构设置**, set the default image model, redemption instructions, purchase link, support contact, and balance reminder threshold, and publish an announcement if needed.
 5. Validate the generations, edits, and variations routes.
 6. Validate per-model pricing, successful charges, failure refunds, price-change confirmation, and insufficient-balance rejection.
 7. Configure the new-user gift (inputs show the points equivalent), redemption codes, registration policy, and rate limits.
-8. If online payment is planned, validate the payment provider, callback signatures, abnormal orders, and reconciliation before exposing it. Payment callbacks are always verified with the gateway's current configuration: to switch merchants (a different app ID, merchant ID, or platform public key), add a new gateway and disable the old one, keeping it until its orders are completed or closed. Otherwise callbacks from the old merchant for orders created before the change fail verification and are not credited.
+8. If online top-up is planned, add a gateway and packages as in [section 3.4](#34-redemption-codes-and-online-top-up), then validate the payment provider, callback signatures, abnormal orders, and reconciliation before turning on **开放在线充值**. Payment callbacks are always verified with the gateway's current configuration: to switch merchants (a different app ID, merchant ID, or platform public key), add a new gateway and disable the old one, keeping it until its orders are completed or closed. Otherwise callbacks from the old merchant for orders created before the change fail verification and are not credited.
 9. Confirm in **光构存储** that the asset directory is writable, and check user storage.
 10. For the Agent, set a text model's info in Model details so that `output_modalities` includes `"text"` and `tags` includes `"tools"` (add `"image"` to `input_modalities` for vision), price it, and give it a channel that supports streaming tool calls.
 
@@ -156,7 +177,7 @@ In product mode the client does not import service-address parameters such as `a
 
 ## 4. Model-specific image billing
 
-Generation, edit, and variation routes charge the public model's CNY selling price per successful HTTP request. The existing `Price` table holds its enabled state, price, capabilities, and output limit. In 光构模型 (Gouo models), tick the resolution tiers (1K/2K/4K) the upstream supports; the client shows only those tiers, a model with none ticked offers only automatic size, and the server validates each size by the tier its pixel count falls into. Sizes, quality levels, generation, and editing share one price per model. Group multipliers and upstream model mappings do not change that selling price. Edit and variation routes accept only `multipart/form-data`: reference images count against the model's limit by the actual number of `image` and `image[]` files in the form, and files under any other field name are rejected.
+Generation, edit, and variation routes charge the public model's CNY selling price per successful HTTP request. The existing `Price` table holds its enabled state, price, capabilities, and output limit. In 光构模型 (Gouo models), tick the resolution tiers (1K/2K/4K) the upstream supports; the client shows only those tiers, a model with none ticked offers only automatic size, and the server validates each size by the tier its pixel count falls into. Price per image = base price × tier factor × quality factor: automatic size counts as the 1K tier, automatic quality as high, and unset factors as 1, so a model whose factors are all 1 has one price for every size and quality. Generation and editing share the same price. Group multipliers and upstream model mappings do not change that selling price. Edit and variation routes accept only `multipart/form-data`: reference images count against the model's limit by the actual number of `image` and `image[]` files in the form, and files under any other field name are rejected.
 
 These legacy settings seed the default model only on the first migration. Change later prices in the admin UI:
 
@@ -171,7 +192,7 @@ GOUO_IMAGE_MODEL=gpt-image-2
 - The client's default model is set with "设为默认" (Set default) on that page or in 光构 → 光构设置 → "默认图片模型" (Gouo settings → default image model). It is used when the user has not picked a model or the picked model is no longer available; when empty or unavailable to the user, the first model in the catalog is used. Changes apply immediately to users who never picked a model. The client does not hard-code a model; nothing is selected until the catalog loads. Manual choices are remembered per account and survive login/token refresh. Tasks and retries retain their original model.
 - `GET /api/gouo/models` requires the login cookie and that account's relay token in `X-Gouo-Token`. It intersects enabled models, valid prices, the actual token allowlist, and channels available to its groups. Missing prices and disabled models fail closed instead of falling back to generic pricing.
 - The client submits `X-Gouo-Price-Version`. Changed prices or capabilities return `409 image_price_changed`; refresh the catalog and confirm by submitting again. In product mode every retry asks the user to confirm the cost of the new request, showing the new price when it changed. Non-product API tokens may omit the version but still use a quote captured when the request starts.
-- Quota is `ceil(CNY price / PaymentUSDRate × QuotaPerUnit)`. Conditional database updates reserve user/token balances in one transaction. Success settles the reservation, confirmed backend failure refunds it, and channel retries share one reservation. Logs preserve the public model, price, billing unit, version, and charged quota. The user center and CSV use the price snapshot; cumulative usage is consumed quota converted at the current rate.
+- Quota is `ceil(CNY price × tier factor × quality factor / PaymentUSDRate × QuotaPerUnit)`. Conditional database updates reserve user/token balances in one transaction. Success settles the reservation, confirmed backend failure refunds it, and channel retries share one reservation. Logs preserve the public model, price, billing unit, version, and charged quota. The user center and CSV use the price snapshot; cumulative usage is consumed quota converted at the current rate.
 - The Gouo product client splits n images into n single-image requests, and each successful request is charged separately (billed per successful image), up to 10 images at a time. For direct API calls, multiple outputs within the model limit in one HTTP request cost one charge.
 - Price synchronization and generic batch editing preserve enabled Gouo settings; change them in the single-model editor. Selling prices are independent of upstream costs, so operators must check actual upstream bills.
 
@@ -224,13 +245,16 @@ Restoring only the database leaves library records without images. Restoring onl
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/status` | Backend status and client settings (registration and password sign-in switches, announcement, redemption instructions, support contact, email and Turnstile settings) |
+| `GET /api/status` | Backend status and client settings (registration and password sign-in switches, announcement, redemption instructions, purchase link, support contact, online top-up packages, balance reminder threshold, email and Turnstile settings) |
 | `GET /api/user/self` | Current user, balance (`balance_cny`), and points conversion rate; legacy image_price_cny is not a model quote |
 | `GET /api/gouo/models` | Models, prices, capabilities, output limits, and price versions available to the current image token |
 | `POST /api/user/login` | Sign in |
 | `POST /api/user/register` | Register |
 | `GET /api/token/playground` | Current user's image relay token |
 | `POST /api/user/topup` | Redeem credit code |
+| `GET /api/user/payment` | Available payment methods |
+| `POST /api/gouo/topup/order` | Create an online top-up order for a package or custom amount; returns a payment link or QR content |
+| `GET /api/gouo/topup/orders` | The current user's recent top-up orders |
 | `GET /api/log/self` | Current user's usage history |
 | `GET /api/gouo/storage` | Cloud storage summary |
 | `POST /api/gouo/assets` | Upload an account asset |
@@ -243,7 +267,7 @@ Restoring only the database leaves library records without images. Restoring onl
 | `GET /api/gouo/image-charges` | Current user's image charge records |
 | `GET /api/gouo/image-results` | Recover a paid image result by its original request ID |
 | `GET /api/gouo/agent/models` | Agent models available to the current user |
-| `GET/PUT /api/gouo/admin/settings` | Admins read and write Gouo client settings (announcement, default image model, redemption instructions, support contact) |
+| `GET/PUT /api/gouo/admin/settings` | Admins read and write Gouo client settings (announcement, default image model, redemption and top-up, support contact, balance reminder, and more) |
 | `GET/PUT /api/gouo/admin/models` | Admins view and change Gouo model prices, capabilities, and availability |
 | `GET /api/gouo/admin/image-charges`, `POST …/:id/resolve` | Admins review image billing and resolve pending requests |
 | `GET /api/gouo/admin/storage[/users…]`, `PUT …/users/:id/quota` | Admins view storage usage, browse a user's works, and change user quotas |
@@ -252,7 +276,8 @@ Every user-data endpoint must enforce authentication and ownership on the server
 
 ## 8. Current boundaries
 
-- The public frontend includes sign-in, registration, user center, redemption codes, usage history, cloud library, canvas, and Agent.
-- Online payment becomes a production feature only after One Hub configuration and callback, duplicate-notification, failure, and reconciliation testing.
+- The public frontend includes sign-in, registration, user center, online top-up, redemption codes, usage history, cloud library, canvas, and Agent.
+- Billing is prepaid points, charged per image (images) and per token (Agent chat). There is no monthly subscription or flat-rate plan.
+- Online top-up becomes a production feature only after a real payment gateway is configured and callback, duplicate-notification, failure, and reconciliation testing pass.
 - The client calls image endpoints without streaming.
 - `server/docs/` describes general upstream One Hub features and does not imply that the public Gouo UI exposes every one of them.

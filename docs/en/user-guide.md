@@ -28,23 +28,25 @@ The backend keeps the session in a cookie. Changing `SESSION_SECRET` invalidates
 
 ## 2. The creation workspace
 
-After signing in you land on **创作** (Create). The sidebar holds Create, **我的作品** (My works), **收藏** (Favorites), and **灵感库** (Inspiration), plus **创作会话** (Agent conversations) and **我的画布** (My canvases). The top right shows your available points and the user center button.
+After signing in you land on **创作** (Create). The sidebar holds Create, **我的作品** (My works), **收藏** (Favorites), and **灵感库** (Inspiration), plus **创作会话** (Agent conversations) and **我的画布** (My canvases). The top right shows your available points and the user center button. When the balance falls below the operator's reminder threshold or runs out, it turns amber and shows **不足** (Low).
 
 ![Creation page](../images/screenshots/client-create.webp)
 
 - The banner at the top shows the operator's announcement. A dismissed announcement reappears when its text changes. Without an announcement, a default introduction is shown.
 - The **生成图片 / 画布 / Agent** switch selects one of three ways of working. The operator can turn off the canvas or Agent, which hides their entry points.
-- Below the prompt box are the model menu, the estimated charge, parameters, and the reference image entry.
+- Below the prompt box are the model menu, parameters, and the reference image entry. Model prices are listed under **用户中心 → 充值/定价** (User center → Top up / Pricing).
 
 ## 3. Create the first image
 
 1. Describe the subject, scene, composition, light, and constraints in the prompt box.
-2. Pick a model from the model menu. The estimated charge appears below the box, for example "预计 20 积分（1 张 · 20 积分/张）· 按成功张数计费" (about 20 points, 1 image at 20 points each, billed per successful image).
-3. Optionally set size, quality, format, and image count (up to 10 per submission; the operator can lower this) under **自定义参数** (Custom parameters).
+2. Pick a model from the model menu.
+3. Optionally set size, quality, format, and image count (up to 10 per submission; the operator can lower this) in the parameters. The operator decides which size tiers and quality levels each model offers.
 4. Optionally add reference images or draw a mask on a reference.
 5. Click the arrow to submit. Results appear under **本次生成** (This session) below the prompt box and in **我的作品**.
 
-Before submitting, the client checks your balance; if it is too low, no task is created and the redemption page opens. The server reserves points when a request starts and refunds images it confirms as failed. Several images are split into single-image requests and billed per successful image.
+Before submitting, the client checks your balance; if it is too low, no task is created, the estimated charge and current balance are shown, and the top-up page opens. The server reserves points when a request starts and refunds images it confirms as failed. Several images are split into single-image requests and billed per successful image.
+
+Price per image = model base price × size tier factor × quality factor. Sizes fall into the 1K, 2K, or 4K tier by output pixels, and **自动** (Auto) size counts as 1K; Auto quality counts as high. Extra-high and maximum quality cost far more than high and are only available when the operator enables them. A model whose factors are all 1 costs the same at every size and quality.
 
 Your model choice is remembered per account. The operator can set a default model, which users who never picked a model use automatically; if your chosen model is withdrawn, the client also falls back to the default. Submission is blocked when the chosen model cannot handle references or masks. When a model's price or capabilities change, the UI asks you to confirm again. Retrying an older task keeps its original model and shows the new price for separate confirmation if it changed.
 
@@ -168,20 +170,27 @@ When you are signed in, successful images are saved to your account by the serve
 
 Recycle-bin items are kept for 3 days by default (the UI shows the current period; the operator can change it), then permanently deleted together with images that are no longer referenced. They cannot be recovered after that.
 
-## 13. Points, redemption codes, and usage
+## 13. Points, top-up, and usage
 
-Gouo Canvas bills in points (积分): **1 CNY = 100 points**. Balance, model prices, estimated charges, usage records, and exported CSV are all shown in points.
+Gouo Canvas bills in points (积分): **1 CNY = 100 points**. Balance, model prices, estimated charges, usage records, and exported CSV are all shown in points. Points are prepaid, not a monthly subscription; top up again when they run out.
 
 Click the balance or avatar at the top right to open the user center:
 
 ![User center](../images/screenshots/client-user-center.webp)
 
-- **账户余额** (Balance): available points.
-- **累计消费** (Total spent): points consumed so far, converted at the current rate.
-- **图片计费** (Image billing): priced per model, confirmed before generating, charged per successful request.
-- **云端空间** (Cloud storage): used space and limit, plus **导入本机旧作品**.
+- **概览** (Overview): balance with an estimate of how many images it covers on the current image model, this month's spending, cloud storage (with the recycle bin and **导入本机旧作品**), and recent records.
+- **充值/定价** (Top up / Pricing): online top-up, redemption codes, recent top-up orders, support contacts, and the price of each image model.
+- **使用记录** (Usage records): the points ledger, described below.
+- **账户与安全** (Account and security): display name, password, email binding (used for password recovery and balance reminders), and sign-out.
 
-Enter a redemption code under **充值积分** (Add points) to credit your account. The page shows the operator's instructions for obtaining codes, and **充值与账务帮助** (Top-up and billing help) at the bottom shows how to contact support.
+**充值/定价** offers two ways to add points:
+
+- **在线充值** (Online top-up), shown once the operator enables it. Pick a points package (some include bonus points) or enter a custom amount, choose a payment method, and click **立即支付** (Pay now). QR payments show a code; other methods open the payment page in a new window. Points arrive automatically after payment, and order status appears under **最近充值订单** (Recent top-up orders). If the payment method charges a fee, the amount shown after the order is created is what you pay.
+- **兑换码** (Redemption code): enter a code and click **立即兑换** (Redeem). Points arrive at once, and each code works only once. If the operator set a purchase link, **购买兑换码 →** (Buy codes) appears at the top right; the operator's instructions for obtaining codes appear below the form.
+
+**联系客服** (Contact support) lists the operator's support contacts. When reporting a problem, include your user ID, the time, and the image request ID.
+
+Accounts with a bound email get a reminder email when the balance drops below the operator's threshold, and again when it runs out.
 
 ![Redeeming points](../images/screenshots/client-redeem.webp)
 
@@ -189,7 +198,7 @@ Enter a redemption code under **充值积分** (Add points) to credit your accou
 
 ![Usage records](../images/screenshots/client-usage.webp)
 
-Each successful image is charged at the model price, and images the server confirms as failed are refunded. Usage records and CSV keep the unit price of each charge. If the operator has not opened online payment, use the redemption codes they provide.
+Each successful image is charged at the model price, and images the server confirms as failed are refunded. Usage records and CSV keep the unit price of each charge. Agent chat is billed by token usage of the selected chat model.
 
 ## 14. Import and export
 
@@ -211,7 +220,7 @@ Sign out and sign in again. If it persists, the operator may have rotated the to
 
 ### Not enough points
 
-The client checks your balance before submitting and opens the redemption page when it is too low. Redeem a valid code, then click **重试** (Retry) on the task.
+The client checks your balance before submitting and opens the top-up page when it is too low. Top up online or redeem a code, then click **重试** (Retry) on the task.
 
 ### Request rejected by the safety system
 
