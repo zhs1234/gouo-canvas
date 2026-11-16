@@ -193,7 +193,8 @@ func SendPasswordResetEmail(c *gin.Context) {
 	})
 }
 
-// passwordResetLink 对查询参数编码：邮箱中的 "+" 不编码会被浏览器解析成空格，导致重置失败
+// passwordResetLink 对查询参数编码：邮箱中的 "+" 不编码会被浏览器解析成空格，导致重置失败。
+// 路径有两段。前端资源必须从站点根引用，否则相对 ./assets 会落到 /user/assets，页面白屏。
 func passwordResetLink(email, token string) string {
 	return config.ServerAddress + "/user/reset?" + url.Values{"email": {email}, "token": {token}}.Encode()
 }
