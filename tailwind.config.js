@@ -33,10 +33,34 @@ export default {
           400: 'rgb(var(--c-text-gray-400) / <alpha-value>)',
           500: 'rgb(var(--c-text-gray-500) / <alpha-value>)',
         },
+        // 橙色文字单独加深/提亮，不改背景色阶，避免白字按钮和深色图标互相打架
+        blue: {
+          400: 'rgb(var(--c-blue-text-400) / <alpha-value>)',
+          500: 'rgb(var(--c-blue-text-500) / <alpha-value>)',
+          600: 'rgb(var(--c-blue-text-600) / <alpha-value>)',
+        },
       },
       fontFamily: {
         sans: ['var(--font-ui-sans)'],
         mono: ['var(--font-mono)'],
+      },
+      // 正文行高按中文阅读拉开；text-xs 保持 12px，作为界面文字下限
+      fontSize: {
+        xs: ['0.75rem', { lineHeight: '1.45' }],
+        sm: ['0.875rem', { lineHeight: '1.55' }],
+        base: ['1rem', { lineHeight: '1.6' }],
+        lg: ['1.125rem', { lineHeight: '1.5' }],
+        xl: ['1.25rem', { lineHeight: '1.4' }],
+        '2xl': ['1.5rem', { lineHeight: '1.3' }],
+      },
+      boxShadow: {
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        xl: 'var(--shadow-lg)',
+      },
+      transitionTimingFunction: {
+        out: 'var(--ease-out)',
       },
     },
   },

@@ -1,19 +1,20 @@
-const VIEWPORT_CONTENT = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+const VIEWPORT_CONTENT = 'width=device-width, initial-scale=1.0, viewport-fit=cover'
 
-function isInsideLightbox(target: EventTarget | null) {
-  return target instanceof Element && Boolean(target.closest('[data-lightbox-root]'))
+function isInsideCanvas(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest('.canvas-workspace'))
 }
 
 export function installMobileViewportGuards() {
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
   if (viewport) viewport.content = VIEWPORT_CONTENT
 
+  // 页面本身允许缩放。画布上的双指交给画布自己处理，避免浏览器把整页一起放大。
   const preventPageGesture = (event: Event) => {
-    if (!isInsideLightbox(event.target)) event.preventDefault()
+    if (isInsideCanvas(event.target)) event.preventDefault()
   }
 
   const preventMultiTouchPageZoom = (event: TouchEvent) => {
-    if (event.touches.length > 1 && !isInsideLightbox(event.target)) event.preventDefault()
+    if (event.touches.length > 1 && isInsideCanvas(event.target)) event.preventDefault()
   }
 
   document.addEventListener('gesturestart', preventPageGesture, { passive: false })

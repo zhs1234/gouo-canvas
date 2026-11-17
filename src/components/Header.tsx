@@ -202,7 +202,7 @@ export default function Header({ compact = false }: { compact?: boolean }) {
                   dismissAllTooltips()
                   setAccountMenu(!accountMenu)
                 }}
-                className="ml-1 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm shadow-blue-500/20 transition hover:brightness-110"
+                className="ml-1 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-sm transition hover:brightness-110"
                 aria-label="用户中心"
                 aria-haspopup="menu"
                 aria-expanded={accountMenu}

@@ -245,6 +245,7 @@ export default function Workspace() {
   // 浏览器后退等切换页面时，收藏夹选择窗口不应留在新页面上
   useEffect(() => { useStore.getState().closeFavoritePicker() }, [location.pathname])
   return <div className={`workspace-shell ${narrow ? 'sidebar-collapsed' : ''} ${canvas ? 'canvas-mode' : ''} ${location.pathname.startsWith('/agent') ? 'agent-mode-page' : ''}`}>
+    <a className="skip-link" href="#workspace-content">跳到主要内容</a>
     {showBanner && location.pathname === '/generate' && !canvas && <div className="workspace-announcement">{notice ? <><span>公告</span> {notice}</> : <><span>光构创作空间</span> 把灵感构造成图像 · 生成、画布与 Agent，一处完成</>}<button aria-label="关闭提示" onClick={closeBanner}>×</button></div>}
     <aside className="workspace-sidebar" aria-label="主导航">
       <Link to="/generate" className="workspace-brand" aria-label="光构首页"><img src={BRAND.logoUrl} alt="" /><strong>{BRAND.name}<small>Gouo Canvas</small></strong></Link>
@@ -266,7 +267,7 @@ export default function Workspace() {
       </div>
       <div className="sidebar-footer"><WorkspaceNavItem label="充值/定价" icon={<Wallet className="h-5 w-5" strokeWidth={1.8} />} collapsed={narrow} onClick={() => requestUserCenter('topup')} /></div>
     </aside>
-    <div className="workspace-main"><Header compact /><Suspense fallback={<PageSkeleton />}><Routes>
+    <div className="workspace-main" id="workspace-content"><Header compact /><Suspense fallback={<PageSkeleton />}><Routes>
       <Route path="/" element={<Navigate to="/generate" replace />} />
       <Route path="/generate" element={<GenerateWorkspace mode={mode} setMode={setMode} />} />
       <Route path="/works" element={<WorksWorkspace />} />

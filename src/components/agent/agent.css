@@ -1,4 +1,4 @@
-.agent-workspace { color: var(--ws-text); background: var(--ws-bg); display: flex; flex-direction: column; height: calc(100dvh - 74px); min-height: 500px; font-size: 14px; }
+.agent-workspace { color: var(--ws-text); background: var(--ws-bg); display: flex; flex-direction: column; height: calc(100dvh - 74px); min-height: 500px; font-size: 16px; line-height: 1.65; }
 .agent-workspace button, .agent-workspace select, .agent-workspace textarea { font: inherit; }
 .agent-workspace button { cursor: pointer; }
 /* 禁用态保留可读性（文字约 3:1 以上），只用降低透明度表达不可用 */
@@ -18,11 +18,11 @@
 .agent-history p { padding: 18px; }
 .agent-empty-content { width: min(100% - 64px, 1060px); margin: clamp(40px, 9vh, 100px) auto auto; }
 .agent-hero { text-align: center; margin: 0 0 40px; }
-.agent-hero > span { font-size: 11px; letter-spacing: 2px; color: var(--ws-text-3); }
+.agent-hero > span { font-size: 12px; letter-spacing: 0.14em; color: var(--ws-text-3); }
 .agent-hero h2 { margin: 12px 0 10px; font-size: clamp(26px, 2.4vw, 36px); font-weight: 500; letter-spacing: -.6px; }
 .agent-hero p { color: var(--ws-text-4); margin: 0; }
 .agent-composer-region { width: 100%; }
-.agent-composer { background: var(--ws-surface); border: 1px solid var(--ws-line); border-radius: 24px; padding: 20px 20px 13px; box-shadow: 0 8px 26px #0001; }
+.agent-composer { background: var(--ws-surface); border: 1px solid var(--ws-line); border-radius: var(--radius-xl); padding: 20px 20px 12px; box-shadow: var(--shadow-sm); }
 .agent-composer:focus-within { border-color: var(--ws-line-strong); }
 .agent-composer-input { display: flex; gap: 22px; align-items: flex-start; }
 .agent-upload-tile { width: 46px; height: 62px; margin: 1px 2px 0; transform: rotate(-8deg); background: var(--ws-raised-2); color: var(--ws-text-3); border: 0; border-radius: 2px; display: grid; place-items: center; flex-shrink: 0; }
@@ -34,7 +34,7 @@
 .agent-model-select { min-width: 0; max-width: 100%; }
 .agent-mode { color: var(--ws-accent); display: flex; gap: 5px; align-items: center; margin-right: 8px; }
 .agent-composer-spacer { flex: 1; }
-.agent-send { background: var(--ws-inverse-bg); color: var(--ws-inverse-text); width: 34px; height: 34px; border: 0; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+.agent-send { background: var(--ws-inverse-bg); color: var(--ws-inverse-text); width: 40px; height: 40px; border: 0; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
 .agent-workspace .agent-send:disabled { background: var(--ws-raised-2); color: var(--ws-text-3); opacity: 1; }
 .agent-stop span { display: block; background: var(--ws-inverse-text); width: 11px; height: 11px; border-radius: 2px; }
 .agent-composer-note { color: var(--ws-text-4); font-size: 12px; text-align: center; margin: 10px 0 0; }
@@ -43,7 +43,7 @@
 .agent-settings-panel > * { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .agent-settings-panel > * > span:first-child { flex-shrink: 0; width: 56px; color: var(--ws-text-3); }
 .agent-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 20px; }
-.agent-suggestions button { border: 1px solid var(--ws-line); background: var(--ws-panel); border-radius: 24px; color: var(--ws-text-2); padding: 10px 17px; font-size: 12px; }
+.agent-suggestions button { border: 1px solid var(--ws-line); background: var(--ws-panel); border-radius: 24px; color: var(--ws-text-2); padding: 10px 17px; min-height: 40px; font-size: 13px; line-height: 1.45; }
 .agent-suggestions button:hover { background: var(--ws-raised); }
 .agent-suggestions span { color: var(--ws-accent); margin-right: 6px; }
 .agent-timeline { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 0 32px; scrollbar-color: var(--ws-line) transparent; }
@@ -90,7 +90,7 @@
 .agent-skill-picker span { font-size: 12px; line-height: 1.5; color: var(--ws-text-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .agent-reference { display: inline-flex; position: relative; width: 64px; height: 64px; border-radius: 8px; background: var(--ws-raised); border: 1px solid var(--ws-line); flex-shrink: 0; }
 .agent-reference img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; }
-.agent-reference > span { font-size: 10px; color: var(--ws-text-4); margin: auto; }
+.agent-reference > span { font-size: 12px; color: var(--ws-text-4); margin: auto; }
 .agent-reference button { position: absolute; top: -5px; right: -5px; border: 1px solid var(--ws-line-strong); background: var(--ws-raised-2); color: var(--ws-text); border-radius: 50%; padding: 3px; }
 /* 生成结果直接放在对话流里，不套卡片 */
 .agent-task { max-width: 680px; margin: 10px 0 22px; }
@@ -170,4 +170,7 @@
   .agent-suggestions button { padding: 9px 12px; }
   .agent-embedded { height: 100%; }
 }
-@media (prefers-reduced-motion: reduce) { .agent-workspace *, .agent-workspace *::before, .agent-workspace *::after { animation: none !important; scroll-behavior: auto !important; } }
+@media (pointer: coarse) {
+  .agent-send, .agent-suggestions button, .agent-text-button { min-height: 44px; min-width: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .agent-workspace *, .agent-workspace *::before, .agent-workspace *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

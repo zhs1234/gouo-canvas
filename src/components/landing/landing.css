@@ -48,7 +48,7 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(to top, rgb(110 46 34 / 0.32), transparent 55%), linear-gradient(to right, rgb(110 46 34 / 0.12), transparent 60%);
+  background: linear-gradient(to top, rgb(62 24 16 / 0.58), rgb(62 24 16 / 0.22) 46%, transparent 72%), linear-gradient(to right, rgb(62 24 16 / 0.18), transparent 58%);
 }
 
 @keyframes gouo-blob {
@@ -128,16 +128,17 @@
 }
 
 .gouo-glass-dark {
-  background: rgb(255 255 255 / 0.14);
-  border: 1px solid rgb(255 255 255 / 0.32);
-  backdrop-filter: blur(15px) saturate(150%);
-  -webkit-backdrop-filter: blur(15px) saturate(150%);
+  /* 浅色彩雾上 14% 白底托不住白字，改成偏深的玻璃，白字对比才稳 */
+  background: rgb(23 23 25 / 0.46);
+  border: 1px solid rgb(255 255 255 / 0.34);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
 }
 
 .gouo-line-mask {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.06em;
+  padding-bottom: 0.12em;
 }
 
 .gouo-line-text {
