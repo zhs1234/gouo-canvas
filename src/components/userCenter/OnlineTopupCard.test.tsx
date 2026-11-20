@@ -94,9 +94,27 @@ it('选择积分包和唯一的支付方式后下单，跳转支付立即提交�
   vi.stubGlobal('document', { body: { appendChild: vi.fn() }, createElement: (tag: string) => tag === 'form' ? form : {} })
   ;(button(tree, '立即支付').props.onClick as () => void)()
   await vi.advanceTimersByTimeAsync(0)
-  expect(api.backendRequest).toHaveBeenLastCalledWith('/api/gouo/topup/order', { method: 'POST', body: '{"gateway":"g1","package":1}' })
+  expect(api.backendRequest).toHaveBeenLastCalledWith('/api/gouo/topup/order', { method: 'POST', body: '{"gateway":"g1","package":1,"price":50,"points":5150}' })
   expect(form.submit).toHaveBeenCalledOnce()
   expect(onOrderCreated).toHaveBeenCalledWith(payment)
+})
+
+it('后台改过积分包导致下单失败时显示原因并重新读取配置', async () => {
+  api.backendRequest.mockImplementation(async (path: string) => {
+    if (path === '/api/user/payment') return [gateway]
+    throw new Error('积分包已更新，请重新选择后再支付')
+  })
+  const onOrderCreated = vi.fn()
+  const onOrderFailed = vi.fn()
+  const draw = () => OnlineTopupCard({ options, onOrderCreated, onOrderFailed })
+  render(draw)
+  await flush()
+  const tree = render(draw)
+  ;(button(tree, '立即支付').props.onClick as () => void)()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(text(render(draw))).toContain('积分包已更新，请重新选择后再支付')
+  expect(onOrderFailed).toHaveBeenCalledOnce()
+  expect(onOrderCreated).not.toHaveBeenCalled()
 })
 
 it('自定义金额校验整数范围，没有支付方式时提示改用兑换码', async () => {

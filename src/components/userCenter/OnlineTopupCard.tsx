@@ -7,7 +7,7 @@ const optionState = (active: boolean) => active
   ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/15 dark:border-blue-400 dark:bg-blue-500/10'
   : 'border-gray-200 bg-white hover:border-blue-300 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-blue-400/50'
 
-export default function OnlineTopupCard({ options, onOrderCreated }: { options: TopupOptions; onOrderCreated: (payment: TopupPayment) => void }) {
+export default function OnlineTopupCard({ options, onOrderCreated, onOrderFailed }: { options: TopupOptions; onOrderCreated: (payment: TopupPayment) => void; onOrderFailed?: () => void }) {
   const [selected, setSelected] = useState<number | 'custom'>(options.packages.length ? 0 : 'custom')
   const [customAmount, setCustomAmount] = useState('')
   const [gateways, setGateways] = useState<PaymentGateway[] | null>(null)
@@ -39,12 +39,14 @@ export default function OnlineTopupCard({ options, onOrderCreated }: { options: 
     setSubmitting(true)
     setError('')
     try {
-      const payment = await createTopupOrder(pack ? { gateway: gateway.uuid, package: selected as number } : { gateway: gateway.uuid, amount })
+      const payment = await createTopupOrder(pack ? { gateway: gateway.uuid, package: selected as number, price: pack.price, points: pack.points + pack.bonus } : { gateway: gateway.uuid, amount })
       // 下单后立即拉起支付页，离点击越近越不容易被浏览器拦截
       if (payment.type === 1) openPayUrl(payment.data)
       onOrderCreated(payment)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      // 失败可能是后台改了积分包或金额范围，重新读取最新配置
+      onOrderFailed?.()
     } finally {
       setSubmitting(false)
     }

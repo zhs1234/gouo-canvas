@@ -90,7 +90,7 @@ export default function TopupSection({ user, status, onRedeemed }: { user: GouoU
     <div className="space-y-4">
       {payNotice && <p role={payNotice.tone === 'error' ? 'alert' : 'status'} className={`rounded-xl px-4 py-3 text-sm font-medium ${payNotice.tone === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : payNotice.tone === 'error' ? 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'}`}>{payNotice.text}</p>}
 
-      {status.onlineTopup && <OnlineTopupCard options={status.onlineTopup} onOrderCreated={(value) => { setPayNotice(null); setPayment(value); void loadOrders() }} />}
+      {status.onlineTopup && <OnlineTopupCard options={status.onlineTopup} onOrderFailed={status.reload} onOrderCreated={(value) => { setPayNotice(null); setPayment(value); void loadOrders() }} />}
       {payment && <TopupPayDialog payment={payment} onPaid={handlePaid} onClose={() => { setPayment(null); void loadOrders() }} />}
 
       <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-blue-100/60 p-5 dark:border-blue-500/15 dark:from-blue-500/[0.08] dark:to-blue-700/[0.04]">
