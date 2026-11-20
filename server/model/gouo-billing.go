@@ -127,8 +127,8 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 	}
 	var charge GouoImageCharge
 	var token Token
-	// 结算后的余额和仍在预扣中的额度，用于余额提醒；-1 表示本次没有结算
-	remaining, pending := -1, 0
+	// 本次是否真的完成了结算，用于余额提醒
+	settled := false
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&GouoImageCharge{}).Where("id = ? AND status = ?", id, expected).Updates(map[string]any{"status": status, "resolved_by": actor, "note": note})
 		if res.Error != nil {
@@ -170,12 +170,7 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 			if err := tx.Unscoped().Model(&Channel{}).Where("id = ?", charge.ChannelID).UpdateColumn("used_quota", gorm.Expr("used_quota + ?", charge.Quota)).Error; err != nil {
 				return err
 			}
-			if err := tx.Model(&User{}).Where("id = ?", charge.UserID).Select("quota").Scan(&remaining).Error; err != nil {
-				return err
-			}
-			if err := tx.Model(&GouoImageCharge{}).Where("user_id = ? AND status IN ?", charge.UserID, []string{GouoChargeReserved, GouoChargeDispatched, GouoChargeReview}).Select("COALESCE(SUM(quota), 0)").Scan(&pending).Error; err != nil {
-				return err
-			}
+			settled = true
 		} else {
 			log.Type, log.Content = LogTypeSystem, "图片预扣退款："+note
 			meta["charged_quota"], meta["reserved_quota"] = 0, charge.Quota
@@ -196,9 +191,15 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 	if err == nil {
 		invalidateGouoQuotaCache(charge.UserID, token.Key)
 	}
-	// 只在确认扣费后提醒，失败退款的请求不发；预扣中的额度尚未花掉，计入余额判断，避免并发预扣把跨过阈值的那次吞掉
-	if err == nil && remaining >= 0 {
-		NotifyQuotaDrop(charge.UserID, remaining+pending+charge.Quota, remaining+pending)
+	// 只在确认扣费后提醒，失败退款的请求不发；预扣中的额度尚未花掉，计入余额判断，避免并发预扣把跨过阈值的那次吞掉。
+	// 提交后再读：事务内的快照（如 MySQL 可重复读）看不到同时提交的其他结算，两个并发结算可能都判断不出跨过阈值；
+	// 提交后读最多让并发的两次都提醒，不会漏掉
+	if err == nil && settled {
+		remaining, pending := 0, 0
+		if DB.Model(&User{}).Where("id = ?", charge.UserID).Select("quota").Scan(&remaining).Error == nil &&
+			DB.Model(&GouoImageCharge{}).Where("user_id = ? AND status IN ?", charge.UserID, []string{GouoChargeReserved, GouoChargeDispatched, GouoChargeReview}).Select("COALESCE(SUM(quota), 0)").Scan(&pending).Error == nil {
+			NotifyQuotaDrop(charge.UserID, remaining+pending+charge.Quota, remaining+pending)
+		}
 	}
 	return err
 }
