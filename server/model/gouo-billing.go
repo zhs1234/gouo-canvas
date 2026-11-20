@@ -216,10 +216,11 @@ func SettleGouoImageCharge(id, expected string, log *Log, delivered, requested i
 				}
 				return err
 			}
+			// 按预扣额度的比例计算，不按当前汇率重新换算，预扣后改汇率不影响本次结算
 			price := charge.PriceCNY * float64(delivered) / float64(requested)
-			quota, err := gouoQuota(price)
-			if err != nil || quota >= charge.Quota {
-				return err
+			quota := int(math.Ceil(float64(charge.Quota) * float64(delivered) / float64(requested)))
+			if quota >= charge.Quota {
+				return nil
 			}
 			res := tx.Model(&GouoImageCharge{}).Where("id = ? AND status = ? AND quota = ?", id, expected, charge.Quota).Updates(map[string]any{"price_cny": price, "quota": quota})
 			if res.Error != nil {

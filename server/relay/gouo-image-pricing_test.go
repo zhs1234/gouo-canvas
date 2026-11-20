@@ -322,10 +322,14 @@ func TestGouoImageQuoteDrivesBilling(t *testing.T) {
 	require.Equal(t, 10000000-2*entry.Quota, balance())
 	q.Undo(c)
 	require.Equal(t, 10000000-entry.Quota, balance())
-	// 要 2 张只返回 1 张：按 1 张结算，少给的那张退回；结束请求时不再重复退款
+	// 要 2 张只返回 1 张：按 1 张结算，少给的那张退回；结束请求时不再重复退款。
+	// 预扣后管理员改了汇率，仍按预扣额度的比例结算，不重新换算
 	c, q, _ = start("partial")
-	half := int(math.Ceil(6 / 7.3 * 500000))
+	half := int(math.Ceil(float64(entry.Quota) / 2))
+	oldRate := config.PaymentUSDRate
+	config.PaymentUSDRate = 14.6
 	require.NoError(t, q.CompleteImage(c, &types.Usage{}, 1))
+	config.PaymentUSDRate = oldRate
 	q.Undo(c)
 	require.Equal(t, 10000000-entry.Quota-half, balance())
 	charge = model.GouoImageCharge{}
