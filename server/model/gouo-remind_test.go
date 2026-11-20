@@ -2,13 +2,16 @@ package model
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"one-api/common/config"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -19,7 +22,12 @@ func init() {
 }
 
 func TestGouoImageSettleSendsBalanceReminder(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "remind.db")+"?_busy_timeout=5000"), &gorm.Config{})
+	// 设置 GOUO_BILLING_TEST_MYSQL_DSN 时在 MySQL 上跑，覆盖可重复读下的并发结算
+	dialector := gorm.Dialector(sqlite.Open(filepath.Join(t.TempDir(), "remind.db") + "?_busy_timeout=5000&_journal_mode=WAL"))
+	if dsn := os.Getenv("GOUO_BILLING_TEST_MYSQL_DSN"); dsn != "" {
+		dialector = mysql.Open(dsn)
+	}
+	db, err := gorm.Open(dialector, &gorm.Config{})
 	require.NoError(t, err)
 	oldDB, oldRedis := DB, config.RedisEnabled
 	oldPoints, oldRate, oldUnit, oldSender := config.GouoBalanceRemindPoints, config.PaymentUSDRate, config.QuotaPerUnit, quotaWarningSender
@@ -42,7 +50,8 @@ func TestGouoImageSettleSendsBalanceReminder(t *testing.T) {
 	}
 	// 100 积分 = 100/100/7.3×500000 ≈ 68493 额度
 	require.Equal(t, 68493, gouoRemindQuota())
-	user := User{Username: fmt.Sprint("remind-", time.Now().UnixNano()), Quota: 70000}
+	name := fmt.Sprint("remind-", time.Now().UnixNano())
+	user := User{Username: name, AccessToken: name, AffCode: name, Quota: 70000}
 	require.NoError(t, db.Create(&user).Error)
 	token := Token{UserId: user.Id, Key: user.Username, UnlimitedQuota: true, ExpiredTime: -1}
 	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Create(&token).Error)
@@ -84,6 +93,26 @@ func TestGouoImageSettleSendsBalanceReminder(t *testing.T) {
 	expect(nil)
 	charge(66500) // 用尽
 	expect(&sent{0, true})
+
+	// 两个请求同时结算、都在对方提交后才读余额时，也必须恰好提醒一次（结算按账号依次进行）
+	for round := 0; round < 10; round++ {
+		require.NoError(t, db.Model(&User{}).Where("id = ?", user.Id).Update("quota", 70000).Error)
+		ids := []string{reserve(2000), reserve(2000)}
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for _, id := range ids {
+			wg.Add(1)
+			go func(id string) {
+				defer wg.Done()
+				<-start
+				require.NoError(t, FinishGouoImageCharge(id, GouoChargeReserved, GouoChargeSettled, nil, 0, "test"))
+			}(id)
+		}
+		close(start)
+		wg.Wait()
+		expect(&sent{68000, false})
+		expect(nil)
+	}
 
 	// 阈值设为 0 时不做即将用尽提醒
 	config.GouoBalanceRemindPoints = 0

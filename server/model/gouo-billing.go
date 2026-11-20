@@ -127,12 +127,18 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 	}
 	var charge GouoImageCharge
 	var token Token
-	// 本次是否真的完成了结算，用于余额提醒
-	settled := false
+	// 结算后的余额和仍在预扣中的额度，用于余额提醒；-1 表示本次没有结算
+	remaining, pending := -1, 0
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&GouoImageCharge{}).Where("id = ? AND status = ?", id, expected).Updates(map[string]any{"status": status, "resolved_by": actor, "note": note})
 		if res.Error != nil {
 			return res.Error
+		}
+		// 在任何普通读取之前锁住账号行，同一账号的预扣、结算和退款依次进行：MySQL 可重复读的快照在第一次普通读取时建立，
+		// 锁在前面才能保证下面读到的余额和预扣总额包含之前提交的其他结算，并发结算时跨过阈值的那次不会被漏掉。
+		// 先更新记录再锁账号：子查询读的是本事务已加排他锁的记录，避免多个事务同时核对同一记录时共享锁升级死锁
+		if err := tx.Unscoped().Model(&User{}).Where("id = (?)", tx.Model(&GouoImageCharge{}).Select("user_id").Where("id = ?", id)).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
+			return err
 		}
 		if err := tx.Where("id = ?", id).First(&charge).Error; err != nil {
 			return err
@@ -170,7 +176,12 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 			if err := tx.Unscoped().Model(&Channel{}).Where("id = ?", charge.ChannelID).UpdateColumn("used_quota", gorm.Expr("used_quota + ?", charge.Quota)).Error; err != nil {
 				return err
 			}
-			settled = true
+			if err := tx.Model(&User{}).Where("id = ?", charge.UserID).Select("quota").Scan(&remaining).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&GouoImageCharge{}).Where("user_id = ? AND status IN ?", charge.UserID, []string{GouoChargeReserved, GouoChargeDispatched, GouoChargeReview}).Select("COALESCE(SUM(quota), 0)").Scan(&pending).Error; err != nil {
+				return err
+			}
 		} else {
 			log.Type, log.Content = LogTypeSystem, "图片预扣退款："+note
 			meta["charged_quota"], meta["reserved_quota"] = 0, charge.Quota
@@ -191,15 +202,9 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 	if err == nil {
 		invalidateGouoQuotaCache(charge.UserID, token.Key)
 	}
-	// 只在确认扣费后提醒，失败退款的请求不发；预扣中的额度尚未花掉，计入余额判断，避免并发预扣把跨过阈值的那次吞掉。
-	// 提交后再读：事务内的快照（如 MySQL 可重复读）看不到同时提交的其他结算，两个并发结算可能都判断不出跨过阈值；
-	// 提交后读最多让并发的两次都提醒，不会漏掉
-	if err == nil && settled {
-		remaining, pending := 0, 0
-		if DB.Model(&User{}).Where("id = ?", charge.UserID).Select("quota").Scan(&remaining).Error == nil &&
-			DB.Model(&GouoImageCharge{}).Where("user_id = ? AND status IN ?", charge.UserID, []string{GouoChargeReserved, GouoChargeDispatched, GouoChargeReview}).Select("COALESCE(SUM(quota), 0)").Scan(&pending).Error == nil {
-			NotifyQuotaDrop(charge.UserID, remaining+pending+charge.Quota, remaining+pending)
-		}
+	// 只在确认扣费后提醒，失败退款的请求不发；预扣中的额度尚未花掉，计入余额判断，避免并发预扣把跨过阈值的那次吞掉
+	if err == nil && remaining >= 0 {
+		NotifyQuotaDrop(charge.UserID, remaining+pending+charge.Quota, remaining+pending)
 	}
 	return err
 }
