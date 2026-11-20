@@ -85,7 +85,7 @@ func responseImageClient(c *gin.Context, response *types.ImageResponse, usage *t
 		if err := quota.SaveImageResult(c, response); err != nil {
 			return common.StringErrorWrapperLocal("图片结果保存失败，预扣积分已自动退回，可直接重试", "image_result_persist_failed", http.StatusInternalServerError)
 		}
-		if err := quota.CompleteImage(c, usage); err != nil {
+		if err := quota.CompleteImage(c, usage, len(response.Data)); err != nil {
 			return common.ErrorWrapperLocal(err, "image_billing_unconfirmed", http.StatusInternalServerError)
 		}
 		if value, ok := c.Get("gouo_image_capture"); ok {
@@ -264,6 +264,8 @@ func prepareGouoImage(c *gin.Context, relay RelayBaseInterface) *types.OpenAIErr
 	}
 	quoted := *entry
 	quoted.PriceCNY, quoted.Quota = priceCNY, quota
+	// 结算时按实际返回的张数退回少给的部分
+	c.Set("gouo_image_n", max(n, 1))
 	// GPT image 模型只返回 b64_json，不支持 response_format 和旧版 style，部分上游会报未知参数；
 	// gpt-image-2 系列（含 2.5）传 input_fidelity 会报 400
 	switch r := relay.(type) {

@@ -24,21 +24,23 @@ const (
 )
 
 type Order struct {
-	ID            int            `json:"id"`
-	UserId        int            `json:"user_id"`
-	GatewayId     int            `json:"gateway_id"`
-	TradeNo       string         `json:"trade_no" gorm:"type:varchar(50);uniqueIndex"`
-	GatewayNo     string         `json:"gateway_no" gorm:"type:varchar(100)"`
-	Amount        int            `json:"amount" gorm:"default:0"`
-	OrderAmount   float64        `json:"order_amount" gorm:"type:decimal(10,2);default:0"`
-	OrderCurrency CurrencyType   `json:"order_currency" gorm:"type:varchar(16)"`
-	Quota         int            `json:"quota" gorm:"type:int;default:0"`
-	Fee           float64        `json:"fee" gorm:"type:decimal(10,2);default:0"`
-	Discount      float64        `json:"discount" gorm:"type:decimal(10,2);default:0"`
-	Status        OrderStatus    `json:"status" gorm:"type:varchar(32)"`
-	CreatedAt     int            `json:"created_at"`
-	UpdatedAt     int            `json:"-"`
-	DeletedAt     gorm.DeletedAt `json:"-" gorm:"index"`
+	ID            int          `json:"id"`
+	UserId        int          `json:"user_id"`
+	GatewayId     int          `json:"gateway_id"`
+	TradeNo       string       `json:"trade_no" gorm:"type:varchar(50);uniqueIndex"`
+	GatewayNo     string       `json:"gateway_no" gorm:"type:varchar(100)"`
+	Amount        int          `json:"amount" gorm:"default:0"`
+	OrderAmount   float64      `json:"order_amount" gorm:"type:decimal(10,2);default:0"`
+	OrderCurrency CurrencyType `json:"order_currency" gorm:"type:varchar(16)"`
+	Quota         int          `json:"quota" gorm:"type:int;default:0"`
+	// 光构积分包下单时的到账积分，汇率以后变了也按下单时显示；旧订单为 0
+	Points    int            `json:"points" gorm:"default:0"`
+	Fee       float64        `json:"fee" gorm:"type:decimal(10,2);default:0"`
+	Discount  float64        `json:"discount" gorm:"type:decimal(10,2);default:0"`
+	Status    OrderStatus    `json:"status" gorm:"type:varchar(32)"`
+	CreatedAt int            `json:"created_at"`
+	UpdatedAt int            `json:"-"`
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // 查询并关闭未完成的订单

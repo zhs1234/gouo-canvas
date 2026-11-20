@@ -61,8 +61,6 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 		return errors.New("图片请求或额度无效")
 	}
 	var token Token
-	// 扣费后的余额，用于余额提醒
-	remaining := -1
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		// 先取得账号写锁，避免 SQLite 的并发读事务升级锁导致幂等检查竞态。
 		if err := tx.Model(&User{}).Where("id = ?", charge.UserID).UpdateColumn("quota", gorm.Expr("quota")).Error; err != nil {
@@ -81,9 +79,6 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 		if res.RowsAffected != 1 {
 			return errors.New("用户余额不足")
 		}
-		if err := tx.Model(&User{}).Where("id = ?", charge.UserID).Select("quota").Scan(&remaining).Error; err != nil {
-			return err
-		}
 		if err := tx.Where("id = ? AND user_id = ? AND status = ? AND (expired_time = -1 OR expired_time >= ?)", charge.TokenID, charge.UserID, config.TokenStatusEnabled, utils.GetTimestamp()).First(&token).Error; err != nil {
 			return err
 		}
@@ -101,7 +96,6 @@ func ReserveGouoQuota(charge *GouoImageCharge) error {
 	})
 	if err == nil {
 		invalidateGouoQuotaCache(charge.UserID, token.Key)
-		NotifyQuotaDrop(charge.UserID, remaining+charge.Quota, remaining)
 	} else {
 		// 并发首查都未命中时，主键冲突仍会回滚预扣，并统一返回可识别的幂等冲突。
 		var existing GouoImageCharge
@@ -133,6 +127,8 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 	}
 	var charge GouoImageCharge
 	var token Token
+	// 结算后的余额和仍在预扣中的额度，用于余额提醒；-1 表示本次没有结算
+	remaining, pending := -1, 0
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&GouoImageCharge{}).Where("id = ? AND status = ?", id, expected).Updates(map[string]any{"status": status, "resolved_by": actor, "note": note})
 		if res.Error != nil {
@@ -174,20 +170,18 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 			if err := tx.Unscoped().Model(&Channel{}).Where("id = ?", charge.ChannelID).UpdateColumn("used_quota", gorm.Expr("used_quota + ?", charge.Quota)).Error; err != nil {
 				return err
 			}
+			if err := tx.Model(&User{}).Where("id = ?", charge.UserID).Select("quota").Scan(&remaining).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&GouoImageCharge{}).Where("user_id = ? AND status IN ?", charge.UserID, []string{GouoChargeReserved, GouoChargeDispatched, GouoChargeReview}).Select("COALESCE(SUM(quota), 0)").Scan(&pending).Error; err != nil {
+				return err
+			}
 		} else {
 			log.Type, log.Content = LogTypeSystem, "图片预扣退款："+note
 			meta["charged_quota"], meta["reserved_quota"] = 0, charge.Quota
 			meta["billing_unit"] = "refunded_request"
-			if err := tx.Unscoped().Model(&User{}).Where("id = ?", charge.UserID).UpdateColumn("quota", gorm.Expr("quota + ?", charge.Quota)).Error; err != nil {
+			if err := refundGouoQuota(tx, &charge, charge.Quota); err != nil {
 				return err
-			}
-			if !charge.UnlimitedQuota {
-				if err := tx.Unscoped().Model(&Token{}).Where("id = ?", charge.TokenID).Updates(map[string]any{"remain_quota": gorm.Expr("remain_quota + ?", charge.Quota), "used_quota": gorm.Expr("used_quota - ?", charge.Quota)}).Error; err != nil {
-					return err
-				}
-				if err := tx.Unscoped().Model(&Token{}).Where("id = ? AND status = ? AND remain_quota > 0", charge.TokenID, config.TokenStatusExhausted).UpdateColumn("status", config.TokenStatusEnabled).Error; err != nil {
-					return err
-				}
 			}
 		}
 		if actor > 0 {
@@ -202,7 +196,63 @@ func FinishGouoImageCharge(id, expected, status string, log *Log, actor int, not
 	if err == nil {
 		invalidateGouoQuotaCache(charge.UserID, token.Key)
 	}
+	// 只在确认扣费后提醒，失败退款的请求不发；预扣中的额度尚未花掉，计入余额判断，避免并发预扣把跨过阈值的那次吞掉
+	if err == nil && remaining >= 0 {
+		NotifyQuotaDrop(charge.UserID, remaining+pending+charge.Quota, remaining+pending)
+	}
 	return err
+}
+
+// SettleGouoImageCharge 按上游实际返回的张数结算：少于请求张数时，先按比例退回差额，再结算剩余部分。
+// 两步分开提交：退差额后若进程中断，记录仍在预扣中，恢复任务会把剩余部分全额退回，不会多扣。
+func SettleGouoImageCharge(id, expected string, log *Log, delivered, requested int) error {
+	if delivered > 0 && delivered < requested {
+		var token Token
+		var charge GouoImageCharge
+		err := DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("id = ? AND status = ?", id, expected).First(&charge).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return ErrGouoChargeState
+				}
+				return err
+			}
+			price := charge.PriceCNY * float64(delivered) / float64(requested)
+			quota, err := gouoQuota(price)
+			if err != nil || quota >= charge.Quota {
+				return err
+			}
+			res := tx.Model(&GouoImageCharge{}).Where("id = ? AND status = ? AND quota = ?", id, expected, charge.Quota).Updates(map[string]any{"price_cny": price, "quota": quota})
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected != 1 {
+				return ErrGouoChargeState
+			}
+			if err := tx.Unscoped().First(&token, charge.TokenID).Error; err != nil {
+				return err
+			}
+			return refundGouoQuota(tx, &charge, charge.Quota-quota)
+		})
+		if err != nil {
+			return err
+		}
+		invalidateGouoQuotaCache(charge.UserID, token.Key)
+	}
+	return FinishGouoImageCharge(id, expected, GouoChargeSettled, log, 0, "上游已返回有效图片")
+}
+
+// refundGouoQuota 把预扣的额度退回用户和令牌，令牌因额度耗尽被停用的恢复启用
+func refundGouoQuota(tx *gorm.DB, charge *GouoImageCharge, amount int) error {
+	if err := tx.Unscoped().Model(&User{}).Where("id = ?", charge.UserID).UpdateColumn("quota", gorm.Expr("quota + ?", amount)).Error; err != nil {
+		return err
+	}
+	if charge.UnlimitedQuota {
+		return nil
+	}
+	if err := tx.Unscoped().Model(&Token{}).Where("id = ?", charge.TokenID).Updates(map[string]any{"remain_quota": gorm.Expr("remain_quota + ?", amount), "used_quota": gorm.Expr("used_quota - ?", amount)}).Error; err != nil {
+		return err
+	}
+	return tx.Unscoped().Model(&Token{}).Where("id = ? AND status = ? AND remain_quota > 0", charge.TokenID, config.TokenStatusExhausted).UpdateColumn("status", config.TokenStatusEnabled).Error
 }
 
 func RecoverGouoImageCharges() error {

@@ -306,7 +306,7 @@ func TestGouoImageQuoteDrivesBilling(t *testing.T) {
 	require.InDelta(t, 12, entry.PriceCNY, 1e-9)
 	require.Equal(t, int(math.Ceil(12/7.3*500000)), entry.Quota)
 	require.Equal(t, 10000000-entry.Quota, balance())
-	require.NoError(t, q.CompleteImage(c, &types.Usage{}))
+	require.NoError(t, q.CompleteImage(c, &types.Usage{}, 2))
 	var charge model.GouoImageCharge
 	require.NoError(t, db.Where("id = ?", model.GouoImageRequestID(1, "settle")).First(&charge).Error)
 	require.Equal(t, model.GouoChargeSettled, charge.Status)
@@ -322,4 +322,23 @@ func TestGouoImageQuoteDrivesBilling(t *testing.T) {
 	require.Equal(t, 10000000-2*entry.Quota, balance())
 	q.Undo(c)
 	require.Equal(t, 10000000-entry.Quota, balance())
+	// 要 2 张只返回 1 张：按 1 张结算，少给的那张退回；结束请求时不再重复退款
+	c, q, _ = start("partial")
+	half := int(math.Ceil(6 / 7.3 * 500000))
+	require.NoError(t, q.CompleteImage(c, &types.Usage{}, 1))
+	q.Undo(c)
+	require.Equal(t, 10000000-entry.Quota-half, balance())
+	charge = model.GouoImageCharge{}
+	require.NoError(t, db.Where("id = ?", model.GouoImageRequestID(1, "partial")).First(&charge).Error)
+	require.Equal(t, model.GouoChargeSettled, charge.Status)
+	require.Equal(t, half, charge.Quota)
+	require.InDelta(t, 6, charge.PriceCNY, 1e-9)
+	var partial model.Log
+	require.NoError(t, db.Where("id = ?", charge.LogID).First(&partial).Error)
+	require.Equal(t, half, partial.Quota)
+	require.EqualValues(t, 1, partial.Metadata.Data()["images"])
+	require.EqualValues(t, 2, partial.Metadata.Data()["requested_images"])
+	var token model.Token
+	require.NoError(t, db.First(&token, 1).Error)
+	require.Equal(t, 10000000-entry.Quota-half, token.RemainQuota)
 }

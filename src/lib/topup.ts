@@ -85,7 +85,8 @@ export async function getPaymentGateways(): Promise<PaymentGateway[]> {
     .sort((a, b) => b.sort - a.sort)
 }
 
-export async function createTopupOrder(input: { gateway: string; package?: number; amount?: number }): Promise<TopupPayment> {
+// 积分包下单时带上看到的价格和积分，后台改过积分包时服务端会拒绝，避免付了另一个包的钱
+export async function createTopupOrder(input: { gateway: string; package?: number; price?: number; points?: number; amount?: number }): Promise<TopupPayment> {
   const data = await backendRequest<unknown>('/api/gouo/topup/order', { method: 'POST', body: JSON.stringify(input) })
   const pay = isRecord(data) && isRecord(data.data) ? data.data : null
   // 跳转支付只接受 http(s) 链接，扫码支付的 url 是二维码内容

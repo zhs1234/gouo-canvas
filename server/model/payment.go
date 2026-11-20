@@ -97,11 +97,13 @@ func GetUserPaymentList() ([]*Payment, error) {
 
 func (p *Payment) Insert() error {
 	p.UUID = utils.GetUUID()
+	defer ResetEnabledPaymentCache()
 	return DB.Create(p).Error
 }
 
 func (p *Payment) Update(overwrite bool) error {
 	var err error
+	defer ResetEnabledPaymentCache()
 
 	if overwrite {
 		err = DB.Model(p).Select("*").Updates(p).Error
@@ -113,5 +115,6 @@ func (p *Payment) Update(overwrite bool) error {
 }
 
 func (p *Payment) Delete() error {
+	defer ResetEnabledPaymentCache()
 	return DB.Delete(p).Error
 }

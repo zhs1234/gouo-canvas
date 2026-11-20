@@ -28,6 +28,9 @@ type gouoTopupOrderRequest struct {
 	Gateway string `json:"gateway"`
 	Package *int   `json:"package"`
 	Amount  *int   `json:"amount"`
+	// 客户端看到的积分包价格和到账积分，用来发现后台已改过积分包
+	Price  *float64 `json:"price"`
+	Points *int     `json:"points"`
 }
 
 type gouoTopupOrder struct {
@@ -64,6 +67,23 @@ func parseGouoTopupPackages(raw string) ([]gouoTopupPackage, error) {
 		}
 	}
 	return packages, nil
+}
+
+// gouoTopupQuota 把到账积分换算成额度（1 元 = 100 积分，与图片计费和日志一致）；超出订单能记录的范围时返回 0
+func gouoTopupQuota(points int) int {
+	quota := math.Round(float64(points) / 100 / config.PaymentUSDRate * config.QuotaPerUnit)
+	if math.IsNaN(quota) || math.IsInf(quota, 0) || quota < 1 || quota > math.MaxInt32 {
+		return 0
+	}
+	return int(quota)
+}
+
+// checkGouoTopupPoints 保存设置时检查单笔到账积分按当前汇率能否下单，免得保存了却永远买不了
+func checkGouoTopupPoints(points int, what string) error {
+	if gouoTopupQuota(points) > 0 {
+		return nil
+	}
+	return fmt.Errorf("%s按当前汇率超出单笔充值上限，单笔最多约 %d 积分", what, int(float64(math.MaxInt32)*config.PaymentUSDRate*100/config.QuotaPerUnit))
 }
 
 // 运行时配置解析失败按无积分包处理
@@ -108,6 +128,11 @@ func CreateGouoTopupOrder(c *gin.Context) {
 		}
 		pkg := packages[*req.Package]
 		price, points = pkg.Price, pkg.Points+pkg.Bonus
+		// 积分包按序号下单，后台增删或调整过积分包时同一序号可能已是另一个包，不能按新包收款
+		if (req.Price != nil && math.Abs(*req.Price-price) > 1e-9) || (req.Points != nil && *req.Points != points) {
+			gouoFail(c, http.StatusConflict, "package_changed", "积分包已更新，请重新选择后再支付")
+			return
+		}
 	} else {
 		if !config.GouoTopupCustom {
 			gouoFail(c, http.StatusBadRequest, "custom_disabled", "暂不支持自定义金额，请选择积分包")
@@ -119,10 +144,9 @@ func CreateGouoTopupOrder(c *gin.Context) {
 		}
 		price, points = float64(*req.Amount), *req.Amount*100
 	}
-	// 1 元 = 100 积分，与图片计费和日志的积分换算一致
 	rate := config.PaymentUSDRate
-	quota := math.Round(float64(points) / 100 / rate * config.QuotaPerUnit)
-	if math.IsNaN(quota) || math.IsInf(quota, 0) || quota < 1 || quota > math.MaxInt32 {
+	quota := gouoTopupQuota(points)
+	if quota == 0 {
 		gouoFail(c, http.StatusBadRequest, "invalid_quota", "充值额度超出范围")
 		return
 	}
@@ -179,12 +203,13 @@ func CreateGouoTopupOrder(c *gin.Context) {
 		GatewayId: gateway.ID,
 		TradeNo:   tradeNo,
 		// Amount 沿用旧语义「充值单位数」，后台订单列表显示为 $；到账、分组升级和统计只用 Quota 与 OrderAmount
-		Amount:        int(math.Round(quota / config.QuotaPerUnit)),
+		Amount:        int(math.Round(float64(quota) / config.QuotaPerUnit)),
 		OrderAmount:   payMoney,
 		OrderCurrency: gateway.Currency,
 		Fee:           orderFee,
 		Status:        model.OrderStatusPending,
-		Quota:         int(quota),
+		Quota:         quota,
+		Points:        points,
 	}
 	if err := order.Insert(); err != nil {
 		logger.LogError(c.Request.Context(), "创建充值订单失败: "+err.Error())
@@ -218,10 +243,14 @@ func ListGouoTopupOrders(c *gin.Context) {
 	}
 	items := make([]gouoTopupOrder, 0, len(orders))
 	for _, order := range orders {
+		// 记录到账积分之前的旧订单按当前汇率折算
+		if order.Points == 0 {
+			order.Points = int(math.Round(float64(order.Quota) / config.QuotaPerUnit * config.PaymentUSDRate * 100))
+		}
 		items = append(items, gouoTopupOrder{
 			TradeNo:   order.TradeNo,
 			Status:    order.Status,
-			Points:    int(math.Round(float64(order.Quota) / config.QuotaPerUnit * config.PaymentUSDRate * 100)),
+			Points:    order.Points,
 			PayAmount: order.OrderAmount,
 			Currency:  order.OrderCurrency,
 			CreatedAt: order.CreatedAt,

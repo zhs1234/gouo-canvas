@@ -18,7 +18,7 @@ func init() {
 	quotaWarningSender = func(int, int, bool) {}
 }
 
-func TestGouoImageReserveSendsBalanceReminder(t *testing.T) {
+func TestGouoImageSettleSendsBalanceReminder(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "remind.db")+"?_busy_timeout=5000"), &gorm.Config{})
 	require.NoError(t, err)
 	oldDB, oldRedis := DB, config.RedisEnabled
@@ -37,7 +37,7 @@ func TestGouoImageReserveSendsBalanceReminder(t *testing.T) {
 		DB, config.RedisEnabled = oldDB, oldRedis
 		config.GouoBalanceRemindPoints, config.PaymentUSDRate, config.QuotaPerUnit, quotaWarningSender = oldPoints, oldRate, oldUnit, oldSender
 	})
-	for _, entry := range []any{&Token{}, &User{}, &GouoImageCharge{}} {
+	for _, entry := range []any{&Channel{}, &Token{}, &User{}, &Log{}, &GouoImageCharge{}} {
 		require.NoError(t, db.AutoMigrate(entry))
 	}
 	// 100 积分 = 100/100/7.3×500000 ≈ 68493 额度
@@ -47,10 +47,16 @@ func TestGouoImageReserveSendsBalanceReminder(t *testing.T) {
 	token := Token{UserId: user.Id, Key: user.Username, UnlimitedQuota: true, ExpiredTime: -1}
 	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).Create(&token).Error)
 	n := 0
-	reserve := func(quota int) {
+	reserve := func(quota int) string {
 		n++
-		require.NoError(t, ReserveGouoQuota(&GouoImageCharge{ID: fmt.Sprint(user.Username, "-", n), UserID: user.Id, TokenID: token.Id, ModelName: "image-test", PriceCNY: 0.1, PriceVersion: "v", Quota: quota}))
+		id := fmt.Sprint(user.Username, "-", n)
+		require.NoError(t, ReserveGouoQuota(&GouoImageCharge{ID: id, UserID: user.Id, TokenID: token.Id, ModelName: "image-test", PriceCNY: 0.1, PriceVersion: "v", Quota: quota}))
+		return id
 	}
+	finish := func(id, status string) {
+		require.NoError(t, FinishGouoImageCharge(id, GouoChargeReserved, status, nil, 0, "test"))
+	}
+	charge := func(quota int) { finish(reserve(quota), GouoChargeSettled) }
 	expect := func(want *sent) {
 		select {
 		case got := <-calls:
@@ -61,18 +67,27 @@ func TestGouoImageReserveSendsBalanceReminder(t *testing.T) {
 		}
 	}
 
-	reserve(1000) // 70000 → 69000，仍在阈值之上
+	charge(1000) // 70000 → 69000，仍在阈值之上
 	expect(nil)
-	reserve(1000) // 69000 → 68000，跨过阈值：提醒一次，金额为扣费后的余额
+	// 预扣时不提醒；生成失败退回后余额没有真的减少，也不提醒
+	id := reserve(2000)
+	expect(nil)
+	finish(id, GouoChargeRefunded)
+	expect(nil)
+	// 两个请求同时预扣到阈值之下：先结算的那个把余额带过阈值，提醒一次；后结算的不重复
+	first, second := reserve(1000), reserve(500)
+	finish(first, GouoChargeSettled)
 	expect(&sent{68000, false})
-	reserve(1000) // 已在阈值之下，不重复提醒
+	finish(second, GouoChargeSettled)
 	expect(nil)
-	reserve(67000) // 用尽
+	charge(1000) // 已在阈值之下，不重复提醒
+	expect(nil)
+	charge(66500) // 用尽
 	expect(&sent{0, true})
 
 	// 阈值设为 0 时不做即将用尽提醒
 	config.GouoBalanceRemindPoints = 0
 	require.NoError(t, db.Model(&User{}).Where("id = ?", user.Id).Update("quota", 70000).Error)
-	reserve(5000)
+	charge(5000)
 	expect(nil)
 }

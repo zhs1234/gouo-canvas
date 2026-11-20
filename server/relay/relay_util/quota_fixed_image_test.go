@@ -83,7 +83,7 @@ func TestGouoImageQuotaRetriesRefundAndSnapshot(t *testing.T) {
 		}
 	}))
 	t.Cleanup(func() { db.Callback().Create().Remove("fail_image_log") })
-	require.Error(t, q.CompleteImage(c, &types.Usage{}))
+	require.Error(t, q.CompleteImage(c, &types.Usage{}, 1))
 	q.Undo(c)
 	var charge model.GouoImageCharge
 	require.NoError(t, db.First(&charge, "id = ?", q.imageCharge.ID).Error)

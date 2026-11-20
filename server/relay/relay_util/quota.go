@@ -249,7 +249,8 @@ func (q *Quota) Undo(c *gin.Context) {
 
 func (q *Quota) Consume(c *gin.Context, usage *types.Usage, isStream bool) {
 	if q.imageModel != nil {
-		if err := q.CompleteImage(c, usage); err != nil {
+		// 正常情况下图片已在写出响应前按实际张数结算；走到这里时拿不到返回张数，按请求张数结算
+		if err := q.CompleteImage(c, usage, c.GetInt("gouo_image_n")); err != nil {
 			logger.LogError(c.Request.Context(), err.Error())
 		}
 		return
@@ -289,14 +290,18 @@ func (q *Quota) SaveImageResult(c *gin.Context, response *types.ImageResponse) e
 }
 
 // 上游成功后先提交账务，再回传图片；浏览器断开不能把已经成功的生成误退。
-func (q *Quota) CompleteImage(c *gin.Context, usage *types.Usage) error {
+// CompleteImage 按上游实际返回的张数结算，少于请求张数的部分按比例退回
+func (q *Quota) CompleteImage(c *gin.Context, usage *types.Usage, delivered int) error {
 	if q.imageCompleted || !q.HandelStatus {
 		return nil
 	}
 	q.startTime = c.GetTime("requestStartTime")
-	entry := &model.Log{PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, RequestTime: q.getRequestTime(), SourceIp: c.ClientIP(), Metadata: datatypes.NewJSONType(q.GetLogMeta(usage))}
+	requested := max(c.GetInt("gouo_image_n"), 1)
+	meta := q.GetLogMeta(usage)
+	meta["images"], meta["requested_images"] = min(delivered, requested), requested
+	entry := &model.Log{PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, RequestTime: q.getRequestTime(), SourceIp: c.ClientIP(), Metadata: datatypes.NewJSONType(meta)}
 	// 结算失败时不回传图片，请求结束时按失败退回预扣
-	if err := model.FinishGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, model.GouoChargeSettled, entry, 0, "上游已返回有效图片"); err != nil {
+	if err := model.SettleGouoImageCharge(q.imageCharge.ID, q.imageCharge.Status, entry, delivered, requested); err != nil {
 		return err
 	}
 	q.imageCompleted, q.HandelStatus = true, false

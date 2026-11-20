@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"one-api/common/config"
@@ -72,6 +73,11 @@ func normalizeGouoSetting(key, value string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		for i, p := range packages {
+			if err := checkGouoTopupPoints(p.Points+p.Bonus, fmt.Sprintf("第 %d 个积分包的积分（含赠送）", i+1)); err != nil {
+				return "", err
+			}
+		}
 		raw, _ := json.Marshal(packages)
 		value = string(raw)
 	case "GouoBalanceRemindPoints":
@@ -79,8 +85,12 @@ func normalizeGouoSetting(key, value string) (string, error) {
 			return "", errors.New("余额提醒阈值必须是 0 到 1000000 的整数（积分），0 表示不提醒")
 		}
 	case "GouoTopupCustomMin", "GouoTopupCustomMax":
-		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 100000 {
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > 100000 {
 			return "", errors.New("自定义充值金额上下限必须是 1 到 100000 的整数（元）")
+		}
+		if err := checkGouoTopupPoints(n*100, "自定义充值金额"); err != nil {
+			return "", err
 		}
 	case "GouoTrashRetentionDays":
 		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 30 {

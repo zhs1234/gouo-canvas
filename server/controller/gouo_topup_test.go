@@ -81,6 +81,7 @@ func setupGouoTopupTest(t *testing.T) (*gorm.DB, *gin.Engine, *fakeTopupGateway)
 	} {
 		require.NoError(t, db.Create(p).Error)
 	}
+	model.ResetEnabledPaymentCache()
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -162,9 +163,13 @@ func TestGouoTopupSettings(t *testing.T) {
 		{"GouoTopupCustomMin": "6000"},
 		{"GouoTopupCustomMin": "50", "GouoTopupCustomMax": "10"},
 		{"GouoTopupCustom": "1"},
+		// 汇率 7.3、每单位 500000 额度时，单笔超过约 31390 元换算出的额度超出订单范围，保存了也买不了
+		{"GouoTopupCustomMax": "50000"},
+		{"GouoTopupPackages": `[{"price":500,"points":3000000,"bonus":200000}]`},
 	} {
 		require.Equal(t, http.StatusBadRequest, put("/settings", body), body)
 	}
+	require.Equal(t, http.StatusOK, put("/settings", map[string]string{"GouoTopupCustomMax": "30000", "GouoTopupPackages": `[{"price":300,"points":3000000,"bonus":0}]`}))
 	require.Equal(t, http.StatusOK, put("/settings", map[string]string{"GouoTopupCustomMin": "6000", "GouoTopupCustomMax": "8000", "GouoTopupCustom": "false"}))
 	require.Equal(t, 6000, config.GouoTopupCustomMin)
 	require.Equal(t, 8000, config.GouoTopupCustomMax)
@@ -206,6 +211,9 @@ func TestGouoTopupStatus(t *testing.T) {
 	// 开启但没有启用的网关时仍视为未开放
 	config.GouoOnlineTopup, config.GouoTopupCustom = true, true
 	require.NoError(t, db.Model(&model.Payment{}).Where("1 = 1").Update("enable", false).Error)
+	// 网关状态缓存 30 秒；后台保存网关时会立即失效，这里直接写表，手动失效
+	require.Equal(t, true, status()["gouo_online_topup"])
+	model.ResetEnabledPaymentCache()
 	data = status()
 	require.Equal(t, false, data["gouo_online_topup"])
 	require.Nil(t, data["gouo_topup_custom"])
@@ -222,8 +230,14 @@ func TestGouoTopupCreateOrder(t *testing.T) {
 		return o
 	}
 
+	// 客户端看到的积分包与服务端当前配置不同（后台改过积分包）时拒绝下单，不按同序号的新包收款
+	for _, body := range []string{`{"gateway":"epay","package":1,"price":0.01,"points":3150}`, `{"gateway":"epay","package":1,"price":30,"points":999999}`} {
+		code, res := create(body)
+		require.Equal(t, http.StatusConflict, code, body)
+		require.Equal(t, "package_changed", res["code"])
+	}
 	// 积分包：价格和积分按服务端配置计算，回跳地址带订单号
-	code, res := create(`{"gateway":"epay","package":1,"price":0.01,"points":999999}`)
+	code, res := create(`{"gateway":"epay","package":1,"price":30,"points":3150}`)
 	require.Equal(t, http.StatusOK, code, res)
 	data := res["data"].(map[string]any)
 	require.Equal(t, 30.0, data["pay_amount"])
@@ -339,7 +353,7 @@ func TestGouoTopupOrdersAndCallback(t *testing.T) {
 		require.Equal(t, http.StatusOK, code, res)
 		return res["data"].([]any)
 	}
-	// 只返回本人订单，最新的在前，积分按额度换算回来
+	// 只返回本人订单，最新的在前
 	orders := list("1", "")
 	require.Len(t, orders, 2)
 	require.Equal(t, "old-failed", orders[0].(map[string]any)["trade_no"])
@@ -352,6 +366,12 @@ func TestGouoTopupOrdersAndCallback(t *testing.T) {
 	require.Equal(t, 30.0, first["pay_amount"])
 	require.Equal(t, "CNY", first["currency"])
 	require.NotZero(t, first["created_at"])
+	// 新订单记录了下单时的到账积分，之后改汇率不影响显示；旧订单仍按当前汇率折算
+	config.PaymentUSDRate = 7
+	orders = list("1", "")
+	require.Equal(t, 3150.0, orders[1].(map[string]any)["points"])
+	require.Equal(t, 700.0, orders[0].(map[string]any)["points"])
+	config.PaymentUSDRate = 7.3
 	require.Len(t, list("1", "?trade_no="+url.QueryEscape(tradeNo)), 1)
 	require.Empty(t, list("1", "?trade_no="+otherTradeNo))
 	require.Len(t, list("2", ""), 1)

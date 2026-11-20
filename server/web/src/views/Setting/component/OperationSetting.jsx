@@ -36,7 +36,6 @@ const OperationSetting = () => {
     QuotaForNewUser: 0,
     QuotaForInviter: 0,
     QuotaForInvitee: 0,
-    QuotaRemindThreshold: 0,
     PreConsumedQuota: 0,
     TopUpLink: '',
     ChatLink: '',
@@ -190,9 +189,6 @@ const OperationSetting = () => {
         case 'monitor':
           if (originInputs['ChannelDisableThreshold'] !== inputs.ChannelDisableThreshold) {
             await updateOption('ChannelDisableThreshold', inputs.ChannelDisableThreshold);
-          }
-          if (originInputs['QuotaRemindThreshold'] !== inputs.QuotaRemindThreshold) {
-            await updateOption('QuotaRemindThreshold', inputs.QuotaRemindThreshold);
           }
           break;
         case 'chatlinks':
@@ -692,22 +688,6 @@ const OperationSetting = () => {
                 onChange={handleInputChange}
                 label={t('setting_index.operationSettings.monitoringSettings.channelDisableThreshold.label')}
                 placeholder={t('setting_index.operationSettings.monitoringSettings.channelDisableThreshold.placeholder')}
-                disabled={loading}
-              />
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel htmlFor="QuotaRemindThreshold">
-                {t('setting_index.operationSettings.monitoringSettings.quotaRemindThreshold.label')}
-              </InputLabel>
-              <OutlinedInput
-                id="QuotaRemindThreshold"
-                name="QuotaRemindThreshold"
-                type="number"
-                value={inputs.QuotaRemindThreshold}
-                endAdornment={<InputAdornment position="end">{renderQuotaWithPrompt(inputs.QuotaRemindThreshold)}</InputAdornment>}
-                onChange={handleInputChange}
-                label={t('setting_index.operationSettings.monitoringSettings.quotaRemindThreshold.label')}
-                placeholder={t('setting_index.operationSettings.monitoringSettings.quotaRemindThreshold.placeholder')}
                 disabled={loading}
               />
             </FormControl>
